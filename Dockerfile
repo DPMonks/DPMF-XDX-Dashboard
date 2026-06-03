@@ -1,4 +1,4 @@
-# force rebuild v2
+# force rebuild v3
 # Use Node 18
 FROM node:18
 
@@ -17,4 +17,3 @@ EXPOSE 8080
 
 # Start the app
 CMD ["npm", "start"]
-
