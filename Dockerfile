@@ -1,4 +1,4 @@
-# force rebuid
+# force rebuild v2
 # Use Node 18
 FROM node:18
 
@@ -13,7 +13,8 @@ RUN npm install
 COPY . .
 
 # Expose the port your server uses
-EXPOSE 4000
+EXPOSE 8080
 
 # Start the app
 CMD ["npm", "start"]
+
