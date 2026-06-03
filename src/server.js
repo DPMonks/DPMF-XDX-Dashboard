@@ -1,7 +1,26 @@
+// ------------------------------------------------------
+// EARLY DIAGNOSTIC LOGS
+// ------------------------------------------------------
+console.log("Server starting…");
+
+process.on("uncaughtException", err => {
+  console.error("Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", err => {
+  console.error("Unhandled Rejection:", err);
+});
+
+// ------------------------------------------------------
+// IMPORTS
+// ------------------------------------------------------
 import express from "express";
 import cors from "cors";
 import { startIndexerLoop } from "./indexer.js";
 
+// ------------------------------------------------------
+// EXPRESS SETUP
+// ------------------------------------------------------
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -11,7 +30,7 @@ const PORT = process.env.PORT || 8080;
 // ------------------------------------------------------
 // STARTUP LOGS
 // ------------------------------------------------------
-console.log("🚀 Booting XRPL Indexer API...");
+console.log("🚀 Booting XRPL Indexer API…");
 console.log("📦 Environment:", process.env.NODE_ENV || "development");
 console.log("🔧 Port:", PORT);
 
