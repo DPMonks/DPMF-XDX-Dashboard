@@ -1,12 +1,12 @@
 export const config = {
   // XRPL WebSocket + RPC (Mainnet)
-  xrplWs: "wss://xrplcluster.com",       // WebSocket for live data
-  xrplRpc: "https://xrplcluster.com",    // HTTPS RPC for account_lines, AMM, etc.
+  xrplWs: "wss://xrplcluster.com",
+  xrplRpc: "https://xrplcluster.com",
 
-  // XDX Token Details
+  // XDX Token Details (REAL on-ledger values)
   xdxIssuer: "rMJAXYsbNzhwp7FYrNaSYP5ty3R9XnurPo",
-  xdxCurrency: "XDX",
-  lpCurrency: "XDXLP",
+  xdxCurrency: "5844580000000000000000000000000000000000",  // XDX in 160-bit hex
+  lpCurrency: "4C50580000000000000000000000000000000000",  // LP token (LPX) hex
 
   // PostgreSQL (Railway injects these automatically)
   db: {
@@ -18,7 +18,7 @@ export const config = {
   },
 
   // Sync intervals (ms)
-  ammSyncInterval: 60000,      // 1 minute
-  holdersSyncInterval: 120000, // 2 minutes
-  lpSyncInterval: 120000       // 2 minutes
+  ammSyncInterval: 60000,
+  holdersSyncInterval: 120000,
+  lpSyncInterval: 120000
 };
