@@ -1,3 +1,4 @@
+// config clean v2
 export const config = {
   // XRPL WebSocket + RPC (Mainnet)
   xrplWs: "wss://xrplcluster.com",
