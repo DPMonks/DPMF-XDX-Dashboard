@@ -1,16 +1,13 @@
 import pg from "pg";
-import dotenv from "dotenv";
+import { config } from "./config.js";
 
-dotenv.config();
-
-export const pool = new pg.Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT
+const pool = new pg.Pool({
+  host: config.db.host,
+  user: config.db.user,
+  password: config.db.password,
+  database: config.db.database,
+  port: config.db.port,
+  ssl: { rejectUnauthorized: false }
 });
 
-pool.connect()
-  .then(() => console.log("PostgreSQL connected"))
-  .catch(err => console.error("PostgreSQL error:", err));
+export default pool;

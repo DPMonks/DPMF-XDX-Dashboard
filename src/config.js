@@ -1,15 +1,21 @@
 export const config = {
-  // XRPL Mainnet WebSocket endpoint
-  xrplWs: "wss://xrplcluster.com",
+  // XRPL WebSocket + RPC (Mainnet)
+  xrplWs: "wss://xrplcluster.com",       // WebSocket for live data
+  xrplRpc: "https://xrplcluster.com",    // HTTPS RPC for account_lines, AMM, etc.
 
-  // Verified XDX issuer (Mainnet)
+  // XDX Token Details
   xdxIssuer: "rMJAXYsbNzhwp7FYrNaSYP5ty3R9XnurPo",
-
-  // Token codes
   xdxCurrency: "XDX",
-
-  // LP token code (not used in AMM request)
   lpCurrency: "XDXLP",
+
+  // PostgreSQL (Railway injects these automatically)
+  db: {
+    host: process.env.PGHOST,
+    user: process.env.PGUSER,
+    password: process.env.PGPASSWORD,
+    database: process.env.PGDATABASE,
+    port: process.env.PGPORT
+  },
 
   // Sync intervals (ms)
   ammSyncInterval: 60000,      // 1 minute

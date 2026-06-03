@@ -2,27 +2,40 @@ import xrpl from "xrpl";
 import { config } from "./config.js";
 
 // ------------------------------------------------------
-// XRPL WebSocket Client (for AMM + live data)
+// XRPL WebSocket Client (live data, AMM, subscriptions)
 // ------------------------------------------------------
-export const client = new xrpl.Client(config.xrplWs);
+export const wsClient = new xrpl.Client(config.xrplWs);
 
 // ------------------------------------------------------
-// XRPL JSON-RPC Client (for account_lines, holders, etc.)
+// XRPL RPC Client (HTTPS requests)
 // ------------------------------------------------------
-export const rpc = new xrpl.Client(config.xrplWs);
-
-// ------------------------------------------------------
-// Connect both clients BEFORE any requests are made
-// ------------------------------------------------------
-export async function connectClients() {
+export async function rpcRequest(body) {
   try {
-    await client.connect();
-    await rpc.connect();
-    console.log("XRPL clients connected");
+    const response = await fetch(config.xrplRpc, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    return await response.json();
   } catch (err) {
-    console.error("XRPL connection error:", err);
+    console.error("[XRPL RPC ERROR]", err);
+    return null;
   }
 }
 
-// Immediately connect on startup
+// ------------------------------------------------------
+// Connect WebSocket client on startup
+// ------------------------------------------------------
+export async function connectClients() {
+  try {
+    console.log("[XRPL] Connecting WebSocket…");
+    await wsClient.connect();
+    console.log("[XRPL] WebSocket connected");
+  } catch (err) {
+    console.error("[XRPL WS ERROR]", err);
+  }
+}
+
 connectClients();
+

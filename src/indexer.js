@@ -1,5 +1,5 @@
-import { client, rpc } from "./xrplClient.js";
-import { pool } from "./db.js";
+import { wsClient, rpcRequest } from "./xrplClient.js";
+import pool from "./db.js";
 import { config } from "./config.js";
 
 // ------------------------------------------------------
@@ -8,12 +8,12 @@ import { config } from "./config.js";
 export async function startIndexerLoop() {
   console.log("[INDEXER] Loop started");
 
-  // Wait until both XRPL clients are connected
-  if (!client.isConnected() || !rpc.isConnected()) {
-    console.log("[INDEXER] Waiting for XRPL connection...");
+  // Wait for WebSocket connection
+  if (!wsClient.isConnected()) {
+    console.log("[INDEXER] Waiting for XRPL WebSocket...");
     await new Promise((resolve) => {
       const check = setInterval(() => {
-        if (client.isConnected() && rpc.isConnected()) {
+        if (wsClient.isConnected()) {
           clearInterval(check);
           resolve();
         }
@@ -21,25 +21,25 @@ export async function startIndexerLoop() {
     });
   }
 
-  console.log("[INDEXER] XRPL connected, starting sync...");
+  console.log("[INDEXER] XRPL WebSocket connected, starting sync...");
 
   // Start periodic syncs
   setInterval(syncAmmPool, config.ammSyncInterval);
   setInterval(syncTokenHolders, config.holdersSyncInterval);
   setInterval(syncLpHolders, config.lpSyncInterval);
 
-  // Run initial sync immediately
+  // Initial sync
   await syncAmmPool();
   await syncTokenHolders();
   await syncLpHolders();
 }
 
 // ------------------------------------------------------
-// AMM POOL SYNC
+// AMM POOL SYNC (WebSocket)
 // ------------------------------------------------------
 async function syncAmmPool() {
   try {
-    const ammInfo = await client.request({
+    const ammInfo = await wsClient.request({
       command: "amm_info",
       asset: {
         currency: config.xdxCurrency,
@@ -70,11 +70,11 @@ async function syncAmmPool() {
 }
 
 // ------------------------------------------------------
-// TOKEN HOLDERS SYNC
+// TOKEN HOLDERS SYNC (RPC)
 // ------------------------------------------------------
 async function syncTokenHolders() {
   try {
-    const lines = await rpc.request({
+    const response = await rpcRequest({
       method: "account_lines",
       params: [
         {
@@ -84,7 +84,12 @@ async function syncTokenHolders() {
       ]
     });
 
-    const holders = lines.result.lines.filter(
+    if (!response || !response.result) {
+      console.error("[HOLDERS] RPC returned no result");
+      return;
+    }
+
+    const holders = response.result.lines.filter(
       (l) => l.currency === config.xdxCurrency && parseFloat(l.balance) > 0
     );
 
@@ -103,11 +108,11 @@ async function syncTokenHolders() {
 }
 
 // ------------------------------------------------------
-// LP HOLDERS SYNC
+// LP HOLDERS SYNC (RPC)
 // ------------------------------------------------------
 async function syncLpHolders() {
   try {
-    const lines = await rpc.request({
+    const response = await rpcRequest({
       method: "account_lines",
       params: [
         {
@@ -117,7 +122,12 @@ async function syncLpHolders() {
       ]
     });
 
-    const lpHolders = lines.result.lines.filter(
+    if (!response || !response.result) {
+      console.error("[LP] RPC returned no result");
+      return;
+    }
+
+    const lpHolders = response.result.lines.filter(
       (l) => l.currency === config.lpCurrency && parseFloat(l.balance) > 0
     );
 
