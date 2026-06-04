@@ -1,0 +1,5 @@
+{
+  "name": "xdx-proxy",
+  "compatibility_date": "2026-06-04",
+  "main": "src/worker.js"
+}

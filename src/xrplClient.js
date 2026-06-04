@@ -9,7 +9,7 @@ export const wsClient = new xrpl.Client("wss://s1.ripple.com");
 // CLOUDFLARE WORKER RPC ENDPOINT (RAILWAY‑SAFE)
 // ------------------------------------------------------
 const RPC_ENDPOINTS = [
-  "https://xdx-proxy.dpmonks.workers.dev"   // Your Cloudflare Worker proxy
+  "https://xdx-proxy.crypto-92e.workers.dev"   // Your Cloudflare Worker proxy
 ];
 
 // Keep track of which endpoint is currently working
@@ -40,12 +40,6 @@ export async function rpcRequest(body) {
       // Reject if malformed or error
       if (!json || json.error || json.result?.error) {
         console.warn(`[RPC FAILOVER] ${url} returned error, trying next…`);
-        continue;
-      }
-
-      // Reject Clio servers
-      if (json.warnings && json.warnings.some(w => w.message?.includes("clio"))) {
-        console.warn(`[RPC FAILOVER] ${url} is Clio, skipping…`);
         continue;
       }
 
