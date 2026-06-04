@@ -1,29 +1,65 @@
 import xrpl from "xrpl";
 
 // ------------------------------------------------------
-// XRPL WebSocket Client (for AMM + live data)
+// XRPL WebSocket Client (for connectivity only)
 // ------------------------------------------------------
 export const wsClient = new xrpl.Client("wss://s1.ripple.com");
 
 // ------------------------------------------------------
-// XRPL RPC Client (HTTPS requests)
+// RPC ENDPOINT FAILOVER LIST
+// ------------------------------------------------------
+const RPC_ENDPOINTS = [
+  "https://s2.ripple.com:51234",       // Full rippled (best)
+  "https://xrplcluster.com",           // Full rippled cluster
+  "https://rippled.xrpldata.com"       // Backup full rippled
+];
+
+// ------------------------------------------------------
+// XRPL RPC Client with automatic failover
 // ------------------------------------------------------
 export async function rpcRequest(body) {
-  try {
-    const response = await fetch("https://s1.ripple.com:51234", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        method: body.method,
-        params: body.params
-      })
-    });
+  for (const url of RPC_ENDPOINTS) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method: body.method,
+          params: body.params
+        })
+      });
 
-    return await response.json();
-  } catch (err) {
-    console.error("[XRPL RPC ERROR]", err);
-    return null;
+      const json = await response.json();
+
+      // Skip if server returned an error
+      if (!json || json.error || json.result?.error) {
+        console.warn(`[RPC FAILOVER] ${url} returned error, trying next…`);
+        continue;
+      }
+
+      // Skip Clio servers (they cannot serve AMM or full trust lines)
+      if (json.warnings && json.warnings.some(w => w.message?.includes("clio"))) {
+        console.warn(`[RPC FAILOVER] ${url} is a Clio server, skipping…`);
+        continue;
+      }
+
+      // Skip empty AMM responses
+      if (body.method === "amm_info" && !json.result?.amm) {
+        console.warn(`[RPC FAILOVER] ${url} returned no AMM data, trying next…`);
+        continue;
+      }
+
+      // Valid response
+      return json;
+
+    } catch (err) {
+      console.warn(`[RPC FAILOVER] ${url} failed: ${err.message}`);
+      continue;
+    }
   }
+
+  console.error("[RPC ERROR] All RPC endpoints failed");
+  return null;
 }
 
 // ------------------------------------------------------
