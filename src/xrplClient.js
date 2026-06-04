@@ -6,11 +6,10 @@ import xrpl from "xrpl";
 export const wsClient = new xrpl.Client("wss://s1.ripple.com");
 
 // ------------------------------------------------------
-// PUBLIC, RAILWAY‑COMPATIBLE RPC ENDPOINTS
+// CLOUDFLARE WORKER RPC ENDPOINT (RAILWAY‑SAFE)
 // ------------------------------------------------------
 const RPC_ENDPOINTS = [
-  "https://rpc.ontheledger.com",          // Best for AMM + account_lines
-  "https://xrplcluster.com/json-rpc"      // Cloudflare-backed, reliable
+  "https://xdx-proxy.dpmonks.workers.dev"   // Your Cloudflare Worker proxy
 ];
 
 // Keep track of which endpoint is currently working
