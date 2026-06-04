@@ -35,29 +35,38 @@ export async function startIndexerLoop() {
 }
 
 // ------------------------------------------------------
-// AMM POOL SYNC (WebSocket)
+// AMM POOL SYNC (RPC instead of WebSocket)
 // ------------------------------------------------------
 async function syncAmmPool() {
   try {
-    const ammInfo = await wsClient.request({
-      command: "amm_info",
-      asset: {
-        currency: config.xdxCurrency,
-        issuer: config.xdxIssuer
-      },
-      asset2: {
-        currency: "XRP"
-      }
+    const response = await rpcRequest({
+      method: "amm_info",
+      params: [
+        {
+          asset: {
+            currency: config.xdxCurrency,
+            issuer: config.xdxIssuer
+          },
+          asset2: {
+            currency: "XRP"
+          }
+        }
+      ]
     });
 
-    const poolData = ammInfo.result;
+    if (!response || !response.result || !response.result.amm) {
+      console.error("[AMM] No AMM data returned");
+      return;
+    }
+
+    const poolData = response.result.amm;
 
     await pool.query("DELETE FROM amm_pool");
     await pool.query(
       "INSERT INTO amm_pool (asset, asset2, lp_token, trading_fee) VALUES ($1,$2,$3,$4)",
       [
-        poolData.asset.currency,
-        poolData.asset2.currency,
+        poolData.amount.currency,   // XDX
+        "XRP",
         poolData.lp_token.currency,
         poolData.trading_fee
       ]
@@ -138,6 +147,13 @@ async function syncLpHolders() {
         [h.account, h.balance]
       );
     }
+
+    console.log(`[LP] LP holders synced: ${lpHolders.length}`);
+  } catch (err) {
+    console.error("LP sync error:", err);
+  }
+}
+
 
     console.log(`[LP] LP holders synced: ${lpHolders.length}`);
   } catch (err) {
