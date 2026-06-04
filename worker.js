@@ -3,7 +3,7 @@ export default {
     try {
       const target = "https://s2.ripple.com:51234";
 
-      // Read the incoming JSON body from Railway / client
+      // Read the incoming JSON body
       const reqBody = await request.text();
 
       // Forward the request to XRPL
