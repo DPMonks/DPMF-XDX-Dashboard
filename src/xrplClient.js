@@ -1,17 +1,16 @@
 import xrpl from "xrpl";
-import { config } from "./config.js";
 
 // ------------------------------------------------------
-// XRPL WebSocket Client (live data, AMM, subscriptions)
+// XRPL WebSocket Client (for AMM + live data)
 // ------------------------------------------------------
-export const wsClient = new xrpl.Client(config.xrplWs);
+export const wsClient = new xrpl.Client("wss://s1.ripple.com");
 
 // ------------------------------------------------------
 // XRPL RPC Client (HTTPS requests)
 // ------------------------------------------------------
 export async function rpcRequest(body) {
   try {
-    const response = await fetch(config.xrplRpc, {
+    const response = await fetch("https://s1.ripple.com:51234", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
