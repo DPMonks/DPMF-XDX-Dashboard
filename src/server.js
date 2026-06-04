@@ -18,6 +18,14 @@ import express from "express";
 import cors from "cors";
 import { startIndexerLoop } from "./indexer.js";
 
+// Import storage functions (MUST be at top)
+import {
+  getLatestSnapshot,
+  getAmmState,
+  getHolders,
+  getLpHolders
+} from "./storage.js";
+
 // ------------------------------------------------------
 // EXPRESS SETUP
 // ------------------------------------------------------
@@ -53,9 +61,61 @@ app.get("/", (req, res) => {
     status: "online",
     service: "XRPL Indexer",
     endpoints: {
-      health: "/health"
+      health: "/health",
+      latest: "/latest",
+      amm: "/amm",
+      holders: "/holders",
+      lp: "/lp"
     }
   });
+});
+
+// ------------------------------------------------------
+// INDEXER DATA ENDPOINTS
+// ------------------------------------------------------
+
+// Latest ledger snapshot
+app.get("/latest", async (req, res) => {
+  try {
+    const latest = await getLatestSnapshot();
+    res.json(latest);
+  } catch (err) {
+    console.error("Error in /latest:", err);
+    res.status(500).json({ error: "Failed to fetch latest snapshot" });
+  }
+});
+
+// AMM pool state
+app.get("/amm", async (req, res) => {
+  try {
+    const amm = await getAmmState();
+    res.json(amm);
+  } catch (err) {
+    console.error("Error in /amm:", err);
+    res.status(500).json({ error: "Failed to fetch AMM state" });
+  }
+});
+
+// Token holders
+app.get("/holders", async (req, res) => {
+  try {
+    const holders = await getHolders();
+    res.json(holders);
+  } catch (err) {
+    console.error("Error in /holders:", err);
+    res.status(500).json({ error: "Failed to fetch holders" });
+  }
+});
+
+// LP holders
+app.get("/lp", async (req, res) => {
+  try {
+    const lp = await getLpHolders();
+    res.json(lp);
+  } catch (err) {
+    console.error("Error in /lp:", err);
+    res.status(500).json({ error: "Failed to fetch LP holders" });
+  }
 });
 
 // ------------------------------------------------------
@@ -66,3 +126,4 @@ app.listen(PORT, () => {
   console.log("🔄 Starting indexer");
   startIndexerLoop();
 });
+
