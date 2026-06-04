@@ -13,7 +13,10 @@ export async function rpcRequest(body) {
     const response = await fetch("https://s1.ripple.com:51234", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        method: body.method,
+        params: body.params
+      })
     });
 
     return await response.json();
