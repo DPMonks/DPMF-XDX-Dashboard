@@ -8,7 +8,6 @@ import { config } from "./config.js";
 export async function startIndexerLoop() {
   console.log("[INDEXER] Loop started");
 
-  // Wait for WebSocket connection
   if (!wsClient.isConnected()) {
     console.log("[INDEXER] Waiting for XRPL WebSocket...");
     await new Promise((resolve) => {
@@ -23,19 +22,17 @@ export async function startIndexerLoop() {
 
   console.log("[INDEXER] XRPL WebSocket connected, starting sync...");
 
-  // Start periodic syncs
   setInterval(syncAmmPool, config.ammSyncInterval);
   setInterval(syncTokenHolders, config.holdersSyncInterval);
   setInterval(syncLpHolders, config.lpSyncInterval);
 
-  // Initial sync
   await syncAmmPool();
   await syncTokenHolders();
   await syncLpHolders();
 }
 
 // ------------------------------------------------------
-// AMM POOL SYNC (RPC instead of WebSocket)
+// AMM POOL SYNC (RPC)
 // ------------------------------------------------------
 async function syncAmmPool() {
   try {
@@ -48,9 +45,10 @@ async function syncAmmPool() {
             issuer: config.xdxIssuer
           },
           asset2: {
-            currency: "XRP"
+            currency: "XRP",
+            issuer: ""              // 🔥 REQUIRED FOR RIPPLE AMM
           },
-          ledger_index: "current"   // 🔥 REQUIRED FOR PUBLIC RIPPLE SERVERS
+          ledger_index: "current"   // 🔥 REQUIRED FOR PUBLIC SERVERS
         }
       ]
     });
@@ -154,4 +152,3 @@ async function syncLpHolders() {
     console.error("LP sync error:", err);
   }
 }
-
