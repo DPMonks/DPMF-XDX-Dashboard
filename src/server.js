@@ -17,14 +17,7 @@ process.on("unhandledRejection", err => {
 import express from "express";
 import cors from "cors";
 import { startIndexerLoop } from "./indexer.js";
-
-// Import storage functions (MUST be at top)
-import {
-  getLatestSnapshot,
-  getAmmState,
-  getHolders,
-  getLpHolders
-} from "./storage.js";
+import pool from "./db.js";   // <-- correct import for PostgreSQL
 
 // ------------------------------------------------------
 // EXPRESS SETUP
@@ -71,25 +64,32 @@ app.get("/", (req, res) => {
 });
 
 // ------------------------------------------------------
-// INDEXER DATA ENDPOINTS
+// INDEXER DATA ENDPOINTS (PostgreSQL-backed)
 // ------------------------------------------------------
 
-// Latest ledger snapshot
+// Latest snapshot (AMM + holders + LP)
 app.get("/latest", async (req, res) => {
   try {
-    const latest = await getLatestSnapshot();
-    res.json(latest);
+    const amm = await pool.query("SELECT * FROM amm_pool LIMIT 1");
+    const holders = await pool.query("SELECT * FROM token_holders ORDER BY balance DESC");
+    const lp = await pool.query("SELECT * FROM lp_holders ORDER BY lp_balance DESC");
+
+    res.json({
+      amm: amm.rows[0] || null,
+      holders: holders.rows,
+      lp_holders: lp.rows
+    });
   } catch (err) {
     console.error("Error in /latest:", err);
     res.status(500).json({ error: "Failed to fetch latest snapshot" });
   }
 });
 
-// AMM pool state
+// AMM pool
 app.get("/amm", async (req, res) => {
   try {
-    const amm = await getAmmState();
-    res.json(amm);
+    const result = await pool.query("SELECT * FROM amm_pool LIMIT 1");
+    res.json(result.rows[0] || {});
   } catch (err) {
     console.error("Error in /amm:", err);
     res.status(500).json({ error: "Failed to fetch AMM state" });
@@ -99,8 +99,8 @@ app.get("/amm", async (req, res) => {
 // Token holders
 app.get("/holders", async (req, res) => {
   try {
-    const holders = await getHolders();
-    res.json(holders);
+    const result = await pool.query("SELECT * FROM token_holders ORDER BY balance DESC");
+    res.json(result.rows);
   } catch (err) {
     console.error("Error in /holders:", err);
     res.status(500).json({ error: "Failed to fetch holders" });
@@ -110,8 +110,8 @@ app.get("/holders", async (req, res) => {
 // LP holders
 app.get("/lp", async (req, res) => {
   try {
-    const lp = await getLpHolders();
-    res.json(lp);
+    const result = await pool.query("SELECT * FROM lp_holders ORDER BY lp_balance DESC");
+    res.json(result.rows);
   } catch (err) {
     console.error("Error in /lp:", err);
     res.status(500).json({ error: "Failed to fetch LP holders" });
@@ -126,4 +126,3 @@ app.listen(PORT, () => {
   console.log("🔄 Starting indexer");
   startIndexerLoop();
 });
-
