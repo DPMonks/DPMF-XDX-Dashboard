@@ -9,7 +9,7 @@ export const wsClient = new xrpl.Client("wss://s1.ripple.com");
 // CLOUDFLARE WORKER RPC ENDPOINT (RAILWAY‑SAFE)
 // ------------------------------------------------------
 const RPC_ENDPOINTS = [
-  "https://xdx-proxy.crypto-92e.workers.dev"   // Your Cloudflare Worker proxy
+  "https://xdx-proxy.crypto-92e.workers.dev"
 ];
 
 // Keep track of which endpoint is currently working
@@ -37,19 +37,16 @@ export async function rpcRequest(body) {
 
       const json = await response.json();
 
-      // Reject if malformed or error
       if (!json || json.error || json.result?.error) {
         console.warn(`[RPC FAILOVER] ${url} returned error, trying next…`);
         continue;
       }
 
-      // Reject empty AMM responses
       if (body.method === "amm_info" && !json.result?.amm) {
         console.warn(`[RPC FAILOVER] ${url} returned no AMM data, trying next…`);
         continue;
       }
 
-      // SUCCESS — lock onto this endpoint
       activeRpcIndex = index;
       return json;
 
