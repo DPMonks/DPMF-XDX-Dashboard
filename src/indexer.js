@@ -49,7 +49,8 @@ async function syncAmmPool() {
           },
           asset2: {
             currency: "XRP"
-          }
+          },
+          ledger_index: "current"   // 🔥 REQUIRED FOR PUBLIC RIPPLE SERVERS
         }
       ]
     });
