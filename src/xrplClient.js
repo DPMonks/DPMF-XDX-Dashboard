@@ -6,12 +6,11 @@ import xrpl from "xrpl";
 export const wsClient = new xrpl.Client("wss://s1.ripple.com");
 
 // ------------------------------------------------------
-// RPC ENDPOINT FAILOVER LIST
+// RPC ENDPOINT FAILOVER LIST (AMM‑compatible)
 // ------------------------------------------------------
 const RPC_ENDPOINTS = [
-  "https://s2.ripple.com:51234",       // Full rippled (best)
-  "https://xrplcluster.com",           // Full rippled cluster
-  "https://rippled.xrpldata.com"       // Backup full rippled
+  "https://xrpl.ws",                 // Best public rippled for AMM
+  "https://s2.ripple.com:51234"      // Ripple full history server
 ];
 
 // ------------------------------------------------------
@@ -76,4 +75,3 @@ export async function connectClients() {
 }
 
 connectClients();
-
