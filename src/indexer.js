@@ -65,7 +65,7 @@ async function syncAmmPool() {
     await pool.query(
       "INSERT INTO amm_pool (asset, asset2, lp_token, trading_fee) VALUES ($1,$2,$3,$4)",
       [
-        poolData.amount.currency,   // XDX
+        poolData.amount.currency,
         "XRP",
         poolData.lp_token.currency,
         poolData.trading_fee
@@ -154,9 +154,3 @@ async function syncLpHolders() {
   }
 }
 
-
-    console.log(`[LP] LP holders synced: ${lpHolders.length}`);
-  } catch (err) {
-    console.error("LP sync error:", err);
-  }
-}
