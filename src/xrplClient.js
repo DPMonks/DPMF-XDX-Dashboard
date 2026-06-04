@@ -6,18 +6,26 @@ import xrpl from "xrpl";
 export const wsClient = new xrpl.Client("wss://s1.ripple.com");
 
 // ------------------------------------------------------
-// RPC ENDPOINT FAILOVER LIST (AMM‑compatible)
+// PUBLIC, RAILWAY‑COMPATIBLE RPC ENDPOINTS
 // ------------------------------------------------------
 const RPC_ENDPOINTS = [
-  "https://xrpl.ws",                 // Best public rippled for AMM
-  "https://s2.ripple.com:51234"      // Ripple full history server
+  "https://rpc.ontheledger.com",          // Best for AMM + account_lines
+  "https://xrplcluster.com/json-rpc"      // Cloudflare-backed, reliable
 ];
 
+// Keep track of which endpoint is currently working
+let activeRpcIndex = 0;
+
 // ------------------------------------------------------
-// XRPL RPC Client with automatic failover
+// SMART RPC CLIENT WITH STICKY FAILOVER
 // ------------------------------------------------------
 export async function rpcRequest(body) {
-  for (const url of RPC_ENDPOINTS) {
+  const total = RPC_ENDPOINTS.length;
+
+  for (let i = 0; i < total; i++) {
+    const index = (activeRpcIndex + i) % total;
+    const url = RPC_ENDPOINTS[index];
+
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -30,25 +38,26 @@ export async function rpcRequest(body) {
 
       const json = await response.json();
 
-      // Skip if server returned an error
+      // Reject if malformed or error
       if (!json || json.error || json.result?.error) {
         console.warn(`[RPC FAILOVER] ${url} returned error, trying next…`);
         continue;
       }
 
-      // Skip Clio servers (they cannot serve AMM or full trust lines)
+      // Reject Clio servers
       if (json.warnings && json.warnings.some(w => w.message?.includes("clio"))) {
-        console.warn(`[RPC FAILOVER] ${url} is a Clio server, skipping…`);
+        console.warn(`[RPC FAILOVER] ${url} is Clio, skipping…`);
         continue;
       }
 
-      // Skip empty AMM responses
+      // Reject empty AMM responses
       if (body.method === "amm_info" && !json.result?.amm) {
         console.warn(`[RPC FAILOVER] ${url} returned no AMM data, trying next…`);
         continue;
       }
 
-      // Valid response
+      // SUCCESS — lock onto this endpoint
+      activeRpcIndex = index;
       return json;
 
     } catch (err) {
