@@ -6,7 +6,13 @@ import { fetchHolders } from "./tasks/holders.js";
 import pools from "./pools.js";
 import { logger } from "./utils/logger.js";
 import { updateHealthTimestamp } from "./health.js";
-import "./server.js"; // start health server
+import {
+  writeAmmSnapshot,
+  writeTokenHolders,
+  writeLpHolders
+} from "./dbWriter.js";
+
+import "./server.js"; // start API + health server
 
 // Delay helper
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -38,16 +44,18 @@ async function processPool(pool) {
     logger.warn("AMM", "No AMM data returned");
   } else {
     logger.info("AMM", "Retrieved AMM info");
+    await writeAmmSnapshot(pool.name, amm);
   }
 
   // -------------------------
   // 2. LP HOLDERS
   // -------------------------
   const lp = await fetchLpHolders(pool);
-  if (!lp) {
+  if (!lp || lp.length === 0) {
     logger.warn("LP", "No LP token data returned");
   } else {
-    logger.info("LP", "Retrieved LP token info");
+    logger.info("LP", `Retrieved ${lp.length} LP holders`);
+    await writeLpHolders(lp);
   }
 
   // -------------------------
@@ -58,6 +66,7 @@ async function processPool(pool) {
     logger.warn("HOLDERS", "No trustlines returned");
   } else {
     logger.info("HOLDERS", `Retrieved ${holders.length} trustlines`);
+    await writeTokenHolders(holders);
   }
 
   const end = Date.now();

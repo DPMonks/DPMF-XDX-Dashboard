@@ -16,9 +16,8 @@ process.on("unhandledRejection", err => {
 // ------------------------------------------------------
 import express from "express";
 import cors from "cors";
-import { startIndexerLoop } from "./indexer.js";
 import pool from "./db.js";
-import { getHealthStatus } from "./health.js";   // <-- UPDATED
+import { getHealthStatus } from "./health.js";
 
 // ------------------------------------------------------
 // EXPRESS SETUP
@@ -37,10 +36,10 @@ console.log("📦 Environment:", process.env.NODE_ENV || "development");
 console.log("🔧 Port:", PORT);
 
 // ------------------------------------------------------
-// HEALTH CHECK (UPDATED)
+// HEALTH CHECK
 // ------------------------------------------------------
 app.get("/health", (req, res) => {
-  res.json(getHealthStatus());   // <-- UPDATED
+  res.json(getHealthStatus());
 });
 
 // ------------------------------------------------------
@@ -52,66 +51,149 @@ app.get("/", (req, res) => {
     service: "XRPL Indexer",
     endpoints: {
       health: "/health",
-      latest: "/latest",
-      amm: "/amm",
-      holders: "/holders",
-      lp: "/lp"
+      overview: "/api/overview",
+      amm: "/api/amm",
+      topHolders: "/api/top-holders",
+      topLp: "/api/top-lp",
+      tvlHistory: "/api/charts/tvl",
+      holdersHistory: "/api/charts/holders",
+      lpHoldersHistory: "/api/charts/lp-holders"
     }
   });
 });
 
 // ------------------------------------------------------
-// INDEXER DATA ENDPOINTS (PostgreSQL-backed)
+// DASHBOARD API ENDPOINTS
 // ------------------------------------------------------
 
-// Latest snapshot (AMM + holders + LP)
-app.get("/latest", async (req, res) => {
+// Overview cards
+app.get("/api/overview", async (req, res) => {
   try {
-    const amm = await pool.query("SELECT * FROM amm_pool LIMIT 1");
-    const holders = await pool.query("SELECT * FROM token_holders ORDER BY balance DESC");
-    const lp = await pool.query("SELECT * FROM lp_holders ORDER BY lp_balance DESC");
+    const amm = await pool.query(
+      "SELECT reserve_asset, reserve_currency, lp_supply FROM amm_pool_latest WHERE pool_name = 'XDX';"
+    );
+    const holders = await pool.query(
+      "SELECT COUNT(*) AS holder_count FROM token_holders_latest;"
+    );
+    const lpHolders = await pool.query(
+      "SELECT COUNT(*) AS lp_holder_count FROM lp_holders_latest;"
+    );
+
+    const row = amm.rows[0] || {
+      reserve_asset: 0,
+      reserve_currency: 0,
+      lp_supply: 0
+    };
+
+    const tvl =
+      Number(row.reserve_asset || 0) + Number(row.reserve_currency || 0);
 
     res.json({
-      amm: amm.rows[0] || null,
-      holders: holders.rows,
-      lp_holders: lp.rows
+      tvl,
+      lp_supply: Number(row.lp_supply || 0),
+      holder_count: Number(holders.rows[0]?.holder_count || 0),
+      lp_holder_count: Number(lpHolders.rows[0]?.lp_holder_count || 0)
     });
   } catch (err) {
-    console.error("Error in /latest:", err);
-    res.status(500).json({ error: "Failed to fetch latest snapshot" });
+    console.error("Error in /api/overview:", err);
+    res.status(500).json({ error: "Failed to fetch overview" });
   }
 });
 
-// AMM pool
-app.get("/amm", async (req, res) => {
+// AMM snapshot
+app.get("/api/amm", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM amm_pool LIMIT 1");
+    const result = await pool.query(
+      "SELECT * FROM amm_pool_latest WHERE pool_name = 'XDX';"
+    );
     res.json(result.rows[0] || {});
   } catch (err) {
-    console.error("Error in /amm:", err);
+    console.error("Error in /api/amm:", err);
     res.status(500).json({ error: "Failed to fetch AMM state" });
   }
 });
 
-// Token holders
-app.get("/holders", async (req, res) => {
+// Top token holders
+app.get("/api/top-holders", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM token_holders ORDER BY balance DESC");
+    const limit = Number(req.query.limit || 100);
+    const result = await pool.query(
+      "SELECT account, balance, frozen FROM token_holders_latest ORDER BY balance DESC LIMIT $1;",
+      [limit]
+    );
     res.json(result.rows);
   } catch (err) {
-    console.error("Error in /holders:", err);
-    res.status(500).json({ error: "Failed to fetch holders" });
+    console.error("Error in /api/top-holders:", err);
+    res.status(500).json({ error: "Failed to fetch top holders" });
   }
 });
 
-// LP holders
-app.get("/lp", async (req, res) => {
+// Top LP holders
+app.get("/api/top-lp", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM lp_holders ORDER BY lp_balance DESC");
+    const limit = Number(req.query.limit || 100);
+    const result = await pool.query(
+      "SELECT account, lp_balance FROM lp_holders_latest ORDER BY lp_balance DESC LIMIT $1;",
+      [limit]
+    );
     res.json(result.rows);
   } catch (err) {
-    console.error("Error in /lp:", err);
-    res.status(500).json({ error: "Failed to fetch LP holders" });
+    console.error("Error in /api/top-lp:", err);
+    res.status(500).json({ error: "Failed to fetch top LP holders" });
+  }
+});
+
+// TVL history
+app.get("/api/charts/tvl", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT 
+         timestamp,
+         reserve_asset + reserve_currency AS tvl
+       FROM amm_pool_history
+       WHERE pool_name = 'XDX'
+       ORDER BY timestamp ASC;`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error in /api/charts/tvl:", err);
+    res.status(500).json({ error: "Failed to fetch TVL history" });
+  }
+});
+
+// Holder count over time
+app.get("/api/charts/holders", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT 
+         DATE(timestamp) AS day,
+         COUNT(*) AS holder_count
+       FROM token_holders_history
+       GROUP BY day
+       ORDER BY day ASC;`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error in /api/charts/holders:", err);
+    res.status(500).json({ error: "Failed to fetch holders history" });
+  }
+});
+
+// LP holder count over time
+app.get("/api/charts/lp-holders", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT 
+         DATE(timestamp) AS day,
+         COUNT(*) AS lp_holder_count
+       FROM lp_holders_history
+       GROUP BY day
+       ORDER BY day ASC;`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error in /api/charts/lp-holders:", err);
+    res.status(500).json({ error: "Failed to fetch LP holders history" });
   }
 });
 
@@ -120,6 +202,4 @@ app.get("/lp", async (req, res) => {
 // ------------------------------------------------------
 app.listen(PORT, () => {
   console.log(`✅ API server running on port ${PORT}`);
-  console.log("🔄 Starting indexer");
-  startIndexerLoop();
 });
