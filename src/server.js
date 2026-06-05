@@ -17,7 +17,8 @@ process.on("unhandledRejection", err => {
 import express from "express";
 import cors from "cors";
 import { startIndexerLoop } from "./indexer.js";
-import pool from "./db.js";   // <-- correct import for PostgreSQL
+import pool from "./db.js";
+import { getHealthStatus } from "./health.js";   // <-- UPDATED
 
 // ------------------------------------------------------
 // EXPRESS SETUP
@@ -36,14 +37,10 @@ console.log("📦 Environment:", process.env.NODE_ENV || "development");
 console.log("🔧 Port:", PORT);
 
 // ------------------------------------------------------
-// HEALTH CHECK
+// HEALTH CHECK (UPDATED)
 // ------------------------------------------------------
 app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    timestamp: Date.now(),
-    message: "XRPL Indexer API is running"
-  });
+  res.json(getHealthStatus());   // <-- UPDATED
 });
 
 // ------------------------------------------------------
