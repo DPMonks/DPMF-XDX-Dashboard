@@ -1,154 +1,75 @@
-import { wsClient, rpcRequest } from "./xrplClient.js";
-import pool from "./db.js";
-import { config } from "./config.js";
+import { fetchAmm } from "./tasks/amm.js";
+import { fetchLpHolders } from "./tasks/lp.js";
+import { fetchHolders } from "./tasks/holders.js";
+import pools from "./pools.js"; // You will create this next
 
-// ------------------------------------------------------
-// INDEXER LOOP
-// ------------------------------------------------------
-export async function startIndexerLoop() {
-  console.log("[INDEXER] Loop started");
+// Delay helper
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-  if (!wsClient.isConnected()) {
-    console.log("[INDEXER] Waiting for XRPL WebSocket...");
-    await new Promise((resolve) => {
-      const check = setInterval(() => {
-        if (wsClient.isConnected()) {
-          clearInterval(check);
-          resolve();
-        }
-      }, 1000);
-    });
+async function processPool(pool) {
+  console.log(`\n[POOL] Processing AMM pool: ${pool.name}`);
+
+  // -------------------------
+  // 1. AMM INFO
+  // -------------------------
+  const amm = await fetchAmm(pool);
+  if (!amm) {
+    console.warn("[AMM] No AMM data returned");
+  } else {
+    console.log("[AMM] Retrieved AMM info");
   }
 
-  console.log("[INDEXER] XRPL WebSocket connected, starting sync...");
+  // -------------------------
+  // 2. LP HOLDERS
+  // -------------------------
+  const lp = await fetchLpHolders(pool);
+  if (!lp) {
+    console.warn("[LP] No LP token data returned");
+  } else {
+    console.log("[LP] Retrieved LP token info");
+  }
 
-  setInterval(syncAmmPool, config.ammSyncInterval);
-  setInterval(syncTokenHolders, config.holdersSyncInterval);
-  setInterval(syncLpHolders, config.lpSyncInterval);
+  // -------------------------
+  // 3. HOLDERS (trustlines)
+  // -------------------------
+  const holders = await fetchHolders(pool.issuer);
+  if (!holders || holders.length === 0) {
+    console.warn("[HOLDERS] No trustlines returned");
+  } else {
+    console.log(`[HOLDERS] Retrieved ${holders.length} trustlines`);
+  }
 
-  await syncAmmPool();
-  await syncTokenHolders();
-  await syncLpHolders();
+  // -------------------------
+  // 4. Save to DB (optional)
+  // -------------------------
+  // TODO: Add your PostgreSQL insert/update logic here
+  // pool, amm, lp, holders
+
+  console.log(`[POOL] Finished processing ${pool.name}`);
 }
 
-// ------------------------------------------------------
-// AMM POOL SYNC (RPC)
-// ------------------------------------------------------
-async function syncAmmPool() {
-  try {
-    const response = await rpcRequest({
-      method: "amm_info",
-      params: [
-        {
-          asset: {
-            currency: config.xdxCurrency,
-            issuer: config.xdxIssuer
-          },
-          asset2: {
-            currency: "XRP",
-            issuer: ""              // 🔥 REQUIRED FOR RIPPLE AMM
-          },
-          ledger_index: "current"   // 🔥 REQUIRED FOR PUBLIC SERVERS
-        }
-      ]
-    });
+async function startIndexer() {
+  console.log("🚀 XDX Indexer Started");
 
-    if (!response || !response.result || !response.result.amm) {
-      console.error("[AMM] No AMM data returned");
-      return;
+  while (true) {
+    console.log("\n==============================");
+    console.log("🔄 Starting new indexer cycle");
+    console.log("==============================");
+
+    for (const pool of pools) {
+      try {
+        await processPool(pool);
+      } catch (err) {
+        console.error(`[POOL ERROR] ${pool.name}`, err);
+      }
+
+      // Small delay between pools
+      await sleep(1500);
     }
 
-    const poolData = response.result.amm;
-
-    await pool.query("DELETE FROM amm_pool");
-    await pool.query(
-      "INSERT INTO amm_pool (asset, asset2, lp_token, trading_fee) VALUES ($1,$2,$3,$4)",
-      [
-        poolData.amount.currency,
-        "XRP",
-        poolData.lp_token.currency,
-        poolData.trading_fee
-      ]
-    );
-
-    console.log("[AMM] Pool synced");
-  } catch (err) {
-    console.error("AMM sync error:", err);
+    console.log("⏳ Cycle complete. Waiting 30 seconds...");
+    await sleep(30000);
   }
 }
 
-// ------------------------------------------------------
-// TOKEN HOLDERS SYNC (RPC)
-// ------------------------------------------------------
-async function syncTokenHolders() {
-  try {
-    const response = await rpcRequest({
-      method: "account_lines",
-      params: [
-        {
-          account: config.xdxIssuer,
-          ledger_index: "validated"
-        }
-      ]
-    });
-
-    if (!response || !response.result) {
-      console.error("[HOLDERS] RPC returned no result");
-      return;
-    }
-
-    const holders = response.result.lines.filter(
-      (l) => l.currency === config.xdxCurrency && parseFloat(l.balance) > 0
-    );
-
-    await pool.query("DELETE FROM token_holders");
-    for (const h of holders) {
-      await pool.query(
-        "INSERT INTO token_holders (account, balance) VALUES ($1,$2)",
-        [h.account, h.balance]
-      );
-    }
-
-    console.log(`[HOLDERS] XDX holders synced: ${holders.length}`);
-  } catch (err) {
-    console.error("Holder sync error:", err);
-  }
-}
-
-// ------------------------------------------------------
-// LP HOLDERS SYNC (RPC)
-// ------------------------------------------------------
-async function syncLpHolders() {
-  try {
-    const response = await rpcRequest({
-      method: "account_lines",
-      params: [
-        {
-          account: config.xdxIssuer,
-          ledger_index: "validated"
-        }
-      ]
-    });
-
-    if (!response || !response.result) {
-      console.error("[LP] RPC returned no result");
-      return;
-    }
-
-    const lpHolders = response.result.lines.filter(
-      (l) => l.currency === config.lpCurrency && parseFloat(l.balance) > 0
-    );
-
-    await pool.query("DELETE FROM lp_holders");
-    for (const h of lpHolders) {
-      await pool.query(
-        "INSERT INTO lp_holders (account, lp_balance) VALUES ($1,$2)",
-        [h.account, h.balance]
-      );
-    }
-
-    console.log(`[LP] LP holders synced: ${lpHolders.length}`);
-  } catch (err) {
-    console.error("LP sync error:", err);
-  }
-}
+startIndexer();
