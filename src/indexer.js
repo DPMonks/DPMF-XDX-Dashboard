@@ -1,13 +1,33 @@
+// /src/indexer.js
+
 import { fetchAmm } from "./tasks/amm.js";
 import { fetchLpHolders } from "./tasks/lp.js";
 import { fetchHolders } from "./tasks/holders.js";
 import pools from "./pools.js";
 import { logger } from "./utils/logger.js";
+import { updateHealthTimestamp } from "./health.js";
+import "./server.js"; // start health server
 
 // Delay helper
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Global crash protection
+process.on("uncaughtException", (err) => {
+  logger.error("SYSTEM", "Uncaught exception", err);
+});
+
+process.on("unhandledRejection", (err) => {
+  logger.error("SYSTEM", "Unhandled promise rejection", err);
+});
+
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  logger.warn("SYSTEM", "Received SIGTERM, shutting down...");
+  process.exit(0);
+});
+
 async function processPool(pool) {
+  const start = Date.now();
   logger.info("POOL", `Processing AMM pool: ${pool.name}`);
 
   // -------------------------
@@ -40,13 +60,8 @@ async function processPool(pool) {
     logger.info("HOLDERS", `Retrieved ${holders.length} trustlines`);
   }
 
-  // -------------------------
-  // 4. Save to DB (optional)
-  // -------------------------
-  // TODO: Add your PostgreSQL insert/update logic here
-  // pool, amm, lp, holders
-
-  logger.info("POOL", `Finished processing ${pool.name}`);
+  const end = Date.now();
+  logger.info("POOL", `${pool.name} processed in ${end - start}ms`);
 }
 
 async function startIndexer() {
@@ -54,25 +69,31 @@ async function startIndexer() {
 
   while (true) {
     logger.cycle("Starting new indexer cycle");
+    updateHealthTimestamp(); // heartbeat at cycle start
+
     const cycleStart = Date.now();
 
-    for (const pool of pools) {
-      try {
-        await processPool(pool);
-      } catch (err) {
-        logger.error("POOL", `Error processing ${pool.name}`, err);
-      }
+    try {
+      for (const pool of pools) {
+        try {
+          await processPool(pool);
+        } catch (err) {
+          logger.error("POOL", `Error processing ${pool.name}`, err);
+        }
 
-      // Small delay between pools
-      await sleep(1500);
+        await sleep(1500); // delay between pools
+      }
+    } catch (err) {
+      logger.error("SYSTEM", "Fatal error in cycle", err);
     }
 
     const cycleEnd = Date.now();
     const duration = ((cycleEnd - cycleStart) / 1000).toFixed(2);
 
     logger.info("SYSTEM", `Cycle completed in ${duration}s`);
-    logger.info("SYSTEM", "Waiting 30 seconds before next cycle");
+    updateHealthTimestamp(); // heartbeat at cycle end
 
+    logger.info("SYSTEM", "Waiting 30 seconds before next cycle");
     await sleep(30000);
   }
 }
