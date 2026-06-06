@@ -7,7 +7,8 @@ export async function fetchAmm(pool) {
       params: [
         {
           asset: pool.asset,
-          asset2: pool.asset2
+          asset2: pool.asset2,
+          ledger_index: "current"   // 🔥 REQUIRED for Clio
         }
       ]
     };
