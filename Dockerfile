@@ -1,13 +1,13 @@
 # force rebuild v3
-# Use Node 18
-FROM node:18
+# Use official Node 22 image
+FROM node:22
 
 # Set working directory inside container
 WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm ci --omit=dev
 
 # Copy everything else (including src/)
 COPY . .
