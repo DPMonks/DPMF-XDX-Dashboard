@@ -12,8 +12,6 @@ import {
   writeLpHolders
 } from "./dbWriter.js";
 
-import "./server.js"; // start API + health server
-
 // Delay helper
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -36,37 +34,31 @@ async function processPool(pool) {
   const start = Date.now();
   logger.info("POOL", `Processing AMM pool: ${pool.name}`);
 
-  // -------------------------
   // 1. AMM INFO
-  // -------------------------
   const amm = await fetchAmm(pool);
-  if (!amm) {
-    logger.warn("AMM", "No AMM data returned");
-  } else {
+  if (amm) {
     logger.info("AMM", "Retrieved AMM info");
     await writeAmmSnapshot(pool.name, amm);
+  } else {
+    logger.warn("AMM", "No AMM data returned");
   }
 
-  // -------------------------
   // 2. LP HOLDERS
-  // -------------------------
   const lp = await fetchLpHolders(pool);
-  if (!lp || lp.length === 0) {
-    logger.warn("LP", "No LP token data returned");
-  } else {
+  if (lp?.length) {
     logger.info("LP", `Retrieved ${lp.length} LP holders`);
     await writeLpHolders(lp);
+  } else {
+    logger.warn("LP", "No LP token data returned");
   }
 
-  // -------------------------
-  // 3. HOLDERS (trustlines)
-  // -------------------------
+  // 3. HOLDERS
   const holders = await fetchHolders(pool.issuer);
-  if (!holders || holders.length === 0) {
-    logger.warn("HOLDERS", "No trustlines returned");
-  } else {
+  if (holders?.length) {
     logger.info("HOLDERS", `Retrieved ${holders.length} trustlines`);
     await writeTokenHolders(holders);
+  } else {
+    logger.warn("HOLDERS", "No trustlines returned");
   }
 
   const end = Date.now();
@@ -78,7 +70,7 @@ async function startIndexer() {
 
   while (true) {
     logger.cycle("Starting new indexer cycle");
-    updateHealthTimestamp(); // heartbeat at cycle start
+    updateHealthTimestamp();
 
     const cycleStart = Date.now();
 
@@ -89,8 +81,7 @@ async function startIndexer() {
         } catch (err) {
           logger.error("POOL", `Error processing ${pool.name}`, err);
         }
-
-        await sleep(1500); // delay between pools
+        await sleep(1500);
       }
     } catch (err) {
       logger.error("SYSTEM", "Fatal error in cycle", err);
@@ -100,7 +91,7 @@ async function startIndexer() {
     const duration = ((cycleEnd - cycleStart) / 1000).toFixed(2);
 
     logger.info("SYSTEM", `Cycle completed in ${duration}s`);
-    updateHealthTimestamp(); // heartbeat at cycle end
+    updateHealthTimestamp();
 
     logger.info("SYSTEM", "Waiting 30 seconds before next cycle");
     await sleep(30000);
