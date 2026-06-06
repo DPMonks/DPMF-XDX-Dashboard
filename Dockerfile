@@ -15,5 +15,5 @@ COPY . .
 # Expose the port your server uses
 EXPOSE 8080
 
-# Start the app
-CMD ["npm", "start"]
+# Start the app directly
+CMD ["node", "src/server.js"]
