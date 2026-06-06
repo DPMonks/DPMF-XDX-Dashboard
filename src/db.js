@@ -12,8 +12,15 @@ const pool = new pg.Pool({
   user: process.env.PGUSER,
   password: process.env.PGPASSWORD,
   database: process.env.PGDATABASE,
-  port: process.env.PGPORT,
+  port: Number(process.env.PGPORT),
   ssl: { rejectUnauthorized: false }
 });
+
+// Test connection
+pool.connect()
+  .then(() => console.log("✅ Connected to Postgres"))
+  .catch(err => {
+    console.error("❌ Postgres connection error:", err);
+  });
 
 export default pool;
