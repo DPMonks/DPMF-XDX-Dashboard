@@ -18,8 +18,8 @@ export default [
       issuer: "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo"
     },
     asset2: {
-      currency: "RLUSD",
-      issuer: "rHqHaQf8rVj8Yk1Vx1t6gFj6FQx1Jp9z8C"   // RLUSD issuer
+      currency: "524C555344000000000000000000000000000000",   // RLUSD HEX currency code
+      issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De"          // RLUSD issuer
     },
     issuer: "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo"
   }
