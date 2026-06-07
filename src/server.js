@@ -19,7 +19,7 @@ import cors from "cors";
 import pool from "./db.js";
 import { getHealthStatus } from "./health.js";
 
-// START INDEXER (IMPORTANT — FIXES LOOP)
+// START INDEXER LOOP
 import "./indexer.js";
 
 // ------------------------------------------------------
@@ -56,6 +56,7 @@ app.get("/", (req, res) => {
       health: "/health",
       overview: "/api/overview",
       amm: "/api/amm",
+      pools: "/api/pools",
       topHolders: "/api/top-holders",
       topLp: "/api/top-lp",
       tvlHistory: "/api/charts/tvl",
@@ -66,10 +67,8 @@ app.get("/", (req, res) => {
 });
 
 // ------------------------------------------------------
-// DASHBOARD API ENDPOINTS
+// OVERVIEW CARDS
 // ------------------------------------------------------
-
-// Overview cards
 app.get("/api/overview", async (req, res) => {
   try {
     const amm = await pool.query(
@@ -103,7 +102,9 @@ app.get("/api/overview", async (req, res) => {
   }
 });
 
-// AMM snapshot
+// ------------------------------------------------------
+// AMM SNAPSHOT
+// ------------------------------------------------------
 app.get("/api/amm", async (req, res) => {
   try {
     const result = await pool.query(
@@ -116,7 +117,9 @@ app.get("/api/amm", async (req, res) => {
   }
 });
 
-// Top token holders
+// ------------------------------------------------------
+// TOP TOKEN HOLDERS
+// ------------------------------------------------------
 app.get("/api/top-holders", async (req, res) => {
   try {
     const limit = Number(req.query.limit || 100);
@@ -131,7 +134,9 @@ app.get("/api/top-holders", async (req, res) => {
   }
 });
 
-// Top LP holders
+// ------------------------------------------------------
+// TOP LP HOLDERS
+// ------------------------------------------------------
 app.get("/api/top-lp", async (req, res) => {
   try {
     const limit = Number(req.query.limit || 100);
@@ -146,7 +151,9 @@ app.get("/api/top-lp", async (req, res) => {
   }
 });
 
-// TVL history
+// ------------------------------------------------------
+// TVL HISTORY
+// ------------------------------------------------------
 app.get("/api/charts/tvl", async (req, res) => {
   try {
     const result = await pool.query(
@@ -164,7 +171,9 @@ app.get("/api/charts/tvl", async (req, res) => {
   }
 });
 
-// Holder count over time
+// ------------------------------------------------------
+// HOLDER COUNT HISTORY
+// ------------------------------------------------------
 app.get("/api/charts/holders", async (req, res) => {
   try {
     const result = await pool.query(
@@ -182,7 +191,9 @@ app.get("/api/charts/holders", async (req, res) => {
   }
 });
 
-// LP holder count over time
+// ------------------------------------------------------
+// LP HOLDER COUNT HISTORY
+// ------------------------------------------------------
 app.get("/api/charts/lp-holders", async (req, res) => {
   try {
     const result = await pool.query(
@@ -201,7 +212,53 @@ app.get("/api/charts/lp-holders", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// START SERVER (IMPORTANT: BIND TO 0.0.0.0 FOR RAILWAY)
+// NEW: POOL STATS ENDPOINT
+// ------------------------------------------------------
+app.get("/api/pools", async (req, res) => {
+  try {
+    const amm = await pool.query(
+      "SELECT * FROM amm_pool_latest WHERE pool_name = 'XDX';"
+    );
+    const holders = await pool.query(
+      "SELECT COUNT(*) AS holder_count FROM token_holders_latest;"
+    );
+    const lpHolders = await pool.query(
+      "SELECT COUNT(*) AS lp_holder_count FROM lp_holders_latest;"
+    );
+
+    const row = amm.rows[0] || {
+      reserve_asset: 0,
+      reserve_currency: 0,
+      lp_supply: 0,
+      price: 0,
+      volume24h: 0,
+      apr: 0
+    };
+
+    const tvl =
+      Number(row.reserve_asset || 0) + Number(row.reserve_currency || 0);
+
+    res.json({
+      pool: "XDX",
+      tvl,
+      price: Number(row.price || 0),
+      apr: Number(row.apr || 0),
+      volume24h: Number(row.volume24h || 0),
+      reserve_asset: Number(row.reserve_asset || 0),
+      reserve_currency: Number(row.reserve_currency || 0),
+      lp_supply: Number(row.lp_supply || 0),
+      holder_count: Number(holders.rows[0]?.holder_count || 0),
+      lp_holder_count: Number(lpHolders.rows[0]?.lp_holder_count || 0),
+      updated: row.timestamp
+    });
+  } catch (err) {
+    console.error("Error in /api/pools:", err);
+    res.status(500).json({ error: "Failed to fetch pool stats" });
+  }
+});
+
+// ------------------------------------------------------
+// START SERVER (Railway requires 0.0.0.0 binding)
 // ------------------------------------------------------
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ API server running on port ${PORT}`);
