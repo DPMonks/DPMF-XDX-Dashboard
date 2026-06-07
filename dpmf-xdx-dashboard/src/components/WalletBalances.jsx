@@ -1,40 +1,27 @@
-import { useEffect } from "react";
-import { useWalletContext } from "../context/WalletContext";
 import { useBalances } from "../hooks/useBalances";
+import { useWallet } from "../context/WalletContext";
 
 export default function WalletBalances() {
-  const { account } = useWalletContext();
-  const { balances, lpBalances, fetchBalances } = useBalances();
+  const { walletAddress } = useWallet();
+  const { balances, loading } = useBalances(walletAddress);
 
-  useEffect(() => {
-    if (account) fetchBalances(account);
-  }, [account]);
-
-  if (!account) return null;
+  if (!walletAddress) return <p>Connect wallet to view balances.</p>;
 
   return (
-    <div className="wallet-balances">
+    <div>
       <h2>Your Balances</h2>
 
-      {balances.map((b, i) => (
-        <div key={i} className="balance-row">
-          <span>{b.currency}</span>
-          <span>{b.balance}</span>
-        </div>
-      ))}
+      {loading && <p>Loading balances...</p>}
 
-      <div style={{ margin: "20px 0", borderBottom: "1px solid #333" }} />
+      {!loading && balances.length === 0 && <p>No balances found.</p>}
 
-      <h2>Your LP Tokens</h2>
-
-      {lpBalances.length === 0 && <p>No LP tokens found</p>}
-
-      {lpBalances.map((lp, i) => (
-        <div key={i} className="balance-row">
-          <span>{lp.currency}</span>
-          <span>{lp.balance}</span>
-        </div>
-      ))}
+      {!loading &&
+        balances.map((bal, i) => (
+          <div key={i} className="balance-row">
+            <span>{bal.currency}</span>
+            <strong>{bal.value}</strong>
+          </div>
+        ))}
     </div>
   );
 }

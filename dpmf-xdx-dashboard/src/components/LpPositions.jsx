@@ -1,57 +1,49 @@
-import { useEffect } from "react";
-import { useWalletContext } from "../context/WalletContext";
-import { useLpPositions } from "../hooks/useLpPositions";
+import { useEffect, useState } from "react";
+import { useWallet } from "../context/WalletContext";
 
 export default function LpPositions() {
-  const { account } = useWalletContext();
-  const { lpPositions, loading, fetchLpPositions } = useLpPositions();
+  const { walletAddress } = useWallet();
+  const [positions, setPositions] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (account) fetchLpPositions(account);
-  }, [account]);
+    if (!walletAddress) return;
 
-  if (!account) return null;
+    const fetchPositions = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(
+          `${import.meta.env.VITE_API_BASE}/lp/${walletAddress}`
+        );
+        const data = await res.json();
+        setPositions(data?.positions || []);
+      } catch (err) {
+        console.error("LP fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPositions();
+  }, [walletAddress]);
+
+  if (!walletAddress) return <p>Connect wallet to view LP positions.</p>;
 
   return (
     <div>
       <h2>Your LP Positions</h2>
 
-      {loading && <p>Loading LP positions...</p>}
+      {loading && <p>Loading positions...</p>}
 
-      {!loading && lpPositions.length === 0 && (
-        <p>No LP positions found.</p>
-      )}
+      {!loading && positions.length === 0 && <p>No LP positions found.</p>}
 
-      {lpPositions.map((pos, i) => (
-        <div key={i} className="dashboard-section" style={{ marginBottom: "20px" }}>
-          <h3>{pos.pool_name}</h3>
-
-          <div className="balance-row">
-            <span>LP Tokens</span>
-            <span>{pos.lp_balance}</span>
+      {!loading &&
+        positions.map((pos, i) => (
+          <div key={i} className="pool-row">
+            <strong>{pos.tokenA}/{pos.tokenB}</strong>
+            <p>Share: {pos.share}</p>
           </div>
-
-          <div className="balance-row">
-            <span>Pool Share</span>
-            <span>{pos.share_percent}%</span>
-          </div>
-
-          <div className="balance-row">
-            <span>{pos.token_a_symbol}</span>
-            <span>{pos.token_a_amount}</span>
-          </div>
-
-          <div className="balance-row">
-            <span>{pos.token_b_symbol}</span>
-            <span>{pos.token_b_amount}</span>
-          </div>
-
-          <div className="balance-row">
-            <span>Total Value (USD)</span>
-            <span>${pos.usd_value}</span>
-          </div>
-        </div>
-      ))}
+        ))}
     </div>
   );
 }

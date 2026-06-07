@@ -1,45 +1,35 @@
 import { useState } from "react";
-import { useWalletContext } from "../context/WalletContext";
+import { useWallet } from "../context/WalletContext";
 import { useRemoveLiquidity } from "../hooks/useRemoveLiquidity";
 
-export default function RemoveLiquidity({ lpTokens }) {
-  const { account } = useWalletContext();
+export default function RemoveLiquidity() {
+  const { walletAddress } = useWallet();
   const { removeLiquidity, loading, payloadUrl } = useRemoveLiquidity();
 
-  const [selectedLp, setSelectedLp] = useState(null);
+  const [poolId, setPoolId] = useState("");
   const [amount, setAmount] = useState("");
 
   function submit() {
-    if (!selectedLp) return;
-
     removeLiquidity({
-      account,
-      lpToken: selectedLp,
+      walletAddress,
+      poolId,
       amount
     });
   }
 
-  if (!account) return <p>Connect wallet to remove liquidity.</p>;
+  if (!walletAddress) return <p>Connect wallet to remove liquidity.</p>;
 
   return (
     <div>
       <h2>Remove Liquidity</h2>
 
       <div className="balance-row">
-        <span>Select LP Token</span>
-        <select
-          onChange={(e) => {
-            const lp = lpTokens.find((t) => t.currency === e.target.value);
-            setSelectedLp(lp);
-          }}
-        >
-          <option value="">Select LP</option>
-          {lpTokens.map((lp, i) => (
-            <option key={i} value={lp.currency}>
-              {lp.currency}
-            </option>
-          ))}
-        </select>
+        <span>Pool ID</span>
+        <input
+          type="text"
+          value={poolId}
+          onChange={(e) => setPoolId(e.target.value)}
+        />
       </div>
 
       <div className="balance-row">

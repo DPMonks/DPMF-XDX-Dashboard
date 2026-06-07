@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useWalletContext } from "../context/WalletContext";
+import { useWallet } from "../context/WalletContext";
 import { useAddLiquidity } from "../hooks/useAddLiquidity";
 
 export default function AddLiquidity() {
-  const { account } = useWalletContext();
+  const { walletAddress: account } = useWallet();
   const { addLiquidity, loading, payloadUrl } = useAddLiquidity();
 
   const [tokenA, setTokenA] = useState("XDX");
