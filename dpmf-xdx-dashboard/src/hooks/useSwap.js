@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { XummPkce } from "xumm-oauth2-pkce";
 
-export function useAddLiquidity() {
+export function useSwap() {
   const [loading, setLoading] = useState(false);
   const [payloadUrl, setPayloadUrl] = useState(null);
 
-  async function addLiquidity({ account, tokenA, tokenB, amountA, amountB }) {
+  async function swap({ account, tokenIn, tokenOut, amountIn }) {
     setLoading(true);
     setPayloadUrl(null);
 
@@ -15,21 +15,20 @@ export function useAddLiquidity() {
       });
 
       const payload = await xumm.payload.create({
-        TransactionType: "AMMDeposit",
+        TransactionType: "AMMOffer",
         Account: account,
-        Amount: amountA,
-        Amount2: amountB,
-        Asset: tokenA,
-        Asset2: tokenB
+        Amount: amountIn,
+        Asset: tokenIn,
+        Asset2: tokenOut
       });
 
       setPayloadUrl(payload?.next?.always || null);
     } catch (err) {
-      console.error("AMMDeposit error:", err);
+      console.error("Swap error:", err);
     }
 
     setLoading(false);
   }
 
-  return { addLiquidity, loading, payloadUrl };
+  return { swap, loading, payloadUrl };
 }
