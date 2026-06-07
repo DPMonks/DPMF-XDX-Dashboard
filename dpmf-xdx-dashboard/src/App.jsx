@@ -4,10 +4,26 @@ import WalletBalances from "./components/WalletBalances";
 import LpPositions from "./components/LpPositions";
 import AddLiquidity from "./components/AddLiquidity";
 import RemoveLiquidity from "./components/RemoveLiquidity";
-import Pools from "./components/Pools";        // NEW: Pool stats module
-import Charts from "./components/Charts";      // NEW: Chart module (optional)
+import Pools from "./components/Pools";
+import Charts from "./components/Charts";
+
+// NEW HOOK IMPORTS
+import useOverview from "./hooks/useOverview";
+import useAmm from "./hooks/useAmm";
+import usePools from "./hooks/usePools";
 
 export default function App() {
+
+  // LOAD BACKEND DATA
+  const overview = useOverview();
+  const amm = useAmm();
+  const poolStats = usePools();
+
+  // OPTIONAL: Loading state
+  if (!overview || !amm || !poolStats) {
+    return <div className="loading-screen">Loading dashboard…</div>;
+  }
+
   return (
     <div className="dashboard-container">
 
@@ -25,7 +41,7 @@ export default function App() {
 
           {/* POOL STATS */}
           <section className="dashboard-card neon-card">
-            <Pools />
+            <Pools data={poolStats} />
           </section>
 
           {/* USER BALANCES */}
@@ -55,7 +71,7 @@ export default function App() {
 
           {/* CHARTS */}
           <section className="dashboard-card neon-card">
-            <Charts />
+            <Charts overview={overview} amm={amm} />
           </section>
 
         </div>
