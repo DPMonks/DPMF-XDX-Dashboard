@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "xumm-oauth2-pkce": "^2.8.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
