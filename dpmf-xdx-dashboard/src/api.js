@@ -29,12 +29,15 @@ export const api = {
   amm: () => fetch(`${API_BASE}/amm`).then(r => r.json()),
   pools: () => fetch(`${API_BASE}/pools`).then(r => r.json()),
 
+  // TOKEN HOLDERS
   topHolders: (limit = 100) =>
     fetch(`${API_BASE}/top-holders?limit=${limit}`).then(r => r.json()),
 
+  // LP HOLDERS (NEW)
   topLp: (limit = 100) =>
     fetch(`${API_BASE}/top-lp?limit=${limit}`).then(r => r.json()),
 
+  // CHARTS
   tvlHistory: () =>
     fetch(`${API_BASE}/charts/tvl`).then(r => r.json()),
 
