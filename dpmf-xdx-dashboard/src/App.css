@@ -395,3 +395,44 @@ select:focus {
   text-shadow: 0 0 6px rgba(0,234,255,0.3);
   letter-spacing: 0.06em;
 }
+/* =============================== */
+/* CONNECT WALLET — FIXED ABOVE HEADER */
+/* =============================== */
+
+.xaman-topright-box {
+  position: fixed;
+  top: 20px;      /* sits above header */
+  right: 20px;    /* aligned to the right */
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  background: #000; /* solid black background */
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 10px;
+  padding: 10px 14px;
+
+  backdrop-filter: blur(6px);
+  box-shadow: 0 0 14px rgba(0,0,0,0.4), 0 0 18px rgba(0,234,255,0.15);
+}
+
+.xaman-topright-logo {
+  height: 28px;
+  filter: drop-shadow(0 0 6px rgba(0,234,255,0.35));
+}
+.dashboard-title {
+  font-size: 2.6rem;
+  margin-bottom: 18px; /* spacing below title */
+}
+
+.dashboard-subtitle {
+  font-size: 1.1rem;
+  margin-top: 0;
+  margin-bottom: 10px;
+  letter-spacing: 0.06em;
+  color: var(--dpmf-neon-cyan);
+  opacity: 0.9;
+  text-shadow: 0 0 6px rgba(0,234,255,0.3);
+}
