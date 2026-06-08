@@ -58,19 +58,23 @@ body {
 
 .dashboard-header {
   width: 100%;
-  padding: 30px 40px 20px;
+  padding: 40px 40px 40px; /* doubled top/bottom padding */
   display: flex;
-  flex-direction: column; /* stack title + subtitle */
-  align-items: center;    /* centre horizontally */
+  flex-direction: column;
+  align-items: center;
   text-align: center;
   background: rgba(20, 20, 25, 0.7);
-  border: 1px solid var(--dpmf-border-soft);
+  border-top: 4px solid var(--dpmf-neon-cyan);    /* double border top */
+  border-bottom: 4px solid var(--dpmf-neon-cyan); /* double border bottom */
+  border-left: 1px solid var(--dpmf-border-soft);
+  border-right: 1px solid var(--dpmf-border-soft);
   border-radius: var(--dpmf-radius-card);
   backdrop-filter: blur(12px);
   box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   margin-top: 70px;
   margin-bottom: 20px;
   position: relative;
+  box-sizing: border-box;
 }
 
 .dashboard-header::after {
@@ -85,38 +89,39 @@ body {
 
 /* TITLE */
 .dashboard-title {
-  font-size: 2.3rem;
+  font-size: 2.6rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   background: linear-gradient(90deg, var(--dpmf-neon-cyan), var(--dpmf-neon-violet));
   -webkit-background-clip: text;
   color: transparent;
-  text-shadow: 0 0 14px var(--dpmf-neon-violet-soft);
+  text-shadow: 0 0 18px var(--dpmf-neon-violet-soft);
   margin: 0;
   padding: 0;
 }
 
 /* SUBTITLE */
 .dashboard-subtitle {
-  margin-top: 10px;
-  font-size: 1rem;
+  margin-top: 12px;
+  font-size: 1.1rem;
   letter-spacing: 0.08em;
   color: var(--dpmf-neon-cyan);
-  opacity: 0.85;
+  opacity: 0.9;
   text-align: center;
+  text-shadow: 0 0 10px rgba(0,255,255,0.4);
   animation: fadeIn 0.6s ease-out;
 }
 
 /* =============================== */
-/* GRID — RESTORED VERTICAL STACK  */
+/* GRID — ALWAYS VERTICAL STACK    */
 /* =============================== */
 
 .dashboard-grid {
   width: 90%;
   max-width: 1200px;
   display: flex;
-  flex-direction: column; /* vertical stacking */
+  flex-direction: column; /* always vertical */
   align-items: center;
   gap: 30px;
   margin-bottom: 60px;
@@ -139,6 +144,16 @@ body {
   backdrop-filter: blur(10px);
   box-shadow: 0 4px 14px rgba(0,0,0,0.35);
   transition: transform var(--dpmf-transition-med), box-shadow var(--dpmf-transition-med), border-color var(--dpmf-transition-med);
+}
+
+/* Neon glow overlay */
+.dashboard-card::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(circle at top left,rgba(199,112,255,0.18) 0%,transparent 55%);
+  opacity: 0.7;
+  pointer-events: none;
 }
 
 .dashboard-card:hover {
@@ -183,6 +198,107 @@ body {
 }
 
 /* =============================== */
+/* SCROLLBARS                      */
+/* =============================== */
+
+.dashboard-card::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dashboard-card::-webkit-scrollbar-thumb {
+  background: var(--dpmf-neon-cyan-soft);
+  border-radius: 10px;
+}
+
+/* =============================== */
+/* CONNECT WALLET BUTTON           */
+/* =============================== */
+
+.connect-wallet-btn {
+  background-color: #000; /* black background */
+  color: #fff;           /* white text */
+  border: 1px solid var(--dpmf-neon-cyan);
+  padding: 9px 16px;
+  border-radius: 9px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background var(--dpmf-transition-fast),
+              box-shadow var(--dpmf-transition-fast),
+              transform var(--dpmf-transition-fast),
+              border-color var(--dpmf-transition-fast);
+}
+
+.connect-wallet-btn:hover {
+  background-color: #111;
+  border-color: var(--dpmf-neon-cyan);
+  box-shadow: 0 0 16px var(--dpmf-neon-cyan-soft);
+  transform: translateY(-1px);
+}
+
+/* =============================== */
+/* GENERIC BUTTONS                 */
+/* =============================== */
+
+button {
+  background: radial-gradient(circle at top left,#151522 0%,#090910 55%,#050507 100%);
+  border: 1px solid var(--dpmf-neon-cyan-soft);
+  color: var(--dpmf-neon-cyan);
+  padding: 9px 16px;
+  border-radius: 9px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background var(--dpmf-transition-fast),
+              box-shadow var(--dpmf-transition-fast),
+              transform var(--dpmf-transition-fast),
+              border-color var(--dpmf-transition-fast);
+}
+
+button:hover {
+  background: radial-gradient(circle at top left,#1b1b2b 0%,#0b0b14 55%,#050507 100%);
+  border-color: var(--dpmf-neon-cyan);
+  box-shadow: 0 0 16px var(--dpmf-neon-cyan-soft);
+  transform: translateY(-1px);
+}
+
+/* =============================== */
+/* INPUTS                          */
+/* =============================== */
+
+input,
+select {
+  background: #07070c;
+  border: 1px solid rgba(199,112,255,0.4);
+  color: var(--dpmf-text-main);
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 0.9rem;
+  width: 100%;
+  transition: border-color var(--dpmf-transition-fast),
+              box-shadow var(--dpmf-transition-fast),
+              background var(--dpmf-transition-fast);
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--dpmf-neon-violet);
+  box-shadow: 0 0 12px var(--dpmf-neon-violet-soft);
+  background: #090914;
+}
+
+/* =============================== */
 /* XAMAN TOP-RIGHT BOX             */
 /* =============================== */
 
@@ -205,6 +321,25 @@ body {
 .xaman-topright-logo {
   height: 26px;
   filter: drop-shadow(0 0 6px rgba(0,234,255,0.35));
+}
+
+.xaman-topright-box:hover {
+  border-color: rgba(0,234,255,0.5);
+  box-shadow: 0 0 22px rgba(0,234,255,0.35);
+  transform: translateY(-2px);
+  transition: 0.25s ease;
+}
+
+/* =============================== */
+/* LOADING SCREEN                  */
+/* =============================== */
+
+.loading-screen {
+  text-align: center;
+  margin-top: 120px;
+  font-size: 1.4rem;
+  color: var(--dpmf-neon-cyan);
+  text-shadow: 0 0 12px var(--dpmf-neon-cyan-soft);
 }
 
 /* =============================== */
