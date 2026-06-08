@@ -37,14 +37,19 @@ body {
 }
 
 /* =============================== */
-/* LAYOUT WRAPPER                  */
+/* WRAPPER                         */
 /* =============================== */
 
 .dashboard-wrapper {
+  width: 100%;
+  min-height: 100vh;
   padding: 24px 20px 40px;
   max-width: 1400px;
   margin: 0 auto;
   animation: fadeIn 0.8s ease-out;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 /* =============================== */
@@ -52,24 +57,19 @@ body {
 /* =============================== */
 
 .dashboard-header {
+  width: 100%;
+  padding: 30px 40px 20px;
   display: flex;
-  justify-content: flex-start;
-  align-items: center;
-
-  padding: 22px 28px;
+  flex-direction: column; /* stack title + subtitle */
+  align-items: center;    /* centre horizontally */
+  text-align: center;
   background: rgba(20, 20, 25, 0.7);
   border: 1px solid var(--dpmf-border-soft);
   border-radius: var(--dpmf-radius-card);
   backdrop-filter: blur(12px);
   box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-
-  margin-bottom: 10px;
   margin-top: 70px;
-  margin-left: 20px;
-
-  width: auto;
-  max-width: 100%;
-  overflow: visible;
+  margin-bottom: 20px;
   position: relative;
 }
 
@@ -83,6 +83,7 @@ body {
   pointer-events: none;
 }
 
+/* TITLE */
 .dashboard-title {
   font-size: 2.3rem;
   font-weight: 700;
@@ -92,34 +93,33 @@ body {
   -webkit-background-clip: text;
   color: transparent;
   text-shadow: 0 0 14px var(--dpmf-neon-violet-soft);
-  transition: 0.3s ease;
+  margin: 0;
+  padding: 0;
 }
 
-.dashboard-title:hover {
-  text-shadow: 0 0 20px var(--dpmf-neon-cyan-soft);
-}
-
-/* SUBTITLE BELOW HEADER */
+/* SUBTITLE */
 .dashboard-subtitle {
+  margin-top: 10px;
   font-size: 1rem;
-  opacity: 0.8;
-  margin-left: 28px;
-  margin-top: -10px;
-  margin-bottom: 30px;
   letter-spacing: 0.08em;
   color: var(--dpmf-neon-cyan);
+  opacity: 0.85;
+  text-align: center;
   animation: fadeIn 0.6s ease-out;
 }
 
 /* =============================== */
-/* GRID LAYOUT                     */
+/* GRID — RESTORED VERTICAL STACK  */
 /* =============================== */
 
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-  gap: 24px;
-  width: 100%;
+  width: 90%;
+  max-width: 1200px;
+  display: flex;
+  flex-direction: column; /* vertical stacking */
+  align-items: center;
+  gap: 30px;
+  margin-bottom: 60px;
 }
 
 /* =============================== */
@@ -127,6 +127,7 @@ body {
 /* =============================== */
 
 .dashboard-card {
+  width: 100%;
   background: linear-gradient(145deg,#0b0c10 0%,#050507 60%,#090812 100%);
   border-radius: var(--dpmf-radius-card);
   border: 1px solid var(--dpmf-border-soft);
@@ -140,30 +141,22 @@ body {
   transition: transform var(--dpmf-transition-med), box-shadow var(--dpmf-transition-med), border-color var(--dpmf-transition-med);
 }
 
-/* TALL CARD FOR CHARTS */
-.tall-card {
-  min-height: 420px;
-  max-height: 520px;
-}
-
-/* Neon glow overlay */
-.dashboard-card::before {
-  content: "";
-  position: absolute;
-  inset: -40%;
-  background: radial-gradient(circle at top left,rgba(199,112,255,0.18) 0%,transparent 55%);
-  opacity: 0.7;
-  pointer-events: none;
-}
-
-/* Hover effect */
 .dashboard-card:hover {
   transform: translateY(-6px);
   box-shadow: 0 8px 22px rgba(0,0,0,0.55), 0 0 26px rgba(0,234,255,0.35);
   border-color: rgba(0,234,255,0.5);
 }
 
-/* Card titles */
+/* TALL CARD */
+.tall-card {
+  min-height: 420px;
+  max-height: 520px;
+}
+
+/* =============================== */
+/* ICONS & TITLES                  */
+/* =============================== */
+
 .card-title,
 .dashboard-card h2 {
   font-size: 1rem;
@@ -176,7 +169,6 @@ body {
   gap: 10px;
 }
 
-/* ICONS */
 .card-icon {
   width: 20px;
   height: 20px;
@@ -191,70 +183,28 @@ body {
 }
 
 /* =============================== */
-/* SCROLLBARS                      */
+/* XAMAN TOP-RIGHT BOX             */
 /* =============================== */
 
-.dashboard-card::-webkit-scrollbar {
-  width: 6px;
-}
-
-.dashboard-card::-webkit-scrollbar-thumb {
-  background: var(--dpmf-neon-cyan-soft);
-  border-radius: 10px;
-}
-
-/* =============================== */
-/* BUTTONS                         */
-/* =============================== */
-
-button,
-.connect-wallet-btn {
-  background: radial-gradient(circle at top left,#151522 0%,#090910 55%,#050507 100%);
-  border: 1px solid var(--dpmf-neon-cyan-soft);
-  color: var(--dpmf-neon-cyan);
-  padding: 9px 16px;
-  border-radius: 9px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-  display: inline-flex;
+.xaman-topright-box {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  transition: background var(--dpmf-transition-fast), box-shadow var(--dpmf-transition-fast), transform var(--dpmf-transition-fast), border-color var(--dpmf-transition-fast);
+  gap: 10px;
+  background: rgba(10, 10, 15, 0.75);
+  border: 1px solid var(--dpmf-border-soft);
+  border-radius: 10px;
+  padding: 8px 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 14px rgba(0,0,0,0.4), 0 0 18px rgba(0,234,255,0.15);
+  z-index: 9999;
 }
 
-button:hover,
-.connect-wallet-btn:hover {
-  background: radial-gradient(circle at top left,#1b1b2b 0%,#0b0b14 55%,#050507 100%);
-  border-color: var(--dpmf-neon-cyan);
-  box-shadow: 0 0 16px var(--dpmf-neon-cyan-soft);
-  transform: translateY(-1px);
-}
-
-/* =============================== */
-/* INPUTS                          */
-/* =============================== */
-
-input,
-select {
-  background: #07070c;
-  border: 1px solid rgba(199,112,255,0.4);
-  color: var(--dpmf-text-main);
-  padding: 7px 10px;
-  border-radius: 7px;
-  font-size: 0.9rem;
-  width: 100%;
-  transition: border-color var(--dpmf-transition-fast), box-shadow var(--dpmf-transition-fast), background var(--dpmf-transition-fast);
-}
-
-input:focus,
-select:focus {
-  outline: none;
-  border-color: var(--dpmf-neon-violet);
-  box-shadow: 0 0 12px var(--dpmf-neon-violet-soft);
-  background: #090914;
+.xaman-topright-logo {
+  height: 26px;
+  filter: drop-shadow(0 0 6px rgba(0,234,255,0.35));
 }
 
 /* =============================== */
@@ -264,250 +214,4 @@ select:focus {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-/* =============================== */
-/* RESPONSIVE                      */
-/* =============================== */
-
-@media (max-width: 900px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* =============================== */
-/* TOP-RIGHT XAMAN SIGN-IN BOX     */
-/* =============================== */
-
-.xaman-topright-box {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-
-  display: flex;
-  align-items: center;
-  gap: 10px;
-
-  background: rgba(10, 10, 15, 0.75);
-  border: 1px solid var(--dpmf-border-soft);
-  border-radius: 10px;
-
-  padding: 8px 12px;
-  backdrop-filter: blur(10px);
-
-  box-shadow: 0 0 14px rgba(0,0,0,0.4), 0 0 18px rgba(0,234,255,0.15);
-
-  z-index: 9999;
-  animation: pulseBorder 3s infinite ease-in-out;
-}
-
-@keyframes pulseBorder {
-  0% { box-shadow: 0 0 14px rgba(0,234,255,0.15); }
-  50% { box-shadow: 0 0 22px rgba(0,234,255,0.35); }
-  100% { box-shadow: 0 0 14px rgba(0,234,255,0.15); }
-}
-
-.xaman-topright-logo {
-  height: 26px;
-  filter: drop-shadow(0 0 6px rgba(0,234,255,0.35));
-}
-
-.xaman-topright-box:hover {
-  border-color: rgba(0,234,255,0.5);
-  box-shadow: 0 0 22px rgba(0,234,255,0.35);
-  transform: translateY(-2px);
-  transition: 0.25s ease;
-}
-
-/* =============================== */
-/* LOADING SCREEN                  */
-/* =============================== */
-
-.loading-screen {
-  text-align: center;
-  margin-top: 120px;
-  font-size: 1.4rem;
-  color: var(--dpmf-neon-cyan);
-  text-shadow: 0 0 12px var(--dpmf-neon-cyan-soft);
-}
-/* HEADER CONTAINER */
-.dashboard-header {
-  position: relative;
-  width: 100%;
-  padding: 30px 40px 50px; /* bottom padding prevents clipping */
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  overflow: visible; /* prevents glow from being cut */
-  box-sizing: border-box;
-}
-
-/* LEFT SIDE (TITLE + SUBTITLE) */
-.header-left {
-  display: flex;
-  flex-direction: column;
-}
-
-.dashboard-title {
-  font-size: 32px;
-  font-weight: 700;
-  margin: 0;
-  padding: 0;
-  color: #fff;
-  text-shadow: 0 0 15px rgba(0, 255, 255, 0.6);
-}
-
-.dashboard-subtitle {
-  margin-top: 6px;
-  font-size: 16px;
-  color: #b8eaff;
-  text-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
-}
-
-/* RIGHT SIDE (XAMAN LOGO + BUTTON) */
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* XAMAN BOX */
-.xaman-topright-box {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.xaman-topright-logo {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-}
-/* === GLOBAL WRAPPER === */
-.dashboard-wrapper {
-  width: 100%;
-  min-height: 100vh;
-  background-color: #0a0b10;
-  color: #fff;
-  font-family: "Inter", sans-serif;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  box-sizing: border-box;
-}
-
-/* === HEADER === */
-.dashboard-header {
-  position: relative;
-  width: 100%;
-  padding: 30px 40px 50px; /* bottom padding prevents clipping */
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  overflow: visible; /* allows glow to show */
-  box-sizing: border-box;
-}
-
-/* LEFT SIDE (TITLE + SUBTITLE) */
-.header-left {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 20px; /* equal spacing between title and subtitle */
-}
-
-.dashboard-title {
-  font-size: 32px;
-  font-weight: 700;
-  margin: 0;
-  padding: 0;
-  color: #fff;
-  text-shadow: 0 0 15px rgba(0, 255, 255, 0.6);
-}
-
-/* Subtitle centred between header and first container */
-.dashboard-subtitle {
-  margin-top: 30px;
-  margin-bottom: 40px;
-  font-size: 16px;
-  color: #00eaff;
-  text-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
-  text-align: center;
-}
-
-/* RIGHT SIDE (XAMAN LOGO + BUTTON) */
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* === XAMAN BOX === */
-.xaman-topright-box {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.xaman-topright-logo {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-}
-
-/* === GRID LAYOUT === */
-.dashboard-grid {
-  width: 90%;
-  max-width: 1200px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-  gap: 30px;
-  margin-bottom: 60px;
-}
-
-/* === CARD STYLING === */
-.dashboard-card {
-  background: rgba(20, 25, 35, 0.9);
-  border: 1px solid rgba(0, 255, 255, 0.2);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.dashboard-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 0 25px rgba(0, 255, 255, 0.3);
-}
-
-/* === CARD TITLES === */
-.card-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #00eaff;
-  margin-bottom: 15px;
-}
-
-.card-icon {
-  color: #00eaff;
-}
-
-/* === TALL CARD === */
-.tall-card {
-  grid-column: span 2;
-}
-
-/* === LOADING SCREEN === */
-.loading-screen {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  font-size: 20px;
-  color: #00eaff;
-  text-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
 }
