@@ -307,3 +307,32 @@ select:focus {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* =============================== */
+/* CONNECT WALLET — FLOATING CLEANLY IN CORNER */
+/* =============================== */
+
+.xaman-topright-box {
+  position: fixed;
+  top: 12px;        /* higher up */
+  right: 12px;      /* tighter to the corner */
+  z-index: 99999;   /* above everything */
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  background: #000;
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 8px;
+  padding: 8px 12px;
+
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 10px rgba(0,0,0,0.4), 0 0 12px rgba(0,234,255,0.15);
+
+  pointer-events: auto; /* ensures it doesn't block layout */
+}
+
+.xaman-topright-logo {
+  height: 22px;
+  filter: drop-shadow(0 0 4px rgba(0,234,255,0.35));
+}
