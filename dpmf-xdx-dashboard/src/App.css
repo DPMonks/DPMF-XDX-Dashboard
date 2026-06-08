@@ -331,3 +331,183 @@ select:focus {
   color: var(--dpmf-neon-cyan);
   text-shadow: 0 0 12px var(--dpmf-neon-cyan-soft);
 }
+/* HEADER CONTAINER */
+.dashboard-header {
+  position: relative;
+  width: 100%;
+  padding: 30px 40px 50px; /* bottom padding prevents clipping */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  overflow: visible; /* prevents glow from being cut */
+  box-sizing: border-box;
+}
+
+/* LEFT SIDE (TITLE + SUBTITLE) */
+.header-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0;
+  padding: 0;
+  color: #fff;
+  text-shadow: 0 0 15px rgba(0, 255, 255, 0.6);
+}
+
+.dashboard-subtitle {
+  margin-top: 6px;
+  font-size: 16px;
+  color: #b8eaff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
+}
+
+/* RIGHT SIDE (XAMAN LOGO + BUTTON) */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* XAMAN BOX */
+.xaman-topright-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.xaman-topright-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+/* === GLOBAL WRAPPER === */
+.dashboard-wrapper {
+  width: 100%;
+  min-height: 100vh;
+  background-color: #0a0b10;
+  color: #fff;
+  font-family: "Inter", sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+/* === HEADER === */
+.dashboard-header {
+  position: relative;
+  width: 100%;
+  padding: 30px 40px 50px; /* bottom padding prevents clipping */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  overflow: visible; /* allows glow to show */
+  box-sizing: border-box;
+}
+
+/* LEFT SIDE (TITLE + SUBTITLE) */
+.header-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px; /* equal spacing between title and subtitle */
+}
+
+.dashboard-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0;
+  padding: 0;
+  color: #fff;
+  text-shadow: 0 0 15px rgba(0, 255, 255, 0.6);
+}
+
+/* Subtitle centred between header and first container */
+.dashboard-subtitle {
+  margin-top: 30px;
+  margin-bottom: 40px;
+  font-size: 16px;
+  color: #00eaff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
+  text-align: center;
+}
+
+/* RIGHT SIDE (XAMAN LOGO + BUTTON) */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* === XAMAN BOX === */
+.xaman-topright-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.xaman-topright-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+/* === GRID LAYOUT === */
+.dashboard-grid {
+  width: 90%;
+  max-width: 1200px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 30px;
+  margin-bottom: 60px;
+}
+
+/* === CARD STYLING === */
+.dashboard-card {
+  background: rgba(20, 25, 35, 0.9);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0 25px rgba(0, 255, 255, 0.3);
+}
+
+/* === CARD TITLES === */
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #00eaff;
+  margin-bottom: 15px;
+}
+
+.card-icon {
+  color: #00eaff;
+}
+
+/* === TALL CARD === */
+.tall-card {
+  grid-column: span 2;
+}
+
+/* === LOADING SCREEN === */
+.loading-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 20px;
+  color: #00eaff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
+}

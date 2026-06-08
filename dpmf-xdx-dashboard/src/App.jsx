@@ -33,23 +33,21 @@ export default function App() {
   return (
     <div className="dashboard-wrapper">
 
-      {/* FIXED TOP-RIGHT XAMAN SIGN-IN BOX */}
-      <div className="xaman-topright-box">
-        <img
-          src="/assets/XAMAN.jpg"
-          alt="Xaman Wallet"
-          className="xaman-topright-logo"
-        />
-        <ConnectWallet />
-      </div>
-
       {/* HEADER */}
       <header className="dashboard-header">
-        <h1 className="dashboard-title">DPMF XDX Dashboard</h1>
-      </header>
 
-      {/* SUBTITLE BELOW HEADER */}
-      <p className="dashboard-subtitle">Operational Intelligence Interface</p>
+        {/* LEFT SIDE — TITLE + SUBTITLE */}
+        <div className="header-left">
+          <h1 className="dashboard-title">DPMF XDX Dashboard</h1>
+          <p className="dashboard-subtitle">Operational Intelligence Interface</p>
+        </div>
+
+        {/* RIGHT SIDE — XAMAN LOGO + CONNECT WALLET */}
+        <div className="header-right">
+          <ConnectWallet />
+        </div>
+
+      </header>
 
       {/* GRID */}
       <main className="dashboard-grid">
