@@ -26,7 +26,5 @@ export default function ConnectWallet() {
     </div>
   );
 }
-git add -A
-git commit -m "Force update ConnectWallet import path"
-git push origin main
+
 
