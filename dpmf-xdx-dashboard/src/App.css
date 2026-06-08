@@ -50,7 +50,7 @@ body {
 }
 
 /* =============================== */
-/* CONNECT WALLET — SMALL + CORNER */
+/* CONNECT WALLET — 25% LARGER, CLEAN CORNER POSITION */
 /* =============================== */
 
 .xaman-topright-box {
@@ -61,18 +61,39 @@ body {
 
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 
   background: #000;
   border: 1px solid rgba(255,255,255,0.25);
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: 6px 10px;
 
-  transform: scale(0.55);
+  transform: scale(0.70); /* increased from 0.55 → 0.70 */
   transform-origin: top right;
 
-  backdrop-filter: blur(3px);
+  backdrop-filter: blur(4px);
   box-shadow: 0 0 10px rgba(0,0,0,0.4), 0 0 12px rgba(0,234,255,0.15);
+}
+
+.xaman-topright-logo {
+  height: 20px; /* increased from 16px */
+  filter: drop-shadow(0 0 3px rgba(0,234,255,0.35));
+}
+
+.connect-wallet-btn {
+  font-size: 0.70rem; /* increased from 0.55rem */
+  padding: 5px 8px;   /* slightly larger */
+  border-radius: 5px;
+
+  background: #000;
+  color: #fff;
+  border: 1px solid var(--dpmf-neon-cyan);
+
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 }
 
 .xaman-topright-logo {
