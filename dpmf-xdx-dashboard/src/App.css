@@ -436,3 +436,76 @@ select:focus {
   opacity: 0.9;
   text-shadow: 0 0 6px rgba(0,234,255,0.3);
 }
+/* =============================== */
+/* CONNECT WALLET — ABOVE HEADER   */
+/* =============================== */
+
+.xaman-topright-box {
+  position: fixed;
+  top: 30px;        /* lifted higher above header */
+  right: 40px;      /* pushed further right for balance */
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  background: #000;
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 10px;
+  padding: 10px 14px;
+
+  backdrop-filter: blur(6px);
+  box-shadow: 0 0 14px rgba(0,0,0,0.4), 0 0 18px rgba(0,234,255,0.15);
+}
+
+/* =============================== */
+/* HEADER — CENTRED & SPACED       */
+/* =============================== */
+
+.dashboard-header {
+  width: 94%; /* slightly narrower to centre between vertical lines */
+  margin: 0 auto; /* centres horizontally */
+  padding: 80px 40px 60px; /* increased vertical padding */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+
+  background: rgba(15, 15, 20, 0.85);
+  border-top: 3px solid rgba(0,234,255,0.6);
+  border-bottom: 3px solid rgba(0,234,255,0.6);
+  border-radius: var(--dpmf-radius-card);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+
+  margin-top: 120px; /* ensures wallet sits above cleanly */
+  margin-bottom: 25px;
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* =============================== */
+/* TITLE + SUBTITLE SPACING        */
+/* =============================== */
+
+.dashboard-title {
+  font-size: 2.6rem;
+  margin-bottom: 20px; /* space below title */
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, var(--dpmf-neon-cyan), var(--dpmf-neon-violet));
+  -webkit-background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 10px rgba(0,234,255,0.4), 0 0 14px rgba(199,112,255,0.3);
+}
+
+.dashboard-subtitle {
+  font-size: 1.1rem;
+  margin-top: 0;
+  margin-bottom: 10px;
+  letter-spacing: 0.06em;
+  color: var(--dpmf-neon-cyan);
+  opacity: 0.9;
+  text-shadow: 0 0 6px rgba(0,234,255,0.3);
+}
