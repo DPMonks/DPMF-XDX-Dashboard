@@ -33,10 +33,10 @@ export default function App() {
   return (
     <div className="dashboard-wrapper">
 
-      {/* SMALL TOP-RIGHT XAMAN SIGN-IN BOX */}
+      {/* FIXED TOP-RIGHT XAMAN SIGN-IN BOX */}
       <div className="xaman-topright-box">
         <img
-          src="https://xumm.app/assets/logo/xumm-logo.svg"
+          src="/assets/xaman-logo.png"
           alt="Xaman Wallet"
           className="xaman-topright-logo"
         />
@@ -46,8 +46,10 @@ export default function App() {
       {/* HEADER */}
       <header className="dashboard-header">
         <h1 className="dashboard-title">DPMF XDX Dashboard</h1>
-        <p className="dashboard-subtitle">Operational Intelligence Interface</p>
       </header>
+
+      {/* SUBTITLE BELOW HEADER */}
+      <p className="dashboard-subtitle">Operational Intelligence Interface</p>
 
       {/* GRID */}
       <main className="dashboard-grid">
