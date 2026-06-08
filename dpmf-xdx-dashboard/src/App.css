@@ -50,7 +50,7 @@ body {
 }
 
 /* =============================== */
-/* CONNECT WALLET — 25% LARGER, CLEAN CORNER POSITION */
+/* CONNECT WALLET — BIGGER + CORNER */
 /* =============================== */
 
 .xaman-topright-box {
@@ -61,14 +61,14 @@ body {
 
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 
   background: #000;
   border: 1px solid rgba(255,255,255,0.25);
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: 8px;
+  padding: 8px 12px;
 
-  transform: scale(0.70); /* increased from 0.55 → 0.70 */
+  transform: scale(0.85); /* bigger */
   transform-origin: top right;
 
   backdrop-filter: blur(4px);
@@ -76,14 +76,14 @@ body {
 }
 
 .xaman-topright-logo {
-  height: 20px; /* increased from 16px */
-  filter: drop-shadow(0 0 3px rgba(0,234,255,0.35));
+  height: 22px;
+  filter: drop-shadow(0 0 4px rgba(0,234,255,0.35));
 }
 
 .connect-wallet-btn {
-  font-size: 0.70rem; /* increased from 0.55rem */
-  padding: 5px 8px;   /* slightly larger */
-  border-radius: 5px;
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  border-radius: 6px;
 
   background: #000;
   color: #fff;
@@ -91,21 +91,7 @@ body {
 
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-
-.xaman-topright-logo {
-  height: 16px;
-  filter: drop-shadow(0 0 3px rgba(0,234,255,0.35));
-}
-
-.connect-wallet-btn {
-  font-size: 0.55rem;
-  padding: 4px 6px;
-  border-radius: 4px;
-  background: #000;
-  color: #fff;
-  border: 1px solid var(--dpmf-neon-cyan);
+  gap: 6px;
 }
 
 /* =============================== */
