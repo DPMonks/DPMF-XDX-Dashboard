@@ -1,4 +1,5 @@
 import "./App.css";
+
 import ConnectWallet from "./components/ConnectWallet";
 import WalletBalances from "./components/WalletBalances";
 import LpPositions from "./components/LpPositions";
@@ -11,6 +12,8 @@ import useOverview from "./hooks/useOverview";
 import useAmm from "./hooks/useAmm";
 import usePools from "./hooks/usePools";
 
+import { useEffect, useState } from "react";
+
 // ICONS
 import {
   Wallet,
@@ -22,13 +25,42 @@ import {
 } from "lucide-react";
 
 export default function App() {
+
+  // PUBLIC XRPL DATA STATES
+  const [publicOverview, setPublicOverview] = useState(null);
+  const [publicAmm, setPublicAmm] = useState(null);
+  const [publicPools, setPublicPools] = useState(null);
+
+  // WALLET-BASED HOOKS (still work normally)
   const overview = useOverview();
   const amm = useAmm();
   const poolStats = usePools();
 
-  if (!overview || !amm || !poolStats) {
-    return <div className="loading-screen">Loading dashboard…</div>;
+  // PUBLIC XRPL FETCHER
+  async function loadPublicXrplData() {
+    try {
+      const resOverview = await fetch("/api/public/overview").then(r => r.json());
+      const resAmm = await fetch("/api/public/amm").then(r => r.json());
+      const resPools = await fetch("/api/public/pools").then(r => r.json());
+
+      setPublicOverview(resOverview);
+      setPublicAmm(resAmm);
+      setPublicPools(resPools);
+
+    } catch (err) {
+      console.error("Public XRPL load failed:", err);
+    }
   }
+
+  // RUN ON PAGE LOAD
+  useEffect(() => {
+    loadPublicXrplData();
+  }, []);
+
+  // CHOOSE PUBLIC OR WALLET DATA
+  const finalOverview = overview || publicOverview;
+  const finalAmm = amm || publicAmm;
+  const finalPools = poolStats || publicPools;
 
   return (
     <div className="dashboard-wrapper">
@@ -42,7 +74,7 @@ export default function App() {
           <p className="dashboard-subtitle">Operational Intelligence Interface</p>
         </div>
 
-        {/* RIGHT SIDE — XAMAN LOGO + CONNECT WALLET */}
+        {/* RIGHT SIDE — CONNECT WALLET */}
         <div className="header-right">
           <ConnectWallet />
         </div>
@@ -56,7 +88,7 @@ export default function App() {
           <h2 className="card-title">
             <Database className="card-icon" /> Pool Statistics
           </h2>
-          <Pools data={poolStats} />
+          <Pools data={finalPools} />
         </section>
 
         <section className="dashboard-card">
@@ -91,7 +123,7 @@ export default function App() {
           <h2 className="card-title">
             <LineChart className="card-icon" /> Analytics & Charts
           </h2>
-          <Charts overview={overview} amm={amm} />
+          <Charts overview={finalOverview} amm={finalAmm} />
         </section>
 
       </main>
