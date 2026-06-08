@@ -1,84 +1,51 @@
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer
-} from "recharts";
-
-import useCharts from "../hooks/useCharts";
+// src/components/Charts.jsx
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import useCharts from "../hooks/useCharts.js";
 
 export default function Charts() {
-  const { tvl, holders, lpHolders, loading } = useCharts();
+  const { charts, loading } = useCharts();
 
-  if (loading) {
-    return (
-      <div className="dashboard-card neon-card">
-        <h2>Charts</h2>
-        <p>Loading…</p>
-      </div>
-    );
-  }
+  if (loading) return <p>Loading charts...</p>;
 
   return (
-    <div className="dashboard-card neon-card">
+    <div className="charts-container">
       <h2>Charts</h2>
 
-      <div style={{ height: 200, marginBottom: 20 }}>
-        <h3 style={{ margin: 0, marginBottom: 6, color: "#9a9ab3" }}>TVL</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={tvl}>
+      {/* TVL Chart */}
+      <div style={{ width: "100%", height: 200 }}>
+        <h3>Total Value Locked</h3>
+        <ResponsiveContainer>
+          <LineChart data={charts.tvl}>
             <XAxis dataKey="timestamp" hide />
             <YAxis hide />
             <Tooltip />
-            <Line
-              type="monotone"
-              dataKey="tvl"
-              stroke="#00eaff"
-              strokeWidth={2}
-              dot={false}
-            />
+            <Line type="monotone" dataKey="tvl" stroke="#00eaff" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      <div style={{ height: 200, marginBottom: 20 }}>
-        <h3 style={{ margin: 0, marginBottom: 6, color: "#9a9ab3" }}>
-          Token Holders
-        </h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={holders}>
-            <XAxis dataKey="day" hide />
+      {/* Holders Chart */}
+      <div style={{ width: "100%", height: 200 }}>
+        <h3>Token Holders</h3>
+        <ResponsiveContainer>
+          <LineChart data={charts.holders}>
+            <XAxis dataKey="timestamp" hide />
             <YAxis hide />
             <Tooltip />
-            <Line
-              type="monotone"
-              dataKey="holder_count"
-              stroke="#c770ff"
-              strokeWidth={2}
-              dot={false}
-            />
+            <Line type="monotone" dataKey="holders" stroke="#ff00aa" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      <div style={{ height: 200 }}>
-        <h3 style={{ margin: 0, marginBottom: 6, color: "#9a9ab3" }}>
-          LP Holders
-        </h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={lpHolders}>
-            <XAxis dataKey="day" hide />
+      {/* LP Holders Chart */}
+      <div style={{ width: "100%", height: 200 }}>
+        <h3>LP Holders</h3>
+        <ResponsiveContainer>
+          <LineChart data={charts.lpHolders}>
+            <XAxis dataKey="timestamp" hide />
             <YAxis hide />
             <Tooltip />
-            <Line
-              type="monotone"
-              dataKey="lp_holder_count"
-              stroke="#00eaff"
-              strokeWidth={2}
-              dot={false}
-            />
+            <Line type="monotone" dataKey="lpHolders" stroke="#ffaa00" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>

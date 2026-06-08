@@ -1,23 +1,30 @@
+// src/hooks/useCharts.js
 import { useEffect, useState } from "react";
+import { api } from "../api";
 
 export default function useCharts() {
-  const [tvl, setTvl] = useState([]);
-  const [holders, setHolders] = useState([]);
-  const [lpHolders, setLpHolders] = useState([]);
+  const [charts, setCharts] = useState({
+    tvl: [],
+    holders: [],
+    lpHolders: []
+  });
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const [tvlRes, holdersRes, lpRes] = await Promise.all([
-          fetch("/api/charts/tvl"),
-          fetch("/api/charts/holders"),
-          fetch("/api/charts/lp-holders")
+        const [tvl, holders, lp] = await Promise.all([
+          api.tvlHistory(),
+          api.holdersHistory(),
+          api.lpHoldersHistory()
         ]);
 
-        setTvl(await tvlRes.json());
-        setHolders(await holdersRes.json());
-        setLpHolders(await lpRes.json());
+        setCharts({
+          tvl: tvl || [],
+          holders: holders || [],
+          lpHolders: lp || []
+        });
       } catch (err) {
         console.error("Failed to load charts:", err);
       } finally {
@@ -28,5 +35,5 @@ export default function useCharts() {
     load();
   }, []);
 
-  return { tvl, holders, lpHolders, loading };
+  return { charts, loading };
 }

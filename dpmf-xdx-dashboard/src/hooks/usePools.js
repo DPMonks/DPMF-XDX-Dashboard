@@ -5,7 +5,9 @@ export default function usePools() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    api.pools().then(setData);
+    api.pools().then(res => {
+      setData(res.pools || []); // extract the array
+    });
   }, []);
 
   return data;
