@@ -36,7 +36,7 @@ export default function App() {
       {/* FIXED TOP-RIGHT XAMAN SIGN-IN BOX */}
       <div className="xaman-topright-box">
         <img
-          src="/assets/xaman-logo.png"
+          src="/assets/XAMAN.jpg"
           alt="Xaman Wallet"
           className="xaman-topright-logo"
         />

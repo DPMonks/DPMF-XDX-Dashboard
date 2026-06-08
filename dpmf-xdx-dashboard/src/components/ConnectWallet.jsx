@@ -1,5 +1,5 @@
 import { useWallet } from "../context/WalletContext";
-import xamanLogo from "/assets/xaman-logo.png"; // <-- Make sure this file exists
+import xamanLogo from "/assets/XAMAN.jpg"; // <-- Correct file name + correct path
 
 export default function ConnectWallet() {
   const { walletAddress, connectWallet, disconnectWallet } = useWallet();
