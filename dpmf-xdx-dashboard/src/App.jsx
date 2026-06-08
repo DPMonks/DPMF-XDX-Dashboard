@@ -7,74 +7,92 @@ import RemoveLiquidity from "./components/RemoveLiquidity";
 import Pools from "./components/Pools";
 import Charts from "./components/Charts";
 
-// NEW HOOK IMPORTS
 import useOverview from "./hooks/useOverview";
 import useAmm from "./hooks/useAmm";
 import usePools from "./hooks/usePools";
 
-export default function App() {
+// ICONS
+import {
+  Wallet,
+  Layers,
+  PlusCircle,
+  MinusCircle,
+  LineChart,
+  Database
+} from "lucide-react";
 
-  // LOAD BACKEND DATA
+export default function App() {
   const overview = useOverview();
   const amm = useAmm();
   const poolStats = usePools();
 
-  // OPTIONAL: Loading state
   if (!overview || !amm || !poolStats) {
     return <div className="loading-screen">Loading dashboard…</div>;
   }
 
   return (
-    <div className="dashboard-container">
+    <div className="dashboard-wrapper">
+
+      {/* SMALL TOP-RIGHT XAMAN SIGN-IN BOX */}
+      <div className="xaman-topright-box">
+        <img
+          src="https://xumm.app/assets/logo/xumm-logo.svg"
+          alt="Xaman Wallet"
+          className="xaman-topright-logo"
+        />
+        <ConnectWallet />
+      </div>
 
       {/* HEADER */}
-      <header className="dashboard-header neon-border">
+      <header className="dashboard-header">
         <h1 className="dashboard-title">DPMF XDX Dashboard</h1>
-        <ConnectWallet />
+        <p className="dashboard-subtitle">Operational Intelligence Interface</p>
       </header>
 
-      {/* MAIN CONTENT */}
+      {/* GRID */}
       <main className="dashboard-grid">
 
-        {/* LEFT COLUMN */}
-        <div className="dashboard-column">
+        <section className="dashboard-card">
+          <h2 className="card-title">
+            <Database className="card-icon" /> Pool Statistics
+          </h2>
+          <Pools data={poolStats} />
+        </section>
 
-          {/* POOL STATS */}
-          <section className="dashboard-card neon-card">
-            <Pools data={poolStats} />
-          </section>
+        <section className="dashboard-card">
+          <h2 className="card-title">
+            <Wallet className="card-icon" /> Wallet Balances
+          </h2>
+          <WalletBalances />
+        </section>
 
-          {/* USER BALANCES */}
-          <section className="dashboard-card neon-card">
-            <WalletBalances />
-          </section>
+        <section className="dashboard-card">
+          <h2 className="card-title">
+            <Layers className="card-icon" /> LP Positions
+          </h2>
+          <LpPositions />
+        </section>
 
-          {/* USER LP POSITIONS */}
-          <section className="dashboard-card neon-card">
-            <LpPositions />
-          </section>
+        <section className="dashboard-card">
+          <h2 className="card-title">
+            <PlusCircle className="card-icon" /> Add Liquidity
+          </h2>
+          <AddLiquidity />
+        </section>
 
-        </div>
+        <section className="dashboard-card">
+          <h2 className="card-title">
+            <MinusCircle className="card-icon" /> Remove Liquidity
+          </h2>
+          <RemoveLiquidity />
+        </section>
 
-        {/* RIGHT COLUMN */}
-        <div className="dashboard-column">
-
-          {/* ADD LIQUIDITY */}
-          <section className="dashboard-card neon-card">
-            <AddLiquidity />
-          </section>
-
-          {/* REMOVE LIQUIDITY */}
-          <section className="dashboard-card neon-card">
-            <RemoveLiquidity />
-          </section>
-
-          {/* CHARTS */}
-          <section className="dashboard-card neon-card">
-            <Charts overview={overview} amm={amm} />
-          </section>
-
-        </div>
+        <section className="dashboard-card tall-card">
+          <h2 className="card-title">
+            <LineChart className="card-icon" /> Analytics & Charts
+          </h2>
+          <Charts overview={overview} amm={amm} />
+        </section>
 
       </main>
     </div>
