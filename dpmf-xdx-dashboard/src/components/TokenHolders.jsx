@@ -1,34 +1,39 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
-// Address shortener
 function shortAddress(addr) {
   if (!addr) return "";
   return `${addr.slice(0, 9)}******${addr.slice(-4)}`;
 }
 
-// Copy helper
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text);
 }
 
 export default function TokenHolders() {
   const [holders, setHolders] = useState([]);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
-  const pageSize = 50;
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const batchSize = 50;
 
-  async function load(offset = 0) {
+  async function load(nextOffset = 0) {
+    if (loading || !hasMore) return;
     setLoading(true);
     try {
-      // 🔥 Infinite scroll: fetch 50 at a time
-      const data = await api.topHolders(50, offset);
-      // 🔥 Numeric sort (fixes rank issue)
+      const data = await api.topHolders(batchSize, nextOffset);
+      if (!data.length) {
+        setHasMore(false);
+        return;
+      }
+
       const sorted = data.sort(
         (a, b) => parseFloat(b.balance) - parseFloat(a.balance)
       );
-      // 🔥 Append new data instead of replacing
+
+      // Append smoothly
       setHolders(prev => [...prev, ...sorted]);
+      setOffset(nextOffset + batchSize);
     } catch (err) {
       console.error("Error loading holders:", err);
     } finally {
@@ -38,37 +43,38 @@ export default function TokenHolders() {
 
   useEffect(() => {
     load(); // initial load
-    const interval = setInterval(() => load(0), 10000); // smooth auto-refresh
+    const interval = setInterval(() => {
+      // refresh first batch only
+      load(0);
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // 🔥 Infinite scroll trigger
+  // 🔥 Infinite scroll trigger (smooth, no jump)
   useEffect(() => {
+    let ticking = false;
     function handleScroll() {
-      if (
-        window.innerHeight + window.scrollY >=
-        document.body.offsetHeight - 200
-      ) {
-        // Load next batch when near bottom
-        const nextOffset = holders.length;
-        load(nextOffset);
-      }
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const nearBottom =
+          window.innerHeight + window.scrollY >=
+          document.body.offsetHeight - 300;
+        if (nearBottom) load(offset);
+        ticking = false;
+      });
     }
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [holders]);
-
-  const paginated = holders.slice((page - 1) * pageSize, page * pageSize);
-  const totalPages = Math.ceil(holders.length / pageSize);
+  }, [offset, holders]);
 
   return (
     <div className="holder-container">
       <ul className="holder-list">
-        {paginated.map((h, i) => (
+        {holders.map((h, i) => (
           <li key={i} className="holder-item">
-            <span>{(page - 1) * pageSize + i + 1}.</span>
+            <span>{i + 1}.</span>
             <span>{shortAddress(h.account)}</span>
-            {/* 🔥 Removed negative sign */}
             <span>{h.balance}</span>
             <button
               className="copy-btn"
@@ -80,22 +86,12 @@ export default function TokenHolders() {
         ))}
       </ul>
 
-      <div className="pagination">
-        <button disabled={page === 1} onClick={() => setPage(p => p - 1)}>
-          Prev
-        </button>
-        <span>
-          Page {page} / {totalPages}
-        </span>
-        <button
-          disabled={page === totalPages}
-          onClick={() => setPage(p => p + 1)}
-        >
-          Next
-        </button>
-      </div>
-
       {loading && <p style={{ textAlign: "center" }}>Loading…</p>}
+      {!hasMore && (
+        <p style={{ textAlign: "center", opacity: 0.6 }}>
+          All holders loaded
+        </p>
+      )}
     </div>
   );
 }
