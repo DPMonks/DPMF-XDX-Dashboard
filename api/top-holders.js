@@ -13,7 +13,6 @@ export default async function handler(req, res) {
     const issuer = process.env.XDX_ISSUER || "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo";
     const currency = "XDX";
 
-    // Fetch trustlines from live ledger
     const { result } = await client.request({
       command: "account_lines",
       account: issuer,
@@ -21,17 +20,19 @@ export default async function handler(req, res) {
     });
 
     // Build list of CURRENT XDX holders only
-    const holders = [];
+    let holders = [];
     for (const line of result.lines) {
+      const balance = Number(line.balance);
+
       if (
-        line.currency === currency &&        // must be XDX
-        Number(line.balance) > 0 &&          // must hold XDX right now
-        Number(line.limit) > 0 &&            // must have an active trustline
-        !line.freeze                         // trustline must not be frozen
+        line.currency === currency &&
+        balance > 0 &&
+        Number(line.limit) > 0 &&
+        !line.freeze
       ) {
         holders.push({
           account: line.account,
-          balance: Number(line.balance)
+          balance
         });
       }
     }
@@ -39,11 +40,18 @@ export default async function handler(req, res) {
     // Sort highest → lowest
     holders.sort((a, b) => b.balance - a.balance);
 
+    // Add rank numbers
+    holders = holders.map((h, i) => ({
+      rank: i + 1,
+      account: h.account,
+      balance: h.balance
+    }));
+
     // Apply limit
-    const resultList = holders.slice(0, limit);
+    holders = holders.slice(0, limit);
 
     await client.disconnect();
-    return res.status(200).json(resultList);
+    return res.status(200).json(holders);
 
   } catch (err) {
     console.error("Top holders API error:", err);
