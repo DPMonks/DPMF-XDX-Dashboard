@@ -47,6 +47,7 @@ export default function TokenHolders() {
               padding: "8px 0"
             }}
           >
+            {/* FIXED: Rank restored */}
             <span style={{ width: "5%", textAlign: "left" }}>{h.rank}.</span>
 
             <span style={{ width: "45%", textAlign: "left" }}>

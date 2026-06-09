@@ -1,5 +1,3 @@
-// api/top-holders.js
-
 import { Client } from "xrpl";
 
 export default async function handler(req, res) {
@@ -20,10 +18,12 @@ export default async function handler(req, res) {
     let holders = [];
 
     for (const line of result.lines) {
-      // Convert issuer-side negative balances to positive wallet balances
+      if (line.currency !== currency) continue;
+
+      // Convert issuer-side negative balances → positive wallet balances
       const balance = Math.abs(Number(line.balance));
 
-      if (line.currency === currency && balance > 0) {
+      if (balance > 0) {
         holders.push({
           account: line.account,
           balance

@@ -7,7 +7,7 @@ import { rpcRequest } from "../xrplClient.js";
  * @param {string} issuer - The issuer account of the token
  * @param {boolean} excludeZeroBalances - Optional flag to remove 0‑balance trustlines
  */
-export async function fetchHolders(issuer, excludeZeroBalances = false) {
+export async function fetchHholders(issuer, excludeZeroBalances = false) {
   try {
     const body = {
       method: "account_lines",
@@ -29,15 +29,21 @@ export async function fetchHolders(issuer, excludeZeroBalances = false) {
     // 🔥 Filter ONLY XDX trustlines (ASCII, not HEX)
     let filtered = res.result.lines.filter(line => line.currency === "XDX");
 
+    // 🔥 Convert issuer-side negative balances → positive wallet balances
+    filtered = filtered.map(line => ({
+      ...line,
+      balance: Math.abs(Number(line.balance)).toString()
+    }));
+
     // 🔥 Optionally remove zero balances
     if (excludeZeroBalances) {
-      filtered = filtered.filter(line => Number(line.balance) !== 0);
+      filtered = filtered.filter(line => Number(line.balance) > 0);
     }
 
     // 🔥 Preserve full precision (string, not Number)
     const holders = filtered.map(line => ({
       account: line.account,
-      balance: line.balance || "0",
+      balance: line.balance,
       frozen: Boolean(line.freeze) || false
     }));
 
