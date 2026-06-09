@@ -24,39 +24,22 @@ export async function getAMM() {
 }
 
 // ------------------------------------------------------
-// FULL API CLIENT (CLEAN + CORRECT)
+// FULL API CLIENT (MATCHES BACKEND EXACTLY)
 // ------------------------------------------------------
 export const api = {
-  // CORE
   overview: () => fetch(`${API_BASE}/overview`).then(r => r.json()),
   amm: () => fetch(`${API_BASE}/amm`).then(r => r.json()),
   pools: () => fetch(`${API_BASE}/pools`).then(r => r.json()),
 
-  // ------------------------------------------------------
-  // TOKEN HOLDERS (CORRECTED FOR INFINITE SCROLL)
-  // ------------------------------------------------------
-  topHolders: (limit = 50, offset = 0) =>
-    fetch(`${API_BASE}/top-holders?limit=${limit}&offset=${offset}`)
-      .then(r => r.json()),
+  // ONLY VALID HOLDER ENDPOINT
+  topHolders: () =>
+    fetch(`${API_BASE}/top-holders`).then(r => r.json()),
 
-  holderCount: () =>
-    fetch(`${API_BASE}/holders/count`)
-      .then(r => r.json()),
-
-  // ------------------------------------------------------
   // LP HOLDERS
-  // ------------------------------------------------------
-  topLp: (limit = 50, offset = 0) =>
-    fetch(`${API_BASE}/top-lp?limit=${limit}&offset=${offset}`)
-      .then(r => r.json()),
+  topLp: () =>
+    fetch(`${API_BASE}/top-lp`).then(r => r.json()),
 
-  lpHolderCount: () =>
-    fetch(`${API_BASE}/lp-holders/count`)
-      .then(r => r.json()),
-
-  // ------------------------------------------------------
   // CHARTS
-  // ------------------------------------------------------
   tvlHistory: () =>
     fetch(`${API_BASE}/charts/tvl`).then(r => r.json()),
 
