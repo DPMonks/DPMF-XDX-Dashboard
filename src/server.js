@@ -59,6 +59,8 @@ app.get("/", (req, res) => {
       pools: "/api/pools",
       topHolders: "/api/top-holders",
       topLp: "/api/top-lp",
+      holdersCount: "/api/holders/count",
+      lpHoldersCount: "/api/lp-holders/count",
       tvlHistory: "/api/charts/tvl",
       holdersHistory: "/api/charts/holders",
       lpHoldersHistory: "/api/charts/lp-holders"
@@ -118,15 +120,47 @@ app.get("/api/amm", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// TOP TOKEN HOLDERS
+// HOLDER COUNT (NEW)
+// ------------------------------------------------------
+app.get("/api/holders/count", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT COUNT(*) FROM token_holders_latest;");
+    res.json({ count: Number(result.rows[0].count) });
+  } catch (err) {
+    console.error("Error in /api/holders/count:", err);
+    res.status(500).json({ error: "Failed to fetch holder count" });
+  }
+});
+
+// ------------------------------------------------------
+// LP HOLDER COUNT (NEW)
+// ------------------------------------------------------
+app.get("/api/lp-holders/count", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT COUNT(*) FROM lp_holders_latest;");
+    res.json({ count: Number(result.rows[0].count) });
+  } catch (err) {
+    console.error("Error in /api/lp-holders/count:", err);
+    res.status(500).json({ error: "Failed to fetch LP holder count" });
+  }
+});
+
+// ------------------------------------------------------
+// PAGINATED TOKEN HOLDERS (UPDATED)
 // ------------------------------------------------------
 app.get("/api/top-holders", async (req, res) => {
   try {
-    const limit = Number(req.query.limit || 100);
+    const limit = Number(req.query.limit || 50);
+    const offset = Number(req.query.offset || 0);
+
     const result = await pool.query(
-      "SELECT account, balance, frozen FROM token_holders_latest ORDER BY balance DESC LIMIT $1;",
-      [limit]
+      `SELECT account, balance, frozen
+       FROM token_holders_latest
+       ORDER BY balance DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
+
     res.json(result.rows);
   } catch (err) {
     console.error("Error in /api/top-holders:", err);
@@ -135,15 +169,21 @@ app.get("/api/top-holders", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// TOP LP HOLDERS
+// PAGINATED LP HOLDERS (UPDATED)
 // ------------------------------------------------------
 app.get("/api/top-lp", async (req, res) => {
   try {
-    const limit = Number(req.query.limit || 100);
+    const limit = Number(req.query.limit || 50);
+    const offset = Number(req.query.offset || 0);
+
     const result = await pool.query(
-      "SELECT account, lp_balance FROM lp_holders_latest ORDER BY lp_balance DESC LIMIT $1;",
-      [limit]
+      `SELECT account, lp_balance
+       FROM lp_holders_latest
+       ORDER BY lp_balance DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
+
     res.json(result.rows);
   } catch (err) {
     console.error("Error in /api/top-lp:", err);
@@ -212,7 +252,7 @@ app.get("/api/charts/lp-holders", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// NEW: POOL STATS ENDPOINT
+// POOL STATS
 // ------------------------------------------------------
 app.get("/api/pools", async (req, res) => {
   try {
@@ -258,7 +298,7 @@ app.get("/api/pools", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// START SERVER (Railway requires 0.0.0.0 binding)
+// START SERVER
 // ------------------------------------------------------
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ API server running on port ${PORT}`);
