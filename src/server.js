@@ -19,8 +19,8 @@ import cors from "cors";
 import pool from "./db.js";
 import { getHealthStatus } from "./health.js";
 
-// Start indexer loop
-import "./indexer.js";
+// IMPORTANT: import startIndexer, DO NOT RUN IT HERE
+import { startIndexer } from "./indexer.js";
 
 // ------------------------------------------------------
 // EXPRESS SETUP
@@ -156,7 +156,7 @@ app.get("/api/lp-holders/count", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// PAGINATED TOKEN HOLDERS (CORRECT XDX BALANCE)
+// PAGINATED TOKEN HOLDERS
 // ------------------------------------------------------
 app.get("/api/top-holders", async (req, res) => {
   try {
@@ -166,7 +166,7 @@ app.get("/api/top-holders", async (req, res) => {
     const result = await pool.query(
       `SELECT 
          account, 
-         balance::numeric AS balance,   -- ensure numeric
+         balance::numeric AS balance,
          frozen
        FROM token_holders_latest
        ORDER BY balance::numeric DESC
@@ -311,8 +311,11 @@ app.get("/api/pools", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// START SERVER
+// START SERVER + SAFE INDEXER START
 // ------------------------------------------------------
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ API server running on port ${PORT}`);
+
+  // Start indexer AFTER server is healthy
+  startIndexer();
 });
