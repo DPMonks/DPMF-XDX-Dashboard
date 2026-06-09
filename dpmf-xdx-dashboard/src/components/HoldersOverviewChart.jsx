@@ -1,16 +1,27 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { Line } from "react-chartjs-2";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from "recharts";
 
-export default function HoldersOverviewChart() {
-  const [tokenHistory, setTokenHistory] = useState([]);
-  const [lpHistory, setLpHistory] = useState([]);
+// Address shortener
+function shortAddress(addr) {
+  if (!addr) return "";
+  return `${addr.slice(0, 9)}******${addr.slice(-4)}`;
+}
+
+export default function HoldersDistributionChart() {
+  const [holders, setHolders] = useState([]);
 
   async function load() {
-    const t = await api.holdersHistory();
-    const l = await api.lpHoldersHistory();
-    setTokenHistory(t);
-    setLpHistory(l);
+    const data = await api.topHolders(200);
+    const sorted = data.sort((a, b) => b.balance - a.balance);
+    setHolders(sorted);
   }
 
   useEffect(() => {
@@ -19,23 +30,50 @@ export default function HoldersOverviewChart() {
     return () => clearInterval(interval);
   }, []);
 
-  const data = {
-    labels: tokenHistory.map(h => h.day),
-    datasets: [
-      {
-        label: "Token Holders",
-        data: tokenHistory.map(h => h.holder_count),
-        borderColor: "#4CAF50",
-        tension: 0.3
-      },
-      {
-        label: "LP Holders",
-        data: lpHistory.map(h => h.lp_holder_count),
-        borderColor: "#2196F3",
-        tension: 0.3
-      }
-    ]
-  };
+  // Top 10 whales + "Others"
+  const top10 = holders.slice(0, 10);
+  const others = holders.slice(10).reduce((sum, h) => sum + h.balance, 0);
 
-  return <Line data={data} />;
+  const chartData = [
+    ...top10.map(h => ({
+      name: shortAddress(h.account),
+      value: h.balance
+    })),
+    { name: "Others", value: others }
+  ];
+
+  const COLORS = [
+    "#4CAF50",
+    "#2196F3",
+    "#FF9800",
+    "#9C27B0",
+    "#F44336",
+    "#00BCD4",
+    "#8BC34A",
+    "#FFC107",
+    "#3F51B5",
+    "#E91E63",
+    "#9E9E9E"
+  ];
+
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <PieChart>
+        <Pie
+          data={chartData}
+          dataKey="value"
+          nameKey="name"
+          outerRadius={110}
+          label
+        >
+          {chartData.map((entry, index) => (
+            <Cell key={index} fill={COLORS[index % COLORS.length]} />
+          ))}
+        </Pie>
+
+        <Tooltip />
+        <Legend />
+      </PieChart>
+    </ResponsiveContainer>
+  );
 }
