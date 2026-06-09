@@ -4,7 +4,6 @@ import { Client } from "xrpl";
 
 export default async function handler(req, res) {
   const limit = parseInt(req.query.limit || "100", 10);
-  const excludeZero = req.query.excludeZero === "true";
 
   const client = new Client("wss://s1.ripple.com");
 
@@ -21,17 +20,19 @@ export default async function handler(req, res) {
       ledger_index: "current"
     });
 
-    // Efficient single-pass filter + map
-    let holders = [];
+    // Build list of CURRENT XDX holders only
+    const holders = [];
     for (const line of result.lines) {
-      if (line.currency === currency) {
-        const balance = Number(line.balance);
-        if (!excludeZero || balance !== 0) {
-          holders.push({
-            account: line.account,
-            balance
-          });
-        }
+      if (
+        line.currency === currency &&        // must be XDX
+        Number(line.balance) > 0 &&          // must hold XDX right now
+        Number(line.limit) > 0 &&            // must have an active trustline
+        !line.freeze                         // trustline must not be frozen
+      ) {
+        holders.push({
+          account: line.account,
+          balance: Number(line.balance)
+        });
       }
     }
 
@@ -39,10 +40,10 @@ export default async function handler(req, res) {
     holders.sort((a, b) => b.balance - a.balance);
 
     // Apply limit
-    holders = holders.slice(0, limit);
+    const resultList = holders.slice(0, limit);
 
     await client.disconnect();
-    return res.status(200).json(holders);
+    return res.status(200).json(resultList);
 
   } catch (err) {
     console.error("Top holders API error:", err);
