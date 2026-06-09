@@ -5,8 +5,9 @@ import { rpcRequest } from "../xrplClient.js";
  * for the XDX token (3‑letter ASCII currency).
  *
  * @param {string} issuer - The issuer account of the token
+ * @param {boolean} excludeZeroBalances - Optional flag to remove 0‑balance trustlines
  */
-export async function fetchHolders(issuer) {
+export async function fetchHolders(issuer, excludeZeroBalances = false) {
   try {
     const body = {
       method: "account_lines",
@@ -26,9 +27,12 @@ export async function fetchHolders(issuer) {
     }
 
     // 🔥 Filter ONLY XDX trustlines (ASCII, not HEX)
-    const filtered = res.result.lines.filter(
-      line => line.currency === "XDX"
-    );
+    let filtered = res.result.lines.filter(line => line.currency === "XDX");
+
+    // 🔥 Optionally remove zero balances
+    if (excludeZeroBalances) {
+      filtered = filtered.filter(line => Number(line.balance) !== 0);
+    }
 
     // 🔥 Preserve full precision (string, not Number)
     const holders = filtered.map(line => ({

@@ -4,6 +4,7 @@ import { Client } from "xrpl";
 
 export default async function handler(req, res) {
   const limit = parseInt(req.query.limit || "100", 10);
+  const excludeZero = req.query.excludeZero === "true";
 
   const client = new Client("wss://s1.ripple.com");
 
@@ -11,7 +12,9 @@ export default async function handler(req, res) {
     await client.connect();
 
     const issuer = process.env.XDX_ISSUER;
-    const currency = process.env.XDX_CURRENCY_HEX; // 40-char hex
+
+    // IMPORTANT: XDX trustlines use ASCII, NOT HEX
+    const currency = "XDX";
 
     const holders = await client.request({
       command: "account_lines",
@@ -19,18 +22,26 @@ export default async function handler(req, res) {
       ledger_index: "validated"
     });
 
-    // Filter only XDX trustlines
-    const filtered = holders.result.lines
+    let filtered = holders.result.lines
       .filter(l => l.currency === currency)
       .map(l => ({
         account: l.account,
         balance: Number(l.balance)
-      }))
-      .sort((a, b) => b.balance - a.balance)
-      .slice(0, limit);
+      }));
+
+    // Optional: remove zero balances
+    if (excludeZero) {
+      filtered = filtered.filter(h => h.balance !== 0);
+    }
+
+    // Sort highest → lowest
+    filtered.sort((a, b) => b.balance - a.balance);
+
+    // Apply limit
+    const result = filtered.slice(0, limit);
 
     await client.disconnect();
-    return res.status(200).json(filtered);
+    return res.status(200).json(result);
 
   } catch (err) {
     console.error("Top holders API error:", err);
