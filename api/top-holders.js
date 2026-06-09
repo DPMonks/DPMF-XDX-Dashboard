@@ -1,4 +1,4 @@
-// api/public/top-holders.js
+// api/top-holders.js
 
 import { Client } from "xrpl";
 
@@ -11,16 +11,23 @@ export default async function handler(req, res) {
   try {
     await client.connect();
 
-    const issuer = process.env.XDX_ISSUER;
+    // Load issuer from environment or fallback
+    const issuer = process.env.XDX_ISSUER || "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo";
 
     // IMPORTANT: XDX trustlines use ASCII, NOT HEX
     const currency = "XDX";
 
+    // Request live ledger trustlines
     const holders = await client.request({
       command: "account_lines",
       account: issuer,
       ledger_index: "current"
     });
+
+    // Debug log to confirm trustlines are being read
+    console.log("XDX issuer:", issuer);
+    console.log("Trustlines returned:", holders.result.lines.length);
+    console.log("Sample trustline:", holders.result.lines[0]);
 
     let filtered = holders.result.lines
       .filter(l => l.currency === currency)
