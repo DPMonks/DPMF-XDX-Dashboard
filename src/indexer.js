@@ -6,10 +6,14 @@ import { fetchHolders } from "./tasks/holders.js";
 import pools from "./pools.js";
 import { logger } from "./utils/logger.js";
 import { updateHealthTimestamp } from "./health.js";
+
 import {
   writeAmmSnapshot,
   writeTokenHolders,
-  writeLpHolders
+  writeLpHolders,
+  writeHoldersHistory,
+  writeLpHoldersHistory,
+  writeTvlHistory
 } from "./dbWriter.js";
 
 // Delay helper
@@ -43,6 +47,11 @@ async function processPool(pool) {
   if (amm) {
     logger.info("AMM", "Retrieved AMM info");
     await writeAmmSnapshot(pool.name, amm);
+
+    // NEW: Write TVL history
+    if (amm?.tvl) {
+      await writeTvlHistory(amm.tvl);
+    }
   } else {
     logger.warn("AMM", "No AMM data returned");
   }
@@ -55,6 +64,9 @@ async function processPool(pool) {
     if (lp?.length) {
       logger.info("LP", `Retrieved ${lp.length} LP holders`);
       await writeLpHolders(lp);
+
+      // NEW: Write LP holders history
+      await writeLpHoldersHistory(lp.length);
     } else {
       logger.warn("LP", "No LP token data returned");
     }
@@ -68,6 +80,9 @@ async function processPool(pool) {
   if (holders?.length) {
     logger.info("HOLDERS", `Retrieved ${holders.length} trustlines`);
     await writeTokenHolders(holders);
+
+    // NEW: Write holders history
+    await writeHoldersHistory(holders.length);
   } else {
     logger.warn("HOLDERS", "No trustlines returned");
   }

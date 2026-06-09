@@ -33,11 +33,13 @@ export const api = {
   topHolders: (limit = 100) =>
     fetch(`${API_BASE}/top-holders?limit=${limit}`).then(r => r.json()),
 
-  // LP HOLDERS (NEW)
+  // LP HOLDERS
   topLp: (limit = 100) =>
     fetch(`${API_BASE}/top-lp?limit=${limit}`).then(r => r.json()),
 
-  // CHARTS
+  // -----------------------------
+  // CHART ENDPOINTS (NEW)
+  // -----------------------------
   tvlHistory: () =>
     fetch(`${API_BASE}/charts/tvl`).then(r => r.json()),
 
