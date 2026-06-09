@@ -1,3 +1,8 @@
+import TokenHolders from "./components/TokenHolders";
+import LpHolders from "./components/LpHolders";
+import HoldersOverviewChart from "./components/HoldersOverviewChart";
+import HoldersDistributionChart from "./components/HoldersDistributionChart";
+import LpDistributionChart from "./components/LpDistributionChart";   // ✅ NEW IMPORT
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
@@ -21,7 +26,8 @@ import {
   PlusCircle,
   MinusCircle,
   LineChart,
-  Database
+  Database,
+  Users
 } from "lucide-react";
 
 export default function App() {
@@ -39,9 +45,11 @@ export default function App() {
   // PUBLIC XRPL FETCHER
   async function loadPublicXrplData() {
     try {
-      const resOverview = await fetch("/api/public/overview").then(r => r.json());
-      const resAmm = await fetch("/api/public/amm").then(r => r.json());
-      const resPools = await fetch("/api/public/pools").then(r => r.json());
+      const base = "https://dpmf-xdx-indexer-production.up.railway.app/api/public";
+
+      const resOverview = await fetch(`${base}/overview`).then(r => r.json());
+      const resAmm = await fetch(`${base}/amm`).then(r => r.json());
+      const resPools = await fetch(`${base}/pools`).then(r => r.json());
 
       setPublicOverview(resOverview);
       setPublicAmm(resAmm);
@@ -84,6 +92,7 @@ export default function App() {
       {/* GRID */}
       <main className="dashboard-grid">
 
+        {/* POOL STATS */}
         <section className="dashboard-card">
           <h2 className="card-title">
             <Database className="card-icon" /> Pool Statistics
@@ -91,6 +100,7 @@ export default function App() {
           <Pools data={finalPools} />
         </section>
 
+        {/* WALLET BALANCES */}
         <section className="dashboard-card">
           <h2 className="card-title">
             <Wallet className="card-icon" /> Wallet Balances
@@ -98,6 +108,7 @@ export default function App() {
           <WalletBalances />
         </section>
 
+        {/* LP POSITIONS */}
         <section className="dashboard-card">
           <h2 className="card-title">
             <Layers className="card-icon" /> LP Positions
@@ -105,6 +116,7 @@ export default function App() {
           <LpPositions />
         </section>
 
+        {/* ADD LIQUIDITY */}
         <section className="dashboard-card">
           <h2 className="card-title">
             <PlusCircle className="card-icon" /> Add Liquidity
@@ -112,6 +124,7 @@ export default function App() {
           <AddLiquidity />
         </section>
 
+        {/* REMOVE LIQUIDITY */}
         <section className="dashboard-card">
           <h2 className="card-title">
             <MinusCircle className="card-icon" /> Remove Liquidity
@@ -119,11 +132,52 @@ export default function App() {
           <RemoveLiquidity />
         </section>
 
+        {/* ANALYTICS */}
         <section className="dashboard-card tall-card">
           <h2 className="card-title">
             <LineChart className="card-icon" /> Analytics & Charts
           </h2>
           <Charts overview={finalOverview} amm={finalAmm} />
+        </section>
+
+        {/* HOLDERS OVERVIEW CHART */}
+        <section className="dashboard-card tall-card">
+          <h2 className="card-title">
+            <LineChart className="card-icon" /> Holders Overview
+          </h2>
+          <HoldersOverviewChart />
+        </section>
+
+        {/* HOLDERS DISTRIBUTION PIE CHART */}
+        <section className="dashboard-card tall-card">
+          <h2 className="card-title">
+            <LineChart className="card-icon" /> Holders Distribution
+          </h2>
+          <HoldersDistributionChart />
+        </section>
+
+        {/* LP DISTRIBUTION PIE CHART */}
+        <section className="dashboard-card tall-card">
+          <h2 className="card-title">
+            <LineChart className="card-icon" /> LP Distribution
+          </h2>
+          <LpDistributionChart />
+        </section>
+
+        {/* TOKEN HOLDERS */}
+        <section className="dashboard-card">
+          <h2 className="card-title">
+            <Users className="card-icon" /> Token Holders
+          </h2>
+          <TokenHolders />
+        </section>
+
+        {/* LP HOLDERS */}
+        <section className="dashboard-card">
+          <h2 className="card-title">
+            <Users className="card-icon" /> LP Holders
+          </h2>
+          <LpHolders />
         </section>
 
       </main>
