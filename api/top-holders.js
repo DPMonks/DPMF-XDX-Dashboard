@@ -11,44 +11,38 @@ export default async function handler(req, res) {
   try {
     await client.connect();
 
-    // Load issuer from environment or fallback
     const issuer = process.env.XDX_ISSUER || "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo";
-
-    // IMPORTANT: XDX trustlines use ASCII, NOT HEX
     const currency = "XDX";
 
-    // Request live ledger trustlines
-    const holders = await client.request({
+    // Fetch trustlines from live ledger
+    const { result } = await client.request({
       command: "account_lines",
       account: issuer,
       ledger_index: "current"
     });
 
-    // Debug log to confirm trustlines are being read
-    console.log("XDX issuer:", issuer);
-    console.log("Trustlines returned:", holders.result.lines.length);
-    console.log("Sample trustline:", holders.result.lines[0]);
-
-    let filtered = holders.result.lines
-      .filter(l => l.currency === currency)
-      .map(l => ({
-        account: l.account,
-        balance: Number(l.balance)
-      }));
-
-    // Optional: remove zero balances
-    if (excludeZero) {
-      filtered = filtered.filter(h => h.balance !== 0);
+    // Efficient single-pass filter + map
+    let holders = [];
+    for (const line of result.lines) {
+      if (line.currency === currency) {
+        const balance = Number(line.balance);
+        if (!excludeZero || balance !== 0) {
+          holders.push({
+            account: line.account,
+            balance
+          });
+        }
+      }
     }
 
     // Sort highest → lowest
-    filtered.sort((a, b) => b.balance - a.balance);
+    holders.sort((a, b) => b.balance - a.balance);
 
     // Apply limit
-    const result = filtered.slice(0, limit);
+    holders = holders.slice(0, limit);
 
     await client.disconnect();
-    return res.status(200).json(result);
+    return res.status(200).json(holders);
 
   } catch (err) {
     console.error("Top holders API error:", err);
