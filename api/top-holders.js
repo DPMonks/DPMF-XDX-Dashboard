@@ -20,7 +20,6 @@ export default async function handler(req, res) {
     for (const line of result.lines) {
       if (line.currency !== currency) continue;
 
-      // Convert issuer-side negative balances → positive wallet balances
       const balance = Math.abs(Number(line.balance));
 
       if (balance > 0) {
@@ -31,10 +30,8 @@ export default async function handler(req, res) {
       }
     }
 
-    // Sort highest → lowest
     holders.sort((a, b) => b.balance - a.balance);
 
-    // Add rank numbers
     holders = holders.map((h, i) => ({
       rank: i + 1,
       account: h.account,
