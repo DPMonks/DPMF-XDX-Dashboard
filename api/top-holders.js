@@ -1,9 +1,8 @@
 import { Client } from "xrpl";
 
 export default async function handler(req, res) {
-  const client = new Client("wss://s1.ripple.com");
-
   try {
+    const client = new Client("wss://s1.ripple.com");
     await client.connect();
 
     const issuer = process.env.XDX_ISSUER || "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo";
@@ -15,6 +14,9 @@ export default async function handler(req, res) {
       ledger_index: "current"
     });
 
+    await client.disconnect();
+
+    // Build holders array from trustlines
     let holders = [];
 
     for (const line of result.lines) {
@@ -30,6 +32,7 @@ export default async function handler(req, res) {
       }
     }
 
+    // Sort and rank
     holders.sort((a, b) => b.balance - a.balance);
 
     holders = holders.map((h, i) => ({
@@ -38,9 +41,7 @@ export default async function handler(req, res) {
       balance: h.balance
     }));
 
-    await client.disconnect();
     return res.status(200).json(holders);
-
   } catch (err) {
     console.error("Top holders API error:", err);
     return res.status(500).json({ error: "Failed to load token holders" });
