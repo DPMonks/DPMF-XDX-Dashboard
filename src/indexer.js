@@ -2,19 +2,19 @@
 
 import { fetchAmm } from "./tasks/amm.js";
 import { fetchLpHolders } from "./tasks/lp.js";
-import { fetchHolders } from "./tasks/holders.js";
 import pools from "./pools.js";
 import { logger } from "./utils/logger.js";
 import { updateHealthTimestamp } from "./health.js";
 
 import {
   writeAmmSnapshot,
-  writeTokenHolders,
   writeLpHolders,
-  writeHoldersHistory,
   writeLpHoldersHistory,
   writeTvlHistory
 } from "./dbWriter.js";
+
+// NEW: Method‑2 ledger walker
+import { runHolderScanCycle } from "./tokenHolderScanner.js";
 
 // Delay helper
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -75,18 +75,6 @@ async function processPool(pool) {
     logger.info("LP", "Skipping LP sync (waiting for 5‑minute interval)");
   }
 
-  // 3. HOLDERS (always every cycle)
-  const holders = await fetchHolders(pool.issuer);
-  if (holders?.length) {
-    logger.info("HOLDERS", `Retrieved ${holders.length} trustlines`);
-    await writeTokenHolders(holders);
-
-    // NEW: Write holders history
-    await writeHoldersHistory(holders.length);
-  } else {
-    logger.warn("HOLDERS", "No trustlines returned");
-  }
-
   const end = Date.now();
   logger.info("POOL", `${pool.name} processed in ${end - start}ms`);
 }
@@ -101,6 +89,7 @@ async function startIndexer() {
     const cycleStart = Date.now();
 
     try {
+      // Process each AMM pool
       for (const pool of pools) {
         try {
           await processPool(pool);
@@ -109,6 +98,10 @@ async function startIndexer() {
         }
         await sleep(1500);
       }
+
+      // NEW: Run Method‑2 ledger walker (trustline scanner)
+      await runHolderScanCycle();
+
     } catch (err) {
       logger.error("SYSTEM", "Fatal error in cycle", err);
     }

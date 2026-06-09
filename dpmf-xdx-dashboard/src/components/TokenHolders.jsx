@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
+// Address shortener
 function shortAddress(addr) {
   if (!addr) return "";
   return `${addr.slice(0, 9)}******${addr.slice(-4)}`;
 }
 
+// Copy helper
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text);
 }
@@ -27,11 +29,11 @@ export default function TokenHolders() {
         return;
       }
 
+      // 🔥 Sort by XDX balance (highest → lowest)
       const sorted = data.sort(
         (a, b) => parseFloat(b.balance) - parseFloat(a.balance)
       );
 
-      // Append smoothly
       setHolders(prev => [...prev, ...sorted]);
       setOffset(nextOffset + batchSize);
     } catch (err) {
@@ -43,14 +45,10 @@ export default function TokenHolders() {
 
   useEffect(() => {
     load(); // initial load
-    const interval = setInterval(() => {
-      // refresh first batch only
-      load(0);
-    }, 10000);
+    const interval = setInterval(() => load(0), 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // 🔥 Infinite scroll trigger (smooth, no jump)
   useEffect(() => {
     let ticking = false;
     function handleScroll() {
@@ -72,15 +70,45 @@ export default function TokenHolders() {
     <div className="holder-container">
       <ul className="holder-list">
         {holders.map((h, i) => (
-          <li key={i} className="holder-item">
-            <span>{i + 1}.</span>
-            <span>{shortAddress(h.account)}</span>
-            <span>{h.balance}</span>
+          <li
+            key={i}
+            className="holder-item"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderBottom: "1px solid rgba(255,255,255,0.1)", // faint grey line
+              padding: "8px 0"
+            }}
+          >
+            <span style={{ width: "5%", textAlign: "left" }}>{i + 1}.</span>
+            <span style={{ width: "45%", textAlign: "left" }}>
+              {shortAddress(h.account)}
+            </span>
+            <span
+              style={{
+                width: "30%",
+                textAlign: "center", // centred balance
+                fontWeight: "500"
+              }}
+            >
+              {parseFloat(h.balance).toLocaleString()} XDX
+            </span>
             <button
               className="copy-btn"
               onClick={() => copyToClipboard(h.account)}
+              style={{
+                width: "120px",
+                backgroundColor: "#00e0ff",
+                color: "#000",
+                border: "none",
+                borderRadius: "4px",
+                padding: "6px 10px",
+                cursor: "pointer",
+                fontWeight: "600"
+              }}
             >
-              Copy
+              Copy Address
             </button>
           </li>
         ))}
@@ -88,9 +116,7 @@ export default function TokenHolders() {
 
       {loading && <p style={{ textAlign: "center" }}>Loading…</p>}
       {!hasMore && (
-        <p style={{ textAlign: "center", opacity: 0.6 }}>
-          All holders loaded
-        </p>
+        <p style={{ textAlign: "center", opacity: 0.6 }}>All holders loaded</p>
       )}
     </div>
   );

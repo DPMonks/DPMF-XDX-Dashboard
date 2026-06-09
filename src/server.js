@@ -156,7 +156,7 @@ app.get("/api/lp-holders/count", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// PAGINATED TOKEN HOLDERS
+// PAGINATED TOKEN HOLDERS (CORRECT XDX BALANCE)
 // ------------------------------------------------------
 app.get("/api/top-holders", async (req, res) => {
   try {
@@ -164,7 +164,10 @@ app.get("/api/top-holders", async (req, res) => {
     const offset = Number(req.query.offset || 0);
 
     const result = await pool.query(
-      `SELECT account, balance, frozen
+      `SELECT 
+         account, 
+         balance::numeric AS balance,   -- ensure numeric
+         frozen
        FROM token_holders_latest
        ORDER BY balance::numeric DESC
        LIMIT $1 OFFSET $2`,
@@ -187,7 +190,9 @@ app.get("/api/top-lp", async (req, res) => {
     const offset = Number(req.query.offset || 0);
 
     const result = await pool.query(
-      `SELECT account, lp_balance
+      `SELECT 
+         account, 
+         lp_balance::numeric AS lp_balance
        FROM lp_holders_latest
        ORDER BY lp_balance::numeric DESC
        LIMIT $1 OFFSET $2`,
