@@ -4,7 +4,6 @@ import { Client } from "xrpl";
 
 export default async function handler(req, res) {
   const limit = parseInt(req.query.limit || "100", 10);
-
   const client = new Client("wss://s1.ripple.com");
 
   try {
@@ -22,7 +21,8 @@ export default async function handler(req, res) {
     // Build list of CURRENT XDX holders only
     let holders = [];
     for (const line of result.lines) {
-      const balance = Number(line.balance);
+      // Convert issuer-side negative balances to positive wallet balances
+      const balance = Math.abs(Number(line.balance));
 
       if (
         line.currency === currency &&
