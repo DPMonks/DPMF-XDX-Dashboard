@@ -11,12 +11,16 @@ export async function fetchAccountLines(account) {
 
   const result = await rpc(body);
 
-  // SAFETY: RPC returned nothing
-  if (!result || !Array.isArray(result.lines)) {
+  // SAFETY: RPC returned nothing or malformed data
+  if (!result || !result.lines || !Array.isArray(result.lines)) {
     return [];
   }
 
   return result.lines;
+}
+
+console.log("[XRPL] SAFE fetchAccountLines loaded");
+
 }
 
 console.log("[XRPL] SAFE fetchAccountLines loaded");
