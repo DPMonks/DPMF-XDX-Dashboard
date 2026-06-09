@@ -3,7 +3,6 @@
 import { Client } from "xrpl";
 
 export default async function handler(req, res) {
-  const limit = parseInt(req.query.limit || "100", 10);
   const client = new Client("wss://s1.ripple.com");
 
   try {
@@ -18,18 +17,13 @@ export default async function handler(req, res) {
       ledger_index: "current"
     });
 
-    // Build list of CURRENT XDX holders only
     let holders = [];
+
     for (const line of result.lines) {
       // Convert issuer-side negative balances to positive wallet balances
       const balance = Math.abs(Number(line.balance));
 
-      if (
-        line.currency === currency &&
-        balance > 0 &&
-        Number(line.limit) > 0 &&
-        !line.freeze
-      ) {
+      if (line.currency === currency && balance > 0) {
         holders.push({
           account: line.account,
           balance
@@ -46,9 +40,6 @@ export default async function handler(req, res) {
       account: h.account,
       balance: h.balance
     }));
-
-    // Apply limit
-    holders = holders.slice(0, limit);
 
     await client.disconnect();
     return res.status(200).json(holders);

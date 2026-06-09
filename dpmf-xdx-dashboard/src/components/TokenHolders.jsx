@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
-// Address shortener
 function shortAddress(addr) {
   if (!addr) return "";
   return `${addr.slice(0, 9)}******${addr.slice(-4)}`;
 }
 
-// Copy helper
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text);
 }
@@ -15,27 +13,12 @@ function copyToClipboard(text) {
 export default function TokenHolders() {
   const [holders, setHolders] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(0);
-  const batchSize = 50;
 
-  async function load(nextOffset = 0) {
-    if (loading || !hasMore) return;
+  async function load() {
     setLoading(true);
     try {
-      const data = await api.topHolders(batchSize, nextOffset);
-      if (!data.length) {
-        setHasMore(false);
-        return;
-      }
-
-      // 🔥 Sort by XDX balance (highest → lowest)
-      const sorted = data.sort(
-        (a, b) => parseFloat(b.balance) - parseFloat(a.balance)
-      );
-
-      setHolders(prev => [...prev, ...sorted]);
-      setOffset(nextOffset + batchSize);
+      const data = await api.topHolders(); // backend returns full sorted list
+      setHolders(data);
     } catch (err) {
       console.error("Error loading holders:", err);
     } finally {
@@ -44,56 +27,42 @@ export default function TokenHolders() {
   }
 
   useEffect(() => {
-    load(); // initial load
-    const interval = setInterval(() => load(0), 10000);
+    load();
+    const interval = setInterval(load, 10000); // refresh every 10s
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    let ticking = false;
-    function handleScroll() {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const nearBottom =
-          window.innerHeight + window.scrollY >=
-          document.body.offsetHeight - 300;
-        if (nearBottom) load(offset);
-        ticking = false;
-      });
-    }
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [offset, holders]);
 
   return (
     <div className="holder-container">
       <ul className="holder-list">
-        {holders.map((h, i) => (
+        {holders.map((h) => (
           <li
-            key={i}
+            key={h.account}
             className="holder-item"
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              borderBottom: "1px solid rgba(255,255,255,0.1)", // faint grey line
+              borderBottom: "1px solid rgba(255,255,255,0.1)",
               padding: "8px 0"
             }}
           >
-            <span style={{ width: "5%", textAlign: "left" }}>{i + 1}.</span>
+            <span style={{ width: "5%", textAlign: "left" }}>{h.rank}.</span>
+
             <span style={{ width: "45%", textAlign: "left" }}>
               {shortAddress(h.account)}
             </span>
+
             <span
               style={{
                 width: "30%",
-                textAlign: "center", // centred balance
+                textAlign: "center",
                 fontWeight: "500"
               }}
             >
-              {parseFloat(h.balance).toLocaleString()} XDX
+              {Number(h.balance).toLocaleString()} XDX
             </span>
+
             <button
               className="copy-btn"
               onClick={() => copyToClipboard(h.account)}
@@ -115,9 +84,6 @@ export default function TokenHolders() {
       </ul>
 
       {loading && <p style={{ textAlign: "center" }}>Loading…</p>}
-      {!hasMore && (
-        <p style={{ textAlign: "center", opacity: 0.6 }}>All holders loaded</p>
-      )}
     </div>
   );
 }

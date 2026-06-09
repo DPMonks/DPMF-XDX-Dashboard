@@ -31,7 +31,7 @@ export const api = {
   amm: () => fetch(`${API_BASE}/amm`).then(r => r.json()),
   pools: () => fetch(`${API_BASE}/pools`).then(r => r.json()),
 
-  // ONLY VALID HOLDER ENDPOINT
+  // CORRECT: backend does NOT accept limit/offset
   topHolders: () =>
     fetch(`${API_BASE}/top-holders`).then(r => r.json()),
 
