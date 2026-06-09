@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     const holders = await client.request({
       command: "account_lines",
       account: issuer,
-      ledger_index: "validated"
+      ledger_index: "current"
     });
 
     let filtered = holders.result.lines
