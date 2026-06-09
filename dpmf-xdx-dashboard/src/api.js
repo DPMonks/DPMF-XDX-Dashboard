@@ -1,5 +1,5 @@
 // Central API base
-const API_BASE = "https://dpmf-xdx-indexer-production.up.railway.app/api/public";
+const API_BASE = "https://dpmf-xdx-indexer-production.up.railway.app/api";
 
 // -----------------------------
 // EXISTING FUNCTIONS (kept)
