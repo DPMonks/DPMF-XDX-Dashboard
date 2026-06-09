@@ -1,63 +1,68 @@
-/* =============================== */
-/* DPMF.Technology Core Theme      */
-/* =============================== */
+/* ============================================================
+   DPMF.Technology — Unified Cyber‑Neon Dashboard Theme
+   Fully rewritten for mobile‑first, clean spacing, no conflicts
+   ============================================================ */
+
+/* ------------------------------ */
+/* ROOT VARIABLES                 */
+/* ------------------------------ */
 
 :root {
-  --dpmf-bg: #050507;
-  --dpmf-bg-elevated: #0b0c10;
-  --dpmf-border-soft: rgba(255,255,255,0.06);
+  --bg: #050507;
+  --bg-elevated: #0b0c10;
+  --border: rgba(255,255,255,0.06);
 
-  --dpmf-neon-violet: #c770ff;
-  --dpmf-neon-violet-soft: rgba(199,112,255,0.5);
+  --neon-cyan: #00eaff;
+  --neon-cyan-soft: rgba(0,234,255,0.45);
 
-  --dpmf-neon-cyan: #00eaff;
-  --dpmf-neon-cyan-soft: rgba(0,234,255,0.5);
+  --neon-violet: #c770ff;
+  --neon-violet-soft: rgba(199,112,255,0.45);
 
-  --dpmf-text-main: #e8e8f5;
-  --dpmf-text-muted: #9a9ab3;
+  --text-main: #e8e8f5;
+  --text-muted: #9a9ab3;
 
-  --dpmf-radius-card: 14px;
-  --dpmf-radius-pill: 999px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
 
-  --dpmf-transition-fast: 0.2s ease;
-  --dpmf-transition-med: 0.3s ease;
+  --transition-fast: 0.2s ease;
+  --transition-med: 0.3s ease;
 }
 
-/* =============================== */
-/* GLOBAL DARK THEME               */
-/* =============================== */
+/* ------------------------------ */
+/* GLOBAL                         */
+/* ------------------------------ */
 
 body {
   background: radial-gradient(circle at top left,#101020 0%,#050507 45%,#020203 100%);
-  color: var(--dpmf-text-main);
+  color: var(--text-main);
   font-family: Inter,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
   margin: 0;
   padding: 0;
   overflow-x: hidden;
 }
 
-/* =============================== */
-/* WRAPPER                         */
-/* =============================== */
+/* ------------------------------ */
+/* WRAPPER                        */
+/* ------------------------------ */
 
 .dashboard-wrapper {
   width: 100%;
   min-height: 100vh;
-  padding: 24px 20px 40px;
+  padding: 20px 16px 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-/* =============================== */
-/* CONNECT WALLET — DO NOT TOUCH   */
-/* =============================== */
+/* ------------------------------ */
+/* CONNECT WALLET (fixed)         */
+/* ------------------------------ */
 
 .xaman-topright-box {
   position: fixed;
   top: 12px;
   right: 12px;
-  z-index: 99999;
+  z-index: 9999;
 
   display: flex;
   align-items: center;
@@ -80,10 +85,6 @@ body {
   filter: drop-shadow(0 0 4px rgba(0,234,255,0.35));
 }
 
-/* =============================== */
-/* CONNECT WALLET BUTTON + HOVER   */
-/* =============================== */
-
 .connect-wallet-btn {
   font-size: 0.85rem;
   padding: 6px 10px;
@@ -91,114 +92,101 @@ body {
 
   background: #000;
   color: #fff;
-  border: 1px solid var(--dpmf-neon-cyan);
+  border: 1px solid var(--neon-cyan);
 
   display: flex;
   align-items: center;
   gap: 6px;
 
-  transition: 0.25s ease;
+  transition: var(--transition-fast);
 }
 
 .connect-wallet-btn:hover {
   box-shadow: 0 0 12px rgba(0,234,255,0.6);
-  border-color: var(--dpmf-neon-cyan);
-  color: #ffffff;
   transform: translateY(-1px);
 }
 
-/* =============================== */
-/* HEADER — FIXED WIDTH, CENTRED   */
-/* =============================== */
+/* ------------------------------ */
+/* HEADER                         */
+/* ------------------------------ */
 
 .dashboard-header {
-  width: 1200px;
-  max-width: 90%;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 1200px;
 
-  padding: 90px 40px 70px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  padding: 70px 20px 50px;
+  margin-top: 120px;
+  margin-bottom: 40px;
+
+  background: rgba(15,15,20,0.85);
+  border-top: 3px solid var(--neon-cyan);
+  border-bottom: 3px solid var(--neon-cyan);
+  border-radius: var(--radius-card);
+
   text-align: center;
-
-  background: rgba(15, 15, 20, 0.85);
-  border-top: 3px solid rgba(0,234,255,0.6);
-  border-bottom: 3px solid rgba(0,234,255,0.6);
-  border-radius: var(--dpmf-radius-card);
-
   backdrop-filter: blur(10px);
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-
-  margin-top: 150px;
-  margin-bottom: 40px;
 }
 
-/* =============================== */
-/* TITLE — PURE WHITE, NO GLOW     */
-/* =============================== */
-
 .dashboard-title {
-  font-size: 2.8rem;
+  font-size: 2.4rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-
-  color: #ffffff; /* PURE WHITE */
-  text-shadow: none; /* NO GLOW, NO FADE, NO BLEED */
-
-  margin: 0;
-  padding-bottom: 22px;
+  margin: 0 0 12px 0;
+  color: #fff;
 }
-
-/* =============================== */
-/* SUBTITLE — CYAN, CLEAN          */
-/* =============================== */
 
 .dashboard-subtitle {
-  font-size: 1.2rem;
-  margin-top: 0;
-  margin-bottom: 10px;
-
+  font-size: 1.1rem;
   letter-spacing: 0.08em;
-  color: var(--dpmf-neon-cyan);
+  color: var(--neon-cyan);
   opacity: 0.95;
-
-  text-shadow: 0 0 4px rgba(0,234,255,0.25);
+  margin: 0;
 }
 
-/* =============================== */
-/* GRID — ALWAYS VERTICAL STACK    */
-/* =============================== */
+/* ------------------------------ */
+/* GRID (mobile‑first)            */
+/* ------------------------------ */
 
 .dashboard-grid {
-  width: 1200px;
-  max-width: 90%;
+  width: 100%;
+  max-width: 1200px;
+
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 28px;
+
   margin-bottom: 60px;
 }
 
-/* =============================== */
-/* CARDS                           */
-/* =============================== */
+/* ------------------------------ */
+/* CARDS                          */
+/* ------------------------------ */
 
 .dashboard-card {
   width: 100%;
   background: linear-gradient(145deg,#0b0c10 0%,#050507 60%,#090812 100%);
-  border-radius: var(--dpmf-radius-card);
-  border: 1px solid var(--dpmf-border-soft);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
   padding: 20px;
-  min-height: 350px;
+
+  min-height: 320px;
   max-height: 480px;
   overflow-y: auto;
+
   position: relative;
   backdrop-filter: blur(10px);
+
   box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-  transition: transform var(--dpmf-transition-med),
-              box-shadow var(--dpmf-transition-med),
-              border-color var(--dpmf-transition-med);
+  transition: var(--transition-med);
+}
+
+.dashboard-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.55),
+              0 0 26px var(--neon-cyan-soft);
+  border-color: var(--neon-cyan-soft);
 }
 
 .dashboard-card::before {
@@ -210,101 +198,72 @@ body {
   pointer-events: none;
 }
 
-.dashboard-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 8px 22px rgba(0,0,0,0.55),
-              0 0 26px rgba(0,234,255,0.35);
-  border-color: rgba(0,234,255,0.5);
-}
+/* ------------------------------ */
+/* CARD TITLES                    */
+/* ------------------------------ */
 
-/* =============================== */
-/* ICONS & TITLES                  */
-/* =============================== */
-
-.card-title,
-.dashboard-card h2 {
-  font-size: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--dpmf-neon-cyan);
-  margin-bottom: 12px;
+.card-title {
   display: flex;
   align-items: center;
   gap: 10px;
+
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--neon-cyan);
+
+  margin-bottom: 12px;
 }
 
 .card-icon {
   width: 20px;
   height: 20px;
-  color: var(--dpmf-neon-cyan);
-  filter: drop-shadow(0 0 6px rgba(0,234,255,0.45));
-  transition: transform 0.25s ease, filter 0.25s ease;
+  color: var(--neon-cyan);
+  filter: drop-shadow(0 0 6px var(--neon-cyan-soft));
+  transition: var(--transition-fast);
 }
 
 .dashboard-card:hover .card-icon {
   transform: scale(1.15);
-  filter: drop-shadow(0 0 10px rgba(0,234,255,0.75));
+  filter: drop-shadow(0 0 10px var(--neon-cyan));
 }
 
-/* =============================== */
-/* SCROLLBARS                      */
-/* =============================== */
+/* ------------------------------ */
+/* CHART FIXES                    */
+/* ------------------------------ */
 
-.dashboard-card::-webkit-scrollbar {
-  width: 6px;
+.dashboard-card .recharts-wrapper {
+  width: 100% !important;
+  min-width: 0 !important;
 }
 
-.dashboard-card::-webkit-scrollbar-thumb {
-  background: var(--dpmf-neon-cyan-soft);
-  border-radius: 10px;
-}
-
-/* =============================== */
-/* INPUTS                          */
-/* =============================== */
+/* ------------------------------ */
+/* INPUTS                         */
+/* ------------------------------ */
 
 input,
 select {
   background: #07070c;
-  border: 1px solid rgba(199,112,255,0.4);
-  color: var(--dpmf-text-main);
+  border: 1px solid var(--neon-violet-soft);
+  color: var(--text-main);
   padding: 7px 10px;
   border-radius: 7px;
   font-size: 0.9rem;
   width: 100%;
-  transition: border-color var(--dpmf-transition-fast),
-              box-shadow var(--dpmf-transition-fast),
-              background var(--dpmf-transition-fast);
+  transition: var(--transition-fast);
 }
 
 input:focus,
 select:focus {
   outline: none;
-  border-color: var(--dpmf-neon-violet);
-  box-shadow: 0 0 12px var(--dpmf-neon-violet-soft);
-  background: #090914;
+  border-color: var(--neon-violet);
+  box-shadow: 0 0 12px var(--neon-violet-soft);
 }
 
-/* =============================== */
-/* LOADING SCREEN                  */
-/* =============================== */
+/* ------------------------------ */
+/* LIST ITEMS                     */
+/* ------------------------------ */
 
-.loading-screen {
-  text-align: center;
-  margin-top: 120px;
-  font-size: 1.4rem;
-  color: var(--dpmf-neon-cyan);
-  text-shadow: 0 0 12px var(--dpmf-neon-cyan-soft);
-}
-
-/* =============================== */
-/* ANIMATIONS                      */
-/* =============================== */
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 .holder-item {
   display: flex;
   justify-content: space-between;
@@ -320,8 +279,41 @@ select:focus {
   border-radius: 4px;
 }
 
+/* ------------------------------ */
+/* PAGINATION                     */
+/* ------------------------------ */
+
 .pagination {
   display: flex;
   justify-content: space-between;
   margin-top: 10px;
+}
+
+/* ------------------------------ */
+/* MOBILE BREAKPOINTS             */
+/* ------------------------------ */
+
+@media (max-width: 768px) {
+
+  .dashboard-header {
+    padding: 50px 20px 40px;
+    margin-top: 100px;
+  }
+
+  .dashboard-title {
+    font-size: 1.8rem;
+  }
+
+  .dashboard-subtitle {
+    font-size: 0.95rem;
+  }
+
+  .dashboard-card {
+    min-height: 260px;
+    max-height: none;
+  }
+
+  .xaman-topright-box {
+    transform: scale(0.75);
+  }
 }
