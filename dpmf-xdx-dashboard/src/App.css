@@ -317,3 +317,58 @@ select:focus {
     transform: scale(0.75);
   }
 }
+.holder-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 10px 20px;
+  overflow-y: auto;
+}
+
+.holder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.holder-item {
+  display: grid;
+  grid-template-columns: 50px 1fr 100px 70px;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #e0e0e0;
+  font-family: "Inter", sans-serif;
+  font-size: 14px;
+}
+
+.holder-item span:nth-child(1) {
+  text-align: right;
+  color: #00ffff;
+}
+
+.holder-item span:nth-child(2) {
+  text-align: left;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+
+.holder-item span:nth-child(3) {
+  text-align: right;
+  font-weight: 500;
+}
+
+.copy-btn {
+  background: #00ffff;
+  color: #000;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: background 0.2s ease;
+}
+
+.copy-btn:hover {
+  background: #00cccc;
+}

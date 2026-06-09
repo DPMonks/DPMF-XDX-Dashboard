@@ -1,28 +1,19 @@
 import pool from "./db.js";
 import { logger } from "./utils/logger.js";
 
-// -----------------------------
+// ------------------------------------------------------
 // AMM SNAPSHOT WRITER
-// -----------------------------
+// ------------------------------------------------------
 export async function writeAmmSnapshot(poolName, amm) {
   if (!amm) return;
 
   try {
-    const {
-      asset,
-      currency,
-      reserve_asset,
-      reserve_currency,
-      lp_supply,
-      trading_fee,
-      tvl // NEW: ensure TVL is captured if available
-    } = amm;
+    const rA = amm.reserve_asset || "0";
+    const rC = amm.reserve_currency || "0";
+    const lp = amm.lp_supply || "0";
+    const fee = amm.trading_fee || "0";
 
-    const rA = Number(reserve_asset || 0);
-    const rC = Number(reserve_currency || 0);
-    const lp = Number(lp_supply || 0);
-    const fee = Number(trading_fee || 0);
-
+    // LATEST
     await pool.query(
       `INSERT INTO amm_pool_latest 
         (pool_name, asset, currency, reserve_asset, reserve_currency, lp_supply, trading_fee, timestamp)
@@ -36,14 +27,31 @@ export async function writeAmmSnapshot(poolName, amm) {
          lp_supply = EXCLUDED.lp_supply,
          trading_fee = EXCLUDED.trading_fee,
          timestamp = NOW();`,
-      [poolName, asset, currency, rA, rC, lp, fee]
+      [
+        poolName,
+        amm.asset,
+        amm.currency,
+        rA,
+        rC,
+        lp,
+        fee
+      ]
     );
 
+    // HISTORY
     await pool.query(
       `INSERT INTO amm_pool_history 
-        (pool_name, asset, currency, reserve_asset, reserve_currency, lp_supply, trading_fee)
-       VALUES ($1,$2,$3,$4,$5,$6,$7);`,
-      [poolName, asset, currency, rA, rC, lp, fee]
+        (pool_name, asset, currency, reserve_asset, reserve_currency, lp_supply, trading_fee, timestamp)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW());`,
+      [
+        poolName,
+        amm.asset,
+        amm.currency,
+        rA,
+        rC,
+        lp,
+        fee
+      ]
     );
 
     logger.info("DB", `AMM snapshot written for ${poolName}`);
@@ -52,13 +60,14 @@ export async function writeAmmSnapshot(poolName, amm) {
   }
 }
 
-// -----------------------------
+// ------------------------------------------------------
 // TOKEN HOLDERS WRITER
-// -----------------------------
+// ------------------------------------------------------
 export async function writeTokenHolders(holders) {
   if (!holders || holders.length === 0) return;
 
   try {
+    // UPSERT LATEST
     for (const h of holders) {
       await pool.query(
         `INSERT INTO token_holders_latest (account, balance, frozen, timestamp)
@@ -68,22 +77,27 @@ export async function writeTokenHolders(holders) {
            balance = EXCLUDED.balance,
            frozen = EXCLUDED.frozen,
            timestamp = NOW();`,
-        [h.account, Number(h.balance || 0), h.frozen || false]
+        [
+          h.account,
+          h.balance || "0",          // 🔥 keep as string (15 decimals safe)
+          Boolean(h.frozen) || false
+        ]
       );
     }
 
+    // HISTORY (batch insert)
     const values = holders
-      .map((h, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`)
+      .map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3}, NOW())`)
       .join(",");
 
     const params = holders.flatMap(h => [
       h.account,
-      Number(h.balance || 0),
-      h.frozen || false
+      h.balance || "0",             // 🔥 keep as string
+      Boolean(h.frozen) || false
     ]);
 
     await pool.query(
-      `INSERT INTO token_holders_history (account, balance, frozen)
+      `INSERT INTO token_holders_history (account, balance, frozen, timestamp)
        VALUES ${values};`,
       params
     );
@@ -94,13 +108,14 @@ export async function writeTokenHolders(holders) {
   }
 }
 
-// -----------------------------
+// ------------------------------------------------------
 // LP HOLDERS WRITER
-// -----------------------------
+// ------------------------------------------------------
 export async function writeLpHolders(lpHolders) {
   if (!lpHolders || lpHolders.length === 0) return;
 
   try {
+    // UPSERT LATEST
     for (const h of lpHolders) {
       await pool.query(
         `INSERT INTO lp_holders_latest (account, lp_balance, timestamp)
@@ -109,21 +124,25 @@ export async function writeLpHolders(lpHolders) {
          DO UPDATE SET 
            lp_balance = EXCLUDED.lp_balance,
            timestamp = NOW();`,
-        [h.account, Number(h.lp_balance || 0)]
+        [
+          h.account,
+          h.lp_balance || "0"        // 🔥 keep as string
+        ]
       );
     }
 
+    // HISTORY (batch insert)
     const values = lpHolders
-      .map((h, i) => `($${i * 2 + 1}, $${i * 2 + 2})`)
+      .map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2}, NOW())`)
       .join(",");
 
     const params = lpHolders.flatMap(h => [
       h.account,
-      Number(h.lp_balance || 0)
+      h.lp_balance || "0"           // 🔥 keep as string
     ]);
 
     await pool.query(
-      `INSERT INTO lp_holders_history (account, lp_balance)
+      `INSERT INTO lp_holders_history (account, lp_balance, timestamp)
        VALUES ${values};`,
       params
     );
@@ -134,9 +153,9 @@ export async function writeLpHolders(lpHolders) {
   }
 }
 
-// -----------------------------
-// NEW: HOLDERS HISTORY (DAILY)
-// -----------------------------
+// ------------------------------------------------------
+// DAILY HOLDERS HISTORY
+// ------------------------------------------------------
 export async function writeHoldersHistory(count) {
   try {
     await pool.query(
@@ -153,9 +172,9 @@ export async function writeHoldersHistory(count) {
   }
 }
 
-// -----------------------------
-// NEW: LP HOLDERS HISTORY (DAILY)
-// -----------------------------
+// ------------------------------------------------------
+// DAILY LP HOLDERS HISTORY
+// ------------------------------------------------------
 export async function writeLpHoldersHistory(count) {
   try {
     await pool.query(
@@ -172,9 +191,9 @@ export async function writeLpHoldersHistory(count) {
   }
 }
 
-// -----------------------------
-// NEW: TVL HISTORY (DAILY)
-// -----------------------------
+// ------------------------------------------------------
+// DAILY TVL HISTORY
+// ------------------------------------------------------
 export async function writeTvlHistory(tvl) {
   try {
     await pool.query(
@@ -182,7 +201,7 @@ export async function writeTvlHistory(tvl) {
        VALUES (CURRENT_DATE, $1)
        ON CONFLICT (day)
        DO UPDATE SET tvl = EXCLUDED.tvl;`,
-      [Number(tvl || 0)]
+      [tvl || "0"]
     );
 
     logger.info("DB", `TVL history updated: ${tvl}`);
@@ -190,4 +209,3 @@ export async function writeTvlHistory(tvl) {
     logger.error("DB", "Error writing TVL history", err);
   }
 }
-

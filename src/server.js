@@ -19,7 +19,7 @@ import cors from "cors";
 import pool from "./db.js";
 import { getHealthStatus } from "./health.js";
 
-// START INDEXER LOOP
+// Start indexer loop
 import "./indexer.js";
 
 // ------------------------------------------------------
@@ -31,9 +31,6 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 
-// ------------------------------------------------------
-// STARTUP LOGS
-// ------------------------------------------------------
 console.log("🚀 Booting XRPL Indexer API…");
 console.log("📦 Environment:", process.env.NODE_ENV || "development");
 console.log("🔧 Port:", PORT);
@@ -69,28 +66,34 @@ app.get("/", (req, res) => {
 });
 
 // ------------------------------------------------------
-// OVERVIEW CARDS
+// OVERVIEW CARD DATA
 // ------------------------------------------------------
 app.get("/api/overview", async (req, res) => {
   try {
     const amm = await pool.query(
-      "SELECT reserve_asset, reserve_currency, lp_supply FROM amm_pool_latest WHERE pool_name = 'XDX';"
+      `SELECT reserve_asset, reserve_currency, lp_supply
+       FROM amm_pool_latest
+       WHERE pool_name = 'XDX/XRP'
+       LIMIT 1;`
     );
+
     const holders = await pool.query(
       "SELECT COUNT(*) AS holder_count FROM token_holders_latest;"
     );
+
     const lpHolders = await pool.query(
       "SELECT COUNT(*) AS lp_holder_count FROM lp_holders_latest;"
     );
 
     const row = amm.rows[0] || {
-      reserve_asset: 0,
-      reserve_currency: 0,
-      lp_supply: 0
+      reserve_asset: "0",
+      reserve_currency: "0",
+      lp_supply: "0"
     };
 
     const tvl =
-      Number(row.reserve_asset || 0) + Number(row.reserve_currency || 0);
+      Number(row.reserve_asset || 0) +
+      Number(row.reserve_currency || 0);
 
     res.json({
       tvl,
@@ -105,12 +108,15 @@ app.get("/api/overview", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// AMM SNAPSHOT
+// AMM SNAPSHOT (LATEST)
 // ------------------------------------------------------
 app.get("/api/amm", async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM amm_pool_latest WHERE pool_name = 'XDX';"
+      `SELECT *
+       FROM amm_pool_latest
+       WHERE pool_name = 'XDX/XRP'
+       LIMIT 1;`
     );
     res.json(result.rows[0] || {});
   } catch (err) {
@@ -120,11 +126,13 @@ app.get("/api/amm", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// HOLDER COUNT (NEW)
+// HOLDER COUNT
 // ------------------------------------------------------
 app.get("/api/holders/count", async (req, res) => {
   try {
-    const result = await pool.query("SELECT COUNT(*) FROM token_holders_latest;");
+    const result = await pool.query(
+      "SELECT COUNT(*) FROM token_holders_latest;"
+    );
     res.json({ count: Number(result.rows[0].count) });
   } catch (err) {
     console.error("Error in /api/holders/count:", err);
@@ -133,11 +141,13 @@ app.get("/api/holders/count", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// LP HOLDER COUNT (NEW)
+// LP HOLDER COUNT
 // ------------------------------------------------------
 app.get("/api/lp-holders/count", async (req, res) => {
   try {
-    const result = await pool.query("SELECT COUNT(*) FROM lp_holders_latest;");
+    const result = await pool.query(
+      "SELECT COUNT(*) FROM lp_holders_latest;"
+    );
     res.json({ count: Number(result.rows[0].count) });
   } catch (err) {
     console.error("Error in /api/lp-holders/count:", err);
@@ -146,7 +156,7 @@ app.get("/api/lp-holders/count", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// PAGINATED TOKEN HOLDERS (UPDATED)
+// PAGINATED TOKEN HOLDERS
 // ------------------------------------------------------
 app.get("/api/top-holders", async (req, res) => {
   try {
@@ -156,7 +166,7 @@ app.get("/api/top-holders", async (req, res) => {
     const result = await pool.query(
       `SELECT account, balance, frozen
        FROM token_holders_latest
-       ORDER BY balance DESC
+       ORDER BY balance::numeric DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
@@ -169,7 +179,7 @@ app.get("/api/top-holders", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// PAGINATED LP HOLDERS (UPDATED)
+// PAGINATED LP HOLDERS
 // ------------------------------------------------------
 app.get("/api/top-lp", async (req, res) => {
   try {
@@ -179,7 +189,7 @@ app.get("/api/top-lp", async (req, res) => {
     const result = await pool.query(
       `SELECT account, lp_balance
        FROM lp_holders_latest
-       ORDER BY lp_balance DESC
+       ORDER BY lp_balance::numeric DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
@@ -197,11 +207,9 @@ app.get("/api/top-lp", async (req, res) => {
 app.get("/api/charts/tvl", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT 
-         timestamp,
-         reserve_asset + reserve_currency AS tvl
+      `SELECT timestamp, reserve_asset::numeric + reserve_currency::numeric AS tvl
        FROM amm_pool_history
-       WHERE pool_name = 'XDX'
+       WHERE pool_name = 'XDX/XRP'
        ORDER BY timestamp ASC;`
     );
     res.json(result.rows);
@@ -217,11 +225,8 @@ app.get("/api/charts/tvl", async (req, res) => {
 app.get("/api/charts/holders", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT 
-         DATE(timestamp) AS day,
-         COUNT(*) AS holder_count
-       FROM token_holders_history
-       GROUP BY day
+      `SELECT day, holder_count
+       FROM holders_history
        ORDER BY day ASC;`
     );
     res.json(result.rows);
@@ -237,11 +242,8 @@ app.get("/api/charts/holders", async (req, res) => {
 app.get("/api/charts/lp-holders", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT 
-         DATE(timestamp) AS day,
-         COUNT(*) AS lp_holder_count
-       FROM lp_holders_history
-       GROUP BY day
+      `SELECT day, lp_holder_count
+       FROM lp_holders_history_daily
        ORDER BY day ASC;`
     );
     res.json(result.rows);
@@ -257,29 +259,35 @@ app.get("/api/charts/lp-holders", async (req, res) => {
 app.get("/api/pools", async (req, res) => {
   try {
     const amm = await pool.query(
-      "SELECT * FROM amm_pool_latest WHERE pool_name = 'XDX';"
+      `SELECT *
+       FROM amm_pool_latest
+       WHERE pool_name = 'XDX/XRP'
+       LIMIT 1;`
     );
+
     const holders = await pool.query(
       "SELECT COUNT(*) AS holder_count FROM token_holders_latest;"
     );
+
     const lpHolders = await pool.query(
       "SELECT COUNT(*) AS lp_holder_count FROM lp_holders_latest;"
     );
 
     const row = amm.rows[0] || {
-      reserve_asset: 0,
-      reserve_currency: 0,
-      lp_supply: 0,
-      price: 0,
-      volume24h: 0,
-      apr: 0
+      reserve_asset: "0",
+      reserve_currency: "0",
+      lp_supply: "0",
+      price: "0",
+      volume24h: "0",
+      apr: "0"
     };
 
     const tvl =
-      Number(row.reserve_asset || 0) + Number(row.reserve_currency || 0);
+      Number(row.reserve_asset || 0) +
+      Number(row.reserve_currency || 0);
 
     res.json({
-      pool: "XDX",
+      pool: "XDX/XRP",
       tvl,
       price: Number(row.price || 0),
       apr: Number(row.apr || 0),
