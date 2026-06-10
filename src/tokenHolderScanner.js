@@ -1,3 +1,5 @@
+// /src/tokenHolderScanner.js
+
 import { fetchLedgerAccounts, fetchAccountLines } from "./xrplLedgerClient.js";
 import { getState, setState } from "./indexerState.js";
 import { writeTokenHolders } from "./dbWriter.js";
@@ -32,15 +34,26 @@ export async function runHolderScanCycle() {
 
         if (!lines || !Array.isArray(lines)) return [];
 
+        // Filter for XDX trustlines
         const xdxLines = lines.filter(
           l => l.currency === TOKEN_CURRENCY && l.issuer === ISSUER
         );
 
-        return xdxLines.map(l => ({
-          account,
-          balance: l.balance || "0",
-          frozen: Boolean(l.freeze) || false
-        }));
+        // Convert balances and remove zero-balance entries
+        return xdxLines
+          .map(l => {
+            const raw = Number(l.balance);
+
+            // Convert issuer-side negatives to positive holder balances
+            const holderBalance = Math.abs(raw);
+
+            return {
+              account,
+              balance: holderBalance,
+              frozen: Boolean(l.freeze) || false
+            };
+          })
+          .filter(h => h.balance > 0); // Remove zero balances
 
       } catch (err) {
         logger.error("HOLDERS", `Error scanning account ${account}`, err);
