@@ -55,6 +55,7 @@ app.get("/", (req, res) => {
       amm: "/api/amm",
       pools: "/api/pools",
       topHolders: "/api/top-holders",
+      topHoldersV2: "/api/top-holders-v2",
       topLp: "/api/top-lp",
       holdersCount: "/api/holders/count",
       lpHoldersCount: "/api/lp-holders/count",
@@ -156,7 +157,7 @@ app.get("/api/lp-holders/count", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// PAGINATED TOKEN HOLDERS
+// PAGINATED TOKEN HOLDERS (v1)
 // ------------------------------------------------------
 app.get("/api/top-holders", async (req, res) => {
   try {
@@ -178,6 +179,32 @@ app.get("/api/top-holders", async (req, res) => {
   } catch (err) {
     console.error("Error in /api/top-holders:", err);
     res.status(500).json({ error: "Failed to fetch top holders" });
+  }
+});
+
+// ------------------------------------------------------
+// PAGINATED TOKEN HOLDERS (v2 alias)
+// ------------------------------------------------------
+app.get("/api/top-holders-v2", async (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 50);
+    const offset = Number(req.query.offset || 0);
+
+    const result = await pool.query(
+      `SELECT 
+         account, 
+         balance::numeric AS balance,
+         frozen
+       FROM token_holders_latest
+       ORDER BY balance::numeric DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error in /api/top-holders-v2:", err);
+    res.status(500).json({ error: "Failed to fetch top holders v2" });
   }
 });
 
