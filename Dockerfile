@@ -12,8 +12,8 @@ RUN npm ci --omit=dev
 # Copy everything else (including src/)
 COPY . .
 
-# Expose the port your server uses
+# Expose the port your server uses (if you run a health server)
 EXPOSE 8080
 
-# Start the app directly
-CMD ["node", "src/server.js"]
+# Start the indexer
+CMD ["node", "src/indexer.js"]
