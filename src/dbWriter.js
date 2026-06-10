@@ -35,30 +35,14 @@ export async function writeAmmSnapshot(poolName, amm) {
          lp_supply = EXCLUDED.lp_supply,
          trading_fee = EXCLUDED.trading_fee,
          timestamp = NOW();`,
-      [
-        poolName,
-        amm.asset,
-        amm.currency,
-        rA,
-        rC,
-        lp,
-        fee
-      ]
+      [poolName, amm.asset, amm.currency, rA, rC, lp, fee]
     );
 
     await pool.query(
       `INSERT INTO amm_pool_history 
         (pool_name, asset, currency, reserve_asset, reserve_currency, lp_supply, trading_fee, timestamp)
        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW());`,
-      [
-        poolName,
-        amm.asset,
-        amm.currency,
-        rA,
-        rC,
-        lp,
-        fee
-      ]
+      [poolName, amm.asset, amm.currency, rA, rC, lp, fee]
     );
 
     logger.info("DB", `AMM snapshot written for ${poolName}`);
@@ -74,7 +58,6 @@ export async function writeTokenHolders(holders) {
   if (!holders || holders.length === 0) return;
 
   try {
-    // UPSERT latest (one row at a time)
     for (const h of holders) {
       await pool.query(
         `INSERT INTO token_holders_latest (account, balance, frozen, timestamp)
@@ -88,7 +71,6 @@ export async function writeTokenHolders(holders) {
       );
     }
 
-    // HISTORY — batch insert
     const values = holders
       .map((h, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`)
       .join(",");
@@ -112,13 +94,12 @@ export async function writeTokenHolders(holders) {
 }
 
 // ------------------------------------------------------
-// LP HOLDERS WRITER
+// LP HOLDERS WRITER (LATEST)
 // ------------------------------------------------------
 export async function writeLpHolders(lpHolders) {
   if (!lpHolders || lpHolders.length === 0) return;
 
   try {
-    // UPSERT latest
     for (const h of lpHolders) {
       await pool.query(
         `INSERT INTO lp_holders_latest (account, lp_balance, timestamp)
@@ -131,7 +112,19 @@ export async function writeLpHolders(lpHolders) {
       );
     }
 
-    // HISTORY — batch insert
+    logger.info("DB", `LP holders latest written: ${lpHolders.length}`);
+  } catch (err) {
+    logger.error("DB", "Error writing LP holders latest", err);
+  }
+}
+
+// ------------------------------------------------------
+// LP HOLDERS HISTORY WRITER (MISSING FUNCTION)
+// ------------------------------------------------------
+export async function writeLpHoldersHistory(lpHolders) {
+  if (!lpHolders || lpHolders.length === 0) return;
+
+  try {
     const values = lpHolders
       .map((h, i) => `($${i * 2 + 1}, $${i * 2 + 2})`)
       .join(",");
@@ -147,9 +140,28 @@ export async function writeLpHolders(lpHolders) {
       params
     );
 
-    logger.info("DB", `LP holders written: ${lpHolders.length}`);
+    logger.info("DB", `LP holders history written: ${lpHolders.length}`);
   } catch (err) {
-    logger.error("DB", "Error writing LP holders", err);
+    logger.error("DB", "Error writing LP holders history", err);
+  }
+}
+
+// ------------------------------------------------------
+// TVL HISTORY WRITER (MISSING FUNCTION)
+// ------------------------------------------------------
+export async function writeTvlHistory(tvl) {
+  if (!tvl) return;
+
+  try {
+    await pool.query(
+      `INSERT INTO tvl_history (tvl, timestamp)
+       VALUES ($1, NOW());`,
+      [num(tvl)]
+    );
+
+    logger.info("DB", `TVL history written: ${tvl}`);
+  } catch (err) {
+    logger.error("DB", "Error writing TVL history", err);
   }
 }
 

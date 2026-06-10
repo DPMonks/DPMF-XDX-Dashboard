@@ -1,13 +1,5 @@
 import { rpcRequest } from "../xrplClient.js";
 
-/**
- * Fetch AMM info for a given pool.
- *
- * Expects:
- *  - pool.amm_issuer  (AMM account)
- *  - pool.tokenA      (e.g. "XDX")
- *  - pool.tokenB      (e.g. "XRP")
- */
 export async function fetchAmm(pool) {
   try {
     const body = {
@@ -35,13 +27,14 @@ export async function fetchAmm(pool) {
 
     const amm = res.result.amm;
 
-    const reserve_asset = amm.amount || "0";
-    const reserve_currency = amm.amount2 || "0";
+    // Extract numeric values ONLY
+    const reserve_asset = amm.amount?.value || "0";
+    const reserve_currency = amm.amount2?.value || "0";
     const lp_supply = amm.lp_token?.value || "0";
     const trading_fee = amm.trading_fee || "0";
 
-    // Simple TVL approximation (you can refine later)
-    const tvl = amm.tvl || reserve_asset;
+    // TVL must be numeric
+    const tvl = amm.tvl?.value || reserve_asset;
 
     return {
       asset: pool.tokenA,
@@ -52,6 +45,7 @@ export async function fetchAmm(pool) {
       trading_fee,
       tvl
     };
+
   } catch (err) {
     console.error("[AMM ERROR]", err);
     return null;

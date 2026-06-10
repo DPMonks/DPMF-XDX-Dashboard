@@ -11,8 +11,9 @@ async function rpc(body) {
 
   const json = await res.json();
 
+  // If XRPL returns an error, return a safe empty result instead of throwing
   if (json?.result?.error) {
-    throw new Error(`XRPL RPC Error: ${JSON.stringify(json.result.error)}`);
+    return { lines: [], state: [], marker: null };
   }
 
   return json.result;
@@ -35,9 +36,9 @@ export async function fetchLedgerAccounts(marker = null) {
   const result = await rpc(body);
 
   return {
-    accounts: (result.state || []).map(s => s.Account),
-    marker: result.marker || null,
-    ledgerIndex: result.ledger_index
+    accounts: (result?.state || []).map(s => s.Account),
+    marker: result?.marker || null,
+    ledgerIndex: result?.ledger_index || null
   };
 }
 
@@ -54,7 +55,8 @@ export async function fetchAccountLines(account) {
 
   const result = await rpc(body);
 
-  if (!result || !result.lines || !Array.isArray(result.lines)) {
+  // Hardened: ALWAYS return an array
+  if (!result?.lines || !Array.isArray(result.lines)) {
     return [];
   }
 

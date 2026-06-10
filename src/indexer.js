@@ -61,15 +61,17 @@ async function processPool(pool) {
   if (now - lastLpRun >= LP_INTERVAL_MS) {
     logger.info("LP", "Running LP analytics (5‑minute interval)");
     const lp = await fetchLpHolders(pool);
+
     if (lp?.length) {
       logger.info("LP", `Retrieved ${lp.length} LP holders`);
       await writeLpHolders(lp);
 
-      // NEW: Write LP holders history
-      await writeLpHoldersHistory(lp.length);
+      // FIXED: pass full array, not lp.length
+      await writeLpHoldersHistory(lp);
     } else {
       logger.warn("LP", "No LP token data returned");
     }
+
     lastLpRun = now;
   } else {
     logger.info("LP", "Skipping LP sync (waiting for 5‑minute interval)");

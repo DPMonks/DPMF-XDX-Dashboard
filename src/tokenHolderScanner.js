@@ -13,7 +13,10 @@ export async function runHolderScanCycle() {
 
   const { accounts, marker: nextMarker } = await fetchLedgerAccounts(marker);
 
-  logger.info("HOLDERS", `Scanning ${accounts.length} accounts (marker=${marker || "start"})`);
+  logger.info(
+    "HOLDERS",
+    `Scanning ${accounts.length} accounts (marker=${marker || "start"})`
+  );
 
   const chunks = [];
   for (let i = 0; i < accounts.length; i += CONCURRENCY) {
@@ -27,6 +30,8 @@ export async function runHolderScanCycle() {
       try {
         const lines = await fetchAccountLines(account);
 
+        if (!lines || !Array.isArray(lines)) return [];
+
         const xdxLines = lines.filter(
           l => l.currency === TOKEN_CURRENCY && l.issuer === ISSUER
         );
@@ -36,6 +41,7 @@ export async function runHolderScanCycle() {
           balance: l.balance || "0",
           frozen: Boolean(l.freeze) || false
         }));
+
       } catch (err) {
         logger.error("HOLDERS", `Error scanning account ${account}`, err);
         return [];
