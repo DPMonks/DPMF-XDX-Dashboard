@@ -1,22 +1,22 @@
-// /src/tokenHolderScanner.js
+// /src/lpHolderScanner.js
 
 import { fetchLedgerAccounts, fetchAccountLines } from "./xrplLedgerClient.js";
 import { getState, setState } from "./indexerState.js";
-import { writeTokenHolders } from "./dbWriter.js";
+import { writeLpHolders, writeLpHoldersHistory } from "./dbWriter.js";
 import { logger } from "./utils/logger.js";
 import pools from "./pools.js";
 
-const TOKEN_CURRENCY = "XDX";
-const ISSUER = pools[0].issuer;
+const LP_CURRENCY = pools[0].lpToken;
+const LP_ISSUER = pools[0].issuer;
 const CONCURRENCY = 20;
 
-export async function runHolderScanCycle() {
-  const marker = await getState("holders_marker");
+export async function runLpHolderScanCycle() {
+  const marker = await getState("lp_holders_marker");
 
   const { accounts, marker: nextMarker } = await fetchLedgerAccounts(marker);
 
   logger.info(
-    "HOLDERS",
+    "LP",
     `Scanning ${accounts.length} accounts (marker=${marker || "start"})`
   );
 
@@ -34,25 +34,24 @@ export async function runHolderScanCycle() {
 
         if (!lines || !Array.isArray(lines)) return [];
 
-        const xdxLines = lines.filter(
-          l => l.currency === TOKEN_CURRENCY && l.issuer === ISSUER
+        const lpLines = lines.filter(
+          l => l.currency === LP_CURRENCY && l.issuer === LP_ISSUER
         );
 
-        return xdxLines
+        return lpLines
           .map(l => {
             const raw = Number(l.balance);
-            const holderBalance = Math.abs(raw);
+            const lpBalance = Math.abs(raw);
 
             return {
               account,
-              balance: holderBalance,
-              frozen: Boolean(l.freeze) || false
+              lp_balance: lpBalance
             };
           })
-          .filter(h => h.balance > 0);
+          .filter(h => h.lp_balance > 0);
 
       } catch (err) {
-        logger.error("HOLDERS", `Error scanning account ${account}`, err);
+        logger.error("LP", `Error scanning account ${account}`, err);
         return [];
       }
     });
@@ -62,14 +61,15 @@ export async function runHolderScanCycle() {
   }
 
   if (allHolders.length > 0) {
-    await writeTokenHolders(allHolders);
-    logger.info("HOLDERS", `Indexed ${allHolders.length} XDX holders`);
+    await writeLpHolders(allHolders);          // writes lp_holders_latest
+    await writeLpHoldersHistory(allHolders);   // writes lp_holders_history_daily
+    logger.info("LP", `Indexed ${allHolders.length} LP holders`);
   }
 
   if (nextMarker) {
-    await setState("holders_marker", nextMarker);
+    await setState("lp_holders_marker", nextMarker);
   } else {
-    logger.info("HOLDERS", "Full ledger scan complete — resetting marker");
-    await setState("holders_marker", "");
+    logger.info("LP", "Full LP ledger scan complete — resetting marker");
+    await setState("lp_holders_marker", "");
   }
 }

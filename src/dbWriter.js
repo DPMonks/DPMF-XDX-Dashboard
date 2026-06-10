@@ -119,32 +119,28 @@ export async function writeLpHolders(lpHolders) {
 }
 
 // ------------------------------------------------------
-// LP HOLDERS HISTORY WRITER (MISSING FUNCTION)
+// LP HOLDERS HISTORY WRITER (DAILY SNAPSHOT)
 // ------------------------------------------------------
 export async function writeLpHoldersHistory(lpHolders) {
   if (!lpHolders || lpHolders.length === 0) return;
 
   try {
-    const values = lpHolders
-      .map((h, i) => `($${i * 2 + 1}, $${i * 2 + 2})`)
-      .join(",");
-
-    const params = lpHolders.flatMap(h => [
-      h.account,
-      num(h.lp_balance)
-    ]);
+    const count = lpHolders.length;
 
     await pool.query(
-      `INSERT INTO lp_holders_history (account, lp_balance)
-       VALUES ${values};`,
-      params
+      `INSERT INTO lp_holders_history_daily (day, lp_holder_count)
+       VALUES (CURRENT_DATE, $1)
+       ON CONFLICT (day)
+       DO UPDATE SET lp_holder_count = EXCLUDED.lp_holder_count;`,
+      [count]
     );
 
-    logger.info("DB", `LP holders history written: ${lpHolders.length}`);
+    logger.info("DB", `LP holders daily history updated: ${count}`);
   } catch (err) {
-    logger.error("DB", "Error writing LP holders history", err);
+    logger.error("DB", "Error writing LP holders daily history", err);
   }
 }
+
 
 // ------------------------------------------------------
 // TVL HISTORY WRITER (MISSING FUNCTION)
