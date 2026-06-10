@@ -20,7 +20,7 @@ export default [
     tokenA: "XDX",
     tokenB: "RLUSD",
 
-    // RLUSD LP token HEX (example placeholder)
+    // RLUSD LP token HEX
     lp_currency_hex: "4C5058524C555344000000000000000000000000"
   }
 ];
