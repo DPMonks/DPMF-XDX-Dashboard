@@ -61,7 +61,12 @@ app.get("/", (req, res) => {
       lpHoldersCount: "/api/lp-holders/count",
       tvlHistory: "/api/charts/tvl",
       holdersHistory: "/api/charts/holders",
-      lpHoldersHistory: "/api/charts/lp-holders"
+      lpHoldersHistory: "/api/charts/lp-holders",
+      walletBalances: "/api/wallet/balances/:address",
+      prices: "/api/prices",
+      priceChange: "/api/prices/change24h",
+      networth: "/api/wallet/networth/:address",
+      sparkline: "/api/sparkline/:asset"
     }
   });
 });
@@ -335,6 +340,158 @@ app.get("/api/pools", async (req, res) => {
   } catch (err) {
     console.error("Error in /api/pools:", err);
     res.status(500).json({ error: "Failed to fetch pool stats" });
+  }
+});
+
+// ------------------------------------------------------
+// NEW: WALLET BALANCES (XRP, XDX, LP)
+// ------------------------------------------------------
+app.get("/api/wallet/balances/:address", async (req, res) => {
+  const { address } = req.params;
+
+  try {
+    const xrp = await pool.query(
+      `SELECT balance FROM xrp_balances_latest WHERE account = $1 LIMIT 1`,
+      [address]
+    );
+
+    const xdx = await pool.query(
+      `SELECT balance FROM token_holders_latest WHERE account = $1 LIMIT 1`,
+      [address]
+    );
+
+    const lp = await pool.query(
+      `SELECT lp_balance FROM lp_holders_latest WHERE account = $1 LIMIT 1`,
+      [address]
+    );
+
+    res.json({
+      xrp: Number(xrp.rows[0]?.balance || 0),
+      xdx: Number(xdx.rows[0]?.balance || 0),
+      lp: Number(lp.rows[0]?.lp_balance || 0)
+    });
+  } catch (err) {
+    console.error("Error in /api/wallet/balances:", err);
+    res.status(500).json({ error: "Failed to fetch wallet balances" });
+  }
+});
+
+// ------------------------------------------------------
+// NEW: PRICE FEED (USD + GBP)
+// ------------------------------------------------------
+app.get("/api/prices", async (req, res) => {
+  try {
+    const price = await pool.query(
+      `SELECT price_usd, price_gbp FROM price_latest LIMIT 1`
+    );
+
+    const row = price.rows[0] || { price_usd: 0, price_gbp: 0 };
+
+    res.json({
+      xrpUsd: row.price_usd,
+      xrpGbp: row.price_gbp,
+      xdxUsd: row.price_usd * 0.000001,
+      xdxGbp: row.price_gbp * 0.000001
+    });
+  } catch (err) {
+    console.error("Error in /api/prices:", err);
+    res.status(500).json({ error: "Failed to fetch prices" });
+  }
+});
+
+// ------------------------------------------------------
+// NEW: DAILY % CHANGE SINCE 20:00 GMT
+// ------------------------------------------------------
+app.get("/api/prices/change24h", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT asset, percent_change
+       FROM price_change_24h
+       WHERE timestamp = date_trunc('day', now()) + interval '20 hours'`
+    );
+
+    const map = {};
+    result.rows.forEach(r => {
+      map[r.asset] = Number(r.percent_change);
+    });
+
+    res.json({
+      xrp: map["XRP"] || 0,
+      xdx: map["XDX"] || 0,
+      lp: map["LP"] || 0
+    });
+  } catch (err) {
+    console.error("Error in /api/prices/change24h:", err);
+    res.status(500).json({ error: "Failed to fetch change data" });
+  }
+});
+
+// ------------------------------------------------------
+// NEW: WALLET NET WORTH (ALL TRUSTLINES)
+// ------------------------------------------------------
+app.get("/api/wallet/networth/:address", async (req, res) => {
+  const { address } = req.params;
+
+  try {
+    const trustlines = await pool.query(
+      `SELECT currency, balance::numeric AS balance
+       FROM token_holders_latest
+       WHERE account = $1`,
+      [address]
+    );
+
+    const prices = await pool.query(
+      `SELECT currency, price_usd, price_gbp
+       FROM price_latest_all`
+    );
+
+    const priceMap = {};
+    prices.rows.forEach(p => {
+      priceMap[p.currency] = {
+        usd: Number(p.price_usd),
+        gbp: Number(p.price_gbp)
+      };
+    });
+
+    let totalUsd = 0;
+    let totalGbp = 0;
+
+    trustlines.rows.forEach(t => {
+      const p = priceMap[t.currency] || { usd: 0, gbp: 0 };
+      totalUsd += t.balance * p.usd;
+      totalGbp += t.balance * p.gbp;
+    });
+
+    res.json({
+      totalUsd,
+      totalGbp
+    });
+  } catch (err) {
+    console.error("Net worth error:", err);
+    res.status(500).json({ error: "Failed to fetch net worth" });
+  }
+});
+
+// ------------------------------------------------------
+// NEW: SPARKLINE MINI-CHART DATA
+// ------------------------------------------------------
+app.get("/api/sparkline/:asset", async (req, res) => {
+  const { asset } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT timestamp, price_usd
+       FROM price_history
+       WHERE asset = $1
+       ORDER BY timestamp DESC
+       LIMIT 50`,
+      [asset]
+    );
+
+    res.json(result.rows.reverse());
+  } catch (err) {
+    console.error("Sparkline error:", err);
+    res.status(500).json({ error: "Failed to fetch sparkline" });
   }
 });
 
