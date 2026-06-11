@@ -209,7 +209,7 @@ app.get("/api/top-holders-v2", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// PAGINATED LP HOLDERS
+// PAGINATED LP HOLDERS (WITH RANKING)
 // ------------------------------------------------------
 app.get("/api/top-lp", async (req, res) => {
   try {
@@ -218,7 +218,8 @@ app.get("/api/top-lp", async (req, res) => {
 
     const result = await pool.query(
       `SELECT 
-         account, 
+         ROW_NUMBER() OVER (ORDER BY lp_balance::numeric DESC) AS rank,
+         account,
          lp_balance::numeric AS lp_balance
        FROM lp_holders_latest
        ORDER BY lp_balance::numeric DESC
