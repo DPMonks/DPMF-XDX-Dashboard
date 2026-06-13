@@ -1,3 +1,5 @@
+import { rpcRequest } from "../xrplClient.js";
+
 export async function fetchLpHolders(pool) {
   try {
     const issuer = pool.amm_issuer;
