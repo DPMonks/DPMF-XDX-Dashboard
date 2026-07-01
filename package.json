@@ -17,5 +17,8 @@
     "xrpl": "^3.0.0",
     "xumm": "^1.0.0",
     "xumm-sdk": "^1.11.2"
+  },
+  "devDependencies": {
+    "vite": "^8.1.2"
   }
 }
