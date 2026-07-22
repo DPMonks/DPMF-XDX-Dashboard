@@ -13,9 +13,9 @@ export const WalletProvider = ({ children }) => {
     try {
       setLoading(true);
 
-      // 1. Request XUMM SignIn payload from Railway backend
+      // Correct backend endpoint
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/create-xumm-payload`,
+        `${import.meta.env.VITE_API_URL}/xaman/create-payload`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" }
@@ -24,27 +24,27 @@ export const WalletProvider = ({ children }) => {
 
       const data = await response.json();
 
-      if (!data.uuid || !data.qr) {
+      // Correct QR field
+      if (!data.uuid || !data.refs?.qr_png) {
         console.error("Invalid payload:", data);
         setLoading(false);
         return;
       }
 
-      // 2. Store QR + UUID for modal
+      // Store QR + UUID + WebSocket
       setQrData({
-        qr: data.qr,
+        qr: data.refs.qr_png,
         uuid: data.uuid,
         websocket: data.websocket
       });
 
-      // 3. Subscribe to XUMM WebSocket
+      // WebSocket listener
       const ws = new WebSocket(data.websocket);
 
       ws.onmessage = (msg) => {
         const event = JSON.parse(msg.data);
 
         if (event.signed) {
-          // 4. Wallet signed — extract account
           const account = event.account;
           setWalletAddress(account);
           ws.close();
