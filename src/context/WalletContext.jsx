@@ -15,7 +15,7 @@ export const WalletProvider = ({ children }) => {
 
       // 1. Request XUMM SignIn payload from Railway backend
       const response = await fetch(
-        "https://dpmf-xdx-indexer-production.up.railway.app/api/create-xumm-payload",
+        `${import.meta.env.VITE_API_URL}/api/create-xumm-payload`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" }

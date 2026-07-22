@@ -20,6 +20,7 @@ export async function createPayload() {
       qr_png: data.refs.qr_png,
       deeplink_web: data.refs.deeplink_web
     },
-    uuid: data.uuid
+    uuid: data.uuid,
+    websocket: data.websocket   // REQUIRED
   };
 }
