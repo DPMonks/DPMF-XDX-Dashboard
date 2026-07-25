@@ -13,9 +13,9 @@ export const WalletProvider = ({ children }) => {
     try {
       setLoading(true);
 
-      // Correct backend endpoint
+      // Correct backend endpoint (MUST include /api)
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/xaman/create-payload`,
+        `${import.meta.env.VITE_API_URL}/api/xaman/create-payload`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" }
@@ -24,8 +24,8 @@ export const WalletProvider = ({ children }) => {
 
       const data = await response.json();
 
-      // Correct QR field
-      if (!data.uuid || !data.refs?.qr_png) {
+      // Validate payload
+      if (!data.uuid || !data.refs?.qr_png || !data.websocket) {
         console.error("Invalid payload:", data);
         setLoading(false);
         return;
