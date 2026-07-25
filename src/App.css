@@ -39,6 +39,10 @@ body {
   text-align: center;
   padding: 1.5rem 0;
   border-bottom: 2px solid rgba(255, 0, 255, 0.3);
+
+  /* FIX: ensures wallet button stays inside header */
+  min-height: 120px;
+  padding-bottom: 20px;
 }
 
 .dashboard-title {
@@ -58,7 +62,14 @@ body {
   opacity: 0.8;
 }
 
-/* VERTICAL STACK */
+/* WALLET BUTTON POSITION */
+.wallet-box-left {
+  position: absolute;
+  left: 20px;
+  bottom: 10px;
+}
+
+/* GRID */
 .dashboard-grid {
   display: flex;
   flex-direction: column;
@@ -151,54 +162,6 @@ button:hover,
   transform: translateY(-1px);
 }
 
-/* RESPONSIVE */
-@media (max-width: 900px) {
-  .dashboard-card {
-    width: 95%;
-  }
-}
-/* WALLET BOX */
-.wallet-box {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 20px;
-}
-
-/* LOGO */
-.wallet-logo {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  object-fit: cover;
-}
-
-/* CONNECT / DISCONNECT BUTTONS */
-.connect-wallet-btn,
-.disconnect-wallet-btn {
-  background: radial-gradient(circle at top left,#151522 0%,#090910 55%,#050507 100%);
-  border: 1px solid rgba(0,234,255,0.5);
-  color: var(--dpmf-neon-cyan);
-  padding: 9px 16px;
-  border-radius: 9px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  transition: background var(--dpmf-transition-fast), box-shadow var(--dpmf-transition-fast), transform var(--dpmf-transition-fast), border-color var(--dpmf-transition-fast);
-}
-
-.connect-wallet-btn:hover,
-.disconnect-wallet-btn:hover {
-  background: radial-gradient(circle at top left,#1b1b2b 0%,#0b0b14 55%,#050507 100%);
-  border-color: var(--dpmf-neon-cyan);
-  box-shadow: 0 0 16px var(--dpmf-neon-cyan-soft);
-  transform: translateY(-1px);
-}
-
 /* CONNECTED WALLET DISPLAY */
 .wallet-connected {
   display: flex;
@@ -215,17 +178,10 @@ button:hover,
   color: var(--dpmf-neon-cyan);
   letter-spacing: 0.03em;
 }
-.wallet-box {
-  position: absolute;
-  right: 20px;
-  bottom: 10px;
-}
-.dashboard-header {
-  position: relative;
-}
 
-.wallet-box-left {
-  position: absolute;
-  left: 20px;
-  bottom: 10px;
+/* RESPONSIVE */
+@media (max-width: 900px) {
+  .dashboard-card {
+    width: 95%;
+  }
 }

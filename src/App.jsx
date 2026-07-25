@@ -34,7 +34,6 @@ export default function App() {
     if (bottom) {
       setPage(prev => prev + 1);
       console.log(`Load more ${type} page ${page + 1}`);
-      // TODO: backend pagination: /api/top-holders?page=page+1
     }
   }
 
@@ -42,16 +41,15 @@ export default function App() {
     <div className="dashboard-container">
 
       {/* HEADER */}
-     <header className="dashboard-header neon-border">
-  <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
-  <p className="dashboard-subtitle">Operational Intelligence Interface</p>
+      <header className="dashboard-header neon-border">
+        <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
+        <p className="dashboard-subtitle">Operational Intelligence Interface</p>
 
-  {/* CONNECT WALLET (bottom-left of header) */}
-  <div className="wallet-box-left">
-    <ConnectWallet />
-  </div>
-</header>
-
+        {/* CONNECT WALLET (bottom-left of header) */}
+        <div className="wallet-box-left">
+          <ConnectWallet />
+        </div>
+      </header>
 
       {/* MAIN CONTENT */}
       <div className="dashboard-grid">
