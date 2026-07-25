@@ -74,7 +74,7 @@ body {
   gap: 6px;
 
   background: rgba(0, 0, 0, 0.75);
-  border: 1px solid rgba(0,234,255,0.35); /* single clean border */
+  /* single clean border */
   border-radius: 8px;
   padding: 8px 12px; /* slightly larger */
   transform: scale(0.65); /* small but readable */
