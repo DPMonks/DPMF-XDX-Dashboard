@@ -42,15 +42,16 @@ export default function App() {
     <div className="dashboard-container">
 
       {/* HEADER */}
-      <header className="dashboard-header neon-border">
-        <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
-        <p className="dashboard-subtitle">Operational Intelligence Interface</p>
+     <header className="dashboard-header neon-border">
+  <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
+  <p className="dashboard-subtitle">Operational Intelligence Interface</p>
 
-        {/* CONNECT WALLET (bottom-right of header) */}
-        <div className="wallet-box">
-          <ConnectWallet />
-        </div>
-      </header>
+  {/* CONNECT WALLET (bottom-left of header) */}
+  <div className="wallet-box-left">
+    <ConnectWallet />
+  </div>
+</header>
+
 
       {/* MAIN CONTENT */}
       <div className="dashboard-grid">

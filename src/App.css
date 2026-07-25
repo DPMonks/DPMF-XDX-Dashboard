@@ -220,3 +220,12 @@ button:hover,
   right: 20px;
   bottom: 10px;
 }
+.dashboard-header {
+  position: relative;
+}
+
+.wallet-box-left {
+  position: absolute;
+  left: 20px;
+  bottom: 10px;
+}
