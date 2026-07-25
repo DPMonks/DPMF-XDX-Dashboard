@@ -13,7 +13,6 @@ export const WalletProvider = ({ children }) => {
     try {
       setLoading(true);
 
-      // Correct backend endpoint (MUST include /api)
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/xaman/create-payload`,
         {
@@ -24,29 +23,27 @@ export const WalletProvider = ({ children }) => {
 
       const data = await response.json();
 
-      // Validate payload
       if (!data.uuid || !data.refs?.qr_png || !data.websocket) {
         console.error("Invalid payload:", data);
         setLoading(false);
         return;
       }
 
-      // Store QR + UUID + WebSocket
+      // Store QR + UUID + WebSocket URL
       setQrData({
         qr: data.refs.qr_png,
         uuid: data.uuid,
         websocket: data.websocket
       });
 
-      // WebSocket listener
+      // Open WebSocket listener
       const ws = new WebSocket(data.websocket);
 
       ws.onmessage = (msg) => {
         const event = JSON.parse(msg.data);
 
         if (event.signed) {
-          const account = event.account;
-          setWalletAddress(account);
+          setWalletAddress(event.account);
           ws.close();
         }
       };
