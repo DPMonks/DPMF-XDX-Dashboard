@@ -63,11 +63,48 @@ body {
 }
 
 /* WALLET BUTTON POSITION */
+/* CONNECT WALLET — SMALL RECTANGULAR HUD (bottom-left) */
 .wallet-box-left {
   position: absolute;
   left: 20px;
-  bottom: 10px;
+  bottom: 12px;
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(0,234,255,0.35);
+  border-radius: 8px;
+  padding: 6px 10px;
+
+  transform: scale(0.55); /* SHRINK dramatically but still readable */
+  transform-origin: bottom left;
+
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 8px rgba(0,234,255,0.25);
 }
+
+/* Wallet logo inside the box */
+.wallet-logo {
+  height: 18px;
+  width: 18px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+/* Button text */
+.connect-wallet-btn {
+  font-size: 0.55rem;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dpmf-neon-cyan);
+  border: none;
+  letter-spacing: 0.05em;
+}
+
 
 /* GRID */
 .dashboard-grid {
