@@ -40,7 +40,7 @@ body {
   padding: 1.5rem 0;
   border-bottom: 2px solid rgba(255, 0, 255, 0.3);
 
-  /* FIX: ensures wallet button stays inside header */
+  /* ensures wallet button stays inside header */
   min-height: 120px;
   padding-bottom: 20px;
 }
@@ -62,8 +62,7 @@ body {
   opacity: 0.8;
 }
 
-/* WALLET BUTTON POSITION */
-/* CONNECT WALLET — SMALL RECTANGULAR HUD (bottom-left) */
+/* CONNECT WALLET — Sleek Rectangular HUD (bottom-left) */
 .wallet-box-left {
   position: absolute;
   left: 20px;
@@ -75,11 +74,10 @@ body {
   gap: 6px;
 
   background: rgba(0, 0, 0, 0.75);
-  border: 1px solid rgba(0,234,255,0.35);
+  border: 1px solid rgba(0,234,255,0.35); /* single clean border */
   border-radius: 8px;
-  padding: 6px 10px;
-
-  transform: scale(0.55); /* SHRINK dramatically but still readable */
+  padding: 8px 12px; /* slightly larger */
+  transform: scale(0.65); /* small but readable */
   transform-origin: bottom left;
 
   backdrop-filter: blur(4px);
@@ -88,15 +86,15 @@ body {
 
 /* Wallet logo inside the box */
 .wallet-logo {
-  height: 18px;
-  width: 18px;
+  height: 20px;
+  width: 20px;
   border-radius: 4px;
   object-fit: cover;
 }
 
 /* Button text */
 .connect-wallet-btn {
-  font-size: 0.55rem;
+  font-size: 0.65rem;
   padding: 4px 8px;
   border-radius: 5px;
   background: transparent;
@@ -104,7 +102,6 @@ body {
   border: none;
   letter-spacing: 0.05em;
 }
-
 
 /* GRID */
 .dashboard-grid {
