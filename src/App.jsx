@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./App.css";
+import ConnectWallet from "./components/ConnectWallet";
 
 export default function App() {
   const [holders, setHolders] = useState([]);
@@ -24,28 +25,38 @@ export default function App() {
 
   // Infinite scroll handler
   function handleScroll(e, type) {
-    const bottom = e.target.scrollHeight - e.target.scrollTop === e.target.clientHeight;
+    const bottom =
+      e.target.scrollHeight - e.target.scrollTop === e.target.clientHeight;
+
     if (bottom) {
       setPage(prev => prev + 1);
-      // TODO: fetch next batch using ?page=prev+1
       console.log(`Load more ${type} page ${page + 1}`);
+      // TODO: backend pagination: /api/top-holders?page=page+1
     }
   }
 
   return (
     <div className="dashboard-container">
+
       {/* HEADER */}
       <header className="dashboard-header neon-border">
         <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
         <p className="dashboard-subtitle">Operational Intelligence Interface</p>
       </header>
 
+      {/* CONNECT WALLET */}
+      <ConnectWallet />
+
       {/* MAIN CONTENT */}
       <div className="dashboard-grid">
+
         {/* AMM POOLS */}
         <div className="dashboard-card neon-card wide-card">
           <h2>AMM Pools</h2>
-          <div className="scroll-area" onScroll={(e) => handleScroll(e, "amm")}>
+          <div
+            className="scroll-area"
+            onScroll={(e) => handleScroll(e, "amm")}
+          >
             {ammData ? (
               <>
                 <div className="balance-row">
@@ -66,7 +77,10 @@ export default function App() {
         {/* TOP HOLDERS */}
         <div className="dashboard-card neon-card wide-card">
           <h2>Top Holders</h2>
-          <div className="scroll-area" onScroll={(e) => handleScroll(e, "holders")}>
+          <div
+            className="scroll-area"
+            onScroll={(e) => handleScroll(e, "holders")}
+          >
             {holders.length > 0 ? (
               holders.map((h, i) => (
                 <div key={i} className="balance-row">
@@ -83,7 +97,10 @@ export default function App() {
         {/* LP HOLDERS */}
         <div className="dashboard-card neon-card wide-card">
           <h2>LP Holders</h2>
-          <div className="scroll-area" onScroll={(e) => handleScroll(e, "lp")}>
+          <div
+            className="scroll-area"
+            onScroll={(e) => handleScroll(e, "lp")}
+          >
             {lpHolders.length > 0 ? (
               lpHolders.map((lp, i) => (
                 <div key={i} className="balance-row">
@@ -96,6 +113,7 @@ export default function App() {
             )}
           </div>
         </div>
+
       </div>
     </div>
   );
