@@ -30,9 +30,12 @@ body {
 
 .dashboard-header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  padding-bottom: 16px;
+  justify-content: center;
+  text-align: center;
+  padding: 1.5rem 0;
+  border-bottom: 2px solid rgba(255, 0, 255, 0.3);
 }
 
 .neon-border {
@@ -51,10 +54,11 @@ body {
 
 /* Grid */
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 26px;
-  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  margin-top: 2rem;
 }
 
 .dashboard-column {
@@ -65,12 +69,18 @@ body {
 
 /* Cards */
 .dashboard-card {
-  background: linear-gradient(145deg,#0b0c10 0%,#050507 60%,#090812 100%);
-  border-radius: var(--dpmf-radius-card);
-  border: 1px solid var(--dpmf-border-soft);
-  padding: 18px;
-  position: relative;
-  overflow: hidden;
+  width: 80%;
+  max-width: 1400px;
+  background: rgba(20, 10, 30, 0.8);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 0 20px rgba(200, 100, 255, 0.3);
+}
+
+.scroll-area {
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: 10px;
 }
 
 .neon-card::before {
@@ -147,4 +157,52 @@ button:hover,
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
+}
+.dashboard-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.dashboard-title {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #c080ff;
+  margin: 0;
+}
+
+.dashboard-subtitle {
+  font-size: 1.3rem;
+  color: #b0a0ff;
+  margin-top: 0.5rem;
+  opacity: 0.8;
+}
+
+.dashboard-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.wide-card {
+  width: 80%;
+  max-width: 1400px;
+}
+
+.scroll-area {
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+.balance-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
 }
