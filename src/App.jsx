@@ -1,99 +1,80 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 export default function App() {
-  const [walletConnected, setWalletConnected] = useState(false);
+  const [holders, setHolders] = useState([]);
+  const [lpHolders, setLpHolders] = useState([]);
+  const [ammData, setAmmData] = useState(null);
+
+  useEffect(() => {
+    fetch("https://dpmf-xdx-indexer.vercel.app/api/top-holders")
+      .then(res => res.json())
+      .then(data => setHolders(data));
+
+    fetch("https://dpmf-xdx-indexer.vercel.app/api/top-lp")
+      .then(res => res.json())
+      .then(data => setLpHolders(data));
+
+    fetch("https://dpmf-xdx-indexer.vercel.app/api/amm")
+      .then(res => res.json())
+      .then(data => setAmmData(data));
+  }, []);
 
   return (
     <div className="dashboard-container">
-      {/* HEADER */}
       <header className="dashboard-header neon-border">
         <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
-
-        {!walletConnected ? (
-          <button
-            className="connect-wallet-btn"
-            onClick={() => setWalletConnected(true)}
-          >
-            Connect Wallet
-          </button>
-        ) : (
-          <button className="connect-wallet-btn">
-            Wallet Connected
-          </button>
-        )}
+        <p className="dashboard-subtitle">Operational Intelligence Interface</p>
       </header>
 
-      {/* GRID */}
       <div className="dashboard-grid">
-        {/* LEFT COLUMN */}
         <div className="dashboard-column">
           <div className="dashboard-card neon-card">
-            <h2>Wallet Balances</h2>
-
-            <div className="balance-row">
-              <span>XRP</span>
-              <span>0.00</span>
-            </div>
-
-            <div className="balance-row">
-              <span>XDX</span>
-              <span>0.00</span>
-            </div>
-
-            <div className="balance-row">
-              <span>LP Tokens</span>
-              <span>0.00</span>
-            </div>
+            <h2>AMM Pools</h2>
+            {ammData ? (
+              <>
+                <div className="balance-row">
+                  <span>Pool</span>
+                  <span>{ammData.poolName}</span>
+                </div>
+                <div className="balance-row">
+                  <span>Liquidity</span>
+                  <span>{ammData.liquidity}</span>
+                </div>
+              </>
+            ) : (
+              <p>No pools found.</p>
+            )}
           </div>
 
           <div className="dashboard-card neon-card">
-            <h2>AMM Pools</h2>
-
-            <div className="balance-row">
-              <span>XDX / XRP</span>
-              <span>Pool Data</span>
-            </div>
-
-            <div className="balance-row">
-              <span>APR</span>
-              <span>0%</span>
-            </div>
-
-            <div className="balance-row">
-              <span>Liquidity</span>
-              <span>0</span>
-            </div>
+            <h2>Top Holders</h2>
+            {holders.length > 0 ? (
+              holders.map((h, i) => (
+                <div key={i} className="balance-row">
+                  <span>{h.account}</span>
+                  <span>{h.balance}</span>
+                </div>
+              ))
+            ) : (
+              <p>No holders found.</p>
+            )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
         <div className="dashboard-column">
           <div className="dashboard-card neon-card">
-            <h2>Actions</h2>
-
-            <button>Swap</button>
-            <button>Add Liquidity</button>
-            <button>Remove Liquidity</button>
-          </div>
-
-          <div className="dashboard-card neon-card">
-            <h2>System Status</h2>
-
-            <div className="balance-row">
-              <span>Indexer</span>
-              <span>Online</span>
-            </div>
-
-            <div className="balance-row">
-              <span>Dashboard</span>
-              <span>Operational</span>
-            </div>
-
-            <div className="balance-row">
-              <span>XRPL</span>
-              <span>Connected</span>
-            </div>
+            <h2>LP Holders</h2>
+            {lpHolders.length > 0 ? (
+              lpHolders.map((lp, i) => (
+                <div key={i} className="balance-row">
+                  <span>{lp.account}</span>
+                  <span>{lp.balance}</span>
+                </div>
+              ))
+            ) : (
+              <p>No LP holders found.</p>
+            )}
           </div>
         </div>
       </div>
