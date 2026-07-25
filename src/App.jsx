@@ -8,19 +8,22 @@ export default function App() {
   const [ammData, setAmmData] = useState(null);
   const [page, setPage] = useState(1);
 
-  // Fetch data
+  // Fetch data from Railway backend
   useEffect(() => {
-    fetch("https://dpmf-xdx-indexer.vercel.app/api/top-holders")
+    fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/top-holders")
       .then(res => res.json())
-      .then(data => setHolders(data));
+      .then(data => setHolders(data))
+      .catch(err => console.error("Error fetching top-holders:", err));
 
-    fetch("https://dpmf-xdx-indexer.vercel.app/api/top-lp")
+    fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/top-lp")
       .then(res => res.json())
-      .then(data => setLpHolders(data));
+      .then(data => setLpHolders(data))
+      .catch(err => console.error("Error fetching top-lp:", err));
 
-    fetch("https://dpmf-xdx-indexer.vercel.app/api/amm")
+    fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/amm")
       .then(res => res.json())
-      .then(data => setAmmData(data));
+      .then(data => setAmmData(data))
+      .catch(err => console.error("Error fetching amm:", err));
   }, []);
 
   // Infinite scroll handler
@@ -42,10 +45,12 @@ export default function App() {
       <header className="dashboard-header neon-border">
         <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
         <p className="dashboard-subtitle">Operational Intelligence Interface</p>
-      </header>
 
-      {/* CONNECT WALLET */}
-      <ConnectWallet />
+        {/* CONNECT WALLET (bottom-right of header) */}
+        <div className="wallet-box">
+          <ConnectWallet />
+        </div>
+      </header>
 
       {/* MAIN CONTENT */}
       <div className="dashboard-grid">

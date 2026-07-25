@@ -31,6 +31,7 @@ body {
 
 /* HEADER */
 .dashboard-header {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -213,4 +214,9 @@ button:hover,
   font-size: 0.95rem;
   color: var(--dpmf-neon-cyan);
   letter-spacing: 0.03em;
+}
+.wallet-box {
+  position: absolute;
+  right: 20px;
+  bottom: 10px;
 }
