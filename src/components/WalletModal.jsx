@@ -1,129 +1,59 @@
-import { useEffect, useState } from "react";
+// src/components/WalletModal.jsx
+import { useWallet } from "../context/WalletContext";
 import "../App.css";
-import { useWallet } from "../context/WallectContext";
-import Toast from "./components/Toast";   // ← toast added
 
-export default function App() {
-  const [holders, setHolders] = useState([]);
-  const [lpHolders, setLpHolders] = useState([]);
-  const [ammData, setAmmData] = useState(null);
-  const [page, setPage] = useState(1);
+export default function WalletModal() {
+  const {
+    modalOpen,
+    qrUrl,
+    mobileUrl,
+    cancelConnect
+  } = useWallet();
 
-  // Fetch data from Railway backend
-  useEffect(() => {
-    fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/top-holders")
-      .then(res => res.json())
-      .then(data => setHolders(data))
-      .catch(err => console.error("Error fetching top-holders:", err));
-
-    fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/top-lp")
-      .then(res => res.json())
-      .then(data => setLpHolders(data))
-      .catch(err => console.error("Error fetching top-lp:", err));
-
-    fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/amm")
-      .then(res => res.json())
-      .then(data => setAmmData(data))
-      .catch(err => console.error("Error fetching amm:", err));
-  }, []);
-
-  // Infinite scroll handler
-  function handleScroll(e, type) {
-    const bottom =
-      e.target.scrollHeight - e.target.scrollTop === e.target.clientHeight;
-
-    if (bottom) {
-      setPage(prev => prev + 1);
-      console.log(`Load more ${type} page ${page + 1}`);
-    }
-  }
+  if (!modalOpen) return null;
 
   return (
-    <div className="dashboard-container">
+    <div className="wallet-modal-overlay">
+      <div className="wallet-modal neon-border">
 
-      {/* GLOBAL WALLET MODAL */}
-      <WalletModal />
+        <h2 className="modal-title">Connect Wallet</h2>
 
-      {/* GLOBAL TOAST */}
-      <Toast />
+        {/* QR CODE */}
+        {qrUrl ? (
+          <img
+            src={qrUrl}
+            alt="Xaman QR"
+            className="qr-image"
+            style={{
+              width: "220px",
+              height: "220px",
+              marginBottom: "20px",
+              borderRadius: "12px"
+            }}
+          />
+        ) : (
+          <p className="loading-text">Generating QR…</p>
+        )}
 
-      {/* HEADER */}
-      <header className="dashboard-header neon-border">
-        <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
-        <p className="dashboard-subtitle">Operational Intelligence Interface</p>
-
-        {/* CONNECT WALLET */}
-        <div className="wallet-box-left">
-          <ConnectWallet />
-        </div>
-      </header>
-
-      {/* MAIN CONTENT */}
-      <div className="dashboard-grid">
-
-        {/* AMM POOLS */}
-        <div className="dashboard-card neon-card wide-card">
-          <h2>AMM Pools</h2>
-          <div
-            className="scroll-area"
-            onScroll={(e) => handleScroll(e, "amm")}
+        {/* MOBILE DEEP LINK */}
+        {mobileUrl && (
+          <a
+            href={mobileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mobile-link-btn"
           >
-            {ammData ? (
-              <>
-                <div className="balance-row">
-                  <span>Pool</span>
-                  <span>{ammData.poolName}</span>
-                </div>
-                <div className="balance-row">
-                  <span>Liquidity</span>
-                  <span>{ammData.liquidity}</span>
-                </div>
-              </>
-            ) : (
-              <p>No pools found.</p>
-            )}
-          </div>
-        </div>
+            Open in Xaman (Mobile)
+          </a>
+        )}
 
-        {/* TOP HOLDERS */}
-        <div className="dashboard-card neon-card wide-card">
-          <h2>Top Holders</h2>
-          <div
-            className="scroll-area"
-            onScroll={(e) => handleScroll(e, "holders")}
-          >
-            {holders.length > 0 ? (
-              holders.map((h, i) => (
-                <div key={i} className="balance-row">
-                  <span>{h.account}</span>
-                  <span>{h.balance}</span>
-                </div>
-              ))
-            ) : (
-              <p>No holders found.</p>
-            )}
-          </div>
-        </div>
-
-        {/* LP HOLDERS */}
-        <div className="dashboard-card neon-card wide-card">
-          <h2>LP Holders</h2>
-          <div
-            className="scroll-area"
-            onScroll={(e) => handleScroll(e, "lp")}
-          >
-            {lpHolders.length > 0 ? (
-              lpHolders.map((lp, i) => (
-                <div key={i} className="balance-row">
-                  <span>{lp.account}</span>
-                  <span>{lp.balance}</span>
-                </div>
-              ))
-            ) : (
-              <p>No LP holders found.</p>
-            )}
-          </div>
-        </div>
+        {/* CANCEL BUTTON */}
+        <button
+          className="cancel-wallet-btn"
+          onClick={cancelConnect}
+        >
+          Cancel
+        </button>
 
       </div>
     </div>
