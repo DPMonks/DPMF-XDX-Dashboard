@@ -2,7 +2,7 @@
 
 export async function createPayload() {
   const response = await fetch(
-    "http://localhost:3000/api/xaman/create-payload",
+    "https://dpmf-xdx-indexer-production.up.railway.app/api/xaman/create-payload",
     {
       method: "POST",
       headers: {
