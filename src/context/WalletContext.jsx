@@ -19,7 +19,7 @@ export function WalletProvider({ children }) {
       setMobileUrl(payload.refs.deeplink_web);
       setModalOpen(true);
 
-      const ws = new WebSocket(payload.websocket);
+      const ws = new WebSocket(payload.refs.websocket_status);
       setWsConnection(ws);
 
       ws.onmessage = (msg) => {
