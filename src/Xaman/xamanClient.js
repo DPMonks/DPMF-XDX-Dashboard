@@ -17,12 +17,13 @@ export async function createPayload() {
 
   const data = await response.json();
 
+  // ✅ Correct mapping for Xumm/Xaman payload structure
   return {
     refs: {
       qr_png: data.refs.qr_png,
-      deeplink_web: data.refs.deeplink_web
+      deeplink_web: data.refs.deeplink_web,
+      websocket_status: data.refs.websocket_status
     },
-    uuid: data.uuid,
-    websocket: data.websocket
+    uuid: data.uuid
   };
 }
