@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from "react";
-import { createPayload } from "../xaman/xamanClient";
+import { createPayload } from "../xaman/xamanClient.js";
 
 const WalletContext = createContext();
 
