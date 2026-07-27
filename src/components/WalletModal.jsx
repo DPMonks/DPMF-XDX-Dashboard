@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import "./App.css";
-
-import ConnectWallet from "./components/ConnectWallet";
-import WalletModal from "./components/WalletModal";   // ← modal added
+import "../App.css";
+import { useWallet } from "../context/WallectContext";
+import Toast from "./components/Toast";   // ← toast added
 
 export default function App() {
   const [holders, setHolders] = useState([]);
@@ -44,6 +43,9 @@ export default function App() {
 
       {/* GLOBAL WALLET MODAL */}
       <WalletModal />
+
+      {/* GLOBAL TOAST */}
+      <Toast />
 
       {/* HEADER */}
       <header className="dashboard-header neon-border">

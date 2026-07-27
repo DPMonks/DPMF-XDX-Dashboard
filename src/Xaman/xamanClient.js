@@ -2,7 +2,7 @@
 
 export async function createPayload() {
   const response = await fetch(
-    "https://dpmf-xdx-indexer-production.up.railway.app/xaman/create-payload",
+    "http://localhost:3000/api/xaman/create-payload",
     {
       method: "POST",
       headers: {
@@ -23,6 +23,6 @@ export async function createPayload() {
       deeplink_web: data.refs.deeplink_web
     },
     uuid: data.uuid,
-    websocket: data.websocket   // REQUIRED for WebSocket sign‑in
+    websocket: data.websocket
   };
 }

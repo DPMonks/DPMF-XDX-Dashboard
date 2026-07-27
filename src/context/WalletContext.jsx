@@ -1,67 +1,67 @@
-// src/context/WalletContext.jsx
-
 import { createContext, useContext, useState } from "react";
+import { createPayload } from "../xaman/xamanClient";
 
 const WalletContext = createContext();
 
-export const WalletProvider = ({ children }) => {
+export function WalletProvider({ children }) {
   const [walletAddress, setWalletAddress] = useState(null);
-  const [qrData, setQrData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [qrUrl, setQrUrl] = useState(null);
+  const [mobileUrl, setMobileUrl] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [wsConnection, setWsConnection] = useState(null);
+  const [toast, setToast] = useState(null);
 
   const connectWallet = async () => {
     try {
-      setLoading(true);
+      const payload = await createPayload();
 
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/xaman/create-payload`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" }
-        }
-      );
+      setQrUrl(payload.refs.qr_png);
+      setMobileUrl(payload.refs.deeplink_web);
+      setModalOpen(true);
 
-      const data = await response.json();
-
-      if (!data.uuid || !data.refs?.qr_png || !data.websocket) {
-        console.error("Invalid payload:", data);
-        setLoading(false);
-        return;
-      }
-
-      // Store QR + UUID + WebSocket URL
-      setQrData({
-        qr: data.refs.qr_png,
-        uuid: data.uuid,
-        websocket: data.websocket
-      });
-
-      // Open WebSocket listener
-      const ws = new WebSocket(data.websocket);
+      const ws = new WebSocket(payload.websocket);
+      setWsConnection(ws);
 
       ws.onmessage = (msg) => {
-        const event = JSON.parse(msg.data);
+        const data = JSON.parse(msg.data);
 
-        if (event.signed) {
-          setWalletAddress(event.account);
+        if (data.signed === true && data.account) {
+          setWalletAddress(data.account);
+
+          // Toast
+          setToast("Wallet Connected");
+          setTimeout(() => setToast(null), 3000);
+
+          setModalOpen(false);
+          setQrUrl(null);
           ws.close();
         }
       };
-
-      ws.onerror = (err) => {
-        console.error("WebSocket error:", err);
-      };
-
     } catch (err) {
       console.error("Wallet connect error:", err);
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const cancelConnect = () => {
+    setModalOpen(false);
+    setQrUrl(null);
+    setMobileUrl(null);
+
+    if (wsConnection) {
+      wsConnection.close();
+      setWsConnection(null);
     }
   };
 
   const disconnectWallet = () => {
     setWalletAddress(null);
-    setQrData(null);
+    setToast("Wallet Disconnected");
+    setTimeout(() => setToast(null), 3000);
+
+    if (wsConnection) {
+      wsConnection.close();
+      setWsConnection(null);
+    }
   };
 
   return (
@@ -70,13 +70,18 @@ export const WalletProvider = ({ children }) => {
         walletAddress,
         connectWallet,
         disconnectWallet,
-        qrData,
-        loading
+        cancelConnect,
+        modalOpen,
+        qrUrl,
+        mobileUrl,
+        toast
       }}
     >
       {children}
     </WalletContext.Provider>
   );
-};
+}
 
-export const useWallet = () => useContext(WalletContext);
+export function useWallet() {
+  return useContext(WalletContext);
+}
