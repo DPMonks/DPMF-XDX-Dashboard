@@ -1,34 +1,33 @@
 // src/xaman/create-payload.js
+// Frontend helper that requests a payload from your indexer backend.
+// No secrets are stored here — it just calls the secure backend route.
 
-import fetch from "node-fetch";
-
-export async function createPayloadBackend(req, res) {
+export async function createPayload() {
   try {
-    // Call the official Xaman Platform API from the backend (safe)
-    const response = await fetch("https://xaman.app/api/v1/platform/payload", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": process.env.XAMAN_API_KEY,
-        "X-API-Secret": process.env.XAMAN_API_SECRET
-      },
-      body: JSON.stringify({
-        txjson: {
-          TransactionType: "SignIn"
-        }
-      })
-    });
+    const response = await fetch(
+      "https://dpmf-xdx-indexer-production.up.railway.app/api/xaman/create-payload",
+      { method: "POST" }
+    );
 
     if (!response.ok) {
-      console.error("Xaman API error:", await response.text());
-      return res.status(500).json({ error: "Failed to create payload" });
+      throw new Error("Failed to create payload");
     }
 
     const payload = await response.json();
-    return res.status(200).json(payload);
 
+    // Validate required fields from Xaman
+    if (
+      !payload.refs ||
+      !payload.refs.qr_png ||
+      !payload.refs.deeplink_web ||
+      !payload.refs.websocket_status
+    ) {
+      throw new Error("Invalid payload structure");
+    }
+
+    return payload;
   } catch (err) {
-    console.error("Backend Xaman error:", err);
-    return res.status(500).json({ error: "Backend error creating payload" });
+    console.error("Dashboard XamanClient error:", err);
+    throw err;
   }
 }
