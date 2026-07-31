@@ -1,13 +1,11 @@
 // src/xaman/xamanClient.js
 
-// This calls YOUR backend route, not Xaman directly.
-// Your backend will safely handle API Key + Secret.
-
 export async function createPayload() {
   try {
-    const response = await fetch("/api/xaman/create-payload", {
-      method: "POST"
-    });
+    const response = await fetch(
+      "https://dpmf-xdx-indexer-production.up.railway.app/api/xaman/create-payload",
+      { method: "POST" }
+    );
 
     if (!response.ok) {
       throw new Error("Failed to create payload");
@@ -15,7 +13,6 @@ export async function createPayload() {
 
     const payload = await response.json();
 
-    // Validate required fields from Xaman
     if (
       !payload.refs ||
       !payload.refs.qr_png ||
