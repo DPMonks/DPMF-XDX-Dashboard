@@ -2,10 +2,12 @@
 
 export async function createPayload() {
   try {
-    const response = await fetch("https://xaman.dpmf.uk/api/payload", {
+    const response = await fetch("https://xaman.app/api/v1/platform/payload", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "X-API-Key": import.meta.env.VITE_XAMAN_API_KEY,
+        "X-API-Secret": import.meta.env.VITE_XAMAN_API_SECRET
       },
       body: JSON.stringify({
         txjson: {
