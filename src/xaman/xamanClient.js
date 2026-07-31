@@ -1,19 +1,12 @@
 // src/xaman/xamanClient.js
 
+// This calls YOUR backend route, not Xaman directly.
+// Your backend will safely handle API Key + Secret.
+
 export async function createPayload() {
   try {
-    const response = await fetch("https://xaman.app/api/v1/platform/payload", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": import.meta.env.VITE_XAMAN_API_KEY,
-        "X-API-Secret": import.meta.env.VITE_XAMAN_API_SECRET
-      },
-      body: JSON.stringify({
-        txjson: {
-          TransactionType: "SignIn"
-        }
-      })
+    const response = await fetch("/api/xaman/create-payload", {
+      method: "POST"
     });
 
     if (!response.ok) {
@@ -22,7 +15,7 @@ export async function createPayload() {
 
     const payload = await response.json();
 
-    // Validate required fields
+    // Validate required fields from Xaman
     if (
       !payload.refs ||
       !payload.refs.qr_png ||
