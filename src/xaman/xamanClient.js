@@ -9,7 +9,7 @@ export async function createPayload() {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}) // backend builds the payload itself
+        body: JSON.stringify({})
       }
     );
 
@@ -26,21 +26,14 @@ export async function createPayload() {
     console.log("📦 FULL PAYLOAD RECEIVED FROM BACKEND:");
     console.log(JSON.stringify(payload, null, 2));
 
-    // ------------------------------------------------------
-    // ROBUST PAYLOAD VALIDATION
-    // Xaman returns:
-    // - refs.qr_png
-    // - refs.deeplink_web
-    // - refs.websocket_status_url
-    // ------------------------------------------------------
     const refs = payload?.refs;
 
-    if (
-      !refs?.qr_png ||
-      !refs?.deeplink_web ||
-      !refs?.websocket_status_url
-    ) {
-      console.error("❌ Invalid payload structure FULL PAYLOAD:", JSON.stringify(payload, null, 2));
+    // Align with actual Xumm payload: qr_png + websocket_status
+    if (!refs?.qr_png || !refs?.websocket_status) {
+      console.error(
+        "❌ Invalid payload structure FULL PAYLOAD:",
+        JSON.stringify(payload, null, 2)
+      );
       throw new Error("Invalid payload structure");
     }
 
