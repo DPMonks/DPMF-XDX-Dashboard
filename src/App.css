@@ -275,3 +275,32 @@ body {
 .dashboard-header {
   position: relative;
 }
+.wallet-status-box {
+  position: absolute;
+  right: 20px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0,0,0,0.45);
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--dpmf-neon-cyan);
+  box-shadow: 0 0 12px rgba(0,234,255,0.35);
+}
+
+.wallet-status-address {
+  color: var(--dpmf-neon-cyan);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.wallet-status-online {
+  color: #00ff6a;
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(0,255,106,0.6);
+}
+.connect-wallet-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useWallet } from "../context/WalletContext";
-import { createPayload } from "../xaman/xamanClient";
+import { createPayload, getPayloadResult } from "../xaman/xamanClient";
 import WalletButton from "./WalletButton";
 
 export default function ConnectWallet() {
@@ -30,23 +30,29 @@ export default function ConnectWallet() {
       const socket = new WebSocket(payload.refs.websocket_status);
       setWs(socket);
 
-      socket.onmessage = (msg) => {
+      socket.onmessage = async (msg) => {
         const data = JSON.parse(msg.data);
 
-        if (data.signed && data.account) {
-          // Update wallet context
-          connectWallet(data.account);
-
+        // Xaman sends "signed: true" BEFORE sending the account
+        if (data.signed) {
           // Close modal immediately
           setQr(null);
           setMobileLink(null);
-          setStatus("idle");
+          setStatus("signed");
+
+          // Fetch account from backend
+          const result = await getPayloadResult(payload.uuid);
+
+          if (result?.response?.account) {
+            connectWallet(result.response.account);
+          }
 
           socket.close();
         }
       };
 
       socket.onerror = (err) => console.error("WS ERROR:", err);
+
     } catch (err) {
       console.error("Wallet connect error:", err);
       setStatus("idle");
