@@ -63,17 +63,15 @@ body {
   opacity: 0.8;
 }
 
-/* FIXED WALLET BUTTON */
+/* WALLET BUTTON INSIDE HEADER */
 .wallet-box-left {
-  position: fixed;
-  bottom: 22px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 999999 !important;
+  position: absolute;
+  left: 20px;
+  bottom: 10px;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: auto !important;
 }
 
 .connect-wallet-btn {
@@ -107,7 +105,6 @@ body {
   object-fit: cover;
   filter: drop-shadow(0 0 4px rgba(0,234,255,0.4));
 }
-
 /* GRID */
 .dashboard-grid {
   display: flex;
@@ -195,7 +192,6 @@ body {
     width: 95%;
   }
 }
-
 /* MODAL */
 .wallet-modal-overlay {
   position: fixed;
@@ -205,12 +201,10 @@ body {
   height: 100%;
   background: rgba(0,0,0,0.7);
   display: flex;
-  align-item: flex-start; /* start vertically, then offset below header */
-  justify-content: center;
-  align-items: center;
-  justify-content: centre;
+  align-items: flex-start; /* start at top */
+  justify-content: center; /* centre horizontally */
   z-index: 9999;
-  padding-top: 120px: /* adjust this to match your header */
+  padding-top: 140px; /* pushes modal below header */
 }
 
 /* QR modal box styling */
@@ -277,15 +271,7 @@ body {
 .dashboard-card {
   overflow: visible !important;
 }
-.dashboard-header {
-  position: relative;
-}
 
-.wallet-box-left {
-  position: absolute;
-  left: 20px;
-  bottom: 10px;
-  z-index: 10;
-}.dashboard-header {
+.dashboard-header {
   position: relative;
 }
