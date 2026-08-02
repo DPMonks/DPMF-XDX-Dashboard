@@ -274,3 +274,15 @@ body {
 .dashboard-card {
   overflow: visible !important;
 }
+.dashboard-header {
+  position: relative;
+}
+
+.wallet-box-left {
+  position: absolute;
+  left: 20px;
+  bottom: 10px;
+  z-index: 10;
+}.dashboard-header {
+  position: relative;
+}

@@ -38,15 +38,15 @@ export default function App() {
 
   return (
     <>
-      {/* FIXED WALLET BUTTON */}
-      <div className="wallet-box-left">
-        <ConnectWallet />
-      </div>
-
       <div className="dashboard-container">
         <header className="dashboard-header neon-border">
           <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
           <p className="dashboard-subtitle">Operational Intelligence Interface</p>
+
+          {/* CONNECT WALLET — bottom-left inside header */}
+          <div className="wallet-box-left">
+            <ConnectWallet />
+          </div>
         </header>
 
         <div className="dashboard-grid">
