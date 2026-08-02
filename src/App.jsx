@@ -46,18 +46,16 @@ export default function App() {
           <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
           <p className="dashboard-subtitle">Operational Intelligence Interface</p>
 
-          {/* CONNECT WALLET — bottom-left inside header */}
-          <div className="wallet-box-left">
+          {/* LEFT BUTTON — same neon style */}
+          <div className="wallet-box-left neon-button">
             <ConnectWallet />
           </div>
 
-          {/* WALLET STATUS — bottom-right inside header */}
+          {/* RIGHT BUTTON — shows ONLINE instead of address */}
           {walletAddress && (
-            <div className="wallet-status-box">
+            <div className="wallet-status-box neon-button online-indicator">
               <span className="wallet-status-online">●</span>
-              <span className="wallet-status-address">
-                {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
-              </span>
+              <span className="wallet-status-text">Online</span>
             </div>
           )}
         </header>
