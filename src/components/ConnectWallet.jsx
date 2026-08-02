@@ -7,7 +7,6 @@ export default function ConnectWallet() {
   const { walletAddress, connectWallet, disconnectWallet } = useWallet();
 
   const [qr, setQr] = useState(null);
-  const [wsUrl, setWsUrl] = useState(null);
   const [mobileLink, setMobileLink] = useState(null);
   const [status, setStatus] = useState("idle");
   const [ws, setWs] = useState(null);
@@ -18,12 +17,19 @@ export default function ConnectWallet() {
 
       const payload = await createPayload();
 
+      // ⭐ SAFETY CHECK — prevents React crash
+      if (!payload || !payload.refs) {
+        console.error("Invalid payload:", payload);
+        setStatus("idle");
+        return;
+      }
+
       setQr(payload.refs.qr_png);
-      setWsUrl(payload.refs.websocket_status);
       setMobileLink(payload.next?.always || payload.refs.deeplink_web);
       setStatus("waiting");
 
       const socket = new WebSocket(payload.refs.websocket_status);
+      setWs(socket);
 
       socket.onopen = () => console.log("WebSocket connected");
 
@@ -34,14 +40,16 @@ export default function ConnectWallet() {
         if (data.signed && data.account) {
           setStatus("signed");
           setQr(null);
-          connectWallet(data.account); // ✅ now matches context
+
+          // ⭐ Matches your WalletContext
+          connectWallet(data.account);
+
           socket.close();
         }
       };
 
       socket.onerror = (err) => console.error("WS ERROR:", err);
 
-      setWs(socket);
     } catch (err) {
       console.error("Wallet connect error:", err);
       setStatus("idle");
@@ -82,7 +90,7 @@ export default function ConnectWallet() {
               {status === "signed" && "Signed!"}
             </h2>
 
-            {status === "loading" && (
+            {status === "loading" ? (
               <div
                 style={{
                   width: "50px",
@@ -94,9 +102,7 @@ export default function ConnectWallet() {
                   animation: "spin 1s linear infinite"
                 }}
               />
-            )}
-
-            {status !== "loading" && (
+            ) : (
               <img src={qr} alt="Xaman QR Code" className="qr-image" />
             )}
 
