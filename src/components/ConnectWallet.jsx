@@ -73,7 +73,7 @@ export default function ConnectWallet() {
   }
 
   return (
-    <div className="wallet-box">
+    <div className="wallet-box" style={{ textAlign: "center" }}>
       {!walletAddress ? (
         <button className="connect-wallet-btn" onClick={handleConnect}>
           <img src={xamanLogo} alt="Xaman" className="wallet-logo" />
@@ -162,11 +162,12 @@ export default function ConnectWallet() {
                   display: "block",
                   marginTop: "10px",
                   padding: "12px",
-                  background: "#00c853",
-                  color: "#000",
+                  background: "#007BFF", // BRAND BLUE
+                  color: "#fff",
                   borderRadius: "10px",
                   textDecoration: "none",
-                  fontWeight: "bold"
+                  fontWeight: "bold",
+                  transition: "background 0.3s ease"
                 }}
               >
                 Open in Xaman App

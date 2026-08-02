@@ -11,6 +11,10 @@
   --dpmf-radius-card: 14px;
   --dpmf-transition-fast: 0.2s ease;
   --dpmf-transition-med: 0.3s ease;
+
+  /* NEW BRAND BLUE FOR XAMAN BUTTON */
+  --xaman-blue: #007BFF;
+  --xaman-blue-hover: #0056b3;
 }
 
 /* GLOBAL */
@@ -39,8 +43,6 @@ body {
   text-align: center;
   padding: 1.5rem 0;
   border-bottom: 2px solid rgba(255, 0, 255, 0.3);
-
-  /* ensures wallet button stays inside header */
   min-height: 120px;
   padding-bottom: 20px;
 }
@@ -62,29 +64,12 @@ body {
   opacity: 0.8;
 }
 
-/* CONNECT WALLET — Sleek Rectangular HUD (bottom-left) */
+/* REMOVE OLD BOTTOM-LEFT WALLET HUD */
 .wallet-box-left {
-  position: absolute;
-  left: 20px;
-  bottom: 12px;
-  z-index: 9999;
-
-  display: flex;
-  align-items: center;
-  gap: 6px;
-
-  background: rgba(0, 0, 0, 0.75);
-  /* single clean border */
-  border-radius: 8px;
-  padding: 8px 12px; /* slightly larger */
-  transform: scale(0.65); /* small but readable */
-  transform-origin: bottom left;
-
-  backdrop-filter: blur(4px);
-  box-shadow: 0 0 8px rgba(0,234,255,0.25);
+  display: none !important;
 }
 
-/* Wallet logo inside the box */
+/* WALLET LOGO */
 .wallet-logo {
   height: 20px;
   width: 20px;
@@ -92,15 +77,16 @@ body {
   object-fit: cover;
 }
 
-/* Button text */
+/* CONNECT WALLET BUTTON */
 .connect-wallet-btn {
-  font-size: 0.65rem;
-  padding: 4px 8px;
-  border-radius: 5px;
-  background: transparent;
+  font-size: 0.9rem;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: radial-gradient(circle at top left,#151522 0%,#090910 55%,#050507 100%);
   color: var(--dpmf-neon-cyan);
-  border: none;
+  border: 1px solid rgba(0,234,255,0.5);
   letter-spacing: 0.05em;
+  cursor: pointer;
 }
 
 /* GRID */
@@ -124,7 +110,6 @@ body {
   transition: transform var(--dpmf-transition-med), box-shadow var(--dpmf-transition-med);
 }
 
-/* REMOVE FULL-SCREEN GLOW */
 .neon-card::before {
   content: "";
   position: absolute;
@@ -133,7 +118,6 @@ body {
   pointer-events: none;
 }
 
-/* TIGHT HOVER EFFECT */
 .neon-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 0 26px rgba(0,0,0,0.9), 0 0 26px rgba(0,234,255,0.35);
@@ -219,7 +203,85 @@ button:hover,
     width: 95%;
   }
 }
+
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* ========================================================= */
+/* WALLET MODAL — QR + MOBILE DEEP LINK */
+/* ========================================================= */
+
+.wallet-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 99999;
+  backdrop-filter: blur(6px);
+}
+
+.wallet-modal {
+  background: #0b0c10;
+  padding: 28px;
+  border-radius: 14px;
+  width: 320px;
+  text-align: center;
+  border: 1px solid var(--dpmf-neon-violet-soft);
+  box-shadow: 0 0 22px rgba(199,112,255,0.35);
+}
+
+.modal-title {
+  font-size: 1.4rem;
+  margin-bottom: 18px;
+  color: var(--dpmf-neon-violet);
+  text-shadow: 0 0 12px var(--dpmf-neon-violet-soft);
+}
+
+.qr-image {
+  width: 220px;
+  height: 220px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 0 14px rgba(0,234,255,0.35);
+}
+
+/* UPDATED XAMAN MOBILE BUTTON */
+.mobile-link-btn {
+  display: block;
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--xaman-blue);
+  color: #fff;
+  border-radius: 10px;
+  font-weight: bold;
+  text-decoration: none;
+  transition: background 0.3s ease;
+}
+
+.mobile-link-btn:hover {
+  background: var(--xaman-blue-hover);
+}
+
+/* CANCEL BUTTON */
+.cancel-wallet-btn {
+  margin-top: 20px;
+  padding: 10px;
+  background: #222;
+  color: white;
+  border-radius: 10px;
+  font-weight: bold;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.cancel-wallet-btn:hover {
+  opacity: 0.85;
 }
