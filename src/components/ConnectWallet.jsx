@@ -4,7 +4,7 @@ import { createPayload, getPayloadResult } from "../xaman/xamanClient";
 import WalletButton from "./WalletButton";
 
 export default function ConnectWallet() {
-  const { walletAddress, connectWallet, disconnectWallet } = useWallet();
+  const { walletAddress, connectWallet } = useWallet();
 
   const [qr, setQr] = useState(null);
   const [mobileLink, setMobileLink] = useState(null);
@@ -33,14 +33,11 @@ export default function ConnectWallet() {
       socket.onmessage = async (msg) => {
         const data = JSON.parse(msg.data);
 
-        // Xaman sends "signed: true" BEFORE sending the account
         if (data.signed) {
-          // Close modal immediately
           setQr(null);
           setMobileLink(null);
           setStatus("signed");
 
-          // Fetch account from backend
           const result = await getPayloadResult(payload.uuid);
 
           if (result?.response?.account) {
@@ -52,7 +49,6 @@ export default function ConnectWallet() {
       };
 
       socket.onerror = (err) => console.error("WS ERROR:", err);
-
     } catch (err) {
       console.error("Wallet connect error:", err);
       setStatus("idle");
@@ -68,17 +64,10 @@ export default function ConnectWallet() {
 
   return (
     <>
-      {!walletAddress ? (
-        <WalletButton
-          onClick={startConnection}
-          disabled={status === "loading" || status === "waiting"}
-        />
-      ) : (
-        <div className="wallet-connected">
-          <span>{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
-          <button onClick={disconnectWallet}>Disconnect</button>
-        </div>
-      )}
+      <WalletButton
+        onClick={startConnection}
+        disabled={status === "loading" || status === "waiting"}
+      />
 
       {qr && (
         <div className="wallet-modal-overlay">
