@@ -12,7 +12,6 @@
   --dpmf-transition-fast: 0.2s ease;
   --dpmf-transition-med: 0.3s ease;
 
-  /* NEW BRAND BLUE FOR XAMAN BUTTON */
   --xaman-blue: #007BFF;
   --xaman-blue-hover: #0056b3;
 }
@@ -65,64 +64,66 @@ body {
 }
 
 /* ========================================================= */
-/* CONNECT WALLET — CLEAN FLOATING BUTTON (BOTTOM CENTER) */
+/* CONNECT WALLET — CLEAN, PROFESSIONAL, FIXED POSITION */
 /* ========================================================= */
 
 .wallet-box-left {
   position: fixed;
-  bottom: 28px; /* lowered closer to purple line */
+  bottom: 18px;
   left: 50%;
-  transform: translateX(-50%) scale(0.9);
+  transform: translateX(-50%);
   z-index: 9999;
 
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
 
-  background: transparent; /* remove black background */
-  border-radius: 10px;
+  background: transparent;
   padding: 0;
-  box-shadow: none; /* remove glow artifact */
+  margin: 0;
+
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
-/* BUTTON STYLE */
 .connect-wallet-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
 
+  padding: 10px 22px;
+  border-radius: 10px;
+
+  background: rgba(0,0,0,0.45);
+  border: 1px solid var(--dpmf-neon-cyan);
+  color: var(--dpmf-neon-cyan);
+
   font-size: 0.9rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--dpmf-neon-cyan);
 
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--dpmf-neon-cyan);
-  border-radius: 10px;
-  padding: 10px 22px;
   cursor: pointer;
-
-  box-shadow: 0 0 12px rgba(0, 234, 255, 0.35);
   transition: all 0.25s ease;
+
+  box-shadow: 0 0 12px rgba(0,234,255,0.35);
 }
 
 .connect-wallet-btn:hover {
-  background: rgba(0, 0, 0, 0.6);
-  box-shadow: 0 0 18px rgba(0, 234, 255, 0.55);
+  background: rgba(0,0,0,0.65);
+  box-shadow: 0 0 18px rgba(0,234,255,0.55);
   transform: translateY(-2px);
 }
 
-/* LOGO */
 .wallet-logo {
   height: 20px;
   width: 20px;
   border-radius: 4px;
   object-fit: cover;
-  filter: drop-shadow(0 0 4px rgba(0, 234, 255, 0.4));
+  filter: drop-shadow(0 0 4px rgba(0,234,255,0.4));
 }
+
 /* GRID */
 .dashboard-grid {
   display: flex;
@@ -157,7 +158,6 @@ body {
   box-shadow: 0 0 26px rgba(0,0,0,0.9), 0 0 26px rgba(0,234,255,0.35);
   border-color: rgba(0,234,255,0.5);
 }
-
 /* SCROLL AREA */
 .scroll-area {
   max-height: 500px;
@@ -254,7 +254,6 @@ body {
   box-shadow: 0 0 14px rgba(0,234,255,0.35);
 }
 
-/* UPDATED XAMAN MOBILE BUTTON */
 .mobile-link-btn {
   display: block;
   margin-top: 10px;
@@ -271,7 +270,18 @@ body {
   background: var(--xaman-blue-hover);
 }
 
-/* CANCEL BUTTON */
 .cancel-wallet-btn {
   margin-top: 20px;
   padding: 10px;
+  background: #222;
+  color: white;
+  border-radius: 10px;
+  font-weight: bold;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.cancel-wallet-btn:hover {
+  opacity: 0.85;
+}
