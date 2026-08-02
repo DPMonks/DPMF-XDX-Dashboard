@@ -40,8 +40,7 @@ export default function App() {
   }
 
   return (
-    <div className="dashboard-container">
-
+    <>
       {/* GLOBAL WALLET MODAL */}
       <WalletModal />
 
@@ -50,80 +49,79 @@ export default function App() {
         <ConnectWallet />
       </div>
 
-      {/* HEADER */}
-      <header className="dashboard-header neon-border">
-        <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
-        <p className="dashboard-subtitle">Operational Intelligence Interface</p>
-      </header>
+      {/* DASHBOARD CONTAINER */}
+      <div className="dashboard-container">
+        <header className="dashboard-header neon-border">
+          <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
+          <p className="dashboard-subtitle">Operational Intelligence Interface</p>
+        </header>
 
-      {/* MAIN CONTENT */}
-      <div className="dashboard-grid">
+        <div className="dashboard-grid">
+          {/* AMM POOLS */}
+          <div className="dashboard-card neon-card wide-card">
+            <h2>AMM Pools</h2>
+            <div
+              className="scroll-area"
+              onScroll={(e) => handleScroll(e, "amm")}
+            >
+              {ammData ? (
+                <>
+                  <div className="balance-row">
+                    <span>Pool</span>
+                    <span>{ammData.poolName}</span>
+                  </div>
+                  <div className="balance-row">
+                    <span>Liquidity</span>
+                    <span>{ammData.liquidity}</span>
+                  </div>
+                </>
+              ) : (
+                <p>No pools found.</p>
+              )}
+            </div>
+          </div>
 
-        {/* AMM POOLS */}
-        <div className="dashboard-card neon-card wide-card">
-          <h2>AMM Pools</h2>
-          <div
-            className="scroll-area"
-            onScroll={(e) => handleScroll(e, "amm")}
-          >
-            {ammData ? (
-              <>
-                <div className="balance-row">
-                  <span>Pool</span>
-                  <span>{ammData.poolName}</span>
-                </div>
-                <div className="balance-row">
-                  <span>Liquidity</span>
-                  <span>{ammData.liquidity}</span>
-                </div>
-              </>
-            ) : (
-              <p>No pools found.</p>
-            )}
+          {/* TOP HOLDERS */}
+          <div className="dashboard-card neon-card wide-card">
+            <h2>Top Holders</h2>
+            <div
+              className="scroll-area"
+              onScroll={(e) => handleScroll(e, "holders")}
+            >
+              {holders.length > 0 ? (
+                holders.map((h, i) => (
+                  <div key={i} className="balance-row">
+                    <span>{h.account}</span>
+                    <span>{h.balance}</span>
+                  </div>
+                ))
+              ) : (
+                <p>No holders found.</p>
+              )}
+            </div>
+          </div>
+
+          {/* LP HOLDERS */}
+          <div className="dashboard-card neon-card wide-card">
+            <h2>LP Holders</h2>
+            <div
+              className="scroll-area"
+              onScroll={(e) => handleScroll(e, "lp")}
+            >
+              {lpHolders.length > 0 ? (
+                lpHolders.map((lp, i) => (
+                  <div key={i} className="balance-row">
+                    <span>{lp.account}</span>
+                    <span>{lp.balance}</span>
+                  </div>
+                ))
+              ) : (
+                <p>No LP holders found.</p>
+              )}
+            </div>
           </div>
         </div>
-
-        {/* TOP HOLDERS */}
-        <div className="dashboard-card neon-card wide-card">
-          <h2>Top Holders</h2>
-          <div
-            className="scroll-area"
-            onScroll={(e) => handleScroll(e, "holders")}
-          >
-            {holders.length > 0 ? (
-              holders.map((h, i) => (
-                <div key={i} className="balance-row">
-                  <span>{h.account}</span>
-                  <span>{h.balance}</span>
-                </div>
-              ))
-            ) : (
-              <p>No holders found.</p>
-            )}
-          </div>
-        </div>
-
-        {/* LP HOLDERS */}
-        <div className="dashboard-card neon-card wide-card">
-          <h2>LP Holders</h2>
-          <div
-            className="scroll-area"
-            onScroll={(e) => handleScroll(e, "lp")}
-          >
-            {lpHolders.length > 0 ? (
-              lpHolders.map((lp, i) => (
-                <div key={i} className="balance-row">
-                  <span>{lp.account}</span>
-                  <span>{lp.balance}</span>
-                </div>
-              ))
-            ) : (
-              <p>No LP holders found.</p>
-            )}
-          </div>
-        </div>
-
       </div>
-    </div>
+    </>
   );
 }
