@@ -285,3 +285,60 @@ body {
 .cancel-wallet-btn:hover {
   opacity: 0.85;
 }
+.wallet-box-left {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.connect-wallet-btn {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid var(--dpmf-neon-cyan);
+  color: var(--dpmf-neon-cyan);
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(0,234,255,0.35);
+  transition: all 0.25s ease;
+}
+
+.connect-wallet-btn:hover {
+  background: rgba(0,0,0,0.65);
+  box-shadow: 0 0 18px rgba(0,234,255,0.55);
+  transform: translateY(-2px);
+}
+
+.wallet-logo {
+  height: 20px;
+  width: 20px;
+  border-radius: 4px;
+  object-fit: cover;
+  filter: drop-shadow(0 0 4px rgba(0,234,255,0.4));
+}
+/* FORCE CONNECT WALLET BUTTON TO BE VISIBLE ABOVE ALL ELEMENTS */
+.wallet-box-left {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999999 !important; /* lift above all layers */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto !important; /* ensure it's clickable */
+}
+
+.dashboard-container,
+.dashboard-grid,
+.dashboard-card {
+  overflow: visible !important; /* prevent clipping */
+}
