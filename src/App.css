@@ -324,18 +324,6 @@ body {
   object-fit: cover;
   filter: drop-shadow(0 0 4px rgba(0,234,255,0.4));
 }
-/* FORCE CONNECT WALLET BUTTON TO BE VISIBLE ABOVE ALL ELEMENTS */
-.wallet-box-left {
-  position: fixed;
-  bottom: 22px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 999999 !important; /* lift above all layers */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto !important; /* ensure it's clickable */
-}
 
 .dashboard-container,
 .dashboard-grid,
