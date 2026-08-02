@@ -7,6 +7,7 @@ export default function ConnectWallet() {
   const { walletAddress, connectWallet, disconnectWallet } = useWallet();
 
   const [qr, setQr] = useState(null);
+  const [wsUrl, setWsUrl] = useState(null);
   const [mobileLink, setMobileLink] = useState(null);
   const [status, setStatus] = useState("idle");
   const [ws, setWs] = useState(null);
@@ -14,30 +15,33 @@ export default function ConnectWallet() {
   async function handleConnect() {
     try {
       setStatus("loading");
+
       const payload = await createPayload();
 
-      if (!payload?.refs) {
-        console.error("Invalid payload:", payload);
-        setStatus("idle");
-        return;
-      }
-
       setQr(payload.refs.qr_png);
-      setMobileLink(payload.refs.deeplink_web);
+      setWsUrl(payload.refs.websocket_status);
+      setMobileLink(payload.next?.always || payload.refs.deeplink_web);
       setStatus("waiting");
 
       const socket = new WebSocket(payload.refs.websocket_status);
-      setWs(socket);
+
+      socket.onopen = () => console.log("WebSocket connected");
 
       socket.onmessage = (msg) => {
         const data = JSON.parse(msg.data);
+        console.log("WS EVENT:", data);
+
         if (data.signed && data.account) {
           setStatus("signed");
           setQr(null);
-          connectWallet(); // ✅ no argument
+          connectWallet(data.account); // ✅ now matches context
           socket.close();
         }
       };
+
+      socket.onerror = (err) => console.error("WS ERROR:", err);
+
+      setWs(socket);
     } catch (err) {
       console.error("Wallet connect error:", err);
       setStatus("idle");
@@ -78,7 +82,7 @@ export default function ConnectWallet() {
               {status === "signed" && "Signed!"}
             </h2>
 
-            {status === "loading" ? (
+            {status === "loading" && (
               <div
                 style={{
                   width: "50px",
@@ -90,7 +94,9 @@ export default function ConnectWallet() {
                   animation: "spin 1s linear infinite"
                 }}
               />
-            ) : (
+            )}
+
+            {status !== "loading" && (
               <img src={qr} alt="Xaman QR Code" className="qr-image" />
             )}
 

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
-import WalletModal from "./components/WalletModal";
 
 export default function App() {
   const [holders, setHolders] = useState([]);
@@ -39,8 +38,6 @@ export default function App() {
 
   return (
     <>
-      <WalletModal />
-
       {/* FIXED WALLET BUTTON */}
       <div className="wallet-box-left">
         <ConnectWallet />
