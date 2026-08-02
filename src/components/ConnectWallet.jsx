@@ -34,12 +34,19 @@ export default function ConnectWallet() {
         const data = JSON.parse(msg.data);
 
         if (data.signed && data.account) {
+          // Update wallet context
           connectWallet(data.account);
+
+          // Close modal immediately
           setQr(null);
-          setStatus("signed");
+          setMobileLink(null);
+          setStatus("idle");
+
           socket.close();
         }
       };
+
+      socket.onerror = (err) => console.error("WS ERROR:", err);
     } catch (err) {
       console.error("Wallet connect error:", err);
       setStatus("idle");
@@ -48,6 +55,7 @@ export default function ConnectWallet() {
 
   function closeModal() {
     setQr(null);
+    setMobileLink(null);
     setStatus("idle");
     if (ws) ws.close();
   }
@@ -55,7 +63,10 @@ export default function ConnectWallet() {
   return (
     <>
       {!walletAddress ? (
-        <WalletButton onClick={startConnection} />
+        <WalletButton
+          onClick={startConnection}
+          disabled={status === "loading" || status === "waiting"}
+        />
       ) : (
         <div className="wallet-connected">
           <span>{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
@@ -69,7 +80,6 @@ export default function ConnectWallet() {
             <h2 className="modal-title">
               {status === "loading" && "Preparing…"}
               {status === "waiting" && "Scan with Xaman"}
-              {status === "signed" && "Signed!"}
             </h2>
 
             {status !== "loading" && (

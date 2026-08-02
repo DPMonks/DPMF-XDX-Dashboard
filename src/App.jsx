@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
+import { useWallet } from "./context/WalletContext";
 
 export default function App() {
+  const { walletAddress } = useWallet();
+
   const [holders, setHolders] = useState([]);
   const [lpHolders, setLpHolders] = useState([]);
   const [ammData, setAmmData] = useState(null);
@@ -47,6 +50,16 @@ export default function App() {
           <div className="wallet-box-left">
             <ConnectWallet />
           </div>
+
+          {/* WALLET STATUS — bottom-right inside header */}
+          {walletAddress && (
+            <div className="wallet-status-box">
+              <span className="wallet-status-address">
+                {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+              </span>
+              <span className="wallet-status-online">● ONLINE</span>
+            </div>
+          )}
         </header>
 
         <div className="dashboard-grid">
