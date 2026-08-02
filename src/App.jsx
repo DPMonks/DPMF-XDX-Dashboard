@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
+import Header from "./components/Header";   // <-- ADD THIS
 import { useWallet } from "./context/WalletContext";
 
 export default function App() {
@@ -41,28 +42,12 @@ export default function App() {
 
   return (
     <>
+      {/* FIX: Use Header.jsx and pass walletAddress */}
+      <Header account={walletAddress} />
+
       <div className="dashboard-container">
-        <header className="dashboard-header neon-border">
-          <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
-          <p className="dashboard-subtitle">Operational Intelligence Interface</p>
-
-          {/* CONNECT WALLET — bottom-left inside header */}
-          <div className="wallet-box-left">
-            <ConnectWallet />
-          </div>
-
-          {/* WALLET STATUS — bottom-right inside header */}
-          {walletAddress && (
-            <div className="wallet-status-box">
-              <span className="wallet-status-address">
-                {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
-              </span>
-              <span className="wallet-status-online">● ONLINE</span>
-            </div>
-          )}
-        </header>
-
         <div className="dashboard-grid">
+
           <div className="dashboard-card neon-card wide-card">
             <h2>AMM Pools</h2>
             <div
@@ -123,6 +108,7 @@ export default function App() {
               )}
             </div>
           </div>
+
         </div>
       </div>
     </>
