@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
-import WalletModal from "./components/WalletModal";   // ← modal added
+import WalletModal from "./components/WalletModal";
 
 export default function App() {
   const [holders, setHolders] = useState([]);
@@ -45,15 +45,15 @@ export default function App() {
       {/* GLOBAL WALLET MODAL */}
       <WalletModal />
 
+      {/* FIXED WALLET BUTTON (HUD ELEMENT) */}
+      <div className="wallet-box-left">
+        <ConnectWallet />
+      </div>
+
       {/* HEADER */}
       <header className="dashboard-header neon-border">
         <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
         <p className="dashboard-subtitle">Operational Intelligence Interface</p>
-
-        {/* CONNECT WALLET */}
-        <div className="wallet-box-left">
-          <ConnectWallet />
-        </div>
       </header>
 
       {/* MAIN CONTENT */}
