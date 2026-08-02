@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useWallet } from "../context/WalletContext";
 import { createPayload } from "../xaman/xamanClient";
-import xamanLogo from "../assets/Xaman.jpg";
+import WalletButton from "./WalletButton";
 
 export default function ConnectWallet() {
   const { walletAddress, connectWallet, disconnectWallet } = useWallet();
@@ -11,14 +11,13 @@ export default function ConnectWallet() {
   const [status, setStatus] = useState("idle");
   const [ws, setWs] = useState(null);
 
-  async function handleConnect() {
+  async function startConnection() {
     try {
       setStatus("loading");
 
       const payload = await createPayload();
 
-      // ⭐ SAFETY CHECK — prevents React crash
-      if (!payload || !payload.refs) {
+      if (!payload?.refs) {
         console.error("Invalid payload:", payload);
         setStatus("idle");
         return;
@@ -31,25 +30,16 @@ export default function ConnectWallet() {
       const socket = new WebSocket(payload.refs.websocket_status);
       setWs(socket);
 
-      socket.onopen = () => console.log("WebSocket connected");
-
       socket.onmessage = (msg) => {
         const data = JSON.parse(msg.data);
-        console.log("WS EVENT:", data);
 
         if (data.signed && data.account) {
-          setStatus("signed");
-          setQr(null);
-
-          // ⭐ Matches your WalletContext
           connectWallet(data.account);
-
+          setQr(null);
+          setStatus("signed");
           socket.close();
         }
       };
-
-      socket.onerror = (err) => console.error("WS ERROR:", err);
-
     } catch (err) {
       console.error("Wallet connect error:", err);
       setStatus("idle");
@@ -65,19 +55,11 @@ export default function ConnectWallet() {
   return (
     <>
       {!walletAddress ? (
-        <button className="connect-wallet-btn" onClick={handleConnect}>
-          <img src={xamanLogo} alt="Xaman" className="wallet-logo" />
-          Connect Wallet
-        </button>
+        <WalletButton onClick={startConnection} />
       ) : (
         <div className="wallet-connected">
-          <img src={xamanLogo} alt="Xaman" className="wallet-logo" />
-          <span className="wallet-address">
-            {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
-          </span>
-          <button className="disconnect-wallet-btn" onClick={disconnectWallet}>
-            Disconnect
-          </button>
+          <span>{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
+          <button onClick={disconnectWallet}>Disconnect</button>
         </div>
       )}
 
@@ -90,20 +72,8 @@ export default function ConnectWallet() {
               {status === "signed" && "Signed!"}
             </h2>
 
-            {status === "loading" ? (
-              <div
-                style={{
-                  width: "50px",
-                  height: "50px",
-                  border: "6px solid #ccc",
-                  borderTopColor: "#000",
-                  borderRadius: "50%",
-                  margin: "20px auto",
-                  animation: "spin 1s linear infinite"
-                }}
-              />
-            ) : (
-              <img src={qr} alt="Xaman QR Code" className="qr-image" />
+            {status !== "loading" && (
+              <img src={qr} alt="QR" className="qr-image" />
             )}
 
             {mobileLink && (
