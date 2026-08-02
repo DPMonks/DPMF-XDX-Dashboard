@@ -107,6 +107,7 @@ body {
   object-fit: cover;
   filter: drop-shadow(0 0 4px rgba(0,234,255,0.4));
 }
+
 /* GRID */
 .dashboard-grid {
   display: flex;
@@ -266,6 +267,7 @@ body {
 .cancel-wallet-btn:hover {
   opacity: 0.85;
 }
+
 /* FINAL OVERRIDES */
 .dashboard-container,
 .dashboard-grid,
