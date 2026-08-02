@@ -1,5 +1,6 @@
 // src/xaman/xamanClient.js
 
+// Create a new Xaman payload via your backend
 export async function createPayload() {
   try {
     console.log("📡 XamanClient: Sending payload request to backend...");
@@ -28,7 +29,6 @@ export async function createPayload() {
 
     const refs = payload?.refs;
 
-    // Align with actual Xumm payload: qr_png + websocket_status
     if (!refs?.qr_png || !refs?.websocket_status) {
       console.error(
         "❌ Invalid payload structure FULL PAYLOAD:",
@@ -43,5 +43,25 @@ export async function createPayload() {
   } catch (err) {
     console.error("❌ XamanClient error:", err);
     throw err;
+  }
+}
+
+// Fetch the final signed payload result (account address)
+export async function getPayloadResult(uuid) {
+  try {
+    const response = await fetch(
+      `https://dpmf-xdx-indexer-production.up.railway.app/api/xaman/payload-result?uuid=${uuid}`
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch payload result");
+    }
+
+    const result = await response.json();
+    return result;
+
+  } catch (err) {
+    console.error("❌ XamanClient getPayloadResult error:", err);
+    return null;
   }
 }

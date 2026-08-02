@@ -1,6 +1,5 @@
 // src/xaman/create-payload.js
-// Frontend helper that requests a payload from your indexer backend.
-// No secrets are stored here — it just calls the secure backend route.
+// Simple helper that requests a payload from your backend
 
 export async function createPayload() {
   try {
@@ -15,17 +14,16 @@ export async function createPayload() {
 
     const payload = await response.json();
 
-    // Validate required fields from Xaman
     if (
       !payload.refs ||
       !payload.refs.qr_png ||
-      !payload.refs.deeplink_web ||
       !payload.refs.websocket_status
     ) {
       throw new Error("Invalid payload structure");
     }
 
     return payload;
+
   } catch (err) {
     console.error("Dashboard XamanClient error:", err);
     throw err;
