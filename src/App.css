@@ -64,12 +64,27 @@ body {
   opacity: 0.8;
 }
 
-/* REMOVE OLD BOTTOM-LEFT WALLET HUD */
+/* ========================================================= */
+/* CONNECT WALLET — BOTTOM LEFT HUD (RESTORED) */
+/* ========================================================= */
+
 .wallet-box-left {
-  display: none !important;
+  position: absolute;
+  left: 20px;
+  bottom: 12px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: 8px;
+  padding: 8px 12px;
+  transform: scale(0.65);
+  transform-origin: bottom left;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 8px rgba(0,234,255,0.25);
 }
 
-/* WALLET LOGO */
 .wallet-logo {
   height: 20px;
   width: 20px;
@@ -77,14 +92,13 @@ body {
   object-fit: cover;
 }
 
-/* CONNECT WALLET BUTTON */
 .connect-wallet-btn {
-  font-size: 0.9rem;
-  padding: 10px 16px;
-  border-radius: 8px;
-  background: radial-gradient(circle at top left,#151522 0%,#090910 55%,#050507 100%);
+  font-size: 0.65rem;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: transparent;
   color: var(--dpmf-neon-cyan);
-  border: 1px solid rgba(0,234,255,0.5);
+  border: none;
   letter-spacing: 0.05em;
   cursor: pointer;
 }
@@ -210,7 +224,7 @@ button:hover,
 }
 
 /* ========================================================= */
-/* WALLET MODAL — QR + MOBILE DEEP LINK */
+/* WALLET MODAL — QR + MOBILE DEEP LINK (CENTERED) */
 /* ========================================================= */
 
 .wallet-modal-overlay {

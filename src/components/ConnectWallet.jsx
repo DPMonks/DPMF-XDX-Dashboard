@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useWallet } from "../context/WalletContext";
 import { createPayload } from "../xaman/xamanClient";
 import xamanLogo from "../assets/Xaman.jpg";
@@ -73,7 +73,7 @@ export default function ConnectWallet() {
   }
 
   return (
-    <div className="wallet-box" style={{ textAlign: "center" }}>
+    <div className="wallet-box-left">
       {!walletAddress ? (
         <button className="connect-wallet-btn" onClick={handleConnect}>
           <img src={xamanLogo} alt="Xaman" className="wallet-logo" />
@@ -96,30 +96,10 @@ export default function ConnectWallet() {
       {/* MODAL */}
       {qr && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.75)",
-            backdropFilter: "blur(4px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-            animation: "fadeIn 0.3s ease"
-          }}
+          className="wallet-modal-overlay"
         >
-          <div
-            style={{
-              background: "#fff",
-              padding: "25px",
-              borderRadius: "14px",
-              textAlign: "center",
-              width: "340px",
-              boxShadow: "0 0 30px rgba(0,0,0,0.4)",
-              animation: "scaleIn 0.25s ease"
-            }}
-          >
-            <h2 style={{ marginBottom: "15px" }}>
+          <div className="wallet-modal">
+            <h2 className="modal-title">
               {status === "loading" && "Preparing…"}
               {status === "waiting" && "Scan with Xaman"}
               {status === "signed" && "Signed!"}
@@ -145,12 +125,7 @@ export default function ConnectWallet() {
               <img
                 src={qr}
                 alt="Xaman QR Code"
-                style={{
-                  width: "260px",
-                  height: "260px",
-                  borderRadius: "8px",
-                  marginBottom: "15px"
-                }}
+                className="qr-image"
               />
             )}
 
@@ -158,17 +133,7 @@ export default function ConnectWallet() {
             {mobileLink && (
               <a
                 href={mobileLink}
-                style={{
-                  display: "block",
-                  marginTop: "10px",
-                  padding: "12px",
-                  background: "#007BFF", // BRAND BLUE
-                  color: "#fff",
-                  borderRadius: "10px",
-                  textDecoration: "none",
-                  fontWeight: "bold",
-                  transition: "background 0.3s ease"
-                }}
+                className="mobile-link-btn"
               >
                 Open in Xaman App
               </a>
@@ -177,43 +142,13 @@ export default function ConnectWallet() {
             {/* CLOSE BUTTON */}
             <button
               onClick={closeModal}
-              style={{
-                marginTop: "16px",
-                padding: "10px 20px",
-                width: "100%",
-                background: "#222",
-                color: "#fff",
-                borderRadius: "10px",
-                border: "none",
-                cursor: "pointer",
-                fontSize: "16px"
-              }}
+              className="cancel-wallet-btn"
             >
               Cancel
             </button>
           </div>
         </div>
       )}
-
-      {/* ANIMATIONS */}
-      <style>
-        {`
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-
-          @keyframes scaleIn {
-            from { transform: scale(0.8); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-          }
-
-          @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-        `}
-      </style>
     </div>
   );
 }
