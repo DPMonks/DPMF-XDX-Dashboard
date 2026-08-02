@@ -65,42 +65,48 @@ body {
 }
 
 /* ========================================================= */
-/* CONNECT WALLET — BOTTOM LEFT HUD (RESTORED) */
+/* CONNECT WALLET — BOTTOM LEFT HUD (HORIZONTAL + LARGER) */
 /* ========================================================= */
 
 .wallet-box-left {
   position: absolute;
   left: 20px;
-  bottom: 12px;
+  bottom: 16px;
   z-index: 9999;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 10px;
   background: rgba(0, 0, 0, 0.75);
-  border-radius: 8px;
-  padding: 8px 12px;
-  transform: scale(0.65);
+  border-radius: 10px;
+  padding: 12px 18px;
+  transform: scale(0.85);
   transform-origin: bottom left;
   backdrop-filter: blur(4px);
-  box-shadow: 0 0 8px rgba(0,234,255,0.25);
+  box-shadow: 0 0 10px rgba(0,234,255,0.25);
 }
 
 .wallet-logo {
-  height: 20px;
-  width: 20px;
+  height: 22px;
+  width: 22px;
   border-radius: 4px;
   object-fit: cover;
 }
 
 .connect-wallet-btn {
-  font-size: 0.65rem;
-  padding: 4px 8px;
-  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  padding: 6px 14px;
+  border-radius: 6px;
   background: transparent;
   color: var(--dpmf-neon-cyan);
   border: none;
   letter-spacing: 0.05em;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 /* GRID */
@@ -173,16 +179,16 @@ button,
   background: radial-gradient(circle at top left,#151522 0%,#090910 55%,#050507 100%);
   border: 1px solid rgba(0,234,255,0.5);
   color: var(--dpmf-neon-cyan);
-  padding: 9px 16px;
+  padding: 10px 18px;
   border-radius: 9px;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   transition: background var(--dpmf-transition-fast), box-shadow var(--dpmf-transition-fast), transform var(--dpmf-transition-fast), border-color var(--dpmf-transition-fast);
 }
 
@@ -222,7 +228,6 @@ button:hover,
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-
 /* ========================================================= */
 /* WALLET MODAL — QR + MOBILE DEEP LINK (CENTERED) */
 /* ========================================================= */
