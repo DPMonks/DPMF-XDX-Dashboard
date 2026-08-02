@@ -17,23 +17,47 @@ export default function Header({ account }) {
         zIndex: 999,
       }}
     >
+      {/* LEFT SIDE — TITLE */}
       <div style={{ color: "#fff", fontSize: "20px", fontWeight: "bold" }}>
         DPMF‑XDX Dashboard
       </div>
 
+      {/* RIGHT SIDE — WALLET STATUS */}
       {account ? (
         <div
           style={{
-            color: "#00c853",
-            fontSize: "16px",
-            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
             background: "#111",
             padding: "10px 16px",
             borderRadius: "10px",
             border: "1px solid #333",
           }}
         >
-          Connected: {account}
+          {/* Flashing green dot */}
+          <span
+            style={{
+              color: "#00ff6a",
+              fontWeight: "bold",
+              fontSize: "18px",
+              animation: "pulseOnline 1.2s infinite ease-in-out",
+            }}
+          >
+            ●
+          </span>
+
+          {/* Wallet address */}
+          <span
+            style={{
+              color: "#00eaff",
+              fontSize: "16px",
+              fontWeight: "bold",
+              letterSpacing: "0.03em",
+            }}
+          >
+            {account.slice(0, 6)}...{account.slice(-4)}
+          </span>
         </div>
       ) : (
         <div
