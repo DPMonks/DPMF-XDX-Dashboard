@@ -3,6 +3,7 @@ import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
 import { useWallet } from "./context/WalletContext";
+import Dashboard from "./components/Dashboard";
 
 export default function App() {
   const { walletAddress } = useWallet();
@@ -43,9 +44,9 @@ export default function App() {
           <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
           <p className="dashboard-subtitle">Operational Intelligence Interface</p>
 
-          {/* Single left‑side Connect Wallet button */}
+          {/* KEEP ONLY THIS BUTTON */}
           <div className="wallet-box-left">
-            <ConnectWallet />
+            <ConnectWallet showButton={true} />
           </div>
 
           {walletAddress && (
@@ -56,13 +57,12 @@ export default function App() {
           )}
         </header>
 
-        <div className="dashboard-grid">
-          {/* your cards unchanged */}
-        </div>
+        {/* Dashboard content */}
+        <Dashboard walletAddress={walletAddress} />
       </div>
 
-      {/* Keep modal outside header for stability */}
-      <ConnectWallet />
+      {/* ONLY RENDER MODAL HERE — NO BUTTON */}
+      <ConnectWallet showButton={false} />
     </>
   );
 }
