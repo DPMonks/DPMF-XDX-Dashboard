@@ -43,8 +43,8 @@ export default function App() {
           <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
           <p className="dashboard-subtitle">Operational Intelligence Interface</p>
 
-          {/* BUTTON ONLY */}
-          <div className="wallet-box-left neon-button">
+          {/* Single left‑side Connect Wallet button */}
+          <div className="wallet-box-left">
             <ConnectWallet />
           </div>
 
@@ -61,7 +61,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* MODAL OUTSIDE HEADER */}
+      {/* Keep modal outside header for stability */}
       <ConnectWallet />
     </>
   );
