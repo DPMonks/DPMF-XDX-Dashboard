@@ -216,29 +216,38 @@ body {
   color: var(--dpmf-text-main);
 }
 
-/* MODAL */
+/* --- WALLET MODAL (FINAL FIXED VERSION) --- */
 .wallet-modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.7);
+  inset: 0;
   display: flex;
-  align-items: flex-start;
   justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.65);
   z-index: 9999;
-  padding-top: 140px;
+
+  /* Prevent flex reflow flicker */
+  pointer-events: all;
 }
 
 .wallet-modal {
-  background: #0a0a0a;
-  border: 1px solid #00eaff;
+  background: #101020;
+  border: 1px solid var(--dpmf-border-soft);
   border-radius: 12px;
   padding: 30px;
-  box-shadow: 0 0 20px #00eaff;
   text-align: center;
-  max-width: 400px;
+
+  /* Hard lock modal position */
+  position: relative;
+  top: 0;
+  left: 0;
+
+  /* Remove ANY movement */
+  transform: none !important;
+  transition: none !important;
+
+  /* Stable shadow */
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
 }
 
 .modal-title {
@@ -249,10 +258,17 @@ body {
 }
 
 .qr-image {
-  width: 220px;
-  height: 220px;
+  display: block;
+  margin: 1rem auto;
+  max-width: 240px;
+  height: auto;
+
+  /* Remove flicker caused by layout shifts */
+  position: relative;
+  left: 0;
+  right: 0;
+
   border-radius: 12px;
-  margin-bottom: 20px;
   box-shadow: 0 0 14px rgba(0,234,255,0.35);
 }
 
@@ -286,33 +302,4 @@ body {
 
 .cancel-wallet-btn:hover {
   opacity: 0.85;
-}
-
-/* WALLET MODAL FIX */
-.wallet-modal-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 9999;
-}
-
-.wallet-modal {
-  background: #101020;
-  border: 1px solid var(--dmf-border-soft);
-  border-radius: 8px;
-  padding: 1.5rem;
-  text-align: center;
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
-  transform: translateY(0);
-  transition: transform 0.2s ease-out;
-}
-
-.qr-image {
-  display: block;
-  margin: 1rem auto;
-  max-width: 240px;
-  height: auto;
 }
