@@ -48,13 +48,14 @@ export default function App() {
         {/* MAIN GRID */}
         <div className="dashboard-grid">
 
-          {/* TRADING CHART */}
+          {/* TRADING CHART (DEXSCREENER) */}
           <div className="dashboard-card neon-card">
             <h2 className="card-title">XDX/XRP Trading Chart</h2>
             <iframe
-              src="https://gatehub.net/markets/XDX+rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo/XRP"
+              src="https://dexscreener.com/xrpl/xdx-xrp"
               title="XDX/XRP Trading Chart"
               className="chart-iframe"
+              allowFullScreen
             ></iframe>
           </div>
 
