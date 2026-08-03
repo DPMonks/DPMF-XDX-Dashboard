@@ -13,6 +13,9 @@ export default function ConnectWallet() {
 
   async function startConnection() {
     try {
+      // Prevent duplicate payload requests
+      if (status === "loading" || status === "waiting") return;
+
       setStatus("loading");
 
       const payload = await createPayload();
@@ -23,10 +26,12 @@ export default function ConnectWallet() {
         return;
       }
 
+      // Set QR + mobile link
       setQr(payload.refs.qr_png);
       setMobileLink(payload.next?.always || payload.refs.deeplink_web);
       setStatus("waiting");
 
+      // Open websocket
       const socket = new WebSocket(payload.refs.websocket_status);
       setWs(socket);
 
@@ -49,6 +54,7 @@ export default function ConnectWallet() {
       };
 
       socket.onerror = (err) => console.error("WS ERROR:", err);
+
     } catch (err) {
       console.error("Wallet connect error:", err);
       setStatus("idle");

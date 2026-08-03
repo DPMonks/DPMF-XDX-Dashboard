@@ -27,17 +27,7 @@ export async function createPayload() {
     console.log("📦 FULL PAYLOAD RECEIVED FROM BACKEND:");
     console.log(JSON.stringify(payload, null, 2));
 
-    const refs = payload?.refs;
-
-    if (!refs?.qr_png || !refs?.websocket_status) {
-      console.error(
-        "❌ Invalid payload structure FULL PAYLOAD:",
-        JSON.stringify(payload, null, 2)
-      );
-      throw new Error("Invalid payload structure");
-    }
-
-    console.log("✅ Payload validated successfully.");
+    // ❌ Removed QR validation — ConnectWallet handles modal logic
     return payload;
 
   } catch (err) {
