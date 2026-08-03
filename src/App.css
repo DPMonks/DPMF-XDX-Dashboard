@@ -225,8 +225,6 @@ body {
   align-items: center;
   background: rgba(0, 0, 0, 0.65);
   z-index: 9999;
-
-  /* Prevent flex reflow flicker */
   pointer-events: all;
 }
 
@@ -236,17 +234,11 @@ body {
   border-radius: 12px;
   padding: 30px;
   text-align: center;
-
-  /* Hard lock modal position */
   position: relative;
   top: 0;
   left: 0;
-
-  /* Remove ANY movement */
   transform: none !important;
   transition: none !important;
-
-  /* Stable shadow */
   box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
 }
 
@@ -262,12 +254,9 @@ body {
   margin: 1rem auto;
   max-width: 240px;
   height: auto;
-
-  /* Remove flicker caused by layout shifts */
   position: relative;
   left: 0;
   right: 0;
-
   border-radius: 12px;
   box-shadow: 0 0 14px rgba(0,234,255,0.35);
 }
