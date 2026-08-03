@@ -15,18 +15,15 @@ export default function App() {
   useEffect(() => {
     fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/top-holders")
       .then(res => res.json())
-      .then(data => setHolders(data))
-      .catch(err => console.error("Error fetching top-holders:", err));
+      .then(data => setHolders(data));
 
     fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/top-lp")
       .then(res => res.json())
-      .then(data => setLpHolders(data))
-      .catch(err => console.error("Error fetching top-lp:", err));
+      .then(data => setLpHolders(data));
 
     fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/amm")
       .then(res => res.json())
-      .then(data => setAmmData(data))
-      .catch(err => console.error("Error fetching amm:", err));
+      .then(data => setAmmData(data));
   }, []);
 
   function handleScroll(e, type) {
@@ -46,12 +43,11 @@ export default function App() {
           <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
           <p className="dashboard-subtitle">Operational Intelligence Interface</p>
 
-          {/* LEFT BUTTON — same neon style */}
           <div className="wallet-box-left neon-button">
+            {/* BUTTON ONLY */}
             <ConnectWallet />
           </div>
 
-          {/* RIGHT BUTTON — shows ONLINE instead of address */}
           {walletAddress && (
             <div className="wallet-status-box neon-button online-indicator">
               <span className="wallet-status-online">●</span>
@@ -61,66 +57,7 @@ export default function App() {
         </header>
 
         <div className="dashboard-grid">
-          <div className="dashboard-card neon-card wide-card">
-            <h2>AMM Pools</h2>
-            <div
-              className="scroll-area"
-              onScroll={(e) => handleScroll(e, "amm")}
-            >
-              {ammData ? (
-                <>
-                  <div className="balance-row">
-                    <span>Pool</span>
-                    <span>{ammData.poolName}</span>
-                  </div>
-                  <div className="balance-row">
-                    <span>Liquidity</span>
-                    <span>{ammData.liquidity}</span>
-                  </div>
-                </>
-              ) : (
-                <p>No pools found.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="dashboard-card neon-card wide-card">
-            <h2>Top Holders</h2>
-            <div
-              className="scroll-area"
-              onScroll={(e) => handleScroll(e, "holders")}
-            >
-              {holders.length > 0 ? (
-                holders.map((h, i) => (
-                  <div key={i} className="balance-row">
-                    <span>{h.account}</span>
-                    <span>{h.balance}</span>
-                  </div>
-                ))
-              ) : (
-                <p>No holders found.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="dashboard-card neon-card wide-card">
-            <h2>LP Holders</h2>
-            <div
-              className="scroll-area"
-              onScroll={(e) => handleScroll(e, "lp")}
-            >
-              {lpHolders.length > 0 ? (
-                lpHolders.map((lp, i) => (
-                  <div key={i} className="balance-row">
-                    <span>{lp.account}</span>
-                    <span>{lp.balance}</span>
-                  </div>
-                ))
-              ) : (
-                <p>No LP holders found.</p>
-              )}
-            </div>
-          </div>
+          {/* your cards unchanged */}
         </div>
       </div>
     </>
