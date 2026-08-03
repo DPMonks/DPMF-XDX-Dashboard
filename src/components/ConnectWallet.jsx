@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { useWallet } from "../context/WalletContext";
 import { createPayload, getPayloadResult } from "../xaman/xamanClient";
-
-import ConnectWalletButton from "./ConnectWalletButton";
-import ConnectWalletModal from "./ConnectWalletModal";
+import WalletButton from "./WalletButton";
 
 export default function ConnectWallet() {
   const { connectWallet } = useWallet();
@@ -67,17 +65,37 @@ export default function ConnectWallet() {
 
   return (
     <>
-      <ConnectWalletButton
+      {/* BUTTON ONLY */}
+      <WalletButton
         onClick={startConnection}
         disabled={status === "loading" || status === "waiting"}
       />
 
-      <ConnectWalletModal
-        qr={qr}
-        status={status}
-        mobileLink={mobileLink}
-        onCancel={closeModal}
-      />
+      {/* MODAL RENDERED OUTSIDE HEADER */}
+      {qr && (
+        <div className="wallet-modal-overlay">
+          <div className="wallet-modal">
+            <h2 className="modal-title">
+              {status === "loading" && "Preparing…"}
+              {status === "waiting" && "Scan with Xaman"}
+            </h2>
+
+            {status !== "loading" && (
+              <img src={qr} alt="QR" className="qr-image" />
+            )}
+
+            {mobileLink && (
+              <a href={mobileLink} className="mobile-link-btn">
+                Open in Xaman App
+              </a>
+            )}
+
+            <button onClick={closeModal} className="cancel-wallet-btn">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

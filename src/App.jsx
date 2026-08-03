@@ -43,7 +43,7 @@ export default function App() {
           <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
           <p className="dashboard-subtitle">Operational Intelligence Interface</p>
 
-          {/* BUTTON ONLY — NO MODAL HERE */}
+          {/* BUTTON ONLY */}
           <div className="wallet-box-left neon-button">
             <ConnectWallet />
           </div>
@@ -61,7 +61,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* MOVE MODAL OUTSIDE HEADER */}
+      {/* MODAL OUTSIDE HEADER */}
       <ConnectWallet />
     </>
   );
