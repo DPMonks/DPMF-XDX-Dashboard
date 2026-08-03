@@ -1,33 +1,40 @@
 // src/xaman/xamanClient.js
 
-// Create a new Xaman payload via your backend
+// Create a new Xaman payload directly from Xaman API
 export async function createPayload() {
   try {
-    console.log("📡 XamanClient: Sending payload request to backend...");
+    console.log("📡 XamanClient: Creating payload directly from Xaman...");
 
     const response = await fetch(
-      "https://dpmf-xdx-indexer-production.up.railway.app/api/xaman/create-payload",
+      "https://xumm.app/api/v1/platform/payload",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({})
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": import.meta.env.VITE_XUMM_API_KEY,
+          "X-API-Secret": import.meta.env.VITE_XUMM_API_SECRET
+        },
+        body: JSON.stringify({
+          txjson: {
+            TransactionType: "SignIn"
+          }
+        })
       }
     );
 
-    console.log("📡 XamanClient: Backend response status:", response.status);
+    console.log("📡 XamanClient: Xaman response status:", response.status);
 
     if (!response.ok) {
       const text = await response.text();
-      console.error("❌ Backend returned non-OK response:", text);
+      console.error("❌ Xaman returned non-OK response:", text);
       throw new Error("Failed to create payload");
     }
 
     const payload = await response.json();
 
-    console.log("📦 FULL PAYLOAD RECEIVED FROM BACKEND:");
+    console.log("📦 FULL PAYLOAD RECEIVED FROM XAMAN:");
     console.log(JSON.stringify(payload, null, 2));
 
-    // ❌ Removed QR validation — ConnectWallet handles modal logic
     return payload;
 
   } catch (err) {
@@ -40,7 +47,13 @@ export async function createPayload() {
 export async function getPayloadResult(uuid) {
   try {
     const response = await fetch(
-      `https://dpmf-xdx-indexer-production.up.railway.app/api/xaman/payload-result?uuid=${uuid}`
+      `https://xumm.app/api/v1/platform/payload/${uuid}`,
+      {
+        headers: {
+          "X-API-Key": import.meta.env.VITE_XUMM_API_KEY,
+          "X-API-Secret": import.meta.env.VITE_XUMM_API_SECRET
+        }
+      }
     );
 
     if (!response.ok) {
