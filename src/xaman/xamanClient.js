@@ -1,38 +1,29 @@
 // src/xaman/xamanClient.js
-// Dashboard-side Xaman payload creator (no indexer dependency)
+// Dashboard-side client that calls the INDEXER (not XUMM)
 
 export async function createPayload() {
   try {
-    console.log("📡 XamanClient: Creating payload directly from Xaman...");
+    console.log("📡 XamanClient: Requesting payload from INDEXER...");
 
     const response = await fetch(
-      "https://xumm.app/api/v1/platform/payload",
+      "https://dpmf-xdx-indexer-production.up.railway.app/api/xaman/create-payload",
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": import.meta.env.VITE_XUMM_API_KEY,
-          "X-API-Secret": import.meta.env.VITE_XUMM_API_SECRET
-        },
-        body: JSON.stringify({
-          txjson: {
-            TransactionType: "SignIn"
-          }
-        })
+        headers: { "Content-Type": "application/json" }
       }
     );
 
-    console.log("📡 XamanClient: Xaman response status:", response.status);
+    console.log("📡 XamanClient: Indexer response status:", response.status);
 
     if (!response.ok) {
       const text = await response.text();
-      console.error("❌ Xaman returned non-OK response:", text);
+      console.error("❌ Indexer returned non-OK response:", text);
       throw new Error("Failed to create payload");
     }
 
     const payload = await response.json();
 
-    console.log("📦 FULL PAYLOAD RECEIVED FROM XAMAN:");
+    console.log("📦 FULL PAYLOAD RECEIVED FROM INDEXER:");
     console.log(JSON.stringify(payload, null, 2));
 
     return payload;
@@ -47,13 +38,7 @@ export async function createPayload() {
 export async function getPayloadResult(uuid) {
   try {
     const response = await fetch(
-      `https://xumm.app/api/v1/platform/payload/${uuid}`,
-      {
-        headers: {
-          "X-API-Key": import.meta.env.VITE_XUMM_API_KEY,
-          "X-API-Secret": import.meta.env.VITE_XUMM_API_SECRET
-        }
-      }
+      `https://dpmf-xdx-indexer-production.up.railway.app/api/xaman/payload-result?uuid=${uuid}`
     );
 
     if (!response.ok) {
