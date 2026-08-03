@@ -260,3 +260,29 @@ body {
 .cancel-wallet-btn:hover {
   opacity: 0.85;
 }
+/* Ensure page scrolls beyond chart */
+html, body {
+  height: auto;
+  overflow-y: auto;
+}
+
+/* Allow dashboard container to expand naturally */
+.dashboard-container {
+  min-height: 100vh;
+  overflow-y: visible;
+}
+
+/* Prevent iframe from blocking scroll */
+.chart-iframe {
+  width: 100%;
+  height: 600px;
+  border: 1px solid rgba(0,234,255,0.3);
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(0,234,255,0.25);
+  display: block;
+  margin-bottom: 40px; /* buffer before next container */
+}
+.dashboard-scroll-wrapper {
+  overflow-y: auto;
+  padding-bottom: 60px;
+}
