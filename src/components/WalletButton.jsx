@@ -15,8 +15,8 @@ export default function WalletButton({ onClick }) {
         cursor: "pointer",
         display: "flex",
         alignItems: "center",
-        gap: "10px",
-        zIndex: 999999
+        gap: "10px"
+        // ❌ REMOVE zIndex COMPLETELY
       }}
     >
       Connect Wallet
