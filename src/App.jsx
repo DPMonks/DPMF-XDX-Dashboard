@@ -3,15 +3,13 @@ import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
 import { useWallet } from "./context/WalletContext";
-import Dashboard from "./components/Dashboard";
 
 export default function App() {
   const { walletAddress } = useWallet();
 
   const [holders, setHolders] = useState([]);
   const [lpHolders, setLpHolders] = useState([]);
-  const [ammData, setAmmData] = useState(null);
-  const [page, setPage] = useState(1);
+  const [ammData, setAmmData] = useState([]);
 
   useEffect(() => {
     fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/top-holders")
@@ -27,16 +25,6 @@ export default function App() {
       .then(data => setAmmData(data));
   }, []);
 
-  function handleScroll(e, type) {
-    const bottom =
-      e.target.scrollHeight - e.target.scrollTop === e.target.clientHeight;
-
-    if (bottom) {
-      setPage(prev => prev + 1);
-      console.log(`Load more ${type} page ${page + 1}`);
-    }
-  }
-
   return (
     <>
       <div className="dashboard-container">
@@ -44,7 +32,7 @@ export default function App() {
           <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
           <p className="dashboard-subtitle">Operational Intelligence Interface</p>
 
-          {/* KEEP ONLY THIS BUTTON */}
+          {/* WALLET BUTTON */}
           <div className="wallet-box-left">
             <ConnectWallet showButton={true} />
           </div>
@@ -57,11 +45,62 @@ export default function App() {
           )}
         </header>
 
-        {/* Dashboard content */}
-        <Dashboard walletAddress={walletAddress} />
+        {/* MAIN GRID */}
+        <div className="dashboard-grid">
+
+          {/* TRADING CHART */}
+          <div className="dashboard-card neon-card">
+            <h2 className="card-title">XDX/XRP Trading Chart</h2>
+            <iframe
+              src="https://gatehub.net/markets/XDX+rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo/XRP"
+              title="XDX/XRP Trading Chart"
+              className="chart-iframe"
+            ></iframe>
+          </div>
+
+          {/* TOP HOLDERS */}
+          <div className="dashboard-card neon-card">
+            <h2 className="card-title">Top XDX Holders</h2>
+            <div className="scroll-area">
+              {holders.map((h) => (
+                <div key={h.account} className="balance-row">
+                  <span>{h.rank}. {h.account}</span>
+                  <span>{h.balance}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* LP HOLDERS */}
+          <div className="dashboard-card neon-card">
+            <h2 className="card-title">LP Holders</h2>
+            <div className="scroll-area">
+              {lpHolders.map((lp) => (
+                <div key={lp.account} className="balance-row">
+                  <span>{lp.rank}. {lp.account}</span>
+                  <span>{lp.lp_balance}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* AMM POOLS */}
+          <div className="dashboard-card neon-card">
+            <h2 className="card-title">AMM Pools</h2>
+            <div className="scroll-area">
+              {ammData.map((pool, i) => (
+                <div key={i} className="balance-row">
+                  <span>{pool.pool}</span>
+                  <span>TVL: {pool.tvl}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
       </div>
 
-      {/* ONLY RENDER MODAL HERE — NO BUTTON */}
+      {/* MODAL ONLY */}
       <ConnectWallet showButton={false} />
     </>
   );
