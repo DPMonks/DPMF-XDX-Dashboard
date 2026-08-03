@@ -287,3 +287,32 @@ body {
 .cancel-wallet-btn:hover {
   opacity: 0.85;
 }
+
+/* WALLET MODAL FIX */
+.wallet-modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9999;
+}
+
+.wallet-modal {
+  background: #101020;
+  border: 1px solid var(--dmf-border-soft);
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: center;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+  transform: translateY(0);
+  transition: transform 0.2s ease-out;
+}
+
+.qr-image {
+  display: block;
+  margin: 1rem auto;
+  max-width: 240px;
+  height: auto;
+}
