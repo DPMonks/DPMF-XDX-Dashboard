@@ -1,6 +1,6 @@
 // src/xaman/xamanClient.js
+// Dashboard-side Xaman payload creator (no indexer dependency)
 
-// Create a new Xaman payload directly from Xaman API
 export async function createPayload() {
   try {
     console.log("📡 XamanClient: Creating payload directly from Xaman...");
