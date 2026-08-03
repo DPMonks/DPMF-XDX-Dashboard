@@ -3,6 +3,7 @@ import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
 import { useWallet } from "./context/WalletContext";
+import DexChart from "./components/DexChart";   // ⭐ ADD THIS
 
 export default function App() {
   const { walletAddress } = useWallet();
@@ -51,12 +52,9 @@ export default function App() {
           {/* TRADING CHART (DEXSCREENER) */}
           <div className="dashboard-card neon-card">
             <h2 className="card-title">XDX/XRP Trading Chart</h2>
-            <iframe
-              src="https://dexscreener.com/xrpl/xdx-xrp"
-              title="XDX/XRP Trading Chart"
-              className="chart-iframe"
-              allowFullScreen
-            ></iframe>
+
+            {/* ⭐ REPLACED IFRAME WITH YOUR FULL DEXCHART COMPONENT */}
+            <DexChart />
           </div>
 
           {/* TOP HOLDERS */}
