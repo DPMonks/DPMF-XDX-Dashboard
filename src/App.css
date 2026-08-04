@@ -398,3 +398,9 @@ body {
   color: #000;
   border-color: #00ff6a;
 }
+.error-message {
+  color: #ff4d4d;
+  text-align: center;
+  font-weight: 600;
+  margin-top: 12px;
+}
