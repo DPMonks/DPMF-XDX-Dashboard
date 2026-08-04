@@ -3,7 +3,11 @@ import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
 import { useWallet } from "./context/WalletContext";
-import DexChart from "./components/DexChart";   // ⭐ ADD THIS
+import DexChart from "./components/DexChart";
+
+// ⭐ NEW COMPONENTS
+import TokenDetails from "./components/TokenDetails";
+import ActivityChart from "./components/ActivityChart";
 
 export default function App() {
   const { walletAddress } = useWallet();
@@ -13,15 +17,17 @@ export default function App() {
   const [ammData, setAmmData] = useState([]);
 
   useEffect(() => {
-    fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/top-holders")
+    const API = "https://dpmf-xdx-indexer-production.up.railway.app/api";
+
+    fetch(`${API}/top-holders`)
       .then(res => res.json())
       .then(data => setHolders(data));
 
-    fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/top-lp")
+    fetch(`${API}/top-lp`)
       .then(res => res.json())
       .then(data => setLpHolders(data));
 
-    fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/amm")
+    fetch(`${API}/amm`)
       .then(res => res.json())
       .then(data => setAmmData(data));
   }, []);
@@ -49,11 +55,21 @@ export default function App() {
         {/* MAIN GRID */}
         <div className="dashboard-grid">
 
+          {/* ⭐ NEW: TOKEN DETAILS */}
+          <div className="dashboard-card neon-card">
+            <h2 className="card-title">Token Details</h2>
+            <TokenDetails />
+          </div>
+
+          {/* ⭐ NEW: ACTIVITY CHART */}
+          <div className="dashboard-card neon-card">
+            <h2 className="card-title">Activity Chart</h2>
+            <ActivityChart />
+          </div>
+
           {/* TRADING CHART (DEXSCREENER) */}
           <div className="dashboard-card neon-card">
             <h2 className="card-title">XDX/XRP Trading Chart</h2>
-
-            {/* ⭐ REPLACED IFRAME WITH YOUR FULL DEXCHART COMPONENT */}
             <DexChart />
           </div>
 
