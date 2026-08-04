@@ -2,54 +2,73 @@ import { useEffect, useState } from "react";
 import Skeleton from "./Skeleton";
 
 export default function TokenDetails() {
-  const [data, setData] = useState(null);
+  const [staticData, setStaticData] = useState(null);
+  const [liveData, setLiveData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
-    try {
-      setLoading(true);
-      const res = await fetch("https://dpmf-xdx-indexer-production.up.railway.app/api/token-details");
-      const json = await res.json();
-      setData(json);
-    } finally {
-      setLoading(false);
-    }
+  async function loadStatic() {
+    const res = await fetch("/api/token-details-static");
+    const json = await res.json();
+    setStaticData(json);
+  }
+
+  async function loadLive() {
+    const res = await fetch("/api/token-details-live");
+    const json = await res.json();
+    setLiveData(json);
   }
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 60000);
+    async function init() {
+      setLoading(true);
+
+      // Load static once
+      await loadStatic();
+
+      // Load live immediately
+      await loadLive();
+
+      setLoading(false);
+    }
+
+    init();
+
+    // Refresh live data every 4 seconds
+    const id = setInterval(loadLive, 4000);
     return () => clearInterval(id);
   }, []);
 
+  if (loading || !staticData || !liveData) {
+    return (
+      <div className="token-details-grid">
+        <Skeleton height={40} />
+        <Skeleton height={40} />
+        <Skeleton height={40} />
+        <Skeleton height={40} />
+        <Skeleton height={40} />
+        <Skeleton height={40} />
+      </div>
+    );
+  }
+
+  // Merge static + live
+  const data = { ...staticData, ...liveData };
+
   return (
     <div className="token-details-grid">
-      {loading && !data ? (
-        <>
-          <Skeleton height={40} />
-          <Skeleton height={40} />
-          <Skeleton height={40} />
-          <Skeleton height={40} />
-          <Skeleton height={40} />
-          <Skeleton height={40} />
-        </>
-      ) : (
-        <>
-          <Detail label="Token Type" value={data.tokenType} />
-          <Detail label="Rank" value={`#${data.rank}`} />
-          <Detail label="Market Cap" value={`$${data.marketCap.toLocaleString()}`} />
-          <Detail label="FDV" value={`$${data.fdv.toLocaleString()}`} />
-          <Detail label="Circulating" value={data.circulating.toLocaleString()} />
-          <Detail label="Total Supply" value={data.totalSupply.toLocaleString()} />
-          <Detail label="Holders" value={data.holders.toLocaleString()} />
-          <Detail label="Trustlines" value={data.trustlines.toLocaleString()} />
-          <Detail label="Issuer Fee" value={data.issuerFee} />
-          <Detail label="Blackholed" value={data.blackholed ? "Yes" : "No"} />
-          <Detail label="Created" value={data.created} />
-          <Detail label="ATH" value={`${data.ath.price} (${data.ath.date})`} />
-          <Detail label="ATL" value={`${data.atl.price} (${data.atl.date})`} />
-        </>
-      )}
+      <Detail label="Token Type" value={data.tokenType} />
+      <Detail label="Rank" value={`#${data.rank}`} />
+      <Detail label="Market Cap" value={`$${data.marketCap.toLocaleString()}`} />
+      <Detail label="FDV" value={`$${data.fdv.toLocaleString()}`} />
+      <Detail label="Circulating" value={data.circulating.toLocaleString()} />
+      <Detail label="Total Supply" value={data.totalSupply.toLocaleString()} />
+      <Detail label="Holders" value={data.holders.toLocaleString()} />
+      <Detail label="Trustlines" value={data.trustlines.toLocaleString()} />
+      <Detail label="Issuer Fee" value={data.issuerFee} />
+      <Detail label="Blackholed" value={data.blackholed ? "Yes" : "No"} />
+      <Detail label="Created" value={data.created} />
+      <Detail label="ATH" value={`${data.ath.price} (${data.ath.date})`} />
+      <Detail label="ATL" value={`${data.atl.price} (${data.atl.date})`} />
     </div>
   );
 }
