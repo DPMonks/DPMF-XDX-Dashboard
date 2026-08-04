@@ -280,22 +280,6 @@ body {
   gap: 12px;
 }
 
-.detail {
-  background: #0b0f1a;
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.detail-label {
-  font-size: 12px;
-  color: #8a93a5;
-}
-
-.detail-value {
-  font-size: 14px;
-  font-weight: 600;
-  color: #ffffff;
-}
 .activity-chart {
   margin-bottom: 24px;
 }
@@ -343,29 +327,95 @@ body {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+/* TOKEN DETAILS GRID */
 .token-details-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  gap: 14px; /* slightly wider gap for breathing room */
 }
 
 .token-detail {
-  padding: 12px;
-  background: #0b0f1a;
-  border: 1px solid #1f2535;
-  border-radius: 8px;
+  padding: 14px;
+  background: var(--dpmf-bg-elevated);
+  border: 1px solid var(--dpmf-border-soft);
+  border-radius: var(--dpmf-radius-card);
+  box-shadow: 0 0 10px rgba(199,112,255,0.15);
+  transition: transform var(--dpmf-transition-fast), box-shadow var(--dpmf-transition-fast);
 }
 
+.token-detail:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 16px rgba(199,112,255,0.25);
+}
+
+/* LABEL + VALUE SPACING */
 .token-detail-label {
-  font-size: 12px;
-  color: #7f8ba8;
+  font-size: 13px;
+  color: var(--dpmf-text-muted);
+  display: block;
+  margin-bottom: 4px; /* adds space between label and value */
+  letter-spacing: 0.03em;
 }
 
 .token-detail-value {
   font-size: 15px;
   font-weight: 600;
-  color: #00ff6a;
+  color: #d8caff; /* soft violet-white accent */
+  letter-spacing: 0.02em;
 }
+/* TOKEN DETAIL – RESPONSIVE & TYPOGRAPHY REFINEMENT */
+.token-detail {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 78px; /* consistent height across cards */
+}
+
+/* LABEL */
+.token-detail-label {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.85;
+  margin-bottom: 6px; /* slightly more spacing */
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* VALUE */
+.token-detail-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #d8caff; /* soft violet-white */
+  line-height: 1.35;
+}
+
+/* MOBILE OPTIMISATION */
+@media (max-width: 600px) {
+  .token-details-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .token-detail {
+    padding: 10px;
+  }
+
+  .token-detail-label {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .token-detail-value {
+    font-size: 15px;
+  }
+}
+
+/* OPTIONAL: SUBTLE GLOW ON HOVER FOR BRAND FEEL */
+.token-detail:hover {
+  box-shadow: 0 0 12px rgba(199,112,255,0.22);
+  border-color: rgba(199,112,255,0.35);
+}
+
 .activity-chart-container {
   display: flex;
   flex-direction: column;
@@ -403,4 +453,52 @@ body {
   text-align: center;
   font-weight: 600;
   margin-top: 12px;
+}
+/* ACTIVITY CHART CONTROLS – BRAND REFINEMENT */
+.activity-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* TABS & RANGES BASE STYLE */
+.tabs, .ranges {
+  display: flex;
+  gap: 8px;
+}
+
+.tab, .range {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--dpmf-bg-elevated);
+  border: 1px solid var(--dpmf-border-soft);
+  color: var(--dpmf-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--dpmf-transition-fast);
+}
+
+/* HOVER STATE */
+.tab:hover, .range:hover {
+  color: var(--dpmf-text-main);
+  border-color: var(--dpmf-neon-violet-soft);
+  box-shadow: 0 0 10px rgba(199,112,255,0.25);
+}
+
+/* ACTIVE STATE */
+.tab.active, .range.active {
+  background: rgba(199,112,255,0.25);
+  color: var(--dpmf-text-main);
+  border-color: var(--dpmf-neon-violet);
+  box-shadow: 0 0 12px rgba(199,112,255,0.35);
+}
+
+/* MOBILE OPTIMISATION */
+@media (max-width: 600px) {
+  .tab, .range {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
 }
