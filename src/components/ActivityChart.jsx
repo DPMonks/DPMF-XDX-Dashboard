@@ -25,7 +25,7 @@ export default function ActivityChart() {
         `https://dpmf-xdx-indexer-production.up.railway.app/api/activity-chart?range=${r}`
       );
       const json = await res.json();
-      setData(json);
+      setData(Array.isArray(json) ? json : []);
     } finally {
       setLoading(false);
     }

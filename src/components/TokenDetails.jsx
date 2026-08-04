@@ -7,13 +7,17 @@ export default function TokenDetails() {
   const [loading, setLoading] = useState(true);
 
   async function loadStatic() {
-    const res = await fetch("/api/token-details-static");
+    const res = await fetch(
+      "https://dpmf-xdx-indexer-production.up.railway.app/api/token-details-static"
+    );
     const json = await res.json();
     setStaticData(json);
   }
 
   async function loadLive() {
-    const res = await fetch("/api/token-details-live");
+    const res = await fetch(
+      "https://dpmf-xdx-indexer-production.up.railway.app/api/token-details-live"
+    );
     const json = await res.json();
     setLiveData(json);
   }
@@ -22,10 +26,7 @@ export default function TokenDetails() {
     async function init() {
       setLoading(true);
 
-      // Load static once
       await loadStatic();
-
-      // Load live immediately
       await loadLive();
 
       setLoading(false);
@@ -33,7 +34,6 @@ export default function TokenDetails() {
 
     init();
 
-    // Refresh live data every 4 seconds
     const id = setInterval(loadLive, 4000);
     return () => clearInterval(id);
   }, []);
@@ -51,7 +51,6 @@ export default function TokenDetails() {
     );
   }
 
-  // Merge static + live
   const data = { ...staticData, ...liveData };
 
   return (
