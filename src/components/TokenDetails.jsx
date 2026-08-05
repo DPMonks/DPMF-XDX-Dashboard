@@ -55,44 +55,49 @@ export default function TokenDetails() {
 
   return (
     <div className="token-details-grid">
-
       <Detail label="Token Type" value={data.tokenType} />
       <Detail label="Rank" value={`#${data.rank}`} />
 
-      {/* XRPL-Wide Market Cap */}
       <Detail
         label="XDX/USD Market Cap"
         value={`$${data.xrplMarketCap.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
       />
 
-      {/* AMM Market Cap */}
       <Detail
         label="AMM Market Cap"
         value={`$${data.ammMarketCap.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
       />
 
-      {/* Circulating Market Cap */}
       <Detail
         label="Circulating Market Cap"
-        value={`$${data.marketCap?.toLocaleString(undefined, { maximumFractionDigits: 2 }) || "N/A"}`}
+        value={`$${data.circulatingMarketCap.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
       />
 
-      {/* FDV */}
       <Detail
-        label="FDV"
-        value={`$${data.fdv?.toLocaleString(undefined, { maximumFractionDigits: 2 }) || "N/A"}`}
+        label="Circulating"
+        value={data.circulating.toLocaleString()}
       />
 
-      <Detail label="Circulating" value={data.circulating.toLocaleString()} />
-      <Detail label="Total Supply" value={data.totalSupply.toLocaleString()} />
-      <Detail label="Holders" value={data.holders.toLocaleString()} />
-      <Detail label="Trustlines" value={data.trustlines.toLocaleString()} />
+      <Detail
+        label="Total Supply"
+        value={data.totalSupply.toLocaleString()}
+      />
+
+      <Detail
+        label="Holders"
+        value={data.holders.toLocaleString()}
+      />
+
+      <Detail
+        label="Trustlines"
+        value={data.trustlines.toLocaleString()}
+      />
+
       <Detail label="Issuer Fee" value={data.issuerFee} />
       <Detail label="Blackholed" value={data.blackholed ? "Yes" : "No"} />
       <Detail label="Created" value={data.created} />
       <Detail label="ATH" value={`${data.ath.price} (${data.ath.date})`} />
       <Detail label="ATL" value={`${data.atl.price} (${data.atl.date})`} />
-
     </div>
   );
 }
