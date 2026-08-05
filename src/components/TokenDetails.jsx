@@ -84,6 +84,11 @@ export default function TokenDetails() {
       />
 
       <Detail
+        label="Burned Supply"
+        value={data.burnedSupply.toLocaleString()}
+      />
+
+      <Detail
         label="Holders"
         value={data.holders.toLocaleString()}
       />
