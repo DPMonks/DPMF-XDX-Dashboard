@@ -55,10 +55,34 @@ export default function TokenDetails() {
 
   return (
     <div className="token-details-grid">
+
       <Detail label="Token Type" value={data.tokenType} />
       <Detail label="Rank" value={`#${data.rank}`} />
-      <Detail label="Market Cap" value={`$${data.marketCap.toLocaleString()}`} />
-      <Detail label="FDV" value={`$${data.fdv.toLocaleString()}`} />
+
+      {/* XRPL-Wide Market Cap */}
+      <Detail
+        label="XDX/USD Market Cap"
+        value={`$${data.xrplMarketCap.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+      />
+
+      {/* AMM Market Cap */}
+      <Detail
+        label="AMM Market Cap"
+        value={`$${data.ammMarketCap.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+      />
+
+      {/* Circulating Market Cap */}
+      <Detail
+        label="Circulating Market Cap"
+        value={`$${data.marketCap?.toLocaleString(undefined, { maximumFractionDigits: 2 }) || "N/A"}`}
+      />
+
+      {/* FDV */}
+      <Detail
+        label="FDV"
+        value={`$${data.fdv?.toLocaleString(undefined, { maximumFractionDigits: 2 }) || "N/A"}`}
+      />
+
       <Detail label="Circulating" value={data.circulating.toLocaleString()} />
       <Detail label="Total Supply" value={data.totalSupply.toLocaleString()} />
       <Detail label="Holders" value={data.holders.toLocaleString()} />
@@ -68,6 +92,7 @@ export default function TokenDetails() {
       <Detail label="Created" value={data.created} />
       <Detail label="ATH" value={`${data.ath.price} (${data.ath.date})`} />
       <Detail label="ATL" value={`${data.atl.price} (${data.atl.date})`} />
+
     </div>
   );
 }
