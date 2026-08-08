@@ -18,14 +18,32 @@ export default function ActivityChart() {
   const [range, setRange] = useState("1M");
   const [loading, setLoading] = useState(true);
 
-  async function load(r) {
+  // cache to avoid redundant fetches
+  const cacheKey = `activity-${range}`;
+  const cached = sessionStorage.getItem(cacheKey);
+
+  async function load(r, useCache = true) {
     try {
       setLoading(true);
+
+      // use cached data if available
+      if (useCache && cached) {
+        setData(JSON.parse(cached));
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch(
         `https://dpmf-xdx-indexer-production.up.railway.app/api/activity-chart?range=${r}`
       );
       const json = await res.json();
-      setData(Array.isArray(json) ? json : []);
+
+      if (Array.isArray(json)) {
+        setData(json);
+        sessionStorage.setItem(cacheKey, JSON.stringify(json));
+      } else {
+        setData([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -33,7 +51,7 @@ export default function ActivityChart() {
 
   useEffect(() => {
     load(range);
-    const id = setInterval(() => load(range), 60000);
+    const id = setInterval(() => load(range, false), 60000); // refresh every minute
     return () => clearInterval(id);
   }, [range]);
 
