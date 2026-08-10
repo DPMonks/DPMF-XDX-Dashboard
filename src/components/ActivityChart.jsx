@@ -18,15 +18,15 @@ export default function ActivityChart() {
   const [range, setRange] = useState("1M");
   const [loading, setLoading] = useState(true);
 
-  // cache to avoid redundant fetches
+  // cache key per range
   const cacheKey = `activity-${range}`;
-  const cached = sessionStorage.getItem(cacheKey);
 
   async function load(r, useCache = true) {
     try {
       setLoading(true);
 
-      // use cached data if available
+      // read cache
+      const cached = sessionStorage.getItem(cacheKey);
       if (useCache && cached) {
         setData(JSON.parse(cached));
         setLoading(false);
@@ -36,14 +36,25 @@ export default function ActivityChart() {
       const res = await fetch(
         `https://dpmf-xdx-indexer-production.up.railway.app/api/activity-chart?range=${r}`
       );
+
+      if (!res.ok) {
+        console.error("Activity chart fetch failed:", res.status);
+        setData([]);
+        setLoading(false);
+        return;
+      }
+
       const json = await res.json();
 
-      if (Array.isArray(json)) {
+      if (Array.isArray(json) && json.length > 0) {
         setData(json);
         sessionStorage.setItem(cacheKey, JSON.stringify(json));
       } else {
         setData([]);
       }
+    } catch (err) {
+      console.error("Activity chart error:", err);
+      setData([]);
     } finally {
       setLoading(false);
     }
