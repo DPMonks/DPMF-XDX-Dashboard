@@ -43,6 +43,7 @@ const en = {
   burnedSupply: "Burned / issuer locked",
   issuerLocked: "Issuer locked",
   issuerAccount: "Issuer",
+  ammAccount: "AMM",
   xdxPerXrp: "XDX / XRP",
   holders: "Holders",
   trustlines: "Trustlines",

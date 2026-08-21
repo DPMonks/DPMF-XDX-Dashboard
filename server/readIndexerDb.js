@@ -12,6 +12,7 @@ import {
   recordedXdxUsdFromPrices,
   xrpPerXdx,
 } from "../src/utils/recordedPrice.js";
+import { poolAssetSplit, quoteUsdFromMap } from "../src/utils/poolSplit.js";
 import {
   asIso,
   buildTodayOwnersPayload,
@@ -707,6 +708,63 @@ async function loadLpTrustlineChart(db, pool = "all") {
   }));
 }
 
+async function loadAmmReserveIndex(db) {
+  const byName = new Map();
+  const byAmm = new Map();
+  const take = (row, overwrite) => {
+    if (!row) return;
+    const name = String(row.pool_name || "").toUpperCase();
+    const extra = {
+      reserve_asset: Number(row.reserve_asset || 0),
+      reserve_currency: Number(row.reserve_currency || 0),
+      lp_supply: Number(row.lp_supply || 0) || null,
+      trading_fee: Number(row.trading_fee || 0) || null,
+      timestamp: row.timestamp || null,
+    };
+    if (name && (overwrite || !byName.has(name))) byName.set(name, extra);
+    if (row.amm_account && (overwrite || !byAmm.has(row.amm_account))) {
+      byAmm.set(row.amm_account, extra);
+    }
+  };
+
+  const history = await tryQuery(
+    db,
+    `SELECT pool_name, reserve_asset, reserve_currency, lp_supply, timestamp
+     FROM amm_pool_history
+     WHERE reserve_currency::numeric > 0
+     ORDER BY timestamp DESC
+     LIMIT 4000`
+  );
+  for (const row of history.rows) take(row, false);
+
+  const latest = await tryQuery(
+    db,
+    `SELECT pool_name, amm_account, reserve_asset, reserve_currency, lp_supply,
+            trading_fee, timestamp
+     FROM amm_pool_latest`
+  );
+  for (const row of latest.rows) take(row, true);
+  return { byName, byAmm };
+}
+
+async function loadQuoteUsdMap(db, xrpUsd) {
+  const prices = { XRP: Number(xrpUsd) || 0 };
+  const latest = await tryQuery(db, "SELECT asset, price_usd FROM price_latest");
+  for (const row of latest.rows) {
+    const key = String(row.asset || "").toUpperCase();
+    const usd = Number(row.price_usd);
+    if (key && usd > 0 && !looksLikeXrpUsd(usd)) prices[key] = usd;
+    else if (key && usd > 0 && key !== "XDX") prices[key] = usd;
+  }
+  const all = await tryQuery(db, "SELECT currency, price_usd FROM price_latest_all");
+  for (const row of all.rows) {
+    const key = String(row.currency || "").toUpperCase();
+    const usd = Number(row.price_usd);
+    if (key && usd > 0 && prices[key] == null) prices[key] = usd;
+  }
+  return prices;
+}
+
 async function loadXdxLpPools(db) {
   const stored = await tryQuery(
     db,
@@ -718,18 +776,64 @@ async function loadXdxLpPools(db) {
   if (!stored.rows.length) {
     return { count: 0, pools: [], catching_up: true, source: "db" };
   }
+
+  const optional = await tryQuery(
+    db,
+    `SELECT amm_account, reserve_quote, reserve_currency
+     FROM xdx_amm_pools`
+  );
+  const optionalByAmm = new Map(
+    optional.rows.map((row) => [
+      row.amm_account,
+      Number(row.reserve_quote || row.reserve_currency || 0),
+    ])
+  );
+
+  const reserves = await loadAmmReserveIndex(db);
+  const quote = await loadXrpQuote(db);
+  const xrpUsd = Number(quote.usd || 0);
+  const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
+  const quotePrices = await loadQuoteUsdMap(db, xrpUsd);
+
   return {
     count: stored.rows.length,
-    pools: stored.rows.map((row) => ({
-      pool_name: row.pool_name,
-      pool: row.pool_name,
-      amm_account: row.amm_account,
-      quote: row.quote,
-      quote_issuer: row.quote_issuer,
-      lp_currency: row.lp_currency_hex,
-      reserve_xdx: Number(row.reserve_xdx || 0),
-      updated: row.updated_at,
-    })),
+    pools: stored.rows.map((row) => {
+      const extra =
+        reserves.byAmm.get(row.amm_account) ||
+        reserves.byName.get(String(row.pool_name || "").toUpperCase()) ||
+        {};
+      const reserveXdx = Number(row.reserve_xdx || extra.reserve_asset || 0);
+      const reserveQuote =
+        Number(optionalByAmm.get(row.amm_account) || 0) ||
+        Number(extra.reserve_currency || 0) ||
+        null;
+      const quoteUsd = quoteUsdFromMap(row.quote, quotePrices);
+      const split = poolAssetSplit({
+        reserveXdx,
+        reserveQuote,
+        xdxUsd,
+        quoteUsd,
+      });
+      return {
+        pool_name: row.pool_name,
+        pool: row.pool_name,
+        amm_account: row.amm_account,
+        quote: row.quote,
+        quote_issuer: row.quote_issuer,
+        lp_currency: row.lp_currency_hex,
+        reserve_xdx: reserveXdx,
+        reserve_asset: reserveXdx,
+        reserve_currency: reserveQuote,
+        xdxUsd,
+        quote_usd: quoteUsd || null,
+        xdx_pct: split?.xdxPct ?? null,
+        quote_pct: split?.quotePct ?? null,
+        lead: split?.lead || null,
+        lp_supply: extra.lp_supply,
+        trading_fee: extra.trading_fee,
+        updated: extra.timestamp || row.updated_at,
+      };
+    }),
     catching_up: false,
     source: "db",
   };

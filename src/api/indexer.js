@@ -1,6 +1,7 @@
 import { api, getHandshakeState, handshake, INDEXER_ORIGIN } from "../api";
 import { pairFromRow, XDX_TOTAL_SUPPLY } from "../constants/ledger";
 import { recordedXdxUsdFromPrices, xrpPerXdx } from "../utils/recordedPrice";
+import { poolAssetSplit, quoteUsdFromMap } from "../utils/poolSplit";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -195,7 +196,31 @@ function mapPool(row) {
     lp_supply: numberOrNull(pick(row, ["lp_supply", "lpSupply", "lp_token.value", "lpToken"])),
     trading_fee: numberOrNull(pick(row, ["trading_fee", "tradingFee", "fee"])),
     holder_count: numberOrNull(pick(row, ["holder_count", "lp_holder_count"])),
+    xdxUsd: numberOrNull(pick(row, ["xdxUsd", "xdx_usd"])),
+    quote_usd: numberOrNull(pick(row, ["quote_usd"])),
+    xdx_pct: numberOrNull(pick(row, ["xdx_pct"])),
+    quote_pct: numberOrNull(pick(row, ["quote_pct"])),
+    lead: pick(row, ["lead"]) || null,
     updated: pick(row, ["updated", "timestamp", "updated_at"]),
+  };
+}
+
+function withPoolSplit(row, fallbackXdxUsd, fallbackXrpUsd) {
+  if (!row) return row;
+  const quoteUsd =
+    row.quote_usd ||
+    quoteUsdFromMap(row.quote, { XRP: fallbackXrpUsd });
+  const split = poolAssetSplit({
+    reserveXdx: row.reserve_asset,
+    reserveQuote: row.reserve_currency,
+    xdxUsd: row.xdxUsd || fallbackXdxUsd,
+    quoteUsd,
+  });
+  return {
+    ...row,
+    xdx_pct: row.xdx_pct ?? split?.xdxPct ?? null,
+    quote_pct: row.quote_pct ?? split?.quotePct ?? null,
+    lead: row.lead || split?.lead || null,
   };
 }
 
@@ -269,7 +294,12 @@ export async function getAmm() {
       (body.catching_up || !asArray(body.pools || body).length)
   );
   if (catchingUp) return [];
-  return uniquePools(asArray(body).map(mapPool).filter(Boolean));
+  return uniquePools(
+    asArray(body)
+      .map(mapPool)
+      .filter(Boolean)
+      .map((row) => withPoolSplit(row, row.xdxUsd, row.quote === "XRP" ? row.quote_usd : 0))
+  );
 }
 
 export async function getTopHolders(onPage) {

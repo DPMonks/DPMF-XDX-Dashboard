@@ -3,6 +3,31 @@ import { formatNumber, formatToken, formatUsd, formatUsdPrice, formatWhen, short
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
+function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
+  if (xdxPct == null || quotePct == null) return null;
+  const xdxLead = lead === "xdx" || xdxPct >= quotePct;
+  return (
+    <div className={`pool-split ${xdxLead ? "is-xdx-lead" : "is-quote-lead"}`}>
+      <div className="pool-split-labels">
+        <span className={`pool-split-xdx ${xdxLead ? "is-lead" : ""}`}>
+          {xdxPct}% {asset}
+        </span>
+        <span className={`pool-split-quote ${xdxLead ? "" : "is-lead"}`}>
+          {quotePct}% {quote}
+        </span>
+      </div>
+      <div
+        className={`pool-split-bar ${xdxLead ? "is-xdx-lead" : "is-quote-lead"}`}
+        role="img"
+        aria-label={`${xdxPct}% ${asset}, ${quotePct}% ${quote}`}
+      >
+        <span className="pool-split-bar-xdx" style={{ width: `${xdxPct}%` }} />
+        <span className="pool-split-bar-quote" style={{ width: `${quotePct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 export default function AmmCard({ pools, loading, error }) {
   const { t, locale } = useI18n();
 
@@ -10,7 +35,7 @@ export default function AmmCard({ pools, loading, error }) {
     return (
       <div className="pool-grid">
         {Array.from({ length: 6 }, (_, i) => (
-          <Skeleton key={i} height={180} />
+          <Skeleton key={i} height={260} />
         ))}
       </div>
     );
@@ -28,10 +53,13 @@ export default function AmmCard({ pools, loading, error }) {
     <div className="pool-grid">
       {pools.map((pool, index) => {
         const { asset, quote } = pairParts(pool.pool);
+        const quoteName = pool.quote || quote;
         return (
           <article
             key={pool.amm_account || `${pool.pool}-${index}`}
-            className="pool-card"
+            className={`pool-card ${
+              pool.lead === "quote" ? "is-quote-lead" : pool.xdx_pct != null ? "is-xdx-lead" : ""
+            }`}
           >
             <header className="pool-card-head">
               <span className="pair-badge">{pool.pool}</span>
@@ -41,10 +69,17 @@ export default function AmmCard({ pools, loading, error }) {
                 </span>
               )}
             </header>
+            <SplitBar
+              asset={asset}
+              quote={quoteName}
+              xdxPct={pool.xdx_pct}
+              quotePct={pool.quote_pct}
+              lead={pool.lead}
+            />
             <dl className="pool-stats">
               {pool.amm_account ? (
                 <div>
-                  <dt>{t.issuerAccount}</dt>
+                  <dt>{t.ammAccount}</dt>
                   <dd title={pool.amm_account}>{shortAddress(pool.amm_account)}</dd>
                 </div>
               ) : null}
@@ -69,14 +104,14 @@ export default function AmmCard({ pools, loading, error }) {
               {pool.reserve_currency != null ? (
                 <div>
                   <dt>
-                    {t.reserve} {quote}
+                    {t.reserve} {quoteName}
                   </dt>
                   <dd>{formatToken(pool.reserve_currency, locale)}</dd>
                 </div>
               ) : (
                 <div>
                   <dt>{t.pair}</dt>
-                  <dd>{quote}</dd>
+                  <dd>{quoteName}</dd>
                 </div>
               )}
               {pool.lp_currency ? (
