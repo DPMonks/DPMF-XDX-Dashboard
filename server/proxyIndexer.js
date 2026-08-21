@@ -3,6 +3,7 @@ import {
   DEFAULT_INDEXER_ORIGIN,
   INDEXER_HANDSHAKE_PATHS,
 } from "../src/handshake/contract.js";
+import { hasIndexerDatabase, readIndexerDb } from "./readIndexerDb.js";
 
 export { DEFAULT_INDEXER_ORIGIN };
 
@@ -64,14 +65,52 @@ export async function fetchIndexer(url, { method = "GET", body } = {}) {
   };
 }
 
-export async function fetchIndexerFirst(paths, { method = "GET", body, search = "" } = {}) {
+function withSource(result, source) {
+  if (!result) return result;
+  return { ...result, source: result.source || source };
+}
+
+function indexerErrorHint(last) {
+  let detail = last?.body || "Indexer unavailable";
+  try {
+    const parsed = JSON.parse(last.body);
+    detail = parsed.error || parsed.detail || parsed.message || detail;
+  } catch {
+    if (typeof last?.body === "string" && last.body.length && last.body.length < 200) {
+      detail = last.body;
+    }
+  }
+  return {
+    status: last?.status || 502,
+    contentType: "application/json",
+    source: "none",
+    body: JSON.stringify({
+      error: detail,
+      hint: "Cards are SELECT-only from the XDX Postgres tables (token_holders_latest, lp_holders_latest, amm_pool_latest, history). Railway HTTP did not return data. Set server-only DATABASE_URL on Vercel to the same database the indexer uses. This process does not start or reset workers.",
+      source: "none",
+    }),
+  };
+}
+
+export async function fetchIndexerFirst(paths, { method = "GET", body, search = "", suffix = "" } = {}) {
+  let dbResult = null;
+
+  // Prefer the XDX tables when a connection string is present so Hikari 429
+  // cannot hide history. Never starts or resets indexer workers.
+  if (method === "GET" && hasIndexerDatabase()) {
+    dbResult = await readIndexerDb(suffix, search);
+    if (dbResult && dbResult.status < 400) {
+      return withSource(dbResult, "postgres");
+    }
+  }
+
   const origin = indexerOrigin();
   let last;
   for (const path of paths) {
     try {
       last = await fetchIndexer(joinIndexerUrl(origin, path, search), { method, body });
-      if (last.status < 500 && last.status !== 404) {
-        return last;
+      if (last.status < 400) {
+        return withSource(last, "indexer");
       }
     } catch (error) {
       last = {
@@ -81,7 +120,17 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
       };
     }
   }
-  return last;
+
+  if (dbResult) return dbResult;
+  return indexerErrorHint(last);
+}
+
+export function proxyResponseHeaders(last) {
+  return {
+    "content-type": last?.contentType || "application/json",
+    ...proxyCorsHeaders(),
+    ...(last?.source ? { "x-dpmf-source": last.source } : {}),
+  };
 }
 
 export function handshakePostBody(incoming) {

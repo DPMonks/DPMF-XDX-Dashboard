@@ -44,6 +44,7 @@ export default function App() {
           path: hs.path,
           error: hs.error,
           health: hs.health?.status,
+          source: hs.source || hs.health?.source || hs.raw?.source,
           onV1: hs.xrpl?.onV1 ?? hs.health?.xrpl?.onV1,
         });
       });
@@ -92,6 +93,7 @@ export default function App() {
             protocol: hs.protocol,
             path: hs.path,
             error: hs.error || nextErrors.holders,
+            source: hs.source,
           });
         }
       }
@@ -131,7 +133,9 @@ export default function App() {
         {link.protocol ? ` · ${link.protocol}` : ""}
         {link.path ? ` · ${link.path}` : ""}
         {link.health ? ` · health ${link.health}` : ""}
+        {link.source ? ` · ${link.source}` : ""}
         {link.onV1 != null ? ` · xrpl /v1 ${link.onV1 ? "yes" : "no"}` : ""}
+        {" · SELECT only, workers not started"}
       </p>
 
       <div className="dashboard-grid">

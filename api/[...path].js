@@ -3,6 +3,7 @@ import {
   handshakePostBody,
   indexerPathsFor,
   proxyCorsHeaders,
+  proxyResponseHeaders,
 } from "../server/proxyIndexer.js";
 
 export const maxDuration = 10;
@@ -38,9 +39,12 @@ export default async function handler(req, res) {
       method,
       body,
       search,
+      suffix,
     });
     res.status(last?.status || 502);
-    res.setHeader("content-type", last?.contentType || "application/json");
+    for (const [key, value] of Object.entries(proxyResponseHeaders(last))) {
+      res.setHeader(key, value);
+    }
     res.setHeader("cache-control", "s-maxage=30, stale-while-revalidate=120");
     res.send(last?.body || JSON.stringify({ error: "Indexer proxy failed" }));
   } catch (error) {

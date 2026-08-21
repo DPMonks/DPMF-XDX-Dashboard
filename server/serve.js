@@ -7,6 +7,7 @@ import {
   handshakePostBody,
   indexerPathsFor,
   proxyCorsHeaders,
+  proxyResponseHeaders,
 } from "./proxyIndexer.js";
 import { suffixFromPath } from "./attachProxy.js";
 
@@ -68,11 +69,9 @@ const server = createServer(async (req, res) => {
         method,
         body,
         search,
+        suffix,
       });
-      res.writeHead(last?.status || 502, {
-        "content-type": last?.contentType || "application/json",
-        ...proxyCorsHeaders(),
-      });
+      res.writeHead(last?.status || 502, proxyResponseHeaders(last));
       res.end(last?.body || JSON.stringify({ error: "Indexer proxy failed" }));
     } catch (error) {
       res.writeHead(502, {

@@ -3,6 +3,7 @@ import {
   handshakePostBody,
   indexerPathsFor,
   proxyCorsHeaders,
+  proxyResponseHeaders,
 } from "./proxyIndexer.js";
 
 function readJsonBody(req) {
@@ -64,10 +65,10 @@ export function attachIndexerProxy(server) {
         method,
         body,
         search,
+        suffix,
       });
       res.statusCode = last?.status || 502;
-      res.setHeader("content-type", last?.contentType || "application/json");
-      for (const [key, value] of Object.entries(proxyCorsHeaders())) {
+      for (const [key, value] of Object.entries(proxyResponseHeaders(last))) {
         res.setHeader(key, value);
       }
       res.end(last?.body || JSON.stringify({ error: "Indexer proxy failed" }));

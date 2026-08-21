@@ -51,6 +51,7 @@ let handshakeState = {
   error: null,
   endpoints: { ...DEFAULT_ENDPOINTS },
   snapshot: {},
+  source: null,
   raw: null,
 };
 
@@ -192,7 +193,9 @@ async function fetchJson(url, { method = "GET", body } = {}) {
       res.status === 429
         ? "Indexer rate-limited (Railway Hikari). The proxy will retry."
         : `${res.status} ${res.statusText}`;
-    const error = new Error(data.error || data.detail || fallback);
+    const error = new Error(
+      [data.error || data.detail || fallback, data.hint].filter(Boolean).join(" — ")
+    );
     error.status = res.status;
     throw error;
   }
@@ -275,6 +278,7 @@ function acceptHandshake(raw, path, extra = {}) {
     snapshot: extractSnapshot(raw),
     health: extra.health || null,
     xrpl: extra.xrpl || extra.health?.xrpl || raw.xrpl || null,
+    source: raw.source || extra.health?.source || extra.source || null,
     raw,
   };
   return true;

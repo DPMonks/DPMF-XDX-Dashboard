@@ -2,7 +2,9 @@
 
 Frontend for the DPMF XDX indexer. The browser never talks to the XRPL. Indexed holder, LP, AMM, chart, and wallet data come from the indexer through a same-origin `/api` proxy. Xaman sign-in stays on this repo (`/api/xaman/*`).
 
-The indexer contract is in `handoff/dashboard-connect/INDEXER_CONNECT.md`. Confirmation is `GET /` and `GET /health` (not `/api/cluster/v1/*`). The dashboard applies those `/api/*` routes immediately. A live catalog can override paths. `/health/xrpl` is optional until indexer PR #3 is on Railway.
+The indexer contract is in `handoff/dashboard-connect/INDEXER_CONNECT.md`. Confirmation is `GET /` and `GET /health` (not `/api/cluster/v1/*`). Cards are **SELECT-only** from the XDX Postgres tables (`token_holders_latest`, `lp_holders_latest`, `amm_pool_latest`, `amm_pool_history`, `holders_history`, `price_*`). The browser never talks to XRPL and this repo never starts or resets indexer workers (those have staggered delays: AMM 0s, prices 8s, LP 20s, holders 35s).
+
+If Railway Hikari 429s the HTTP API, set server-only `DATABASE_URL` on Vercel / `.env` so `/api/*` can read the same tables directly.
 
 ## Pairing
 
@@ -10,7 +12,7 @@ The indexer contract is in `handoff/dashboard-connect/INDEXER_CONNECT.md`. Confi
 | --- | --- |
 | Dashboard | this repo |
 | Handshake | `GET /` catalog + `GET /health` (same-origin proxy) |
-| Indexer data | same-origin `/api/*` → Railway production |
+| Indexer data | same-origin `/api/*` → XDX Postgres tables (Railway HTTP, or `DATABASE_URL` SELECT) |
 | Xaman | dashboard `/api/xaman/create-payload` using `XUMM_API_KEY` / `XUMM_API_SECRET` |
 
 The browser does **not** call Railway directly. Vite and Vercel proxy `/api/*` (except `/api/xaman/*`) to `https://dpmf-xdx-indexer-production.up.railway.app`, send cluster identity headers, retry HTTP 429, and serialize fetches so the first holders/LP page can paint. Set `VITE_USE_DIRECT_INDEXER=true` only if you want the old direct client.
@@ -43,6 +45,7 @@ Do not commit `.env` files. Production and preview read encrypted store values, 
 | `XUMM_API_SECRET` | GitHub Actions secrets **and** Vercel env (Production + Preview) | Xaman API secret (server-only, no `VITE_` prefix) |
 | `VITE_API_BASE` | Vercel env (Production + Preview) | remote indexer label + server-side proxy target |
 | `INDEXER_ORIGIN` | Vercel env (optional) | override the server-side proxy target |
+| `DATABASE_URL` | Vercel env (Production + Preview), server-only | same Postgres the indexer writes. Used for read-only XDX SELECTs when Railway HTTP 429s. Never starts workers. |
 
 GitHub: repository **Settings → Secrets and variables → Actions**.
 
