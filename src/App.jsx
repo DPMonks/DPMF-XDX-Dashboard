@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
-import { useWallet } from "./context/WalletContext";
-import DexChart from "./components/DexChart";
+import { useWallet } from "./context/useWallet";
 import TokenDetails from "./components/TokenDetails";
-import ActivityChart from "./components/ActivityChart";
 import AccountList from "./components/AccountList";
 import AmmCard from "./components/AmmCard";
 import WalletOverview from "./components/WalletOverview";
 import OverviewStrip from "./components/OverviewStrip";
+import Skeleton from "./components/Skeleton";
 import { INDEXER_URL, getAmm, getOverview, getTopHolders, getTopLp } from "./api/indexer";
+
+const DexChart = lazy(() => import("./components/DexChart"));
+const ActivityChart = lazy(() => import("./components/ActivityChart"));
 
 export default function App() {
   const { walletAddress } = useWallet();
@@ -105,12 +107,16 @@ export default function App() {
 
         <section className="dashboard-card neon-card">
           <h2 className="card-title">Activity Chart</h2>
-          <ActivityChart />
+          <Suspense fallback={<Skeleton height={300} />}>
+            <ActivityChart />
+          </Suspense>
         </section>
 
         <section className="dashboard-card neon-card">
           <h2 className="card-title">XDX/XRP Trading Chart</h2>
-          <DexChart />
+          <Suspense fallback={<Skeleton height={300} />}>
+            <DexChart />
+          </Suspense>
         </section>
 
         <section className="dashboard-card neon-card">

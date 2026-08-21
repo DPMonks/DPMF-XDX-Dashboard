@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useWallet } from "../context/WalletContext";
+import { useWallet } from "../context/useWallet";
 import {
   createPayload,
   extractSignedAccount,

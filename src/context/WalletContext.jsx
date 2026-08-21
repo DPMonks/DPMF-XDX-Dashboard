@@ -1,8 +1,7 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { WalletContext } from "./walletContextInstance";
 
 const STORAGE_KEY = "dpmf-xdx-wallet";
-
-const WalletContext = createContext(null);
 
 export function WalletProvider({ children }) {
   const [walletAddress, setWalletAddress] = useState(() => {
@@ -42,12 +41,4 @@ export function WalletProvider({ children }) {
       {children}
     </WalletContext.Provider>
   );
-}
-
-export function useWallet() {
-  const context = useContext(WalletContext);
-  if (!context) {
-    throw new Error("useWallet must be used within WalletProvider");
-  }
-  return context;
 }
