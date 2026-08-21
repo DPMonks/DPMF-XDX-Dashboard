@@ -73,7 +73,7 @@ All paths are relative to `/api`.
 | Holders | `/top-holders?limit=&offset=` (`/top-holders-v2` same) |
 | LP holders | `/top-lp?limit=&offset=` field is `lp_balance` |
 | Counts | `/holders/count` `/lp-holders/count` |
-| Charts | `/charts/tvl` `/charts/holders` `/charts/lp-holders` |
+| Charts | `/activity-chart?range=` then `/charts/tvl` `/charts/holders` `/charts/lp-holders` |
 | Wallet | `/wallet/balances/:address` also `/balances/:address` |
 | Net worth | `/wallet/networth/:address` |
 | Prices | `/prices` `/prices/change24h` `/sparkline/XRP\|XDX\|LP` |

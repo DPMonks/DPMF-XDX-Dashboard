@@ -12,7 +12,7 @@ import { formatDay, formatNumber } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
-const METRICS = ["tvl", "holders", "lpHolders"];
+const METRICS = ["tvl", "holders", "lpHolders", "price", "volume"];
 const RANGES = ["1D", "1W", "1M", "Max"];
 
 function filterRange(rows, range) {
@@ -30,7 +30,7 @@ export default function ActivityChart() {
   const { t, locale } = useI18n();
   const [data, setData] = useState([]);
   const [metric, setMetric] = useState("tvl");
-  const [range, setRange] = useState("1M");
+  const [range, setRange] = useState("Max");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -51,9 +51,10 @@ export default function ActivityChart() {
           }
         }
 
-        const rows = await getChartHistory();
+        const rows = await getChartHistory(range);
         if (!cancelled) {
-          setData(filterRange(rows, range));
+          const visible = filterRange(rows, range);
+          setData(visible.length ? visible : rows);
           setError(rows.length ? null : t.noHistory);
           sessionStorage.setItem(cacheKey, JSON.stringify({ rows }));
         }
@@ -74,12 +75,16 @@ export default function ActivityChart() {
   }, [range, t.noHistory]);
 
   const history = useMemo(() => [...data].reverse().slice(0, 12), [data]);
+  const metrics = useMemo(
+    () => METRICS.filter((item) => data.some((row) => row[item] != null) || item === metric),
+    [data, metric]
+  );
 
   return (
     <div className="activity-chart-container">
       <div className="activity-controls">
         <div className="tabs">
-          {METRICS.map((item) => (
+          {metrics.map((item) => (
             <button
               key={item}
               type="button"

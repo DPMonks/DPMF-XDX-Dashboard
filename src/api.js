@@ -384,6 +384,11 @@ export const api = {
   },
   holdersCount: () => getJson(endpoint("holdersCount")),
   lpHoldersCount: () => getJson(endpoint("lpHoldersCount")),
+  activityChart: (range = "Max") => {
+    const path = endpoint("activityChart");
+    const join = path.includes("?") ? "&" : "?";
+    return getJson(`${path}${join}range=${encodeURIComponent(range)}`);
+  },
   tvlHistory: () => getJson(endpoint("tvlHistory")),
   holdersHistory: () => getJson(endpoint("holdersHistory")),
   lpHoldersHistory: () => getJson(endpoint("lpHoldersHistory")),

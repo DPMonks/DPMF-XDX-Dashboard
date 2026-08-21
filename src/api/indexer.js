@@ -20,6 +20,50 @@ function asArray(value) {
   return [];
 }
 
+function chartArray(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+  for (const key of [
+    "rows",
+    "data",
+    "history",
+    "points",
+    "series",
+    "values",
+    "items",
+    "result",
+    "tvl",
+    "holders",
+    "lpHolders",
+    "lp_holders",
+  ]) {
+    if (Array.isArray(value[key])) return value[key];
+  }
+  if (rowTimestamp(value)) return [value];
+  return [];
+}
+
+function rowTimestamp(row) {
+  if (row == null || typeof row !== "object") return null;
+  const raw =
+    row.timestamp ??
+    row.day ??
+    row.date ??
+    row.time ??
+    row.ts ??
+    row.created_at ??
+    row.updated_at ??
+    row.updated;
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "number") {
+    const ms = raw < 1e12 ? raw * 1000 : raw;
+    const date = new Date(ms);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+  }
+  const date = new Date(raw);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : String(raw);
+}
+
 function numberOrNull(value) {
   if (value == null || value === "") return null;
   if (typeof value === "object") {
@@ -280,48 +324,151 @@ export async function getTokenDetails() {
   };
 }
 
-export async function getChartHistory() {
+async function firstChartSeries(loaders) {
+  const errors = [];
+  for (const load of loaders) {
+    try {
+      const rows = chartArray(await load());
+      if (rows.length) return { rows, error: null };
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  return { rows: [], error: errors.at(-1) || null };
+}
+
+function mergeChartRow(target, row) {
+  const timestamp = rowTimestamp(row);
+  if (!timestamp) return;
+  const current = target.get(timestamp) || { timestamp };
+  const next = {
+    ...current,
+    tvl: numberOrNull(row.tvl ?? row.total_value_locked) ?? current.tvl,
+    holders:
+      numberOrNull(row.holders ?? row.holder_count ?? row.xdxHolders) ??
+      current.holders,
+    lpHolders:
+      numberOrNull(row.lpHolders ?? row.lp_holders ?? row.lp_holder_count) ??
+      current.lpHolders,
+    price: numberOrNull(row.price ?? row.xdxUsd ?? row.xdx_usd) ?? current.price,
+    volume:
+      numberOrNull(row.volume ?? row.volume24h ?? row.volume_24h) ?? current.volume,
+    marketcap:
+      numberOrNull(row.marketcap ?? row.market_cap ?? row.xrplMarketCap) ??
+      current.marketcap,
+  };
+  target.set(timestamp, next);
+}
+
+function sparklineRows(payload, key) {
+  const list = chartArray(payload);
+  const now = Date.now();
+  return list
+    .map((item, index) => {
+      if (item != null && typeof item !== "object") {
+        return {
+          timestamp: new Date(now - (list.length - 1 - index) * 86400000).toISOString(),
+          [key]: numberOrNull(item),
+        };
+      }
+      const timestamp =
+        rowTimestamp(item) ||
+        new Date(now - (list.length - 1 - index) * 86400000).toISOString();
+      return {
+        timestamp,
+        [key]: numberOrNull(
+          item?.value ?? item?.price ?? item?.[key] ?? item?.close ?? item?.y
+        ),
+      };
+    })
+    .filter((row) => row[key] != null);
+}
+
+export async function getChartHistory(range = "Max") {
   const state = await Promise.race([
     handshake(),
     sleep(1200).then(() => getHandshakeState()),
   ]);
   const charts = state.snapshot?.charts || {};
-  const tvl = asArray(charts.tvl || (await api.tvlHistory().catch(() => [])));
-  const holders = asArray(
-    charts.holders || (await api.holdersHistory().catch(() => []))
-  );
-  const lp = asArray(
-    charts.lpHolders || charts.lp_holders || (await api.lpHoldersHistory().catch(() => []))
-  );
-
   const merged = new Map();
-  for (const row of tvl) {
-    const timestamp = row.timestamp || row.day;
-    merged.set(String(timestamp), {
-      timestamp,
-      tvl: numberOrNull(row.tvl),
-    });
-  }
-  for (const row of holders) {
-    const timestamp = row.timestamp || row.day;
-    const key = String(timestamp);
-    merged.set(key, {
-      ...(merged.get(key) || { timestamp }),
-      holders: numberOrNull(row.holder_count ?? row.holders),
-    });
-  }
-  for (const row of lp) {
-    const timestamp = row.timestamp || row.day;
-    const key = String(timestamp);
-    merged.set(key, {
-      ...(merged.get(key) || { timestamp }),
-      lpHolders: numberOrNull(row.lp_holder_count ?? row.lpHolders),
-    });
+  const errors = [];
+
+  const activity = await firstChartSeries([
+    () => charts.activity,
+    () => api.activityChart(range),
+    () => getJsonAliasPath(`/api/activity-chart?range=${encodeURIComponent(range)}`),
+  ]);
+  if (activity.error) errors.push(activity.error);
+  for (const row of activity.rows) mergeChartRow(merged, row);
+
+  const tvl = await firstChartSeries([
+    () => charts.tvl,
+    () => api.tvlHistory(),
+  ]);
+  if (tvl.error) errors.push(tvl.error);
+  for (const row of tvl.rows) mergeChartRow(merged, row);
+
+  const holders = await firstChartSeries([
+    () => charts.holders,
+    () => api.holdersHistory(),
+  ]);
+  if (holders.error) errors.push(holders.error);
+  for (const row of holders.rows) mergeChartRow(merged, row);
+
+  const lp = await firstChartSeries([
+    () => charts.lpHolders || charts.lp_holders,
+    () => api.lpHoldersHistory(),
+  ]);
+  if (lp.error) errors.push(lp.error);
+  for (const row of lp.rows) mergeChartRow(merged, row);
+
+  if (!merged.size) {
+    for (const asset of ["XDX", "XRP", "LP"]) {
+      try {
+        const rows = sparklineRows(await api.sparkline(asset), "price");
+        for (const row of rows) mergeChartRow(merged, row);
+        if (merged.size) break;
+      } catch (error) {
+        errors.push(error);
+      }
+    }
   }
 
-  return [...merged.values()].sort(
+  if (!merged.size) {
+    const live = await getTokenDetails().catch(() => null);
+    if (live && (live.tvl != null || live.holders != null || live.price != null)) {
+      mergeChartRow(merged, {
+        timestamp: new Date().toISOString(),
+        tvl: live.tvl,
+        holders: live.holders,
+        lpHolders: live.lp_holder_count,
+        price: live.price,
+        volume: live.volume24h,
+        marketcap: live.xrplMarketCap,
+      });
+    }
+  }
+
+  const rows = [...merged.values()].sort(
     (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
   );
+  if (!rows.length && errors.length) {
+    throw errors[0];
+  }
+  return rows;
+}
+
+async function getJsonAliasPath(path) {
+  const res = await fetch(path, {
+    credentials: "same-origin",
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || data.detail || `${res.status} ${res.statusText}`);
+  }
+  return data;
 }
 
 function amountFromBalances(payload, names) {
