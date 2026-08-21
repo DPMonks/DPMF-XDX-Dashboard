@@ -11,6 +11,11 @@ export function isXrpMicroFallback(xdxUsd, xrpUsd) {
   return Math.abs(xdx - xrp * XRP_MICRO) < 1e-12;
 }
 
+export function looksLikeXrpUsd(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num >= 0.05;
+}
+
 export function recordedXdxUsdFromPrices(prices = {}, fallbackXrpUsd) {
   const xrpUsd = Number(prices.xrpUsd ?? prices.xrp_usd ?? fallbackXrpUsd ?? 0);
   for (const value of [prices.recorded_price, prices.xdxUsd, prices.xdx_usd]) {
@@ -23,7 +28,7 @@ export function recordedXdxUsdFromPrices(prices = {}, fallbackXrpUsd) {
 }
 
 export function pickTrustlineCount(latestCount, historyCount) {
-  const latest = Number(latestCount) || 0;
-  if (latest > 0) return latest;
-  return Number(historyCount) || 0;
+  const history = Number(historyCount) || 0;
+  if (history > 0) return history;
+  return Number(latestCount) || 0;
 }

@@ -3,38 +3,48 @@
 Dashboard PR: https://github.com/DPMonks/DPMF-XDX-Dashboard/pull/4  
 Indexer branch: `cursor/xdx-efficient-indexer-34cb`
 
-Dashboard is **SELECT-only**. Do not start or reset workers from there. Frontend contract is locked.
+Dashboard is **SELECT-only**. Do not start or reset workers. No new routes. SQL is enough if `x-dpmf-source: postgres`.
 
-## Live Worker 4 scan
+## Price is written and updating
 
-Trustlines **19,983** (every XDX line, including 0) and holders **15,947** (`balance > 0`) are in `token_holders_latest` and `token_holders_history`. Those are different counts.
+Right now:
 
-## Price (Worker 2)
+- `price_latest` `asset='XDX'` `price_usd` = **0.0000416**
+- `xdx_usd` = **0.0000416** on every `price_latest` row (newest is XDX)
+- `price_latest_all.currency='XDX'` `price_usd` = **0.0000416**
+- `xrpUsd` ≈ 1.4
 
-Tiles show only `xdxUsd` / `recorded_price` (USD per 1 XDX, 8 decimals). SQL order:
+Frontend lock stays: Price = `xdxUsd` / `recorded_price` only (USD per 1 XDX, 8 decimals).
 
-1. `price_latest.xdx_usd` (newest row)
-2. `price_latest.price_usd WHERE asset IN ('XDX','xdx')`
-3. `price_latest_all.price_usd WHERE currency = 'XDX'`
-4. `price_history.price_usd WHERE asset = 'XDX'`
+SQL:
 
-Ignore AMM `price` (XRP per XDX). Reject `xrpUsd * 0.000001`. `price_latest.price_usd` without an XDX asset filter is XRP USD.
+```sql
+SELECT xdx_usd FROM price_latest ORDER BY timestamp DESC LIMIT 1
+-- and/or
+SELECT price_usd FROM price_latest WHERE asset IN ('XDX','xdx')
+```
 
-Until Worker 2 logs `Prices written XRP=… XDX=0.00004…`, Price can still be `$0.00000000`.
+Do **not** use AMM `price` (XRP per XDX). Do **not** use `reserve_currency` for the tile — old Worker 1 is still writing that as 0. Do **not** use `xrpUsd * 0.000001`. Caps = `10_000_000_000 * recorded_price`.
 
-## Trustlines
+If Price is still `$0.00000000`, Vercel is not reading Postgres (`x-dpmf-source` must be `postgres`), or the tile is still bound to AMM price.
 
-- Tile: `GET /api/trustlines/count` → `{ count, as_of }`
-- SQL: `COUNT(*)` on `token_holders_latest`, else the latest `token_holders_history` timestamp (all rows, including 0)
-- Chart: `GET /api/charts/trustlines` → `[{ timestamp, trustline_count }]`
-- Do **not** copy `holder_count` into the Trustlines tile
+## Trustlines ≠ holders
 
-`GET /api/holders/count?snapshot=today` and `GET /api/top-holders?snapshot=today` stay owners only (`TODAY_OWNERS.md`). Do not change that shape.
+`token_holders_latest` may be empty if an old `main` writer TRUNCATEs it. The same-time scan is in history:
 
-## Empty cards
+- **19,983** trustlines (every line, including 0)
+- **15,947** holders (`balance > 0`)
+- latest history timestamp ~ `2026-08-21T21:45:22Z`
 
-If tiles are still empty after this scan, the gap is Vercel `DATABASE_URL` / SSL (`x-dpmf-source` must be `postgres` on `/api/overview`), not missing indexer writes.
+Tile = `GET /api/trustlines/count` or
 
-Redeploy API, then Worker 1, then Worker 2, then Worker 4. Do not start them together.
+```sql
+SELECT COUNT(*) FROM token_holders_history
+WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)
+```
 
-Auth: none. `accept: application/json`. No `/api/cluster/v1/*`.
+Do not `COUNT(*) WHERE balance > 0` for Trustlines. Do not copy `holder_count`. Chart = `GET /api/charts/trustlines` / `GROUP BY timestamp`.
+
+Today-owners shape is locked (`TODAY_OWNERS.md`). Do not change it.
+
+Confirm after refresh: Price ≈ **$0.00004160**, Trustlines **19983**, Holders **15947**.

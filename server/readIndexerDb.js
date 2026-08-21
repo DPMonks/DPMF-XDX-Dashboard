@@ -5,7 +5,11 @@ import {
   XDX_TOTAL_SUPPLY,
   XDX_XRP_AMM,
 } from "../src/constants/ledger.js";
-import { pickTrustlineCount, recordedXdxUsdFromPrices } from "../src/utils/recordedPrice.js";
+import {
+  looksLikeXrpUsd,
+  pickTrustlineCount,
+  recordedXdxUsdFromPrices,
+} from "../src/utils/recordedPrice.js";
 import {
   asIso,
   buildTodayOwnersPayload,
@@ -523,11 +527,10 @@ async function tokenTrustlineSnapshot(db) {
      FROM token_holders_history
      WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)`
   );
-  const count = pickTrustlineCount(latest.rows[0]?.count, history.rows[0]?.count);
-  const asOf =
-    count === Number(latest.rows[0]?.count || 0) && Number(latest.rows[0]?.count || 0) > 0
-      ? latest.rows[0]?.as_of
-      : history.rows[0]?.as_of;
+  const historyCount = Number(history.rows[0]?.count || 0);
+  const latestCount = Number(latest.rows[0]?.count || 0);
+  const count = pickTrustlineCount(latestCount, historyCount);
+  const asOf = historyCount > 0 ? history.rows[0]?.as_of : latest.rows[0]?.as_of;
   return { count, as_of: asIso(asOf) };
 }
 
@@ -678,7 +681,17 @@ async function loadXrpQuote(db) {
   if (Date.now() - xrpQuote.at < 300_000 && xrpQuote.usd) return xrpQuote;
   const latest = await tryQuery(
     db,
-    "SELECT price_usd, price_gbp FROM price_latest LIMIT 1"
+    `SELECT price_usd, price_gbp FROM price_latest
+     WHERE asset IN ('XRP', 'xrp')
+     ORDER BY timestamp DESC NULLS LAST
+     LIMIT 1`
+  );
+  const all = await tryQuery(
+    db,
+    `SELECT price_usd, price_gbp FROM price_latest_all
+     WHERE currency IN ('XRP', 'xrp')
+     ORDER BY timestamp DESC NULLS LAST
+     LIMIT 1`
   );
   const hist = await tryQuery(
     db,
@@ -686,8 +699,10 @@ async function loadXrpQuote(db) {
      WHERE asset IN ('XRP', 'xrp')
      ORDER BY timestamp DESC LIMIT 1`
   );
-  let usd = Number(latest.rows[0]?.price_usd || hist.rows[0]?.price_usd || 0);
-  let gbp = Number(latest.rows[0]?.price_gbp || 0);
+  const row = latest.rows[0] || all.rows[0] || {};
+  let usd = Number(row.price_usd || hist.rows[0]?.price_usd || 0);
+  let gbp = Number(row.price_gbp || 0);
+  if (!looksLikeXrpUsd(usd)) usd = 0;
   if (!usd) {
     try {
       const res = await fetch(

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   isXrpMicroFallback,
+  looksLikeXrpUsd,
   pickTrustlineCount,
   recordedXdxUsdFromPrices,
 } from "../src/utils/recordedPrice.js";
@@ -16,19 +17,22 @@ test("rejects live Railway xrpUsd * 0.000001 fallback", () => {
   );
 });
 
-test("trustline count uses every latest row and does not copy holders", () => {
-  assert.equal(pickTrustlineCount(19983, 15947), 19983);
+test("trustline count prefers the history scan when latest was truncated", () => {
   assert.equal(pickTrustlineCount(0, 19983), 19983);
+  assert.equal(pickTrustlineCount(15947, 19983), 19983);
+  assert.equal(pickTrustlineCount(19983, 0), 19983);
   assert.equal(pickTrustlineCount(0, 0), 0);
-  assert.notEqual(pickTrustlineCount(19983, 15947), 15947);
+  assert.notEqual(pickTrustlineCount(15947, 19983), 15947);
 });
 
-test("keeps a real USD-per-XDX recorded price at 8 decimals", () => {
+test("keeps Worker 2 XDX USD and does not treat it as XRP", () => {
   const price = recordedXdxUsdFromPrices({
-    recorded_price: 0.00002946123,
-    xdxUsd: 0.00002946123,
-    xrpUsd: 1.36,
+    recorded_price: 0.0000416,
+    xdxUsd: 0.0000416,
+    xrpUsd: 1.4,
   });
-  assert.equal(price, 0.00002946);
-  assert.equal(isXrpMicroFallback(0.00002946, 1.36), false);
+  assert.equal(price, 0.0000416);
+  assert.equal(looksLikeXrpUsd(0.0000416), false);
+  assert.equal(looksLikeXrpUsd(1.4), true);
+  assert.equal(isXrpMicroFallback(0.0000416, 1.4), false);
 });
