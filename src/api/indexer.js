@@ -1,87 +1,13 @@
-import { formatPair } from "../utils/currency.js";
+import { api, INDEXER_ORIGIN } from "../api";
+import { pairFromRow } from "../constants/ledger";
 
-export const INDEXER_ORIGIN =
-  "https://dpmf-xdx-indexer-production.up.railway.app";
+export { INDEXER_ORIGIN };
+export const INDEXER_URL = INDEXER_ORIGIN;
+
 const PAGE_SIZE = 200;
 const MAX_ROWS = 5000;
 
-// Empty string = same-origin `/api` via the Vite/Vercel proxy.
-// Set VITE_INDEXER_URL to call Railway from the browser instead.
-export const INDEXER_URL = (
-  import.meta.env.VITE_INDEXER_URL ?? ""
-).replace(/\/$/, "");
-
-export class IndexerError extends Error {
-  constructor(message, { status, path, body } = {}) {
-    super(message);
-    this.name = "IndexerError";
-    this.status = status;
-    this.path = path;
-    this.body = body;
-  }
-}
-
-async function parseBody(response) {
-  const text = await response.text();
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
-
-export async function indexerFetch(path, options = {}) {
-  const url = path.startsWith("http") ? path : `${INDEXER_URL}${path}`;
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Accept: "application/json",
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...options.headers,
-    },
-  });
-
-  const body = await parseBody(response);
-
-  if (!response.ok) {
-    const detail =
-      (body && typeof body === "object" && (body.error || body.message)) ||
-      (typeof body === "string" ? body : response.statusText);
-    throw new IndexerError(`Indexer ${response.status} on ${path}: ${detail}`, {
-      status: response.status,
-      path,
-      body,
-    });
-  }
-
-  return body;
-}
-
-export async function indexerGet(path) {
-  return indexerFetch(path, { method: "GET" });
-}
-
-export async function indexerPost(path, body) {
-  return indexerFetch(path, {
-    method: "POST",
-    body: body == null ? undefined : JSON.stringify(body),
-  });
-}
-
-export async function firstOk(requests) {
-  let lastError;
-  for (const request of requests) {
-    try {
-      return await request();
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError ?? new IndexerError("No indexer request succeeded");
-}
-
-export function asArray(value) {
+function asArray(value) {
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.rows)) return value.rows;
   if (Array.isArray(value?.data)) return value.data;
@@ -89,11 +15,6 @@ export function asArray(value) {
   if (Array.isArray(value?.pools)) return value.pools;
   if (value && typeof value === "object" && !value.error) return [value];
   return [];
-}
-
-function asObject(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value;
 }
 
 function numberOrNull(value) {
@@ -113,59 +34,44 @@ function pick(row, keys) {
   return null;
 }
 
-async function fetchAllPages(path) {
-  const first = asArray(await indexerGet(path));
-  if (first.length === 0) return [];
-  if (first.length !== 50 && first.length !== 100) return first;
-
-  const all = [...first];
-  let offset = first.length;
+async function paginate(fetchPage, pageSize = PAGE_SIZE) {
+  const all = [];
+  let offset = 0;
 
   while (offset < MAX_ROWS) {
-    const page = asArray(
-      await indexerGet(`${path}${path.includes("?") ? "&" : "?"}limit=${PAGE_SIZE}&offset=${offset}`)
-    );
+    const page = asArray(await fetchPage(pageSize, offset));
     if (!page.length) break;
-    const seen = new Set(all.map((row) => row.account || JSON.stringify(row)));
-    const fresh = page.filter((row) => !seen.has(row.account || JSON.stringify(row)));
-    if (!fresh.length) break;
-    all.push(...fresh);
-    if (page.length < PAGE_SIZE) break;
+    all.push(...page);
+    if (page.length < pageSize) break;
     offset += page.length;
   }
 
   return all;
 }
 
-function mapHolder(row, index, offset = 0) {
-  const account = pick(row, ["account", "address", "wallet"]);
+function mapHolder(row, index) {
   return {
-    rank: numberOrNull(row.rank) ?? offset + index + 1,
-    account,
+    rank: numberOrNull(row.rank) ?? index + 1,
+    account: pick(row, ["account", "address", "wallet"]),
     balance: numberOrNull(pick(row, ["balance", "xdx", "amount"])) ?? 0,
     frozen: Boolean(row.frozen),
   };
 }
 
-function mapLp(row, index, offset = 0) {
-  const account = pick(row, ["account", "address", "wallet"]);
+function mapLp(row, index) {
   return {
-    rank: numberOrNull(row.rank) ?? offset + index + 1,
-    account,
-    lp_balance: numberOrNull(pick(row, ["lp_balance", "balance", "lp", "amount"])) ?? 0,
-    pair: formatPair(row),
+    rank: numberOrNull(row.rank) ?? index + 1,
+    account: pick(row, ["account", "address", "wallet"]),
+    lp_balance: numberOrNull(pick(row, ["lp_balance", "balance", "lp"])) ?? 0,
+    pair: pairFromRow(row),
     frozen: Boolean(row.frozen),
   };
 }
 
 function mapPool(row) {
   if (!row || typeof row !== "object") return null;
-  const pair = formatPair(row);
-  const { asset, quote } = (() => {
-    const [left, right] = pair.split("/");
-    return { asset: left, quote: right };
-  })();
-
+  const pair = pairFromRow(row);
+  const [asset, quote] = pair.split("/");
   return {
     pool: pair,
     asset,
@@ -188,135 +94,163 @@ function mapPool(row) {
 }
 
 export async function getOverview() {
-  return asObject(await indexerGet("/api/overview"));
-}
-
-export async function getPools() {
-  return await indexerGet("/api/pools");
+  return api.overview();
 }
 
 export async function getAmm() {
-  const [ammResult, poolsResult] = await Promise.allSettled([
-    indexerGet("/api/amm"),
-    indexerGet("/api/pools"),
-  ]);
+  const pools = await api.pools();
+  const mapped = asArray(pools).map(mapPool).filter(Boolean);
+  if (mapped.length) return mapped;
 
-  const merged = new Map();
-
-  if (ammResult.status === "fulfilled") {
-    for (const row of asArray(ammResult.value)) {
-      const pool = mapPool(row);
-      if (pool) merged.set(pool.pool, pool);
-    }
-  }
-
-  if (poolsResult.status === "fulfilled") {
-    const value = poolsResult.value;
-    const rows = Array.isArray(value?.pools) ? value.pools : asArray(value);
-    for (const row of rows) {
-      const pool = mapPool(row);
-      if (!pool) continue;
-      merged.set(pool.pool, { ...(merged.get(pool.pool) || {}), ...pool });
-    }
-  }
-
-  return [...merged.values()].filter((row) => row.pool);
+  const amm = await api.amm();
+  return asArray(amm).map(mapPool).filter(Boolean);
 }
 
 export async function getTopHolders() {
-  const rows = await firstOk([
-    () => fetchAllPages("/api/top-holders"),
-    () => fetchAllPages("/api/top-holders-v2"),
-    () => fetchAllPages("/api/holders"),
-  ]);
-
+  const rows = await paginate((limit, offset) => api.topHolders(limit, offset));
   return rows
-    .map((row, index) => mapHolder(row, index))
+    .map(mapHolder)
     .filter((row) => row.account)
     .sort((a, b) => Number(b.balance) - Number(a.balance))
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
 export async function getTopLp() {
-  const rows = await firstOk([
-    () => fetchAllPages("/api/top-lp"),
-    () => fetchAllPages("/api/lp-holders"),
-  ]);
-
+  const rows = await paginate((limit, offset) => api.topLp(limit, offset), 50);
   return rows
-    .map((row, index) => mapLp(row, index))
+    .map(mapLp)
     .filter((row) => row.account)
     .sort((a, b) => Number(b.lp_balance) - Number(a.lp_balance))
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
-export async function getTokenDetailsStatic() {
-  return firstOk([
-    () => indexerGet("/api/token-details-static"),
-    () => indexerGet("/api/token-details"),
-  ]);
-}
+export async function getTokenDetails() {
+  const overview = await api.overview().catch(() => ({}));
+  const prices = await api.prices().catch(() => ({}));
+  const change = await api.change24h().catch(() => ({}));
+  const holders = await api.holdersCount().catch(() => ({}));
+  const ammRows = await getAmm().catch(() => []);
+  const primary = ammRows[0] || {};
 
-export async function getTokenDetailsLive() {
-  return firstOk([
-    () => indexerGet("/api/token-details-live"),
-    () => indexerGet("/api/token-details"),
-  ]);
-}
+  const circulating = numberOrNull(
+    overview.circulating || overview.circulating_supply || overview.xdx_supply
+  );
+  const price = numberOrNull(prices.xdxUsd || prices.xdx_usd || primary.price);
 
-function mapActivityRow(row) {
   return {
-    timestamp: row.timestamp || row.day || row.date || row.time,
-    price: numberOrNull(row.price),
-    volume: numberOrNull(row.volume ?? row.volume24h),
-    marketcap: numberOrNull(row.marketcap ?? row.marketCap ?? row.xrplMarketCap),
-    rank: numberOrNull(row.rank),
-    traders: numberOrNull(row.traders),
-    holders: numberOrNull(row.holders ?? row.holder_count),
-    tvl: numberOrNull(row.tvl),
-    lpHolders: numberOrNull(row.lpHolders ?? row.lp_holder_count),
+    tokenType: "XDX",
+    xrplMarketCap: circulating != null && price != null ? circulating * price : overview.market_cap,
+    ammMarketCap: primary.tvl,
+    circulatingMarketCap:
+      circulating != null && price != null ? circulating * price : null,
+    circulating,
+    totalSupply: overview.total_supply,
+    burnedSupply: overview.burned_supply,
+    holders: holders.count ?? overview.holder_count,
+    trustlines: overview.trustline_count ?? overview.trustlines,
+    issuerFee: overview.issuer_fee,
+    blackholed: overview.blackholed,
+    created: overview.created,
+    price,
+    change24h: change.XDX ?? change.xdx,
+    ...overview,
+    ...primary,
   };
 }
 
-export async function getActivityChart(range = "1M") {
-  const rows = asArray(
-    await indexerGet(`/api/activity-chart?range=${encodeURIComponent(range)}`)
+export async function getChartHistory() {
+  const tvl = asArray(await api.tvlHistory().catch(() => []));
+  const holders = asArray(await api.holdersHistory().catch(() => []));
+  const lp = asArray(await api.lpHoldersHistory().catch(() => []));
+
+  const merged = new Map();
+  for (const row of tvl) {
+    const timestamp = row.timestamp || row.day;
+    merged.set(String(timestamp), {
+      timestamp,
+      tvl: numberOrNull(row.tvl),
+    });
+  }
+  for (const row of holders) {
+    const timestamp = row.timestamp || row.day;
+    const key = String(timestamp);
+    merged.set(key, {
+      ...(merged.get(key) || { timestamp }),
+      holders: numberOrNull(row.holder_count ?? row.holders),
+    });
+  }
+  for (const row of lp) {
+    const timestamp = row.timestamp || row.day;
+    const key = String(timestamp);
+    merged.set(key, {
+      ...(merged.get(key) || { timestamp }),
+      lpHolders: numberOrNull(row.lp_holder_count ?? row.lpHolders),
+    });
+  }
+
+  return [...merged.values()].sort(
+    (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
   );
-  return rows.map(mapActivityRow).filter((row) => row.timestamp);
 }
 
-export async function getChartHistory(kind) {
-  const path =
-    kind === "holders"
-      ? "/api/charts/holders"
-      : kind === "lp"
-        ? "/api/charts/lp-holders"
-        : "/api/charts/tvl";
+function amountFromBalances(payload, names) {
+  if (payload == null) return null;
+  if (typeof payload === "number" || typeof payload === "string") {
+    return numberOrNull(payload);
+  }
 
-  return asArray(await indexerGet(path)).map((row) => ({
-    timestamp: row.timestamp || row.day,
-    tvl: numberOrNull(row.tvl),
-    holders: numberOrNull(row.holder_count ?? row.holders),
-    lpHolders: numberOrNull(row.lp_holder_count ?? row.lpHolders),
-  }));
+  const list = asArray(payload.balances || payload.lines || payload);
+  for (const row of list) {
+    const currency = String(row.currency || row.code || row.symbol || "").toUpperCase();
+    if (names.some((name) => currency === name.toUpperCase() || currency.includes(name.toUpperCase()))) {
+      return numberOrNull(row.value ?? row.balance ?? row.amount);
+    }
+  }
+
+  for (const name of names) {
+    const direct = numberOrNull(payload[name] ?? payload[name.toLowerCase()]);
+    if (direct != null) return direct;
+  }
+  return null;
 }
 
 export async function getWalletBalances(address) {
-  return asObject(
-    await indexerGet(`/api/wallet/balances/${encodeURIComponent(address)}`)
+  let payload;
+  try {
+    payload = await api.balances(address);
+  } catch {
+    payload = await getJsonAlias(address);
+  }
+
+  return {
+    raw: payload,
+    xrp: amountFromBalances(payload, ["XRP"]),
+    xdx: amountFromBalances(payload, ["XDX", "5844580000000000000000000000000000000000"]),
+    lp: amountFromBalances(payload, [
+      "LP",
+      "03970105D80AE3C54085F6E97EE16CEDE6CE8200",
+      "03BCD44104644B711C58CD14CD13CBA65757CFBE",
+    ]),
+  };
+}
+
+async function getJsonAlias(address) {
+  const base = INDEXER_ORIGIN.replace(/\/$/, "");
+  const res = await fetch(
+    `${base}/api/balances/${encodeURIComponent(address)}`,
+    { headers: { accept: "application/json" } }
   );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || data.detail || `${res.status} ${res.statusText}`);
+  }
+  return data;
 }
 
 export async function getWalletNetworth(address) {
-  return asObject(
-    await indexerGet(`/api/wallet/networth/${encodeURIComponent(address)}`)
-  );
+  return api.networth(address);
 }
 
 export async function getPrices() {
-  return asObject(await indexerGet("/api/prices"));
-}
-
-export async function getHealth() {
-  return firstOk([() => indexerGet("/health"), () => indexerGet("/")]);
+  return api.prices();
 }

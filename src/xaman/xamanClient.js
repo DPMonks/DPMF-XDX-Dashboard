@@ -1,5 +1,3 @@
-import { firstOk, indexerGet, indexerPost } from "../api/indexer";
-
 function pick(object, keys) {
   for (const key of keys) {
     const value = key.split(".").reduce((acc, part) => acc?.[part], object);
@@ -37,25 +35,34 @@ export function normalizePayload(raw) {
 }
 
 export async function createPayload() {
-  const raw = await firstOk([
-    () => indexerPost("/api/xaman/create-payload"),
-    () => indexerPost("/xaman/create-payload"),
-    () => indexerPost("/api/create-xumm-payload"),
-  ]);
+  const response = await fetch("/api/xaman/create-payload", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+  const raw = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(raw.error || raw.detail || "Failed to start Xaman sign-in");
+  }
 
   const payload = normalizePayload(raw);
   if (!payload) {
-    throw new Error("Indexer returned an incomplete Xaman payload");
+    throw new Error("Xaman returned an incomplete payload");
   }
   return payload;
 }
 
 export async function getPayloadResult(uuid) {
   try {
-    return await firstOk([
-      () => indexerGet(`/api/xaman/payload-result?uuid=${encodeURIComponent(uuid)}`),
-      () => indexerGet(`/xaman/payload-result?uuid=${encodeURIComponent(uuid)}`),
-    ]);
+    const response = await fetch(
+      `/api/xaman/payload-result?uuid=${encodeURIComponent(uuid)}`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (!response.ok) return null;
+    return await response.json();
   } catch {
     return null;
   }

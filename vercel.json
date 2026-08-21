@@ -1,12 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://dpmf-xdx-indexer-production.up.railway.app/api/:path*"
-    },
-    {
-      "source": "/xaman/:path*",
-      "destination": "https://dpmf-xdx-indexer-production.up.railway.app/xaman/:path*"
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ]
 }

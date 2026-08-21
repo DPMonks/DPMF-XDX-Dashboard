@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getTokenDetailsLive, getTokenDetailsStatic } from "../api/indexer";
+import { getTokenDetails } from "../api/indexer";
 import { formatNumber, formatUsd } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
@@ -31,12 +31,9 @@ export default function TokenDetails() {
 
     async function load() {
       try {
-        const [staticData, liveData] = await Promise.all([
-          getTokenDetailsStatic(),
-          getTokenDetailsLive(),
-        ]);
+        const next = await getTokenDetails();
         if (!cancelled) {
-          setData({ ...staticData, ...liveData });
+          setData(next);
           setError(null);
         }
       } catch (err) {
@@ -44,20 +41,11 @@ export default function TokenDetails() {
       }
     }
 
-    load();
-    const id = setInterval(async () => {
-      try {
-        const liveData = await getTokenDetailsLive();
-        if (!cancelled) {
-          setData((current) => ({ ...(current || {}), ...liveData }));
-        }
-      } catch {
-        // keep last good snapshot
-      }
-    }, 15000);
-
+    const timeout = setTimeout(load, 800);
+    const id = setInterval(load, 60000);
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
       clearInterval(id);
     };
   }, []);
@@ -76,16 +64,14 @@ export default function TokenDetails() {
     return <p className="error-message">{error}</p>;
   }
 
-  const ath = data.ath || {};
-  const atl = data.atl || {};
   const blackholed = pick(data, ["blackholed"]);
 
   return (
     <div className="token-details-grid">
       <Detail label={t.tokenType} value={pick(data, ["tokenType", "token_type"])} />
       <Detail
-        label={t.rank}
-        value={pick(data, ["rank"]) != null ? `#${pick(data, ["rank"])}` : "—"}
+        label={t.price}
+        value={formatUsd(pick(data, ["price", "xdxUsd"]), locale)}
       />
       <Detail
         label={t.xrplMarketCap}
@@ -93,56 +79,28 @@ export default function TokenDetails() {
       />
       <Detail
         label={t.ammMarketCap}
-        value={formatUsd(pick(data, ["ammMarketCap", "amm_market_cap"]), locale)}
-      />
-      <Detail
-        label={t.circulatingMarketCap}
-        value={formatUsd(
-          pick(data, ["circulatingMarketCap", "circulating_market_cap"]),
-          locale
-        )}
+        value={formatUsd(pick(data, ["ammMarketCap", "tvl"]), locale)}
       />
       <Detail
         label={t.circulating}
         value={formatNumber(pick(data, ["circulating", "circulating_supply"]), locale)}
       />
-      <Detail
-        label={t.totalSupply}
-        value={formatNumber(pick(data, ["totalSupply", "total_supply"]), locale)}
-      />
-      <Detail
-        label={t.burnedSupply}
-        value={formatNumber(pick(data, ["burnedSupply", "burned_supply"]), locale)}
-      />
+      <Detail label={t.tvl} value={formatNumber(pick(data, ["tvl"]), locale)} />
       <Detail
         label={t.holders}
         value={formatNumber(pick(data, ["holders", "holder_count"]), locale)}
       />
       <Detail
-        label={t.trustlines}
-        value={formatNumber(pick(data, ["trustlines", "trustline_count"]), locale)}
+        label={t.lpHoldersCount}
+        value={formatNumber(pick(data, ["lp_holder_count"]), locale)}
       />
-      <Detail label={t.issuerFee} value={pick(data, ["issuerFee", "issuer_fee"])} />
+      <Detail
+        label={t.lpSupply}
+        value={formatNumber(pick(data, ["lp_supply"]), locale)}
+      />
       <Detail
         label={t.blackholed}
         value={blackholed == null ? "—" : blackholed ? t.yes : t.no}
-      />
-      <Detail label={t.created} value={pick(data, ["created", "created_at"])} />
-      <Detail
-        label={t.ath}
-        value={
-          ath.price
-            ? `${ath.price}${ath.date ? ` (${ath.date})` : ""}`
-            : pick(data, ["ath"])
-        }
-      />
-      <Detail
-        label={t.atl}
-        value={
-          atl.price
-            ? `${atl.price}${atl.date ? ` (${atl.date})` : ""}`
-            : pick(data, ["atl"])
-        }
       />
     </div>
   );

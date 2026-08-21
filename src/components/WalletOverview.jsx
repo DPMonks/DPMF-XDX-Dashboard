@@ -16,10 +16,8 @@ export default function WalletOverview({ address }) {
 
     async function load() {
       try {
-        const [nextBalances, nextNetworth] = await Promise.all([
-          getWalletBalances(address),
-          getWalletNetworth(address).catch(() => null),
-        ]);
+        const nextBalances = await getWalletBalances(address);
+        const nextNetworth = await getWalletNetworth(address).catch(() => null);
         if (!cancelled) {
           setBalances(nextBalances);
           setNetworth(nextNetworth);
@@ -31,7 +29,7 @@ export default function WalletOverview({ address }) {
     }
 
     load();
-    const id = setInterval(load, 20000);
+    const id = setInterval(load, 30000);
     return () => {
       cancelled = true;
       clearInterval(id);

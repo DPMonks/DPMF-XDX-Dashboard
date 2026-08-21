@@ -15,6 +15,10 @@ import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
 const DexChart = lazy(() => import("./components/DexChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function App() {
   const { t } = useI18n();
   const { walletAddress } = useWallet();
@@ -29,29 +33,42 @@ export default function App() {
 
     async function load() {
       const nextErrors = {};
-      const [holdersResult, lpResult, ammResult] = await Promise.allSettled([
-        getTopHolders(),
-        getTopLp(),
-        getAmm(),
-      ]);
 
+      try {
+        const nextHolders = await getTopHolders();
+        if (!cancelled) setHolders(nextHolders);
+      } catch (error) {
+        nextErrors.holders = error.message;
+      }
+
+      await sleep(250);
       if (cancelled) return;
 
-      if (holdersResult.status === "fulfilled") setHolders(holdersResult.value);
-      else nextErrors.holders = holdersResult.reason.message;
+      try {
+        const nextLp = await getTopLp();
+        if (!cancelled) setLpHolders(nextLp);
+      } catch (error) {
+        nextErrors.lp = error.message;
+      }
 
-      if (lpResult.status === "fulfilled") setLpHolders(lpResult.value);
-      else nextErrors.lp = lpResult.reason.message;
+      await sleep(250);
+      if (cancelled) return;
 
-      if (ammResult.status === "fulfilled") setAmmData(ammResult.value);
-      else nextErrors.amm = ammResult.reason.message;
+      try {
+        const nextAmm = await getAmm();
+        if (!cancelled) setAmmData(nextAmm);
+      } catch (error) {
+        nextErrors.amm = error.message;
+      }
 
-      setErrors(nextErrors);
-      setLoading(false);
+      if (!cancelled) {
+        setErrors(nextErrors);
+        setLoading(false);
+      }
     }
 
     load();
-    const id = setInterval(load, 30000);
+    const id = setInterval(load, 60000);
     return () => {
       cancelled = true;
       clearInterval(id);
