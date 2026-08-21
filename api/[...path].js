@@ -2,11 +2,23 @@ import {
   fetchIndexerFirst,
   handshakePostBody,
   indexerPathsFor,
+  proxyCorsHeaders,
 } from "../server/proxyIndexer.js";
+
+export const maxDuration = 10;
 
 export default async function handler(req, res) {
   const parts = req.query.path;
   const suffix = Array.isArray(parts) ? parts.join("/") : parts || "";
+
+  for (const [key, value] of Object.entries(proxyCorsHeaders())) {
+    res.setHeader(key, value);
+  }
+
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
 
   if (suffix.startsWith("xaman")) {
     res.status(404).json({ error: "Xaman stays on dashboard /api/xaman/*" });

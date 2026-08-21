@@ -50,6 +50,10 @@ Vercel: project **Settings → Environment Variables**, then redeploy.
 
 ## Scripts
 
-- `npm run dev` — Vite dev server
+- `npm run dev` — Vite dev server (proxies `/api` to the indexer)
 - `npm run build` — production build
+- `npm run preview` — Vite preview **with the same `/api` proxy** (needed in containers)
+- `npm start` — serve `dist/` plus the indexer proxy (`PORT`, default 4173)
 - `npm run lint` — ESLint
+
+Static file servers (nginx, `vite preview` without the plugin, opening `dist/index.html`) will show **Failed to fetch** in every card because `/api` is missing. Use `npm run dev`, `npm run preview`, `npm start`, or Vercel.

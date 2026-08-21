@@ -1,6 +1,5 @@
 import {
   CATALOG_PATHS,
-  CLUSTER_HEADERS,
   DEFAULT_ENDPOINTS,
   DEFAULT_INDEXER_ORIGIN,
   ENDPOINT_ALIASES,
@@ -163,14 +162,28 @@ function cacheSet(url, data) {
 }
 
 async function fetchJson(url, { method = "GET", body } = {}) {
-  const res = await fetch(url, {
-    method,
-    headers: {
-      ...CLUSTER_HEADERS,
-      ...(body ? { "content-type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      credentials: "same-origin",
+      headers: {
+        accept: "application/json",
+        ...(body ? { "content-type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (error) {
+    const timedOut = error.name === "TimeoutError" || error.name === "AbortError";
+    const next = new Error(
+      timedOut
+        ? "Indexer proxy timed out"
+        : "Failed to fetch via /api proxy. Use Vite, `npm start`, or Vercel so /api is proxied — the browser must not call Railway."
+    );
+    next.status = 0;
+    throw next;
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const fallback =
@@ -203,7 +216,7 @@ async function getJson(path, options = {}) {
     body,
     cache = method === "GET",
     queue: useQueue = true,
-    retries = 4,
+    retries = 2,
   } = options;
   const url = requestUrl(path);
   const cacheKey = `${method} ${url}`;

@@ -20,10 +20,6 @@ export function indexerOrigin(env = process.env) {
   return (remote || DEFAULT_INDEXER_ORIGIN).replace(/\/$/, "");
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export function joinIndexerUrl(origin, path, search = "") {
   const prefix = origin.replace(/\/$/, "");
   const suffix = path.startsWith("/") ? path : `/${path}`;
@@ -42,51 +38,48 @@ function isHandshakeSuffix(suffix) {
 
 export function indexerPathsFor(suffix) {
   if (suffix === "health") return ["/health", "/api/health"];
-  if (isHandshakeSuffix(suffix)) return INDEXER_HANDSHAKE_PATHS;
+  if (isHandshakeSuffix(suffix)) return INDEXER_HANDSHAKE_PATHS.slice(0, 2);
+  if (!suffix) return ["/api", "/"];
   return [`/api/${suffix}`];
 }
 
 export async function fetchIndexer(url, { method = "GET", body } = {}) {
-  let lastError;
   const payload =
     body == null || typeof body === "string" ? body : JSON.stringify(body);
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      const response = await fetch(url, {
-        method,
-        headers: {
-          ...CLUSTER_HEADERS,
-          "user-agent": "DPMF-XDX-Dashboard/1.1",
-          ...(payload ? { "content-type": "application/json" } : {}),
-        },
-        body: payload,
-      });
-      if (response.status === 429 && attempt < 4) {
-        await sleep(900 * 2 ** attempt);
-        continue;
-      }
-      const text = await response.text();
-      return {
-        status: response.status,
-        contentType: response.headers.get("content-type") || "application/json",
-        body: text,
-      };
-    } catch (error) {
-      lastError = error;
-      await sleep(400 * (attempt + 1));
-    }
-  }
-  throw lastError || new Error("Indexer proxy failed");
+  const response = await fetch(url, {
+    method,
+    headers: {
+      ...CLUSTER_HEADERS,
+      "user-agent": "DPMF-XDX-Dashboard/1.1",
+      ...(payload ? { "content-type": "application/json" } : {}),
+    },
+    body: payload,
+    signal: AbortSignal.timeout(3500),
+  });
+  const text = await response.text();
+  return {
+    status: response.status,
+    contentType: response.headers.get("content-type") || "application/json",
+    body: text,
+  };
 }
 
 export async function fetchIndexerFirst(paths, { method = "GET", body, search = "" } = {}) {
   const origin = indexerOrigin();
   let last;
   for (const path of paths) {
-    last = await fetchIndexer(joinIndexerUrl(origin, path, search), { method, body });
-    if (last.status < 500 && last.status !== 404 && last.status !== 429) {
-      return last;
+    try {
+      last = await fetchIndexer(joinIndexerUrl(origin, path, search), { method, body });
+      if (last.status < 500 && last.status !== 404) {
+        return last;
+      }
+    } catch (error) {
+      last = {
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({ error: error.message || "Indexer proxy failed" }),
+      };
     }
   }
   return last;
@@ -97,4 +90,12 @@ export function handshakePostBody(incoming) {
     return { ...HANDSHAKE_BODY, ...incoming };
   }
   return HANDSHAKE_BODY;
+}
+
+export function proxyCorsHeaders() {
+  return {
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "accept,content-type",
+  };
 }
