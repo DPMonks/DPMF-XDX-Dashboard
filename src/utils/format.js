@@ -17,15 +17,20 @@ export function formatNumber(value, locale, options = {}) {
   });
 }
 
+export function recordUsdPrice(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 0;
+  return Math.round(num * 1e8) / 1e8;
+}
+
 export function formatUsd(value, locale) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
-  const digits = Math.abs(num) > 0 && Math.abs(num) < 0.01 ? 8 : 2;
   return num.toLocaleString(localeOf(locale), {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: digits === 8 ? 8 : 2,
-    maximumFractionDigits: digits,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 

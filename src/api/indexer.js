@@ -1,5 +1,6 @@
 import { api, getHandshakeState, handshake, INDEXER_ORIGIN } from "../api";
 import { pairFromRow, XDX_TOTAL_SUPPLY } from "../constants/ledger";
+import { recordUsdPrice } from "../utils/format";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -331,14 +332,14 @@ export async function getTokenDetails() {
   );
   const circulating =
     rawCirc && rawCirc > 0 ? rawCirc : Math.max(totalSupply - issuerLocked, 0);
-  const price = numberOrNull(
-    prices.xdxUsd || prices.xdx_usd || overview.xdxUsd || overview.price || primary.price
+  const price = recordUsdPrice(
+    prices.xdxUsd || prices.xdx_usd || overview.recorded_price || overview.xdxUsd
   );
   const tvlUsd = numberOrNull(overview.tvl_usd || primary.tvl_usd || overview.tvl || primary.tvl);
   const poolTvl = ammRows.reduce((sum, row) => sum + (Number(row.tvl) || 0), 0);
   const ammMarketCap =
     numberOrNull(overview.ammMarketCap) || (poolTvl > 0 ? poolTvl : tvlUsd);
-  const fdv = price != null ? totalSupply * price : null;
+  const fdv = totalSupply * price;
 
   return {
     ...primary,
@@ -346,6 +347,7 @@ export async function getTokenDetails() {
     tokenType: "XDX",
     price,
     xdxUsd: price,
+    recorded_price: price,
     xrplMarketCap: fdv ?? overview.xrplMarketCap ?? overview.market_cap,
     ammMarketCap,
     circulatingMarketCap: price != null ? circulating * price : overview.circulatingMarketCap,

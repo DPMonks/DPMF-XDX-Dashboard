@@ -61,6 +61,7 @@ const en = {
   yes: "Yes",
   no: "No",
   price: "Price",
+  recordedPrice: "Recorded price",
   volume: "Volume",
   marketcap: "Market cap",
   traders: "Traders",

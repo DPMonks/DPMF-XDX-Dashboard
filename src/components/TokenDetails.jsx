@@ -4,11 +4,12 @@ import { formatNumber, formatUsd, formatUsdPrice, shortAddress } from "../utils/
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
-function Detail({ label, value }) {
+function Detail({ label, value, hint }) {
   return (
     <div className="token-detail neon-card">
       <span className="token-detail-label">{label}</span>
       <span className="token-detail-value">{value ?? "—"}</span>
+      {hint ? <span className="token-detail-hint">{hint}</span> : null}
     </div>
   );
 }
@@ -66,7 +67,8 @@ export default function TokenDetails() {
 
   const blackholed = pick(data, ["blackholed"]);
   const issuer = pick(data, ["issuer"]);
-  const usdPrice = pick(data, ["price", "xdxUsd"]);
+  const usdPrice = pick(data, ["recorded_price", "price", "xdxUsd"]);
+  const recordedHint = `${t.recordedPrice} ${formatUsdPrice(usdPrice, locale)}`;
 
   return (
     <div className="token-details-grid">
@@ -76,14 +78,17 @@ export default function TokenDetails() {
       <Detail
         label={t.xrplMarketCap}
         value={formatUsd(pick(data, ["xrplMarketCap"]), locale)}
+        hint={recordedHint}
       />
       <Detail
         label={t.circulatingMarketCap}
         value={formatUsd(pick(data, ["circulatingMarketCap"]), locale)}
+        hint={recordedHint}
       />
       <Detail
         label={t.ammMarketCap}
         value={formatUsd(pick(data, ["ammMarketCap", "tvl_usd", "tvl"]), locale)}
+        hint={recordedHint}
       />
       <Detail
         label={t.circulating}

@@ -1,5 +1,6 @@
 import pg from "pg";
 import { XDX_ISSUER, XDX_TOTAL_SUPPLY, XDX_XRP_AMM } from "../src/constants/ledger.js";
+import { recordUsdPrice } from "../src/utils/format.js";
 
 let pool = null;
 
@@ -368,6 +369,35 @@ async function loadXrpQuote(db) {
   return xrpQuote;
 }
 
+async function loadRecordedXdxUsd(db, xdxPerXrp, xrpUsd) {
+  const fromAmm = xdxPerXrp > 0 && xrpUsd > 0 ? xdxPerXrp * xrpUsd : 0;
+  if (fromAmm > 0) return recordUsdPrice(fromAmm);
+
+  const latest = await tryQuery(
+    db,
+    `SELECT price_usd FROM price_latest
+     WHERE asset IN ('XDX', 'xdx')
+     ORDER BY timestamp DESC NULLS LAST
+     LIMIT 1`
+  );
+  const hist = await tryQuery(
+    db,
+    `SELECT price_usd FROM price_history
+     WHERE asset IN ('XDX', 'xdx')
+     ORDER BY timestamp DESC
+     LIMIT 1`
+  );
+  const all = await tryQuery(
+    db,
+    `SELECT price_usd FROM price_latest_all
+     WHERE currency IN ('XDX', 'xdx')
+     LIMIT 1`
+  );
+  return recordUsdPrice(
+    latest.rows[0]?.price_usd || hist.rows[0]?.price_usd || all.rows[0]?.price_usd || 0
+  );
+}
+
 async function hydrateAmm(db) {
   const latest = await tryQuery(
     db,
@@ -551,7 +581,7 @@ async function buildSnapshot(db) {
       ? reserveCurrency / reserveAsset
       : Number(amm.price || 0);
   const xrpUsd = Number(quote.usd || 0);
-  const xdxUsd = xdxPerXrp > 0 && xrpUsd > 0 ? xdxPerXrp * xrpUsd : 0;
+  const xdxUsd = await loadRecordedXdxUsd(db, xdxPerXrp, xrpUsd);
   const tvlUsd = reserveCurrency > 0 && xrpUsd > 0 ? reserveCurrency * 2 * xrpUsd : 0;
   const totalSupply = XDX_TOTAL_SUPPLY;
   const burned = Math.abs(Number(issuerLocked || 0));
@@ -565,6 +595,7 @@ async function buildSnapshot(db) {
     tvl_usd: tvlUsd,
     price: xdxUsd,
     xdxUsd,
+    recorded_price: xdxUsd,
     xdxGbp: xdxPerXrp > 0 && quote.gbp ? xdxPerXrp * quote.gbp : 0,
     xrpUsd,
     xrpGbp: Number(quote.gbp || 0),
@@ -771,6 +802,7 @@ export async function readIndexerDb(suffix, search = "") {
         xrpUsd: snap.xrpUsd,
         xrpGbp: snap.xrpGbp,
         xdxUsd: snap.xdxUsd,
+        recorded_price: snap.xdxUsd,
         xdxGbp: snap.xdxGbp,
         source: "db",
       });

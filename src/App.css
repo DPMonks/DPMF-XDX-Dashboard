@@ -332,6 +332,14 @@ body {
   overflow-wrap: anywhere;
 }
 
+.token-detail-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--dpmf-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .activity-chart-container,
 .activity-controls {
   display: flex;
