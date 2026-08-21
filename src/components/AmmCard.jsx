@@ -41,7 +41,7 @@ export default function AmmCard({ pools, loading, error }) {
             <dl className="pool-stats">
               <div>
                 <dt>{t.tvl}</dt>
-                <dd>{formatToken(pool.tvl, locale)}</dd>
+                <dd>{formatUsd(pool.tvl, locale)}</dd>
               </div>
               <div>
                 <dt>{t.price}</dt>

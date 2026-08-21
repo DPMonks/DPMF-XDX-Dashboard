@@ -175,7 +175,7 @@ async function fetchJson(url, { method = "GET", body } = {}) {
         ...(body ? { "content-type": "application/json" } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(20000),
     });
   } catch (error) {
     const timedOut = error.name === "TimeoutError" || error.name === "AbortError";

@@ -1,9 +1,10 @@
 {
   "functions": {
-    "api/index.js": { "maxDuration": 10 },
-    "api/overview.js": { "maxDuration": 10 },
+    "api/index.js": { "maxDuration": 20 },
+    "api/overview.js": { "maxDuration": 20 },
     "api/health.js": { "maxDuration": 10 },
-    "api/[...path].js": { "maxDuration": 10 }
+    "api/[...path].js": { "maxDuration": 20 },
+    "api/top-holders.js": { "maxDuration": 20 }
   },
   "rewrites": [
     { "source": "/health", "destination": "/api/health" },

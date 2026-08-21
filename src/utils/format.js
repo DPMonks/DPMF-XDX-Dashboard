@@ -20,11 +20,12 @@ export function formatNumber(value, locale, options = {}) {
 export function formatUsd(value, locale) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
+  const digits = Math.abs(num) > 0 && Math.abs(num) < 0.01 ? 8 : 2;
   return num.toLocaleString(localeOf(locale), {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: digits,
   });
 }
 

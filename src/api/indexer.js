@@ -157,7 +157,7 @@ function mapPool(row) {
     pool: pair,
     asset,
     quote,
-    tvl: numberOrNull(pick(row, ["tvl", "tvl_usd", "total_value_locked", "liquidity"])),
+    tvl: numberOrNull(pick(row, ["tvl_usd", "tvl", "total_value_locked", "liquidity"])),
     price: numberOrNull(pick(row, ["price", "price_usd"])),
     apr: numberOrNull(pick(row, ["apr", "apy"])),
     volume24h: numberOrNull(pick(row, ["volume24h", "volume_24h", "volume"])),
@@ -306,29 +306,36 @@ export async function getTokenDetails() {
   const circulating = numberOrNull(
     overview.circulating || overview.circulating_supply || overview.xdx_supply
   );
-  const price = numberOrNull(prices.xdxUsd || prices.xdx_usd || primary.price);
+  const price = numberOrNull(
+    prices.xdxUsd || prices.xdx_usd || overview.xdxUsd || overview.price || primary.price
+  );
+  const tvlUsd = numberOrNull(overview.tvl_usd || primary.tvl_usd || overview.tvl || primary.tvl);
 
   return {
+    ...primary,
+    ...overview,
     tokenType: "XDX",
-    xrplMarketCap: circulating != null && price != null ? circulating * price : overview.market_cap,
-    ammMarketCap: primary.tvl,
+    price,
+    xdxUsd: price,
+    xrplMarketCap:
+      circulating != null && price != null ? circulating * price : overview.market_cap,
+    ammMarketCap: tvlUsd,
     circulatingMarketCap:
       circulating != null && price != null ? circulating * price : null,
     circulating,
     totalSupply: overview.total_supply,
-    burnedSupply: overview.burned_supply,
+    burnedSupply: overview.burned_supply || overview.issuer_locked,
+    issuerLocked: overview.issuer_locked || overview.burned_supply,
     holders:
       (typeof holders === "number" ? holders : holders.count) ??
       overview.holder_count,
-    trustlines: overview.trustline_count ?? overview.trustlines,
+    trustlines: overview.trustline_count ?? overview.trustlines ?? overview.holder_count,
+    issuer: overview.issuer,
     issuerFee: overview.issuer_fee,
     blackholed: overview.blackholed,
     created: overview.created,
-    price,
     change24h: change.xdx ?? change.XDX,
     source: overview.source,
-    ...overview,
-    ...primary,
   };
 }
 

@@ -1,4 +1,5 @@
 import pg from "pg";
+import { XDX_ISSUER, XDX_XRP_AMM } from "../src/constants/ledger.js";
 
 let pool = null;
 
@@ -208,56 +209,38 @@ async function tokenHolderCount(db) {
 }
 
 async function tokenHoldersPage(db, limit, offset) {
-  const withFrozen = await tryQuery(
-    db,
-    `SELECT ROW_NUMBER() OVER (ORDER BY ABS(balance::numeric) DESC) AS rank,
-            account, ABS(balance::numeric) AS balance, frozen
-     FROM token_holders_latest
-     ORDER BY ABS(balance::numeric) DESC
-     LIMIT $1 OFFSET $2`,
-    [limit, offset]
-  );
-  if (withFrozen.rows.length) return withFrozen.rows;
-
   const latest = await tryQuery(
     db,
-    `SELECT ROW_NUMBER() OVER (ORDER BY ABS(balance::numeric) DESC) AS rank,
-            account, ABS(balance::numeric) AS balance
+    `SELECT account, ABS(balance::numeric) AS balance
      FROM token_holders_latest
      ORDER BY ABS(balance::numeric) DESC
      LIMIT $1 OFFSET $2`,
     [limit, offset]
   );
   if (latest.rows.length) {
-    return latest.rows.map((row) => ({ ...row, frozen: Boolean(row.frozen) }));
+    return latest.rows.map((row, index) => ({
+      rank: offset + index + 1,
+      account: row.account,
+      balance: Number(row.balance),
+      frozen: false,
+    }));
   }
-
-  const history = await tryQuery(
-    db,
-    `SELECT ROW_NUMBER() OVER (ORDER BY ABS(h.balance::numeric) DESC) AS rank,
-            h.account, ABS(h.balance::numeric) AS balance, false AS frozen
-     FROM (
-       SELECT DISTINCT ON (account) account, balance
-       FROM token_holders_history
-       ORDER BY account, timestamp DESC
-     ) h
-     ORDER BY ABS(h.balance::numeric) DESC
-     LIMIT $1 OFFSET $2`,
-    [limit, offset]
-  );
-  if (history.rows.length) return history.rows;
 
   const grouped = await tryQuery(
     db,
-    `SELECT ROW_NUMBER() OVER (ORDER BY ABS(MAX(balance::numeric)) DESC) AS rank,
-            account, ABS(MAX(balance::numeric)) AS balance, false AS frozen
+    `SELECT account, ABS(MAX(balance::numeric)) AS balance
      FROM token_holders_history
      GROUP BY account
      ORDER BY ABS(MAX(balance::numeric)) DESC
      LIMIT $1 OFFSET $2`,
     [limit, offset]
   );
-  return grouped.rows;
+  return grouped.rows.map((row, index) => ({
+    rank: offset + index + 1,
+    account: row.account,
+    balance: Number(row.balance),
+    frozen: false,
+  }));
 }
 
 async function tokenBalanceFor(db, address) {
@@ -277,6 +260,134 @@ async function tokenBalanceFor(db, address) {
     [address]
   );
   return Number(history.rows[0]?.balance || 0);
+}
+
+let xrpQuote = { at: 0, usd: 0, gbp: 0 };
+
+async function loadXrpQuote(db) {
+  if (Date.now() - xrpQuote.at < 300_000 && xrpQuote.usd) return xrpQuote;
+  const latest = await tryQuery(
+    db,
+    "SELECT price_usd, price_gbp FROM price_latest LIMIT 1"
+  );
+  const hist = await tryQuery(
+    db,
+    `SELECT price_usd FROM price_history
+     WHERE asset IN ('XRP', 'xrp')
+     ORDER BY timestamp DESC LIMIT 1`
+  );
+  let usd = Number(latest.rows[0]?.price_usd || hist.rows[0]?.price_usd || 0);
+  let gbp = Number(latest.rows[0]?.price_gbp || 0);
+  if (!usd) {
+    try {
+      const res = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd,gbp",
+        { signal: AbortSignal.timeout(2500) }
+      );
+      const body = await res.json();
+      usd = Number(body?.ripple?.usd || 0);
+      gbp = Number(body?.ripple?.gbp || 0);
+    } catch {
+      usd = usd || 0;
+    }
+  }
+  xrpQuote = { at: Date.now(), usd, gbp };
+  return xrpQuote;
+}
+
+async function hydrateAmm(db) {
+  const latest = await tryQuery(
+    db,
+    `SELECT * FROM amm_pool_latest WHERE pool_name = 'XDX/XRP' LIMIT 1`
+  );
+  const row = { ...(latest.rows[0] || {}) };
+  if (!(Number(row.reserve_currency) > 0)) {
+    const hist = await tryQuery(
+      db,
+      `SELECT reserve_asset, reserve_currency, lp_supply, price, timestamp
+       FROM amm_pool_history
+       WHERE pool_name = 'XDX/XRP' AND reserve_currency::numeric > 0
+       ORDER BY timestamp DESC
+       LIMIT 1`
+    );
+    if (hist.rows[0]) {
+      row.reserve_currency = hist.rows[0].reserve_currency;
+      if (!Number(row.reserve_asset)) row.reserve_asset = hist.rows[0].reserve_asset;
+      if (!Number(row.price)) row.price = hist.rows[0].price;
+      row.reserve_source = "amm_pool_history";
+    }
+  }
+  return row;
+}
+
+async function buildSnapshot(db) {
+  const [amm, quote, holders, lp, totals, issuer, ammHeld] = await Promise.all([
+    hydrateAmm(db),
+    loadXrpQuote(db),
+    tokenHolderCount(db),
+    tryQuery(db, "SELECT COUNT(*) AS lp_holder_count FROM lp_holders_latest"),
+    tryQuery(
+      db,
+      "SELECT COALESCE(SUM(ABS(balance::numeric)), 0) AS total FROM token_holders_latest"
+    ),
+    tryQuery(
+      db,
+      "SELECT COALESCE(ABS(balance::numeric), 0) AS balance FROM token_holders_latest WHERE account = $1 LIMIT 1",
+      [XDX_ISSUER]
+    ),
+    tryQuery(
+      db,
+      "SELECT COALESCE(ABS(balance::numeric), 0) AS balance FROM token_holders_latest WHERE account = $1 LIMIT 1",
+      [XDX_XRP_AMM]
+    ),
+  ]);
+
+  const reserveAsset = Number(amm.reserve_asset || 0);
+  const reserveCurrency = Number(amm.reserve_currency || 0);
+  const xdxPerXrp =
+    reserveAsset > 0 && reserveCurrency > 0
+      ? reserveCurrency / reserveAsset
+      : Number(amm.price || 0);
+  const xrpUsd = Number(quote.usd || 0);
+  const xdxUsd = xdxPerXrp > 0 && xrpUsd > 0 ? xdxPerXrp * xrpUsd : 0;
+  const tvlUsd = reserveCurrency > 0 && xrpUsd > 0 ? reserveCurrency * 2 * xrpUsd : 0;
+  const totalSupply = Number(totals.rows[0]?.total || 0);
+  const issuerLocked = Number(issuer.rows[0]?.balance || 0);
+  const ammXdx = Number(ammHeld.rows[0]?.balance || reserveAsset || 0);
+  const circulating = Math.max(totalSupply - issuerLocked, 0);
+
+  return {
+    pool: amm.pool_name || "XDX/XRP",
+    tvl: tvlUsd || reserveCurrency || 0,
+    tvl_usd: tvlUsd,
+    price: xdxUsd || xdxPerXrp,
+    xdxUsd,
+    xdxGbp: xdxPerXrp > 0 && quote.gbp ? xdxPerXrp * quote.gbp : 0,
+    xrpUsd,
+    xrpGbp: Number(quote.gbp || 0),
+    xdx_per_xrp: xdxPerXrp,
+    apr: Number(amm.apr || 0),
+    volume24h: Number(amm.volume24h || 0),
+    reserve_asset: reserveAsset,
+    reserve_currency: reserveCurrency,
+    lp_supply: Number(amm.lp_supply || 0),
+    trading_fee: Number(amm.trading_fee || 0) || null,
+    holder_count: holders,
+    lp_holder_count: Number(lp.rows[0]?.lp_holder_count || 0),
+    circulating,
+    circulating_supply: circulating,
+    total_supply: totalSupply,
+    burned_supply: issuerLocked,
+    issuer_locked: issuerLocked,
+    amm_xdx: ammXdx,
+    trustlines: holders,
+    trustline_count: holders,
+    issuer: XDX_ISSUER,
+    amm_account: XDX_XRP_AMM,
+    updated: amm.timestamp,
+    reserve_source: amm.reserve_source || "amm_pool_latest",
+    source: "db",
+  };
 }
 
 export async function readIndexerDb(suffix, search = "") {
@@ -315,37 +426,12 @@ export async function readIndexerDb(suffix, search = "") {
       });
     }
 
-    if (suffix === "overview") {
-      const amm = await tryQuery(
-        db,
-        `SELECT reserve_asset, reserve_currency, lp_supply
-         FROM amm_pool_latest
-         WHERE pool_name = 'XDX/XRP'
-         LIMIT 1`
-      );
-      const lp = await tryQuery(
-        db,
-        "SELECT COUNT(*) AS lp_holder_count FROM lp_holders_latest"
-      );
-      const row = amm.rows[0] || {};
-      return ok({
-        tvl: Number(row.reserve_asset || 0) + Number(row.reserve_currency || 0),
-        lp_supply: Number(row.lp_supply || 0),
-        holder_count: await tokenHolderCount(db),
-        lp_holder_count: Number(lp.rows[0]?.lp_holder_count || 0),
-        source: "db",
-      });
+    if (suffix === "overview" || suffix === "token-details") {
+      return ok(await buildSnapshot(db));
     }
 
     if (suffix === "amm") {
-      const result = await tryQuery(
-        db,
-        `SELECT *
-         FROM amm_pool_latest
-         WHERE pool_name = 'XDX/XRP'
-         LIMIT 1`
-      );
-      return ok(result.rows[0] || {});
+      return ok(await buildSnapshot(db));
     }
 
     if (suffix === "holders/count") {
@@ -395,7 +481,18 @@ export async function readIndexerDb(suffix, search = "") {
         db,
         `SELECT day, holder_count FROM holders_history ORDER BY day ASC`
       );
-      return ok(result.rows);
+      if (result.rows.length) return ok(result.rows);
+      const fromLedger = await tryQuery(
+        db,
+        `SELECT date_trunc('day', timestamp)::date AS day,
+                COUNT(DISTINCT account) AS holder_count
+         FROM token_holders_history
+         GROUP BY 1
+         ORDER BY 1`
+      );
+      if (fromLedger.rows.length) return ok(fromLedger.rows);
+      const count = await tokenHolderCount(db);
+      return ok(count ? [{ day: new Date().toISOString(), holder_count: count }] : []);
     }
 
     if (suffix === "charts/lp-holders") {
@@ -405,73 +502,46 @@ export async function readIndexerDb(suffix, search = "") {
          FROM lp_holders_history_daily
          ORDER BY day ASC`
       );
-      return ok(result.rows);
-    }
-
-    if (suffix === "pools") {
-      const amm = await tryQuery(
-        db,
-        `SELECT *
-         FROM amm_pool_latest
-         WHERE pool_name = 'XDX/XRP'
-         LIMIT 1`
-      );
-      const holderCount = await tokenHolderCount(db);
-      const lp = await tryQuery(
+      if (result.rows.length) return ok(result.rows);
+      const latest = await tryQuery(
         db,
         "SELECT COUNT(*) AS lp_holder_count FROM lp_holders_latest"
       );
+      const count = Number(latest.rows[0]?.lp_holder_count || 0);
+      return ok(count ? [{ day: new Date().toISOString(), lp_holder_count: count }] : []);
+    }
+
+    if (suffix === "pools") {
+      const snap = await buildSnapshot(db);
       const allPools = await tryQuery(db, "SELECT * FROM amm_pool_latest");
-      const row = amm.rows[0] || {};
-      const tvl =
-        Number(row.reserve_asset || 0) + Number(row.reserve_currency || 0);
       return ok({
-        pool: row.pool_name || "XDX/XRP",
-        tvl,
-        price: Number(row.price || 0),
-        apr: Number(row.apr || 0),
-        volume24h: Number(row.volume24h || 0),
-        reserve_asset: Number(row.reserve_asset || 0),
-        reserve_currency: Number(row.reserve_currency || 0),
-        lp_supply: Number(row.lp_supply || 0),
-        holder_count: holderCount,
-        lp_holder_count: Number(lp.rows[0]?.lp_holder_count || 0),
-        updated: row.timestamp,
-        source: "db",
+        ...snap,
         pools: allPools.rows.map((item) => ({
           pool: item.pool_name,
           tvl:
-            Number(item.reserve_asset || 0) + Number(item.reserve_currency || 0),
-          price: Number(item.price || 0),
+            item.pool_name === "XDX/XRP"
+              ? snap.tvl
+              : Number(item.reserve_asset || 0) + Number(item.reserve_currency || 0),
+          price: item.pool_name === "XDX/XRP" ? snap.price : Number(item.price || 0),
           reserve_asset: Number(item.reserve_asset || 0),
-          reserve_currency: Number(item.reserve_currency || 0),
+          reserve_currency:
+            item.pool_name === "XDX/XRP"
+              ? snap.reserve_currency
+              : Number(item.reserve_currency || 0),
           lp_supply: Number(item.lp_supply || 0),
+          trading_fee: Number(item.trading_fee || 0) || null,
           updated: item.timestamp,
         })),
       });
     }
 
     if (suffix === "prices") {
-      const price = await tryQuery(
-        db,
-        "SELECT price_usd, price_gbp FROM price_latest LIMIT 1"
-      );
-      const xdx = await tryQuery(
-        db,
-        `SELECT price_usd, price_gbp
-         FROM price_latest_all
-         WHERE currency IN ('XDX', 'xdx')
-         LIMIT 1`
-      );
-      const row = price.rows[0] || {};
-      const xdxRow = xdx.rows[0] || {};
-      const xrpUsd = Number(row.price_usd || 0);
-      const xrpGbp = Number(row.price_gbp || 0);
+      const snap = await buildSnapshot(db);
       return ok({
-        xrpUsd,
-        xrpGbp,
-        xdxUsd: Number(xdxRow.price_usd || xrpUsd * 0.000001 || 0),
-        xdxGbp: Number(xdxRow.price_gbp || xrpGbp * 0.000001 || 0),
+        xrpUsd: snap.xrpUsd,
+        xrpGbp: snap.xrpGbp,
+        xdxUsd: snap.xdxUsd,
+        xdxGbp: snap.xdxGbp,
         source: "db",
       });
     }

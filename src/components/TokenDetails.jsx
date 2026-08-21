@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getTokenDetails } from "../api/indexer";
-import { formatNumber, formatUsd } from "../utils/format";
+import { formatNumber, formatUsd, shortAddress } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
@@ -53,7 +53,7 @@ export default function TokenDetails() {
   if (!data && !error) {
     return (
       <div className="token-details-grid">
-        {Array.from({ length: 8 }, (_, i) => (
+        {Array.from({ length: 14 }, (_, i) => (
           <Skeleton key={i} height={58} />
         ))}
       </div>
@@ -65,6 +65,7 @@ export default function TokenDetails() {
   }
 
   const blackholed = pick(data, ["blackholed"]);
+  const issuer = pick(data, ["issuer"]);
 
   return (
     <div className="token-details-grid">
@@ -74,21 +75,46 @@ export default function TokenDetails() {
         value={formatUsd(pick(data, ["price", "xdxUsd"]), locale)}
       />
       <Detail
+        label={t.xdxPerXrp}
+        value={formatNumber(pick(data, ["xdx_per_xrp"]), locale, {
+          maximumFractionDigits: 10,
+        })}
+      />
+      <Detail
         label={t.xrplMarketCap}
-        value={formatUsd(pick(data, ["xrplMarketCap", "marketCap", "market_cap"]), locale)}
+        value={formatUsd(pick(data, ["xrplMarketCap", "circulatingMarketCap"]), locale)}
+      />
+      <Detail
+        label={t.circulatingMarketCap}
+        value={formatUsd(pick(data, ["circulatingMarketCap"]), locale)}
       />
       <Detail
         label={t.ammMarketCap}
-        value={formatUsd(pick(data, ["ammMarketCap", "tvl"]), locale)}
+        value={formatUsd(pick(data, ["ammMarketCap", "tvl_usd", "tvl"]), locale)}
       />
       <Detail
         label={t.circulating}
         value={formatNumber(pick(data, ["circulating", "circulating_supply"]), locale)}
       />
-      <Detail label={t.tvl} value={formatNumber(pick(data, ["tvl"]), locale)} />
+      <Detail
+        label={t.totalSupply}
+        value={formatNumber(pick(data, ["totalSupply", "total_supply"]), locale)}
+      />
+      <Detail
+        label={t.burnedSupply}
+        value={formatNumber(pick(data, ["burnedSupply", "burned_supply", "issuer_locked"]), locale)}
+      />
+      <Detail
+        label={t.issuerLocked}
+        value={formatNumber(pick(data, ["issuerLocked", "issuer_locked"]), locale)}
+      />
       <Detail
         label={t.holders}
         value={formatNumber(pick(data, ["holders", "holder_count"]), locale)}
+      />
+      <Detail
+        label={t.trustlines}
+        value={formatNumber(pick(data, ["trustlines", "trustline_count"]), locale)}
       />
       <Detail
         label={t.lpHoldersCount}
@@ -98,6 +124,7 @@ export default function TokenDetails() {
         label={t.lpSupply}
         value={formatNumber(pick(data, ["lp_supply"]), locale)}
       />
+      <Detail label={t.issuerAccount} value={issuer ? shortAddress(issuer) : "—"} />
       <Detail
         label={t.blackholed}
         value={blackholed == null ? "—" : blackholed ? t.yes : t.no}

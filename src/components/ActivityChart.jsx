@@ -8,22 +8,36 @@ import {
   YAxis,
 } from "recharts";
 import { getChartHistory } from "../api/indexer";
-import { formatDay, formatNumber } from "../utils/format";
+import { formatDay, formatNumber, formatWhen } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
 const METRICS = ["tvl", "holders", "lpHolders", "price", "volume"];
-const RANGES = ["1D", "1W", "1M", "Max"];
+const RANGES = ["1H", "4H", "12H", "24H", "1W", "1M", "3M", "1Y", "Max"];
+const RANGE_MS = {
+  "1H": 3600000,
+  "4H": 4 * 3600000,
+  "12H": 12 * 3600000,
+  "24H": 86400000,
+  "1W": 7 * 86400000,
+  "1M": 30 * 86400000,
+  "3M": 90 * 86400000,
+  "1Y": 365 * 86400000,
+};
 
 function filterRange(rows, range) {
   if (!rows.length || range === "Max") return rows;
+  const windowMs = RANGE_MS[range];
+  if (!windowMs) return rows;
   const now = Date.now();
-  const windowMs =
-    range === "1D" ? 86400000 : range === "1W" ? 7 * 86400000 : 30 * 86400000;
   return rows.filter((row) => {
     const ts = new Date(row.timestamp).getTime();
     return Number.isFinite(ts) && now - ts <= windowMs;
   });
+}
+
+function isIntraday(range) {
+  return range === "1H" || range === "4H" || range === "12H" || range === "24H";
 }
 
 export default function ActivityChart() {
@@ -121,12 +135,19 @@ export default function ActivityChart() {
                 <XAxis
                   dataKey="timestamp"
                   tick={{ fill: "#7f8ba8", fontSize: 11 }}
-                  tickFormatter={(value) =>
-                    new Date(value).toLocaleDateString(locale, {
+                  tickFormatter={(value) => {
+                    const date = new Date(value);
+                    if (isIntraday(range)) {
+                      return date.toLocaleTimeString(locale, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+                    }
+                    return date.toLocaleDateString(locale, {
                       day: "2-digit",
                       month: "short",
-                    })
-                  }
+                    });
+                  }}
                 />
                 <YAxis tick={{ fill: "#7f8ba8", fontSize: 11 }} width={56} />
                 <Tooltip
@@ -162,7 +183,11 @@ export default function ActivityChart() {
                 <tbody>
                   {history.map((row) => (
                     <tr key={String(row.timestamp)}>
-                      <td>{formatDay(row.timestamp, locale)}</td>
+                      <td>
+                        {isIntraday(range)
+                          ? formatWhen(row.timestamp, locale)
+                          : formatDay(row.timestamp, locale)}
+                      </td>
                       <td className="col-num">
                         {formatNumber(row[metric], locale, {
                           maximumFractionDigits: 6,
