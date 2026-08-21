@@ -93,7 +93,9 @@ export function applyConnectionOverrides(raw) {
     const auth = finalPass
       ? `${encodeURIComponent(finalUser)}:${encodeURIComponent(finalPass)}`
       : encodeURIComponent(finalUser);
-    return `postgres://${auth}@${finalHost}:${finalPort}/${finalDb}${url.search}`;
+    return sanitizeDatabaseUrl(
+      `postgres://${auth}@${finalHost}:${finalPort}/${finalDb}${url.search}`
+    );
   } catch {
     return raw;
   }
@@ -132,14 +134,66 @@ export function databaseUrlHint() {
   return "";
 }
 
-// Railway's public TCP proxy uses a cert chain node-pg rejects when the URL
-// carries sslmode=require (that flag overrides ssl.rejectUnauthorized=false).
+const VERIFY_SSLMODES = new Set(["require", "verify-full", "verify-ca"]);
+
+function decodePart(value, fallback = "") {
+  try {
+    return decodeURIComponent(value || "") || fallback;
+  } catch {
+    return value || fallback;
+  }
+}
+
+// Railway's public TCP proxy presents a cert chain node-pg rejects when the
+// URL (or PGSSLMODE) is sslmode=require. That flag is parsed AFTER Pool.ssl
+// and overwrites rejectUnauthorized:false. Strip it. Keep no-verify only when
+// another query param is still required.
 export function sanitizeDatabaseUrl(raw) {
   if (!raw) return "";
-  return String(raw).replace(
-    /([?&])sslmode=(require|verify-full|verify-ca)\b/gi,
-    "$1sslmode=no-verify"
-  );
+  const text = String(raw);
+  try {
+    const url = new URL(text);
+    const mode = String(url.searchParams.get("sslmode") || "").toLowerCase();
+    if (VERIFY_SSLMODES.has(mode)) url.searchParams.delete("sslmode");
+    const ssl = String(url.searchParams.get("ssl") || "").toLowerCase();
+    if (ssl === "true" || ssl === "1" || ssl === "require") {
+      url.searchParams.delete("ssl");
+    }
+    if (!url.searchParams.size) {
+      url.search = "";
+      return url.toString();
+    }
+    if (!url.searchParams.has("sslmode")) url.searchParams.set("sslmode", "no-verify");
+    return url.toString();
+  } catch {
+    let next = text.replace(/[?&]sslmode=(require|verify-full|verify-ca)\b/gi, "");
+    next = next.replace(/[?&]ssl=(true|1|require)\b/gi, "");
+    next = next.replace(/\?&/, "?").replace(/[?&]$/, "");
+    if (next.includes("?") && !/[?&]sslmode=/i.test(next)) {
+      next += `${next.includes("?") ? "&" : "?"}sslmode=no-verify`;
+    }
+    return next;
+  }
+}
+
+export function postgresPoolOptions(raw) {
+  const connectionString = sanitizeDatabaseUrl(raw);
+  const ssl = { rejectUnauthorized: false };
+  try {
+    const url = new URL(connectionString);
+    const password = decodePart(url.password);
+    return {
+      host: decodePart(url.hostname),
+      port: Number(url.port || 5432),
+      user: decodePart(url.username, "postgres"),
+      ...(password ? { password } : {}),
+      database: decodePart(url.pathname.replace(/^\//, ""), "railway"),
+      ssl,
+      max: 2,
+    };
+  } catch {
+    return { connectionString, ssl, max: 2 };
+  }
 }
 
 function safePgMessage(error) {
@@ -182,11 +236,10 @@ function getPool() {
   const raw = databaseUrl();
   if (!raw) return null;
   if (!pool) {
-    pool = new pg.Pool({
-      connectionString: sanitizeDatabaseUrl(raw),
-      ssl: { rejectUnauthorized: false },
-      max: 2,
-    });
+    if (VERIFY_SSLMODES.has(String(process.env.PGSSLMODE || "").toLowerCase())) {
+      process.env.PGSSLMODE = "no-verify";
+    }
+    pool = new pg.Pool(postgresPoolOptions(raw));
     pool.on("error", (error) => logDbError(error));
   }
   return pool;
@@ -267,6 +320,8 @@ async function pageSameTimeScan(db, table, ts, limit, offset) {
 }
 
 async function loadTodayOwners(db, { limit = 200, offset = 0, includeHolders = true } = {}) {
+  // SELECT-only: if origin/main TRUNCATEd latest, serve the same-time history
+  // scan (235 XDX accounts when last probed). Do not INSERT/hydrate writes.
   const latest = await lastSameTimeScan(db, "token_holders_latest");
   const history = await lastSameTimeScan(db, "token_holders_history");
 

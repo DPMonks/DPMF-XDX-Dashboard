@@ -44,7 +44,7 @@ Rules:
 - Keep XDX/XRP AMM reserves populated: `reserve_asset` = XDX units, `reserve_currency` = XRP (not drops, not 0).
 - `GET /api/sparkline/XDX` points must use `price_usd` as USD per XDX.
 
-Redeploy **API**, then **Worker 2 only** (8s stagger). Do not start or reset other workers.
+Redeploy **API first**, then **Worker 1**, then **Worker 2**, then **Worker 4**. Do not start them together. Until Worker 2 writes a real XDX USD row, price can still be `$0.00000000` if the live AMM row still has XRP reserve 0.
 
 ## 2. Native XDX trustlines (not the same as holders)
 
