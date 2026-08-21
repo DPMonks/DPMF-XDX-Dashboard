@@ -73,3 +73,9 @@ export function pickTodayLpSource(input) {
     kind: remapLpSourceKind(picked.kind),
   };
 }
+
+export function pickAllPoolCount(latestCount, historyCount) {
+  const latest = Number(latestCount) || 0;
+  const history = Number(historyCount) || 0;
+  return history > latest ? history : latest;
+}

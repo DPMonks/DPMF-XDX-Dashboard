@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildTodayLpOwnersPayload,
   normalizeLpPool,
+  pickAllPoolCount,
   pickTodayLpSource,
   remapLpSourceKind,
 } from "../src/todayLpOwners.js";
@@ -76,4 +77,10 @@ test("buildTodayLpOwnersPayload matches the today-LP envelope", () => {
   assert.equal(present.holders[1].lp_balance, 1);
   assert.equal(present.holders[1].pool_name, "XDX/SOLO");
   assert.equal(present.pool, "all");
+});
+
+test("pickAllPoolCount uses every pool, not one leftover scan", () => {
+  assert.equal(pickAllPoolCount(1, 84), 84);
+  assert.equal(pickAllPoolCount(120, 80), 120);
+  assert.equal(pickAllPoolCount(0, 0), 0);
 });

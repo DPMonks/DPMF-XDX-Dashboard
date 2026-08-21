@@ -24,6 +24,7 @@ import {
 import {
   buildTodayLpOwnersPayload,
   normalizeLpPool,
+  pickAllPoolCount,
   pickTodayLpSource,
 } from "../src/todayLpOwners.js";
 
@@ -557,9 +558,13 @@ function lpPoolClause(pool, column = "pool_name") {
   return { sql: `COALESCE(${column}, 'XDX/XRP') = $1`, params: [pool] };
 }
 
+function lpOwnerSql(ownersOnly) {
+  return ownersOnly ? "AND ABS(lp_balance::numeric) > 0" : "";
+}
+
 async function lastSameTimeLpScan(db, table, pool, ownersOnly) {
   const where = lpPoolClause(pool);
-  const ownerSql = ownersOnly ? "AND ABS(lp_balance::numeric) > 0" : "";
+  const ownerSql = lpOwnerSql(ownersOnly);
   const stamp = await tryQuery(
     db,
     `SELECT MAX(timestamp) AS ts
@@ -568,19 +573,141 @@ async function lastSameTimeLpScan(db, table, pool, ownersOnly) {
     where.params
   );
   const ts = stamp.rows[0]?.ts || null;
-  if (!ts) return { ts: null, count: 0 };
+  if (!ts) return { ts: null, count: 0, supply: 0 };
   const count = await tryQuery(
     db,
-    `SELECT COUNT(*)::int AS n
+    `SELECT COUNT(*)::int AS n,
+            COALESCE(SUM(ABS(lp_balance::numeric)), 0) AS supply
      FROM ${table}
      WHERE timestamp = $${where.params.length + 1}
        AND ${where.sql} ${ownerSql}`,
     [...where.params, ts]
   );
-  return { ts, count: Number(count.rows[0]?.n || 0) };
+  return {
+    ts,
+    count: Number(count.rows[0]?.n || 0),
+    supply: Number(count.rows[0]?.supply || 0),
+  };
+}
+
+async function countAllLatestLp(db, ownersOnly) {
+  const result = await tryQuery(
+    db,
+    `SELECT COUNT(*)::int AS n,
+            COALESCE(SUM(ABS(lp_balance::numeric)), 0) AS supply,
+            MAX(timestamp) AS ts
+     FROM lp_holders_latest
+     WHERE TRUE ${lpOwnerSql(ownersOnly)}`
+  );
+  return {
+    ts: result.rows[0]?.ts || null,
+    count: Number(result.rows[0]?.n || 0),
+    supply: Number(result.rows[0]?.supply || 0),
+  };
+}
+
+async function countPerPoolHistoryLp(db, ownersOnly) {
+  const result = await tryQuery(
+    db,
+    `WITH latest_ts AS (
+       SELECT COALESCE(pool_name, 'XDX/XRP') AS pool_name, MAX(timestamp) AS ts
+       FROM lp_holders_history
+       GROUP BY 1
+     )
+     SELECT COUNT(*)::int AS n,
+            COALESCE(SUM(ABS(h.lp_balance::numeric)), 0) AS supply,
+            MAX(h.timestamp) AS ts
+     FROM lp_holders_history h
+     JOIN latest_ts t
+       ON COALESCE(h.pool_name, 'XDX/XRP') = t.pool_name
+      AND h.timestamp = t.ts
+     WHERE TRUE ${lpOwnerSql(ownersOnly)}`
+  );
+  return {
+    ts: result.rows[0]?.ts || null,
+    count: Number(result.rows[0]?.n || 0),
+    supply: Number(result.rows[0]?.supply || 0),
+  };
+}
+
+async function loadAllLpLineStats(db, ownersOnly) {
+  const latest = await countAllLatestLp(db, ownersOnly);
+  const history = await countPerPoolHistoryLp(db, ownersOnly);
+  const useHistory = pickAllPoolCount(latest.count, history.count) === history.count && history.count > latest.count;
+  const row = useHistory ? history : latest;
+  return {
+    ...row,
+    source: useHistory
+      ? "lp_holders_history"
+      : latest.count
+        ? "lp_holders_latest"
+        : "none",
+  };
+}
+
+async function pagePerPoolHistoryLpOwners(db, limit, offset) {
+  const withFrozen = await tryQuery(
+    db,
+    `WITH latest_ts AS (
+       SELECT COALESCE(pool_name, 'XDX/XRP') AS pool_name, MAX(timestamp) AS ts
+       FROM lp_holders_history
+       GROUP BY 1
+     )
+     SELECT ROW_NUMBER() OVER (ORDER BY ABS(h.lp_balance::numeric) DESC) AS rank,
+            h.account,
+            ABS(h.lp_balance::numeric) AS lp_balance,
+            COALESCE(h.frozen, false) AS frozen,
+            COALESCE(h.pool_name, 'XDX/XRP') AS pool_name
+     FROM lp_holders_history h
+     JOIN latest_ts t
+       ON COALESCE(h.pool_name, 'XDX/XRP') = t.pool_name
+      AND h.timestamp = t.ts
+     WHERE ABS(h.lp_balance::numeric) > 0
+     ORDER BY ABS(h.lp_balance::numeric) DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
+  );
+  return withFrozen.rows;
+}
+
+async function pageAllLatestLpOwners(db, limit, offset, { since = null, until = null } = {}) {
+  const bounds = since && until ? "AND timestamp >= $3 AND timestamp < $4" : "";
+  const params = since && until ? [limit, offset, since, until] : [limit, offset];
+  const withFrozen = await tryQuery(
+    db,
+    `SELECT ROW_NUMBER() OVER (ORDER BY ABS(lp_balance::numeric) DESC) AS rank,
+            account,
+            ABS(lp_balance::numeric) AS lp_balance,
+            COALESCE(frozen, false) AS frozen,
+            COALESCE(pool_name, 'XDX/XRP') AS pool_name
+     FROM lp_holders_latest
+     WHERE ABS(lp_balance::numeric) > 0
+       ${bounds}
+     ORDER BY ABS(lp_balance::numeric) DESC
+     LIMIT $1 OFFSET $2`,
+    params
+  );
+  if (withFrozen.rows.length) return withFrozen.rows;
+  const plain = await tryQuery(
+    db,
+    `SELECT ROW_NUMBER() OVER (ORDER BY ABS(lp_balance::numeric) DESC) AS rank,
+            account,
+            ABS(lp_balance::numeric) AS lp_balance,
+            COALESCE(pool_name, 'XDX/XRP') AS pool_name
+     FROM lp_holders_latest
+     WHERE ABS(lp_balance::numeric) > 0
+       ${bounds}
+     ORDER BY ABS(lp_balance::numeric) DESC
+     LIMIT $1 OFFSET $2`,
+    params
+  );
+  return plain.rows;
 }
 
 async function pageSameTimeLpScan(db, table, ts, pool, limit, offset) {
+  if (!pool && table === "lp_holders_latest") {
+    return pageAllLatestLpOwners(db, limit, offset);
+  }
   const where = lpPoolClause(pool);
   const withFrozen = await tryQuery(
     db,
@@ -617,6 +744,22 @@ async function pageSameTimeLpScan(db, table, ts, pool, limit, offset) {
 
 async function loadLiveLpOwners(db, { limit = 50, offset = 0, includeHolders = true, pool = "XDX/XRP" } = {}) {
   const pair = normalizeLpPool(pool);
+  if (!pair) {
+    const stats = await loadAllLpLineStats(db, true);
+    const holders = includeHolders && stats.count
+      ? stats.source === "lp_holders_history"
+        ? await pagePerPoolHistoryLpOwners(db, limit, offset)
+        : await pageAllLatestLpOwners(db, limit, offset)
+      : [];
+    return {
+      holders,
+      rows: holders,
+      count: stats.count,
+      as_of: asIso(stats.ts),
+      pool: "all",
+      source: stats.source,
+    };
+  }
   const latest = await lastSameTimeLpScan(db, "lp_holders_latest", pair, true);
   const history = await lastSameTimeLpScan(db, "lp_holders_history", pair, true);
   const useLatest = latest.count > 0 && latest.ts;
@@ -636,13 +779,28 @@ async function loadLiveLpOwners(db, { limit = 50, offset = 0, includeHolders = t
     rows: holders,
     count,
     as_of: asIso(ts),
-    pool: pair || "all",
+    pool: pair,
     source: kind,
   };
 }
 
 async function loadTodayLpOwners(db, { limit = 50, offset = 0, includeHolders = true, pool = "XDX/XRP" } = {}) {
   const pair = normalizeLpPool(pool);
+  if (!pair) {
+    const live = await loadAllLpLineStats(db, true);
+    const source = {
+      kind: live.source,
+      ts: live.ts,
+      count: live.count,
+      present: live.count > 0,
+    };
+    const holders = includeHolders && source.present
+      ? source.kind === "lp_holders_history"
+        ? await pagePerPoolHistoryLpOwners(db, limit, offset)
+        : await pageAllLatestLpOwners(db, limit, offset)
+      : [];
+    return buildTodayLpOwnersPayload({ source, holders, offset, pool: "all" });
+  }
   const latest = await lastSameTimeLpScan(db, "lp_holders_latest", pair, true);
   const history = await lastSameTimeLpScan(db, "lp_holders_history", pair, true);
   const source = pickTodayLpSource({
@@ -655,34 +813,46 @@ async function loadTodayLpOwners(db, { limit = 50, offset = 0, includeHolders = 
   if (includeHolders && source.present) {
     holders = await pageSameTimeLpScan(db, source.kind, source.ts, pair, limit, offset);
   }
-  return buildTodayLpOwnersPayload({ source, holders, offset, pool: pair || "all" });
+  return buildTodayLpOwnersPayload({ source, holders, offset, pool: pair });
 }
 
 async function loadLpTrustlineCount(db, pool = "all") {
   const pair = normalizeLpPool(pool);
-  const where = lpPoolClause(pair);
-  const history = await tryQuery(
-    db,
-    `SELECT COUNT(*)::int AS count, MAX(timestamp) AS as_of
-     FROM lp_holders_history
-     WHERE timestamp = (
-       SELECT MAX(timestamp) FROM lp_holders_history WHERE ${where.sql}
-     )
-       AND ${where.sql}`,
-    where.params
-  );
+  if (!pair) {
+    const stats = await loadAllLpLineStats(db, false);
+    return { count: stats.count, as_of: asIso(stats.ts), pool: "all", source: stats.source };
+  }
+  const history = await lastSameTimeLpScan(db, "lp_holders_history", pair, false);
   const latest = await tryQuery(
     db,
-    `SELECT COUNT(*)::int AS count, MAX(timestamp) AS as_of
+    `SELECT COUNT(*)::int AS n, MAX(timestamp) AS ts
      FROM lp_holders_latest
-     WHERE ${where.sql}`,
-    where.params
+     WHERE ${lpPoolClause(pair).sql}`,
+    lpPoolClause(pair).params
   );
-  const historyCount = Number(history.rows[0]?.count || 0);
-  const latestCount = Number(latest.rows[0]?.count || 0);
+  const latestCount = Number(latest.rows[0]?.n || 0);
+  const historyCount = history.count;
   const count = pickTrustlineCount(latestCount, historyCount);
-  const asOf = historyCount > 0 ? history.rows[0]?.as_of : latest.rows[0]?.as_of;
-  return { count, as_of: asIso(asOf), pool: pair || "all" };
+  const asOf = historyCount > 0 ? history.ts : latest.rows[0]?.ts;
+  return { count, as_of: asIso(asOf), pool: pair };
+}
+
+async function loadAllLpSupply(db) {
+  const lines = await loadAllLpLineStats(db, false);
+  if (lines.supply > 0) return lines.supply;
+  const catalog = await tryQuery(
+    db,
+    "SELECT COALESCE(SUM(lp_supply::numeric), 0) AS n FROM xdx_amm_pools"
+  );
+  const catalogSum = Number(catalog.rows[0]?.n || 0);
+  if (catalogSum > 0) return catalogSum;
+  const latest = await tryQuery(
+    db,
+    `SELECT COALESCE(SUM(lp_supply::numeric), 0) AS n
+     FROM amm_pool_latest
+     WHERE pool_name ILIKE 'XDX/%' OR pool_name ILIKE 'XDX-%'`
+  );
+  return Number(latest.rows[0]?.n || 0);
 }
 
 async function loadLpTrustlineChart(db, pool = "all") {
@@ -1276,14 +1446,15 @@ async function readAmmTrades(db) {
 }
 
 async function buildSnapshot(db) {
-  const [amm, quote, holders, trustlines, lpOwners, lpTrustlines, issuerLocked, ammXdx] =
+  const [amm, quote, holders, trustlines, lpOwners, lpTrustlines, lpSupply, issuerLocked, ammXdx] =
     await Promise.all([
       hydrateAmm(db),
       loadXrpQuote(db),
       tokenHolderCount(db),
       tokenTrustlineCount(db),
-      loadTodayLpOwners(db, { includeHolders: false, pool: "all" }),
+      loadAllLpLineStats(db, true),
       loadLpTrustlineCount(db, "all"),
+      loadAllLpSupply(db),
       loadIssuerLocked(db),
       tokenBalanceFor(db, XDX_XRP_AMM),
     ]);
@@ -1315,7 +1486,7 @@ async function buildSnapshot(db) {
     volume24h: Number(amm.volume24h || 0),
     reserve_asset: reserveAsset,
     reserve_currency: reserveCurrency,
-    lp_supply: Number(amm.lp_supply || 0),
+    lp_supply: Number(lpSupply || amm.lp_supply || 0),
     trading_fee: Number(amm.trading_fee || 0) || null,
     holder_count: holders,
     lp_holder_count: Number(lpOwners.count || 0),

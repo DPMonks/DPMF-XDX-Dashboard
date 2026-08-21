@@ -388,7 +388,7 @@ export async function getTokenDetails() {
     state.snapshot?.trustlinesCount ||
     (await api.trustlinesCount().catch(() => ({})));
   const lpHolders =
-    (await api.lpHoldersCount({ snapshot: "today", pool: "all" }).catch(() => ({})));
+    (await api.lpHoldersCount({ pool: "all" }).catch(() => ({})));
   const lpTrustlines =
     (await api.lpTrustlinesCount({ pool: "all" }).catch(() => ({})));
 
@@ -445,6 +445,7 @@ export async function getTokenDetails() {
     lp_trustline_count:
       (typeof lpTrustlines === "number" ? lpTrustlines : lpTrustlines.count) ??
       overview.lp_trustline_count,
+    lp_supply: numberOrNull(overview.lp_supply),
     issuer: overview.issuer,
     issuerFee: overview.issuer_fee,
     blackholed: overview.blackholed,

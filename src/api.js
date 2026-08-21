@@ -403,12 +403,12 @@ export const api = {
   trustlinesCount: () => getJson(endpoint("trustlinesCount")),
   lpHoldersCount: (extra = {}) => {
     const path = endpoint("lpHoldersCount");
-    const snapshot = extra.snapshot || "today";
     const pool = extra.pool || extra.pair || "all";
     const join = path.includes("?") ? "&" : "?";
-    return getJson(
-      `${path}${join}snapshot=${encodeURIComponent(snapshot)}&pool=${encodeURIComponent(pool)}`
-    );
+    const snapshot = extra.snapshot
+      ? `snapshot=${encodeURIComponent(extra.snapshot)}&`
+      : "";
+    return getJson(`${path}${join}${snapshot}pool=${encodeURIComponent(pool)}`);
   },
   lpTrustlinesCount: (extra = {}) => {
     const path = endpoint("lpTrustlinesCount") || "/lp-trustlines/count";
