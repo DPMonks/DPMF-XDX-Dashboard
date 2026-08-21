@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getOrderbooks } from "../api/indexer";
 import {
+  bookHeader,
   combineOrderbookSide,
   emptyOrderbook,
   normalizeOrderbookPair,
@@ -136,7 +137,7 @@ export default function OrderBook() {
   }
 
   const quote = book.quote || pair.split("/")[1] || "XRP";
-  const midUsd = Number(book.mid_usd);
+  const header = bookHeader(book);
 
   return (
     <div className="orderbook">
@@ -159,23 +160,23 @@ export default function OrderBook() {
       <dl className="orderbook-header">
         <div>
           <dt>{t.bestBid}</dt>
-          <dd className="is-bid">{formatQuotePerBase(book.best_bid, locale, quote)}</dd>
+          <dd className="is-bid">{formatQuotePerBase(header.best_bid, locale, quote)}</dd>
         </div>
         <div>
           <dt>{t.bestAsk}</dt>
-          <dd className="is-ask">{formatQuotePerBase(book.best_ask, locale, quote)}</dd>
+          <dd className="is-ask">{formatQuotePerBase(header.best_ask, locale, quote)}</dd>
         </div>
         <div>
           <dt>{t.mid}</dt>
-          <dd>{formatQuotePerBase(book.mid, locale, quote)}</dd>
+          <dd>{formatQuotePerBase(header.mid, locale, quote)}</dd>
         </div>
         <div>
           <dt>{t.spreadBps}</dt>
-          <dd>{book.spread_bps == null ? "—" : Number(book.spread_bps).toFixed(1)}</dd>
+          <dd>{header.spread_bps == null ? "—" : Number(header.spread_bps).toFixed(1)}</dd>
         </div>
         <div>
           <dt>{t.midUsdHint}</dt>
-          <dd>{midUsd > 0 ? formatUsdPrice(midUsd, locale) : "—"}</dd>
+          <dd>{header.mid_usd ? formatUsdPrice(header.mid_usd, locale) : "—"}</dd>
         </div>
       </dl>
 

@@ -64,6 +64,34 @@ export function emptyOrderbook(pair = "XDX/XRP") {
   };
 }
 
+export function bookHeader(book = {}) {
+  const ammLevels = Array.isArray(book.amm?.levels) ? book.amm.levels : [];
+  const ammBids = ammLevels
+    .filter((row) => String(row.side).toLowerCase() === "bid" && Number(row.price) > 0)
+    .sort((a, b) => Number(b.price) - Number(a.price));
+  const ammAsks = ammLevels
+    .filter((row) => String(row.side).toLowerCase() === "ask" && Number(row.price) > 0)
+    .sort((a, b) => Number(a.price) - Number(b.price));
+  const best_bid = Number(book.best_bid) > 0 ? Number(book.best_bid) : ammBids[0]?.price ?? null;
+  const best_ask = Number(book.best_ask) > 0 ? Number(book.best_ask) : ammAsks[0]?.price ?? null;
+  const mid =
+    Number(book.mid) > 0
+      ? Number(book.mid)
+      : best_bid > 0 && best_ask > 0
+        ? (best_bid + best_ask) / 2
+        : best_bid || best_ask || (Number(book.amm?.price) > 0 ? Number(book.amm.price) : null);
+  const mid_usd = Number(book.mid_usd) > 0 ? Number(book.mid_usd) : null;
+  const spread =
+    best_bid > 0 && best_ask > 0 ? best_ask - best_bid : Number(book.spread) > 0 ? Number(book.spread) : null;
+  const spread_bps =
+    mid > 0 && spread > 0
+      ? Math.round((spread / mid) * 1_000_000) / 100
+      : Number(book.spread_bps) > 0
+        ? Number(book.spread_bps)
+        : null;
+  return { best_bid, best_ask, mid, mid_usd, spread, spread_bps };
+}
+
 export function orderBookRowStamp(row = {}) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   return row.as_of || payload.as_of || row.timestamp || row.updated_at || null;

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   asOrderbookPayload,
+  bookHeader,
   combineOrderbookSide,
   emptyOrderbook,
   normalizeOrderbookPair,
@@ -58,6 +59,27 @@ test("combineOrderbookSide mirrors GateHub: best bid high, best ask low", () => 
     "ask"
   );
   assert.equal(asks[0].price, 0.000031);
+});
+
+test("bookHeader uses AMM quote-per-XDX when DEX bid/ask are zero", () => {
+  const header = bookHeader({
+    best_bid: 0,
+    best_ask: 0,
+    mid: 0.000029697395,
+    mid_usd: 0.00004336,
+    amm: {
+      price: 0.000029697395,
+      levels: [
+        { side: "bid", price: 0.000029623152 },
+        { side: "ask", price: 0.000029771638 },
+      ],
+    },
+  });
+  assert.equal(header.best_bid, 0.000029623152);
+  assert.equal(header.best_ask, 0.000029771638);
+  assert.equal(header.mid, 0.000029697395);
+  assert.equal(header.mid_usd, 0.00004336);
+  assert.ok(header.spread_bps > 0);
 });
 
 test("order book stamp prefers Worker 2 timestamp, not updated_at", () => {
