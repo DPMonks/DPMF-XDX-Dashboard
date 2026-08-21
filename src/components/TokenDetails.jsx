@@ -67,7 +67,7 @@ export default function TokenDetails() {
 
   const blackholed = pick(data, ["blackholed"]);
   const issuer = pick(data, ["issuer"]);
-  const usdPrice = pick(data, ["recorded_price", "price", "xdxUsd"]);
+  const usdPrice = pick(data, ["recorded_price", "xdxUsd"]);
   const recordedHint = `${t.recordedPrice} ${formatUsdPrice(usdPrice, locale)}`;
 
   return (

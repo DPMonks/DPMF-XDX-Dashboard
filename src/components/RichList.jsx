@@ -74,8 +74,32 @@ export default function RichList({
     return <p className="error-message">{error}</p>;
   }
 
+  const freshnessLine = freshness ? (
+    <p
+      className={`rich-freshness ${
+        freshness.catching_up ? "is-catching-up" : "is-present"
+      }`}
+    >
+      <span className="rich-freshness-dot" aria-hidden="true" />
+      {freshness.catching_up
+        ? `${t.todaySnapshotWaiting} ${
+            freshness.as_of || freshness.snapshot_day
+              ? formatWhen(freshness.as_of || freshness.snapshot_day, locale)
+              : ""
+          }`.trim()
+        : freshness.as_of
+          ? `${t.todaySnapshot} ${formatWhen(freshness.as_of, locale)}`
+          : t.todaySnapshotLive}
+    </p>
+  ) : null;
+
   if (!rows.length) {
-    return <p className="empty-message">{emptyLabel}</p>;
+    return (
+      <div className="rich-list">
+        {freshnessLine}
+        <p className="empty-message">{emptyLabel}</p>
+      </div>
+    );
   }
 
   return (
@@ -122,22 +146,7 @@ export default function RichList({
           {t.showing} {filtered.length.toLocaleString(locale)} {t.addresses}
         </p>
       </div>
-      <p
-        className={`rich-freshness ${
-          freshness?.catching_up ? "is-catching-up" : "is-present"
-        }`}
-      >
-        <span className="rich-freshness-dot" aria-hidden="true" />
-        {freshness?.catching_up
-          ? `${t.todaySnapshotWaiting} ${
-              freshness.as_of || freshness.snapshot_day
-                ? formatWhen(freshness.as_of || freshness.snapshot_day, locale)
-                : ""
-            }`.trim()
-          : freshness?.as_of
-            ? `${t.todaySnapshot} ${formatWhen(freshness.as_of, locale)}`
-            : t.todaySnapshotLive}
-      </p>
+      {freshnessLine}
 
       <div className="rich-table-wrap">
         <table className="rich-table">

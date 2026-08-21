@@ -1,6 +1,6 @@
 import { api, getHandshakeState, handshake, INDEXER_ORIGIN } from "../api";
 import { pairFromRow, XDX_TOTAL_SUPPLY } from "../constants/ledger";
-import { recordUsdPrice } from "../utils/format";
+import { recordedXdxUsdFromPrices } from "../utils/recordedPrice";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -215,17 +215,20 @@ function pickFreshness(payload, rows = []) {
       snapshot_day: payload.snapshot_day || null,
       source: payload.source || null,
       present: Boolean(payload.present),
-      catching_up: Boolean(payload.catching_up),
+      catching_up: Boolean(payload.catching_up || payload.present === false),
       age_seconds: numberOrNull(payload.age_seconds),
+      count: numberOrNull(payload.count),
     };
   }
   const updated = rows.find((row) => row.updated)?.updated || null;
   return {
     as_of: updated,
-    source: null,
-    present: false,
-    catching_up: Boolean(updated),
+    snapshot_day: null,
+    source: rows.length ? "token_holders_latest" : null,
+    present: rows.length > 0,
+    catching_up: false,
     age_seconds: null,
+    count: rows.length || null,
   };
 }
 
@@ -264,19 +267,23 @@ export async function getAmm() {
 
 export async function getTopHolders(onPage) {
   const cached = sessionRead("holders");
-  if (Array.isArray(cached) && cached.length) onPage?.(cached, null);
   if (cached?.rows?.length) onPage?.(cached.rows, cached.freshness || null);
+  else if (Array.isArray(cached) && cached.length) onPage?.(cached, null);
 
   const payload = await api.topHolders(FIRST_HOLDERS, 0, { snapshot: "today" });
   const first = asArray(payload);
   const firstMapped = finishHolders(first);
   const freshness = pickFreshness(payload, firstMapped);
-  if (firstMapped.length) {
-    onPage?.(firstMapped, freshness);
-    sessionWrite("holders", { rows: firstMapped, freshness });
-  }
+  const catchingUp = Boolean(
+    payload &&
+      typeof payload === "object" &&
+      !Array.isArray(payload) &&
+      (payload.catching_up || payload.present === false)
+  );
+  onPage?.(firstMapped, freshness);
+  sessionWrite("holders", { rows: firstMapped, freshness });
 
-  if (first.length < FIRST_HOLDERS) return firstMapped;
+  if (catchingUp || first.length < FIRST_HOLDERS) return firstMapped;
 
   const rest = await paginate(
     (limit, offset) =>
@@ -350,9 +357,16 @@ export async function getTokenDetails() {
   );
   const circulating =
     rawCirc && rawCirc > 0 ? rawCirc : Math.max(totalSupply - issuerLocked, 0);
-  const price = recordUsdPrice(
-    prices.xdxUsd || prices.xdx_usd || overview.recorded_price || overview.xdxUsd
-  );
+  const price =
+    recordedXdxUsdFromPrices(prices, prices.xrpUsd || overview.xrpUsd) ||
+    recordedXdxUsdFromPrices(
+      {
+        recorded_price: overview.recorded_price,
+        xdxUsd: overview.xdxUsd,
+        xrpUsd: overview.xrpUsd,
+      },
+      overview.xrpUsd
+    );
   const tvlUsd = numberOrNull(overview.tvl_usd || primary.tvl_usd || overview.tvl || primary.tvl);
   const poolTvl = ammRows.reduce((sum, row) => sum + (Number(row.tvl) || 0), 0);
   const ammMarketCap =

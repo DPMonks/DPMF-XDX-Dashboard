@@ -1,11 +1,15 @@
-# Indexer ask: today's XDX owner snapshot
+# Today's XDX owner snapshot
 
 Dashboard PR: https://github.com/DPMonks/DPMF-XDX-Dashboard/pull/4  
+Indexer PR: https://github.com/DPMonks/dpmf-xdx-indexer/pull/5 (`219e859`)
+
 Dashboard is **SELECT-only**. Do **not** start or reset workers from the dashboard. Holder worker stagger stays **35s**.
 
 The rich list is **today's current XDX owners**, not mixed historical rows.
 
-## What the dashboard now calls
+Indexer PR #5 implements this contract. Dashboard reads the same object.
+
+## What the dashboard calls
 
 ```
 GET /api/top-holders?limit=100&offset=0&snapshot=today
@@ -13,11 +17,11 @@ GET /api/top-holders-v2?limit=100&offset=0&snapshot=today
 GET /api/holders/count?snapshot=today
 ```
 
-`snapshot=today` means the **UTC calendar day** of the latest holder scan.
+`snapshot=today` means the **UTC calendar day** of the latest same-time holder scan.
 
-## Required response
+Catalog keys `topHoldersToday` / `holdersCountToday` are aliases. The client still appends `snapshot=today` on the base paths.
 
-Object (array-only is still accepted, but the dashboard needs the stamp):
+## Response
 
 ```json
 {
@@ -33,7 +37,7 @@ Object (array-only is still accepted, but the dashboard needs the stamp):
 }
 ```
 
-Field is **`balance`**, wallets with **balance > 0 only** (0-balance trustlines are not owners).
+`balance > 0` only. Field is **`balance`**. `frozen` is passed through.
 
 If there is **no scan dated today UTC**:
 
@@ -44,19 +48,24 @@ If there is **no scan dated today UTC**:
   "snapshot_day": "<last scan day>",
   "present": false,
   "catching_up": true,
-  "count": 0
+  "count": 0,
+  "source": "none"
 }
 ```
 
-Do **not** fall back to `DISTINCT ON (account)` across old days. That mixes last week's balances into "current owners".
+Do **not** use `DISTINCT ON (account)` across old days.
 
-## Indexer write path
+Without `snapshot=today`, `/api/top-holders` still returns the live array and `/api/holders/count` still returns `{ count }`.
 
-1. Each holder cycle overwrites **`token_holders_latest`** with the full current owner set (one row per account, `balance > 0`).
-2. Stamp the **same `timestamp`** (and ledger index if you have it) on every row in that cycle.
-3. Also append that same-time set to **`token_holders_history`**.
-4. `GET /api/top-holders?snapshot=today` reads that one scan if `timestamp::date = CURRENT_DATE` (UTC).
+`GET /api/holders/count?snapshot=today` uses the same object (`holders` is `[]`; `count` is the full same-time scan).
 
-Catalog can add the same query string; no new path is required.
+## Write path (worker 4)
+
+1. Each holder cycle overwrites `token_holders_latest` with the full current owner set (one row per account, `balance > 0`).
+2. Stamp the **same UTC `timestamp`** on every latest row and on the history append.
+3. Append that same-time set to `token_holders_history`.
+4. Reads use that one scan when `timestamp` UTC date is today.
 
 Auth: none. `accept: application/json`. Do not call `/api/cluster/v1/*`.
+
+Redeploy **API first**, then **Worker 4 only**. Pause any `main` holder writer — it TRUNCATEs latest on empty scans.

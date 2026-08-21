@@ -6,6 +6,15 @@ import {
   XDX_XRP_AMM,
 } from "../src/constants/ledger.js";
 import { recordUsdPrice } from "../src/utils/format.js";
+import { recordedXdxUsdFromPrices } from "../src/utils/recordedPrice.js";
+import {
+  asIso,
+  buildTodayOwnersPayload,
+  isSameUtcDay,
+  pickTodayOwnerSource,
+  utcDay,
+  wantsTodaySnapshot,
+} from "../src/todayOwners.js";
 
 let pool = null;
 
@@ -22,9 +31,11 @@ const CATALOG = {
     amm: "/api/amm",
     pools: "/api/pools",
     topHolders: "/api/top-holders",
+    topHoldersToday: "/api/top-holders?snapshot=today",
     topHoldersV2: "/api/top-holders-v2",
     topLp: "/api/top-lp",
     holdersCount: "/api/holders/count",
+    holdersCountToday: "/api/holders/count?snapshot=today",
     trustlinesCount: "/api/trustlines/count",
     lpHoldersCount: "/api/lp-holders/count",
     tvlHistory: "/api/charts/tvl",
@@ -206,31 +217,82 @@ async function tryQuery(db, sql, params) {
   }
 }
 
+async function lastSameTimeScan(db, table) {
+  const stamp = await tryQuery(
+    db,
+    `SELECT MAX(timestamp) AS ts
+     FROM ${table}
+     WHERE ABS(balance::numeric) > 0`
+  );
+  const ts = stamp.rows[0]?.ts || null;
+  if (!ts) return { ts: null, count: 0 };
+  const count = await tryQuery(
+    db,
+    `SELECT COUNT(*)::int AS n
+     FROM ${table}
+     WHERE timestamp = $1 AND ABS(balance::numeric) > 0`,
+    [ts]
+  );
+  return { ts, count: Number(count.rows[0]?.n || 0) };
+}
+
+async function pageSameTimeScan(db, table, ts, limit, offset) {
+  const withFrozen = await tryQuery(
+    db,
+    `SELECT ROW_NUMBER() OVER (ORDER BY ABS(balance::numeric) DESC) AS rank,
+            account,
+            ABS(balance::numeric) AS balance,
+            COALESCE(frozen, false) AS frozen,
+            timestamp
+     FROM ${table}
+     WHERE timestamp = $1 AND ABS(balance::numeric) > 0
+     ORDER BY ABS(balance::numeric) DESC
+     LIMIT $2 OFFSET $3`,
+    [ts, limit, offset]
+  );
+  if (withFrozen.rows.length) return withFrozen.rows;
+  const plain = await tryQuery(
+    db,
+    `SELECT ROW_NUMBER() OVER (ORDER BY ABS(balance::numeric) DESC) AS rank,
+            account,
+            ABS(balance::numeric) AS balance,
+            timestamp
+     FROM ${table}
+     WHERE timestamp = $1 AND ABS(balance::numeric) > 0
+     ORDER BY ABS(balance::numeric) DESC
+     LIMIT $2 OFFSET $3`,
+    [ts, limit, offset]
+  );
+  return plain.rows;
+}
+
+async function loadTodayOwners(db, { limit = 200, offset = 0, includeHolders = true } = {}) {
+  const latest = await lastSameTimeScan(db, "token_holders_latest");
+  const history = await lastSameTimeScan(db, "token_holders_history");
+
+  const source = pickTodayOwnerSource({
+    latestTs: latest.ts,
+    latestCount: latest.count,
+    historyTs: history.ts,
+    historyCount: history.count,
+  });
+
+  let holders = [];
+  if (includeHolders && source.present) {
+    holders = await pageSameTimeScan(db, source.kind, source.ts, limit, offset);
+  }
+
+  return buildTodayOwnersPayload({ source, holders, offset });
+}
+
 function mapHolderRows(rows, offset, asOf) {
   return rows.map((row, index) => ({
-    rank: offset + index + 1,
+    rank: Number(row.rank) || offset + index + 1,
     account: row.account,
     balance: Number(row.balance),
-    frozen: false,
+    frozen: Boolean(row.frozen),
     updated: row.timestamp || row.updated || asOf || null,
   }));
-}
-
-function asIso(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
-}
-
-function utcDay(value = new Date()) {
-  const date = value instanceof Date ? value : new Date(value);
-  if (!Number.isFinite(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
-}
-
-function isSameUtcDay(value, day = utcDay()) {
-  const stamp = utcDay(value);
-  return Boolean(stamp && day && stamp === day);
 }
 
 function freshnessOf(asOf, { liveTable = false, todayOnly = false } = {}) {
@@ -295,24 +357,14 @@ async function pickHolderSource(db, { todayOnly = false } = {}) {
   const historyFresh = freshnessOf(history.as_of);
 
   if (todayOnly) {
-    if (latest.count > 0 && (!latest.as_of || isSameUtcDay(latest.as_of))) {
-      return {
-        kind: "token_holders_latest",
-        count: latest.count,
-        ...freshnessOf(latest.as_of, { liveTable: true, todayOnly: true }),
-      };
-    }
-    if (history.count > 0 && isSameUtcDay(history.as_of)) {
-      return {
-        kind: "token_holders_history",
-        count: history.count,
-        ...freshnessOf(history.as_of, { todayOnly: true }),
-      };
-    }
+    const today = await loadTodayOwners(db, { includeHolders: false });
     return {
-      kind: "none",
-      count: 0,
-      ...freshnessOf(history.as_of || latest.as_of, { todayOnly: true }),
+      kind: today.source,
+      count: today.count,
+      as_of: today.as_of,
+      snapshot_day: today.snapshot_day,
+      present: today.present,
+      catching_up: today.catching_up,
     };
   }
 
@@ -430,13 +482,10 @@ async function tokenTrustlineCount(db) {
   return Number(latest.rows[0]?.count || 0);
 }
 
-function wantsTodaySnapshot(params) {
-  const raw = String(params.get("snapshot") || params.get("as_of") || "").toLowerCase();
-  return raw === "today" || raw === "1" || raw === "true";
-}
-
 async function tokenHoldersPage(db, limit, offset, options = {}) {
-  const page = await freshTokenHolders(db, limit, offset, options);
+  const page = options.todayOnly
+    ? await loadTodayOwners(db, { limit, offset, includeHolders: true })
+    : await freshTokenHolders(db, limit, offset, options);
   return {
     ...page,
     rows: page.holders,
@@ -609,11 +658,20 @@ async function loadRecordedXdxUsd(db, xdxPerXrp, xrpUsd) {
 
   const latest = await tryQuery(
     db,
-    `SELECT price_usd FROM price_latest
-     WHERE asset IN ('XDX', 'xdx')
+    `SELECT xdx_usd, price_usd FROM price_latest
      ORDER BY timestamp DESC NULLS LAST
      LIMIT 1`
   );
+  const fromColumn = recordedXdxUsdFromPrices(
+    {
+      xdxUsd: latest.rows[0]?.xdx_usd,
+      recorded_price: latest.rows[0]?.xdx_usd,
+      xrpUsd,
+    },
+    xrpUsd
+  );
+  if (fromColumn > 0) return fromColumn;
+
   const hist = await tryQuery(
     db,
     `SELECT price_usd FROM price_history
@@ -627,8 +685,12 @@ async function loadRecordedXdxUsd(db, xdxPerXrp, xrpUsd) {
      WHERE currency IN ('XDX', 'xdx')
      LIMIT 1`
   );
-  return recordUsdPrice(
-    latest.rows[0]?.price_usd || hist.rows[0]?.price_usd || all.rows[0]?.price_usd || 0
+  return recordedXdxUsdFromPrices(
+    {
+      xdxUsd: hist.rows[0]?.price_usd || all.rows[0]?.price_usd || 0,
+      xrpUsd,
+    },
+    xrpUsd
   );
 }
 
@@ -907,9 +969,10 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "holders/count") {
-      const source = await pickHolderSource(db, {
-        todayOnly: wantsTodaySnapshot(params),
-      });
+      if (wantsTodaySnapshot(params)) {
+        return ok(await loadTodayOwners(db, { includeHolders: false }));
+      }
+      const source = await pickHolderSource(db);
       return ok({
         count: source.count,
         as_of: source.as_of,
