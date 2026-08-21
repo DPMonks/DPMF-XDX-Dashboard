@@ -142,11 +142,15 @@ function mapHolder(row, index) {
 }
 
 function mapLp(row, index) {
+  const pair = pick(row, ["pool_name", "pool", "pair"]) || pairFromRow(row);
+  const lp = numberOrNull(pick(row, ["lp_balance", "balance", "lp"])) ?? 0;
   return {
     rank: numberOrNull(row.rank) ?? index + 1,
     account: pick(row, ["account", "address", "wallet"]),
-    lp_balance: numberOrNull(pick(row, ["lp_balance", "balance", "lp"])) ?? 0,
-    pair: pairFromRow(row),
+    lp_balance: lp,
+    balance: lp,
+    pair,
+    pool_name: pair,
     frozen: Boolean(row.frozen),
     updated: pick(row, ["updated", "timestamp", "as_of"]),
   };
@@ -154,20 +158,30 @@ function mapLp(row, index) {
 
 function mapPool(row) {
   if (!row || typeof row !== "object") return null;
-  const pair = pairFromRow(row);
-  const [asset, quote] = pair.split("/");
+  const pair = pick(row, ["pool_name", "pool", "pair"]) || pairFromRow(row);
+  const [asset, quoteFromName] = String(pair || "XDX/XRP").split("/");
   const ammAccount = pick(row, ["amm_account", "amm", "account"]);
   return {
     pool: pair,
-    asset,
-    quote,
+    pool_name: pair,
+    asset: asset || "XDX",
+    quote: pick(row, ["quote"]) || quoteFromName || "XRP",
+    quote_issuer: pick(row, ["quote_issuer"]) || null,
     amm_account: ammAccount || null,
+    lp_currency: pick(row, ["lp_currency", "lp_currency_hex"]) || null,
     tvl: numberOrNull(pick(row, ["tvl_usd", "tvl", "total_value_locked", "liquidity"])),
-    price: numberOrNull(pick(row, ["price", "price_usd", "xdxUsd"])),
+    price: numberOrNull(pick(row, ["price", "price_usd"])),
     apr: numberOrNull(pick(row, ["apr", "apy"])),
     volume24h: numberOrNull(pick(row, ["volume24h", "volume_24h", "volume"])),
     reserve_asset: numberOrNull(
-      pick(row, ["reserve_asset", "reserveAsset", "amount", "asset_reserve", "xdx_reserve"])
+      pick(row, [
+        "reserve_asset",
+        "reserveAsset",
+        "reserve_xdx",
+        "amount",
+        "asset_reserve",
+        "xdx_reserve",
+      ])
     ),
     reserve_currency: numberOrNull(
       pick(row, [
@@ -247,22 +261,15 @@ export async function getOverview() {
 }
 
 export async function getAmm() {
-  try {
-    const pools = await api.pools();
-    const mapped = asArray(pools).map(mapPool).filter(Boolean);
-    if (mapped.length) return uniquePools(mapped);
-  } catch {
-    // fall through to snapshot /amm
-  }
-
-  const snap = await snapshotField("pools");
-  if (Array.isArray(snap) || Array.isArray(snap?.pools)) {
-    const mapped = asArray(snap).map(mapPool).filter(Boolean);
-    if (mapped.length) return uniquePools(mapped);
-  }
-
-  const amm = await api.amm();
-  return uniquePools(asArray(amm).map(mapPool).filter(Boolean));
+  const body = await api.lpPools();
+  const catchingUp = Boolean(
+    body &&
+      typeof body === "object" &&
+      !Array.isArray(body) &&
+      (body.catching_up || !asArray(body.pools || body).length)
+  );
+  if (catchingUp) return [];
+  return uniquePools(asArray(body).map(mapPool).filter(Boolean));
 }
 
 export async function getTopHolders(onPage) {
@@ -301,22 +308,27 @@ export async function getTopHolders(onPage) {
 
 export async function getTopLp(onPage) {
   const cached = sessionRead("lpHolders");
-  if (Array.isArray(cached) && cached.length) onPage?.(cached, null);
   if (cached?.rows?.length) onPage?.(cached.rows, cached.freshness || null);
+  else if (Array.isArray(cached) && cached.length) onPage?.(cached, null);
 
-  const payload = await api.topLp(FIRST_LP, 0);
+  const payload = await api.topLp(FIRST_LP, 0, { snapshot: "today", pool: "all" });
   const first = asArray(payload);
   const firstMapped = finishLp(first);
   const freshness = pickFreshness(payload, firstMapped);
-  if (firstMapped.length) {
-    onPage?.(firstMapped, freshness);
-    sessionWrite("lpHolders", { rows: firstMapped, freshness });
-  }
+  const catchingUp = Boolean(
+    payload &&
+      typeof payload === "object" &&
+      !Array.isArray(payload) &&
+      (payload.catching_up || payload.present === false)
+  );
+  onPage?.(firstMapped, freshness);
+  sessionWrite("lpHolders", { rows: firstMapped, freshness });
 
-  if (first.length < FIRST_LP) return firstMapped;
+  if (catchingUp || first.length < FIRST_LP) return firstMapped;
 
   const rest = await paginate(
-    (limit, offset) => api.topLp(limit, FIRST_LP + offset),
+    (limit, offset) =>
+      api.topLp(limit, FIRST_LP + offset, { snapshot: "today", pool: "all" }),
     50,
     (all) => {
       const mapped = finishLp([...first, ...all]);
@@ -345,8 +357,10 @@ export async function getTokenDetails() {
   const trustlines =
     state.snapshot?.trustlinesCount ||
     (await api.trustlinesCount().catch(() => ({})));
-  const ammRows = await getAmm().catch(() => []);
-  const primary = ammRows[0] || {};
+  const lpHolders =
+    (await api.lpHoldersCount({ snapshot: "today", pool: "all" }).catch(() => ({})));
+  const lpTrustlines =
+    (await api.lpTrustlinesCount({ pool: "all" }).catch(() => ({})));
 
   const totalSupply =
     numberOrNull(overview.total_supply || overview.totalSupply) || XDX_TOTAL_SUPPLY;
@@ -367,16 +381,13 @@ export async function getTokenDetails() {
       },
       overview.xrpUsd
     );
-  const tvlUsd = numberOrNull(overview.tvl_usd || primary.tvl_usd || overview.tvl || primary.tvl);
-  const poolTvl = ammRows.reduce((sum, row) => sum + (Number(row.tvl) || 0), 0);
-  const ammMarketCap =
-    numberOrNull(overview.ammMarketCap) || (poolTvl > 0 ? poolTvl : tvlUsd);
+  const tvlUsd = numberOrNull(overview.tvl_usd || overview.tvl);
+  const ammMarketCap = numberOrNull(overview.ammMarketCap) || tvlUsd;
   const fdv = totalSupply * price;
   const xrpUsd = numberOrNull(prices.xrpUsd || prices.xrp_usd || overview.xrpUsd);
   const xdxPerXrp = xrpPerXdx(price, xrpUsd);
 
   return {
-    ...primary,
     ...overview,
     tokenType: "XDX",
     price,
@@ -398,6 +409,12 @@ export async function getTokenDetails() {
       (typeof trustlines === "number" ? trustlines : trustlines.count) ??
       overview.trustline_count ??
       overview.trustlines,
+    lp_holder_count:
+      (typeof lpHolders === "number" ? lpHolders : lpHolders.count) ??
+      overview.lp_holder_count,
+    lp_trustline_count:
+      (typeof lpTrustlines === "number" ? lpTrustlines : lpTrustlines.count) ??
+      overview.lp_trustline_count,
     issuer: overview.issuer,
     issuerFee: overview.issuer_fee,
     blackholed: overview.blackholed,

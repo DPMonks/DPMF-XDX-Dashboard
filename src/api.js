@@ -385,10 +385,14 @@ export const api = {
       `${path}${join}limit=${limit}&offset=${offset}&snapshot=${encodeURIComponent(snapshot)}`
     );
   },
-  topLp: (limit = 100, offset = 0) => {
+  topLp: (limit = 100, offset = 0, extra = {}) => {
     const path = endpoint("topLp");
     const join = path.includes("?") ? "&" : "?";
-    return getJson(`${path}${join}limit=${limit}&offset=${offset}`);
+    const snapshot = extra.snapshot || "today";
+    const pool = extra.pool || extra.pair || "all";
+    return getJson(
+      `${path}${join}limit=${limit}&offset=${offset}&snapshot=${encodeURIComponent(snapshot)}&pool=${encodeURIComponent(pool)}`
+    );
   },
   holdersCount: (extra = {}) => {
     const path = endpoint("holdersCount");
@@ -397,10 +401,31 @@ export const api = {
     return getJson(`${path}${join}snapshot=${encodeURIComponent(snapshot)}`);
   },
   trustlinesCount: () => getJson(endpoint("trustlinesCount")),
-  lpHoldersCount: () => getJson(endpoint("lpHoldersCount")),
+  lpHoldersCount: (extra = {}) => {
+    const path = endpoint("lpHoldersCount");
+    const snapshot = extra.snapshot || "today";
+    const pool = extra.pool || extra.pair || "all";
+    const join = path.includes("?") ? "&" : "?";
+    return getJson(
+      `${path}${join}snapshot=${encodeURIComponent(snapshot)}&pool=${encodeURIComponent(pool)}`
+    );
+  },
+  lpTrustlinesCount: (extra = {}) => {
+    const path = endpoint("lpTrustlinesCount") || "/lp-trustlines/count";
+    const pool = extra.pool || extra.pair || "all";
+    const join = path.includes("?") ? "&" : "?";
+    return getJson(`${path}${join}pool=${encodeURIComponent(pool)}`);
+  },
+  lpPools: () => getJson(endpoint("lpPools") || "/lp-pools"),
   tvlHistory: () => getJson(endpoint("tvlHistory")),
   holdersHistory: () => getJson(endpoint("holdersHistory")),
   lpHoldersHistory: () => getJson(endpoint("lpHoldersHistory")),
+  lpTrustlinesHistory: (extra = {}) => {
+    const path = endpoint("lpTrustlinesHistory") || "/charts/lp-trustlines";
+    const pool = extra.pool || extra.pair || "all";
+    const join = path.includes("?") ? "&" : "?";
+    return getJson(`${path}${join}pool=${encodeURIComponent(pool)}`);
+  },
   trustlinesHistory: () => getJson(endpoint("trustlinesHistory")),
   activityHistory: () => getJson(endpoint("activityHistory")),
   tradersHistory: () => getJson(endpoint("tradersHistory")),

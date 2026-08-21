@@ -60,7 +60,7 @@ export default function TokenDetails() {
   if (!data && !error) {
     return (
       <div className="token-details-grid">
-        {Array.from({ length: 15 }, (_, i) => (
+        {Array.from({ length: 16 }, (_, i) => (
           <Skeleton key={i} height={58} />
         ))}
       </div>
@@ -120,6 +120,10 @@ export default function TokenDetails() {
       <Detail
         label={t.lpHoldersCount}
         value={formatNumber(pick(data, ["lp_holder_count"]), locale)}
+      />
+      <Detail
+        label={t.lpTrustlinesCount}
+        value={formatNumber(pick(data, ["lp_trustline_count"]), locale)}
       />
       <Detail
         label={t.lpSupply}
