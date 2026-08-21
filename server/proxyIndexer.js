@@ -104,6 +104,7 @@ function localDashboardStatus(suffix, extra = {}) {
     priceChange: "/api/prices/change24h",
     networth: "/api/wallet/networth/:address",
     sparkline: "/api/sparkline/:asset",
+    issuerLocked: "/api/issuer-locked",
   };
 
   if (suffix === "health" || suffix === "health/xrpl") {

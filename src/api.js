@@ -411,4 +411,5 @@ export const api = {
   prices: () => getJson(endpoint("prices")),
   change24h: () => getJson(endpoint("change24h")),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),
+  issuerLocked: () => getJson(endpoint("issuerLocked")),
 };

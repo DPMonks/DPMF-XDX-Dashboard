@@ -5,6 +5,12 @@ export const XDX_CURRENCY = "XDX";
 export const XDX_HEX = "5844580000000000000000000000000000000000";
 export const XDX_TOTAL_SUPPLY = 10_000_000_000;
 
+export function issuerLockedFromIssued(issued, total = XDX_TOTAL_SUPPLY) {
+  const out = Number(issued);
+  if (!Number.isFinite(out) || out <= 0) return 0;
+  return Math.max(0, Math.round((total - out) * 1e8) / 1e8);
+}
+
 export const XDX_XRP_AMM = "rhEwhutV5EyYzTbBYDdK7dHxwdi5omqffB";
 export const XDX_XRP_LP_HEX = "03970105D80AE3C54085F6E97EE16CEDE6CE8200";
 

@@ -1,5 +1,6 @@
 import pg from "pg";
 import {
+  issuerLockedFromIssued,
   XDX_ISSUER,
   XDX_RLUSD_AMM,
   XDX_TOTAL_SUPPLY,
@@ -55,6 +56,7 @@ const CATALOG = {
     priceChange: "/api/prices/change24h",
     networth: "/api/wallet/networth/:address",
     sparkline: "/api/sparkline/:asset",
+    issuerLocked: "/api/issuer-locked",
   },
 };
 
@@ -657,6 +659,74 @@ async function nativeXdxFlows(db) {
   }));
 }
 
+const ISSUER_POLL_MS = 30_000;
+let issuerLockedCache = { at: 0, issued: 0, locked: 0, source: null, as_of: null };
+
+async function issuedXdxFromHolders(db) {
+  const history = await tryQuery(
+    db,
+    `SELECT COALESCE(SUM(ABS(balance::numeric)), 0) AS issued
+     FROM token_holders_history
+     WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)
+       AND ABS(balance::numeric) > 0
+       AND account <> $1`,
+    [XDX_ISSUER]
+  );
+  const latest = await tryQuery(
+    db,
+    `SELECT COALESCE(SUM(ABS(balance::numeric)), 0) AS issued
+     FROM token_holders_latest
+     WHERE ABS(balance::numeric) > 0
+       AND account <> $1`,
+    [XDX_ISSUER]
+  );
+  const historyIssued = Number(history.rows[0]?.issued || 0);
+  const latestIssued = Number(latest.rows[0]?.issued || 0);
+  return historyIssued > 0 ? historyIssued : latestIssued;
+}
+
+async function issuedXdxFromIssuerAccount() {
+  const url = process.env.XRPL_STATE_URL || "https://s1.ripple.com";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify({
+      method: "gateway_balances",
+      params: [{ account: XDX_ISSUER, ledger_index: "validated", hotwallet: [] }],
+    }),
+    signal: AbortSignal.timeout(4000),
+  });
+  if (!res.ok) throw new Error(`issuer gateway_balances HTTP ${res.status}`);
+  const body = await res.json();
+  const issued = Number(body?.result?.obligations?.XDX || 0);
+  if (!(issued > 0)) throw new Error("issuer obligation empty");
+  return issued;
+}
+
+async function loadIssuerLocked(db) {
+  if (Date.now() - issuerLockedCache.at < ISSUER_POLL_MS && issuerLockedCache.locked > 0) {
+    return issuerLockedCache;
+  }
+  let issued;
+  let source;
+  try {
+    issued = await issuedXdxFromIssuerAccount();
+    source = "issuer";
+  } catch {
+    issued = db ? await issuedXdxFromHolders(db) : 0;
+    source = "db";
+  }
+  const locked = issuerLockedFromIssued(issued);
+  issuerLockedCache = {
+    at: Date.now(),
+    issued,
+    locked,
+    source,
+    as_of: new Date().toISOString(),
+  };
+  return issuerLockedCache;
+}
+
 async function tokenBalanceFor(db, address) {
   const latest = await tryQuery(
     db,
@@ -940,7 +1010,7 @@ async function buildSnapshot(db) {
     tokenHolderCount(db),
     tokenTrustlineCount(db),
     tryQuery(db, "SELECT COUNT(*) AS lp_holder_count FROM lp_holders_latest"),
-    tokenBalanceFor(db, XDX_ISSUER),
+    loadIssuerLocked(db),
     tokenBalanceFor(db, XDX_XRP_AMM),
   ]);
 
@@ -950,7 +1020,7 @@ async function buildSnapshot(db) {
   const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
   const tvlUsd = reserveCurrency > 0 && xrpUsd > 0 ? reserveCurrency * 2 * xrpUsd : 0;
   const totalSupply = XDX_TOTAL_SUPPLY;
-  const burned = Math.abs(Number(issuerLocked || 0));
+  const burned = Number(issuerLocked.locked || 0);
   const circulating = Math.max(totalSupply - burned, 0);
   const pools = (await listXdxPools(db)).map((row) => presentPool(row, xdxUsd, xrpUsd));
   const ammMarketCap = pools.reduce((sum, pool) => sum + Number(pool.tvl || 0), 0) || tvlUsd;
@@ -980,6 +1050,8 @@ async function buildSnapshot(db) {
     total_supply: totalSupply,
     burned_supply: burned,
     issuer_locked: burned,
+    issued_xdx: Number(issuerLocked.issued || 0),
+    issuer_source: issuerLocked.source,
     amm_xdx: Number(ammXdx || reserveAsset || 0),
     trustlines,
     trustline_count: trustlines,
@@ -1033,6 +1105,19 @@ export async function readIndexerDb(suffix, search = "") {
 
     if (suffix === "overview" || suffix === "token-details") {
       return ok(await buildSnapshot(db));
+    }
+
+    if (suffix === "issuer-locked") {
+      const snap = await loadIssuerLocked(db);
+      return ok({
+        issuer: XDX_ISSUER,
+        issuer_locked: snap.locked,
+        burned_supply: snap.locked,
+        issued: snap.issued,
+        circulating: Math.max(XDX_TOTAL_SUPPLY - snap.locked, 0),
+        as_of: snap.as_of,
+        source: snap.source,
+      });
     }
 
     if (suffix === "amm") {
