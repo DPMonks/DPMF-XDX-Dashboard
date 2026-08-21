@@ -281,6 +281,8 @@ function acceptHandshake(raw, path, extra = {}) {
     health: extra.health || null,
     xrpl: extra.xrpl || extra.health?.xrpl || raw.xrpl || null,
     source: raw.source || extra.health?.source || extra.source || null,
+    database: raw.database || extra.health?.database || extra.database || null,
+    hint: raw.hint || extra.health?.hint || extra.hint || null,
     raw,
   };
   return true;

@@ -45,6 +45,8 @@ export default function App() {
           error: hs.error,
           health: hs.health?.status,
           source: hs.source || hs.health?.source || hs.raw?.source,
+          database: hs.database || hs.health?.database || hs.raw?.database,
+          hint: hs.hint || hs.health?.hint || hs.raw?.hint,
           onV1: hs.xrpl?.onV1 ?? hs.health?.xrpl?.onV1,
         });
       });
@@ -94,6 +96,8 @@ export default function App() {
             path: hs.path,
             error: hs.error || nextErrors.holders,
             source: hs.source,
+            database: hs.database,
+            hint: hs.hint || hs.error || nextErrors.holders,
           });
         }
       }
@@ -121,21 +125,23 @@ export default function App() {
 
       <p className={`indexer-source is-${link.status}`}>
         <span className="handshake-dot" aria-hidden="true" />
-        {link.status === "ok"
+        {link.database === "postgres" || link.source === "postgres"
           ? t.handshakeOk
           : link.status === "error"
             ? t.handshakeError
-            : link.status === "fallback"
-              ? t.handshakeFallback
-              : t.handshakeConnecting}
+            : link.status === "connecting"
+              ? t.handshakeConnecting
+              : t.handshakeFallback}
         {": "}
         <code>{INDEXER_ORIGIN}</code>
         {link.protocol ? ` · ${link.protocol}` : ""}
         {link.path ? ` · ${link.path}` : ""}
         {link.health ? ` · health ${link.health}` : ""}
         {link.source ? ` · ${link.source}` : ""}
+        {link.database ? ` · DATABASE_URL ${link.database}` : ""}
         {link.onV1 != null ? ` · xrpl /v1 ${link.onV1 ? "yes" : "no"}` : ""}
         {" · SELECT only, workers not started"}
+        {link.hint ? ` · ${link.hint}` : ""}
       </p>
 
       <div className="dashboard-grid">

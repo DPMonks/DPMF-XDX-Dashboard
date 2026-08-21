@@ -59,7 +59,7 @@ export function databaseUrlHint() {
     return "DATABASE_URL is set but is not a postgres:// connection string.";
   }
   if (kind === "missing") {
-    return "DATABASE_URL is unset. Set the Postgres TCP proxy URL (not the indexer HTTP host).";
+    return "DATABASE_URL is unset on this Vercel deploy. In DPMF-XDX-Dashboard → Settings → Environment Variables, add postgres://USER:PASS@acela.proxy.rlwy.net:48994/railway for Preview AND Production (no VITE_, no ?sslmode=require), then Redeploy this preview.";
   }
   return "";
 }

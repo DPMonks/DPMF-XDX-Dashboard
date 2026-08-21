@@ -3,7 +3,12 @@ import {
   DEFAULT_INDEXER_ORIGIN,
   INDEXER_HANDSHAKE_PATHS,
 } from "../src/handshake/contract.js";
-import { databaseUrlHint, hasIndexerDatabase, readIndexerDb } from "./readIndexerDb.js";
+import {
+  databaseUrlHint,
+  databaseUrlKind,
+  hasIndexerDatabase,
+  readIndexerDb,
+} from "./readIndexerDb.js";
 
 export { DEFAULT_INDEXER_ORIGIN };
 
@@ -70,6 +75,60 @@ function withSource(result, source) {
   return { ...result, source: result.source || source };
 }
 
+function localDashboardStatus(suffix) {
+  const database = databaseUrlKind();
+  const hint = databaseUrlHint();
+  const endpoints = {
+    health: "/health",
+    overview: "/api/overview",
+    amm: "/api/amm",
+    pools: "/api/pools",
+    topHolders: "/api/top-holders",
+    topHoldersV2: "/api/top-holders-v2",
+    topLp: "/api/top-lp",
+    holdersCount: "/api/holders/count",
+    lpHoldersCount: "/api/lp-holders/count",
+    tvlHistory: "/api/charts/tvl",
+    holdersHistory: "/api/charts/holders",
+    lpHoldersHistory: "/api/charts/lp-holders",
+    walletBalances: "/api/wallet/balances/:address",
+    prices: "/api/prices",
+    priceChange: "/api/prices/change24h",
+    networth: "/api/wallet/networth/:address",
+    sparkline: "/api/sparkline/:asset",
+  };
+
+  if (suffix === "health" || suffix === "health/xrpl") {
+    return {
+      status: 200,
+      contentType: "application/json",
+      source: "dashboard",
+      body: JSON.stringify({
+        status: database === "postgres" ? "ok" : "degraded",
+        source: "dashboard",
+        database,
+        hint,
+        timestamp: new Date().toISOString(),
+        note: "Read-only SELECT on XDX tables. Workers were not started. DATABASE_URL must be on this Preview deploy (not Production-only).",
+      }),
+    };
+  }
+
+  return {
+    status: 200,
+    contentType: "application/json",
+    source: "dashboard",
+    body: JSON.stringify({
+      status: "online",
+      service: "XRPL Indexer",
+      source: "dashboard",
+      database,
+      hint,
+      endpoints,
+    }),
+  };
+}
+
 function indexerErrorHint(last) {
   let detail = last?.body || "Indexer unavailable";
   try {
@@ -80,21 +139,32 @@ function indexerErrorHint(last) {
       detail = last.body;
     }
   }
+  const database = databaseUrlKind();
+  const hint =
+    databaseUrlHint() ||
+    "Cards are SELECT-only from the XDX Postgres tables. Set server-only DATABASE_URL on Vercel Preview + Production to postgres://USER:PASS@HOST:PORT/DB (not the indexer HTTP host), then Redeploy this preview.";
   return {
-    status: last?.status || 502,
+    status: last?.status || 503,
     contentType: "application/json",
     source: "none",
     body: JSON.stringify({
-      error: detail,
-      hint:
-        databaseUrlHint() ||
-        "Cards are SELECT-only from the XDX Postgres tables (token_holders_latest, lp_holders_latest, amm_pool_latest, history). Railway HTTP did not return data. Set server-only DATABASE_URL on Vercel to postgres://USER:PASS@HOST:PORT/DB (not the indexer HTTP host). This process does not start or reset workers.",
+      error: database === "postgres" ? detail : "DATABASE_URL missing on this Vercel deploy",
+      hint,
+      database,
       source: "none",
     }),
   };
 }
 
 export async function fetchIndexerFirst(paths, { method = "GET", body, search = "", suffix = "" } = {}) {
+  const catalogOrHealth =
+    method === "GET" &&
+    (!suffix ||
+      suffix === "api" ||
+      suffix === "health" ||
+      suffix === "health/xrpl" ||
+      isHandshakeSuffix(suffix));
+
   let dbResult = null;
   const dbHint = databaseUrlHint();
   if (dbHint && !hasIndexerDatabase()) {
@@ -108,6 +178,16 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
     if (dbResult && dbResult.status < 400) {
       return withSource(dbResult, "postgres");
     }
+  }
+
+  // No postgres:// on this deploy: do not burn Railway Hikari on 429s.
+  // Catalog/health still 200 so the banner can show database=missing.
+  if (!hasIndexerDatabase()) {
+    if (catalogOrHealth) return localDashboardStatus(suffix);
+    return indexerErrorHint({
+      status: 503,
+      body: JSON.stringify({ error: "DATABASE_URL missing on this Vercel deploy" }),
+    });
   }
 
   const origin = indexerOrigin();
@@ -128,6 +208,7 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
   }
 
   if (dbResult) return dbResult;
+  if (catalogOrHealth) return localDashboardStatus(suffix);
   return indexerErrorHint(last);
 }
 
