@@ -21,3 +21,9 @@ export function recordedXdxUsdFromPrices(prices = {}, fallbackXrpUsd) {
   }
   return 0;
 }
+
+export function pickTrustlineCount(latestCount, historyCount) {
+  const latest = Number(latestCount) || 0;
+  if (latest > 0) return latest;
+  return Number(historyCount) || 0;
+}

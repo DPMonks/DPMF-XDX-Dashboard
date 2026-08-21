@@ -5,8 +5,7 @@ import {
   XDX_TOTAL_SUPPLY,
   XDX_XRP_AMM,
 } from "../src/constants/ledger.js";
-import { recordUsdPrice } from "../src/utils/format.js";
-import { recordedXdxUsdFromPrices } from "../src/utils/recordedPrice.js";
+import { pickTrustlineCount, recordedXdxUsdFromPrices } from "../src/utils/recordedPrice.js";
 import {
   asIso,
   buildTodayOwnersPayload,
@@ -512,29 +511,28 @@ async function tokenHolderCount(db) {
   return source.count;
 }
 
-async function tokenTrustlineCount(db) {
-  const snapshot = await tryQuery(
+async function tokenTrustlineSnapshot(db) {
+  const latest = await tryQuery(
     db,
-    `SELECT COUNT(*) AS count
+    `SELECT COUNT(*)::int AS count, MAX(timestamp) AS as_of
+     FROM token_holders_latest`
+  );
+  const history = await tryQuery(
+    db,
+    `SELECT COUNT(*)::int AS count, MAX(timestamp) AS as_of
      FROM token_holders_history
      WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)`
   );
-  const snapCount = Number(snapshot.rows[0]?.count || 0);
-  if (snapCount > 0) return snapCount;
+  const count = pickTrustlineCount(latest.rows[0]?.count, history.rows[0]?.count);
+  const asOf =
+    count === Number(latest.rows[0]?.count || 0) && Number(latest.rows[0]?.count || 0) > 0
+      ? latest.rows[0]?.as_of
+      : history.rows[0]?.as_of;
+  return { count, as_of: asIso(asOf) };
+}
 
-  const distinct = await tryQuery(
-    db,
-    `SELECT COUNT(*) AS count FROM (
-       SELECT DISTINCT ON (account) account
-       FROM token_holders_history
-       ORDER BY account, timestamp DESC
-     ) current`
-  );
-  const distinctCount = Number(distinct.rows[0]?.count || 0);
-  if (distinctCount > 0) return distinctCount;
-
-  const latest = await tryQuery(db, "SELECT COUNT(*) AS count FROM token_holders_latest");
-  return Number(latest.rows[0]?.count || 0);
+async function tokenTrustlineCount(db) {
+  return (await tokenTrustlineSnapshot(db)).count;
 }
 
 async function tokenHoldersPage(db, limit, offset, options = {}) {
@@ -707,26 +705,33 @@ async function loadXrpQuote(db) {
   return xrpQuote;
 }
 
-async function loadRecordedXdxUsd(db, xdxPerXrp, xrpUsd) {
-  const fromAmm = xdxPerXrp > 0 && xrpUsd > 0 ? xdxPerXrp * xrpUsd : 0;
-  if (fromAmm > 0) return recordUsdPrice(fromAmm);
-
-  const latest = await tryQuery(
+async function loadRecordedXdxUsd(db, xrpUsd) {
+  const latestCol = await tryQuery(
     db,
-    `SELECT xdx_usd, price_usd FROM price_latest
+    `SELECT xdx_usd FROM price_latest
      ORDER BY timestamp DESC NULLS LAST
      LIMIT 1`
   );
-  const fromColumn = recordedXdxUsdFromPrices(
-    {
-      xdxUsd: latest.rows[0]?.xdx_usd,
-      recorded_price: latest.rows[0]?.xdx_usd,
-      xrpUsd,
-    },
+  const fromLatest = recordedXdxUsdFromPrices(
+    { recorded_price: latestCol.rows[0]?.xdx_usd, xdxUsd: latestCol.rows[0]?.xdx_usd, xrpUsd },
     xrpUsd
   );
-  if (fromColumn > 0) return fromColumn;
+  if (fromLatest > 0) return fromLatest;
 
+  const latestAsset = await tryQuery(
+    db,
+    `SELECT price_usd FROM price_latest
+     WHERE asset IN ('XDX', 'xdx')
+     ORDER BY timestamp DESC NULLS LAST
+     LIMIT 1`
+  );
+  const all = await tryQuery(
+    db,
+    `SELECT price_usd FROM price_latest_all
+     WHERE currency IN ('XDX', 'xdx')
+     ORDER BY timestamp DESC NULLS LAST
+     LIMIT 1`
+  );
   const hist = await tryQuery(
     db,
     `SELECT price_usd FROM price_history
@@ -734,15 +739,13 @@ async function loadRecordedXdxUsd(db, xdxPerXrp, xrpUsd) {
      ORDER BY timestamp DESC
      LIMIT 1`
   );
-  const all = await tryQuery(
-    db,
-    `SELECT price_usd FROM price_latest_all
-     WHERE currency IN ('XDX', 'xdx')
-     LIMIT 1`
-  );
   return recordedXdxUsdFromPrices(
     {
-      xdxUsd: hist.rows[0]?.price_usd || all.rows[0]?.price_usd || 0,
+      xdxUsd:
+        latestAsset.rows[0]?.price_usd ||
+        all.rows[0]?.price_usd ||
+        hist.rows[0]?.price_usd ||
+        0,
       xrpUsd,
     },
     xrpUsd
@@ -932,7 +935,7 @@ async function buildSnapshot(db) {
       ? reserveCurrency / reserveAsset
       : Number(amm.price || 0);
   const xrpUsd = Number(quote.usd || 0);
-  const xdxUsd = await loadRecordedXdxUsd(db, xdxPerXrp, xrpUsd);
+  const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
   const tvlUsd = reserveCurrency > 0 && xrpUsd > 0 ? reserveCurrency * 2 * xrpUsd : 0;
   const totalSupply = XDX_TOTAL_SUPPLY;
   const burned = Math.abs(Number(issuerLocked || 0));
@@ -1039,10 +1042,10 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "trustlines/count") {
-      const count = await tokenTrustlineCount(db);
+      const snap = await tokenTrustlineSnapshot(db);
       return ok({
-        count,
-        as_of: new Date().toISOString(),
+        count: snap.count,
+        as_of: snap.as_of,
         source: "db",
       });
     }
