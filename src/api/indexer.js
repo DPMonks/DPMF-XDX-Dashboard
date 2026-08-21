@@ -1,11 +1,14 @@
 import { formatPair } from "../utils/currency.js";
 
-const DEFAULT_INDEXER_URL = "https://dpmf-xdx-indexer-production.up.railway.app";
+export const INDEXER_ORIGIN =
+  "https://dpmf-xdx-indexer-production.up.railway.app";
 const PAGE_SIZE = 200;
 const MAX_ROWS = 5000;
 
+// Empty string = same-origin `/api` via the Vite/Vercel proxy.
+// Set VITE_INDEXER_URL to call Railway from the browser instead.
 export const INDEXER_URL = (
-  import.meta.env.VITE_INDEXER_URL || DEFAULT_INDEXER_URL
+  import.meta.env.VITE_INDEXER_URL ?? ""
 ).replace(/\/$/, "");
 
 export class IndexerError extends Error {

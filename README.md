@@ -7,9 +7,9 @@ Frontend for the [DPMF XDX indexer](https://dpmf-xdx-indexer-production.up.railw
 | Layer | Source |
 | --- | --- |
 | Dashboard | this repo (`DPMF-XDX-Dashboard`) |
-| Indexer API | `VITE_INDEXER_URL` (defaults to Railway production) |
+| Indexer API | same-origin `/api` proxy to Railway production |
 
-The dashboard never talks to Xaman or XRPL directly for indexed data. Wallet QR payloads are created by the indexer so API keys stay on the backend.
+The browser calls `/api/*` on the dashboard host. Vite (local) and Vercel (preview/prod) forward those requests to `https://dpmf-xdx-indexer-production.up.railway.app`. Xaman QR payloads stay on the indexer so API keys never sit in the frontend.
 
 ## Local setup
 

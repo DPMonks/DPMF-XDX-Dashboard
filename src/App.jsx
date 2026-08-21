@@ -8,10 +8,9 @@ import TokenDetails from "./components/TokenDetails";
 import RichList from "./components/RichList";
 import AmmCard from "./components/AmmCard";
 import WalletOverview from "./components/WalletOverview";
-import OverviewStrip from "./components/OverviewStrip";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
-import { INDEXER_URL, getAmm, getOverview, getTopHolders, getTopLp } from "./api/indexer";
+import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
 
 const DexChart = lazy(() => import("./components/DexChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
@@ -22,7 +21,6 @@ export default function App() {
   const [holders, setHolders] = useState([]);
   const [lpHolders, setLpHolders] = useState([]);
   const [ammData, setAmmData] = useState([]);
-  const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
 
@@ -31,11 +29,10 @@ export default function App() {
 
     async function load() {
       const nextErrors = {};
-      const [holdersResult, lpResult, ammResult, overviewResult] = await Promise.allSettled([
+      const [holdersResult, lpResult, ammResult] = await Promise.allSettled([
         getTopHolders(),
         getTopLp(),
         getAmm(),
-        getOverview(),
       ]);
 
       if (cancelled) return;
@@ -48,9 +45,6 @@ export default function App() {
 
       if (ammResult.status === "fulfilled") setAmmData(ammResult.value);
       else nextErrors.amm = ammResult.reason.message;
-
-      if (overviewResult.status === "fulfilled") setOverview(overviewResult.value);
-      else nextErrors.overview = overviewResult.reason.message;
 
       setErrors(nextErrors);
       setLoading(false);
@@ -77,7 +71,7 @@ export default function App() {
       </header>
 
       <p className="indexer-source">
-        {t.indexer}: <code>{INDEXER_URL}</code>
+        {t.indexer}: <code>{INDEXER_ORIGIN}</code>
       </p>
 
       <div className="dashboard-grid">
@@ -87,15 +81,6 @@ export default function App() {
             <WalletOverview address={walletAddress} />
           </section>
         )}
-
-        <section className="dashboard-card neon-card">
-          <h2 className="card-title">{t.snapshot}</h2>
-          <OverviewStrip
-            overview={overview}
-            loading={loading}
-            error={errors.overview}
-          />
-        </section>
 
         <section className="dashboard-card neon-card">
           <h2 className="card-title">{t.tokenDetails}</h2>
