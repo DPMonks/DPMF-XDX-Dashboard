@@ -760,6 +760,143 @@ body {
   overflow-wrap: anywhere;
 }
 
+.orderbook-wrap {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.orderbook-title {
+  margin-bottom: 12px;
+}
+
+.orderbook-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.orderbook-unit {
+  margin: 0;
+  color: var(--dpmf-text-muted);
+  font-size: 12px;
+}
+
+.orderbook-header {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.orderbook-header dt {
+  color: var(--dpmf-text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.orderbook-header dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.orderbook-header .is-bid {
+  color: #3dff8a;
+}
+
+.orderbook-header .is-ask {
+  color: #ff6b6b;
+}
+
+.orderbook-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.orderbook-side {
+  min-width: 0;
+  background: rgba(8, 8, 14, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.orderbook-side-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--dpmf-text-main);
+}
+
+.orderbook-tape {
+  max-height: 280px;
+  overflow: auto;
+}
+
+.orderbook-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr 0.9fr;
+  gap: 6px;
+  padding: 5px 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.orderbook-row.is-head {
+  color: var(--dpmf-text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.orderbook-depth {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(61, 255, 138, 0.16);
+  pointer-events: none;
+}
+
+.orderbook-row.is-ask .orderbook-depth {
+  background: rgba(255, 107, 107, 0.16);
+}
+
+.orderbook-price,
+.orderbook-row > span:not(.orderbook-depth) {
+  position: relative;
+  z-index: 1;
+}
+
+.orderbook-row.is-bid .orderbook-price {
+  color: #3dff8a;
+}
+
+.orderbook-row.is-ask .orderbook-price {
+  color: #ff6b6b;
+}
+
+.orderbook-row.is-amm {
+  outline: 1px dashed rgba(199, 112, 255, 0.45);
+  outline-offset: -1px;
+}
+
+.orderbook-amm {
+  margin-top: 12px;
+}
+
+.orderbook-empty,
+.orderbook-asof {
+  margin: 8px 0 0;
+  color: var(--dpmf-text-muted);
+  font-size: 12px;
+}
+
 .skeleton {
   background: linear-gradient(90deg, #0d111c 0%, #1a2030 50%, #0d111c 100%);
   background-size: 200% 100%;
@@ -897,6 +1034,10 @@ body {
   .activity-plot {
     height: 220px;
   }
+
+  .orderbook-header {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 700px) {
@@ -951,6 +1092,14 @@ body {
 
   .activity-plot {
     height: 200px;
+  }
+
+  .orderbook-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .orderbook-header {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .rich-table {

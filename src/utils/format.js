@@ -45,6 +45,16 @@ export function formatUsdPrice(value, locale) {
   });
 }
 
+export function formatQuotePerBase(value, locale, quote = "XRP") {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return "—";
+  const formatted = num.toLocaleString(localeOf(locale), {
+    minimumFractionDigits: 8,
+    maximumFractionDigits: 8,
+  });
+  return quote ? `${formatted} ${quote}` : formatted;
+}
+
 export function formatXrpPrice(value, locale) {
   const num = Number(value);
   if (!Number.isFinite(num) || num <= 0) return "—";

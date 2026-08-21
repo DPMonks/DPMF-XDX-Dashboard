@@ -437,4 +437,10 @@ export const api = {
   change24h: () => getJson(endpoint("change24h")),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),
   issuerLocked: () => getJson(endpoint("issuerLocked")),
+  orderbook: (pair = "XDX/XRP") => {
+    const path = endpoint("orderbook") || "/orderbook";
+    const join = path.includes("?") ? "&" : "?";
+    return getJson(`${path}${join}pair=${encodeURIComponent(pair)}`);
+  },
+  orderbooks: () => getJson(endpoint("orderbooks") || "/orderbooks"),
 };

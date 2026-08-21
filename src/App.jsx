@@ -7,6 +7,7 @@ import { useI18n } from "./i18n/useI18n";
 import TokenDetails from "./components/TokenDetails";
 import RichList from "./components/RichList";
 import AmmCard from "./components/AmmCard";
+import OrderBook from "./components/OrderBook";
 import WalletOverview from "./components/WalletOverview";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
@@ -170,6 +171,10 @@ export default function App() {
           <Suspense fallback={<Skeleton height={300} />}>
             <DexChart />
           </Suspense>
+          <div className="orderbook-wrap">
+            <h3 className="card-title orderbook-title">{t.orderbook}</h3>
+            <OrderBook />
+          </div>
         </section>
 
         <section className="dashboard-card neon-card">

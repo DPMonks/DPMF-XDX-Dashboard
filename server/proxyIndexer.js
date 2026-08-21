@@ -110,6 +110,8 @@ function localDashboardStatus(suffix, extra = {}) {
     networth: "/api/wallet/networth/:address",
     sparkline: "/api/sparkline/:asset",
     issuerLocked: "/api/issuer-locked",
+    orderbook: "/api/orderbook",
+    orderbooks: "/api/orderbooks",
   };
 
   if (suffix === "health" || suffix === "health/xrpl") {

@@ -40,6 +40,8 @@ export const DEFAULT_ENDPOINTS = {
   change24h: "/prices/change24h",
   sparkline: "/sparkline/:asset",
   issuerLocked: "/issuer-locked",
+  orderbook: "/orderbook",
+  orderbooks: "/orderbooks",
 };
 
 export const ENDPOINT_ALIASES = {
@@ -72,6 +74,8 @@ export const ENDPOINT_ALIASES = {
   change24h: ["change24h", "priceChange"],
   sparkline: ["sparkline"],
   issuerLocked: ["issuerLocked", "issuer_locked"],
+  orderbook: ["orderbook", "order_book"],
+  orderbooks: ["orderbooks", "order_books"],
 };
 
 export const CATALOG_PATHS = ["/api/", "/"];

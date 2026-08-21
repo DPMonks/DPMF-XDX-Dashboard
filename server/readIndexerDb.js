@@ -27,6 +27,12 @@ import {
   pickAllPoolCount,
   pickTodayLpSource,
 } from "../src/todayLpOwners.js";
+import {
+  asOrderbookPayload,
+  emptyOrderbook,
+  normalizeOrderbookPair,
+  ORDERBOOK_PAIRS,
+} from "../src/orderbook.js";
 
 let pool = null;
 
@@ -69,6 +75,8 @@ const CATALOG = {
     networth: "/api/wallet/networth/:address",
     sparkline: "/api/sparkline/:asset",
     issuerLocked: "/api/issuer-locked",
+    orderbook: "/api/orderbook",
+    orderbooks: "/api/orderbooks",
   },
 };
 
@@ -855,6 +863,38 @@ async function loadAllLpSupply(db) {
   return Number(latest.rows[0]?.n || 0);
 }
 
+async function loadOrderbook(db, pair = "XDX/XRP") {
+  const name = normalizeOrderbookPair(pair);
+  const stored = await tryQuery(
+    db,
+    `SELECT payload, pair, updated_at
+     FROM order_book_latest
+     WHERE pair = $1
+     LIMIT 1`,
+    [name]
+  );
+  if (!stored.rows.length) return emptyOrderbook(name);
+  const book = asOrderbookPayload(stored.rows[0].payload, name);
+  return {
+    ...book,
+    as_of: book.as_of || asIso(stored.rows[0].updated_at),
+    source: "db",
+  };
+}
+
+async function loadOrderbooks(db) {
+  const books = {};
+  for (const pair of ORDERBOOK_PAIRS) {
+    books[pair] = await loadOrderbook(db, pair);
+  }
+  return {
+    quotes: ["XRP", "RLUSD"],
+    default_pair: "XDX/XRP",
+    books,
+    source: "db",
+  };
+}
+
 async function loadLpTrustlineChart(db, pool = "all") {
   const pair = normalizeLpPool(pool);
   const where = lpPoolClause(pair);
@@ -1611,6 +1651,16 @@ export async function readIndexerDb(suffix, search = "") {
 
     if (suffix === "lp-pools") {
       return ok(await loadXdxLpPools(db));
+    }
+
+    if (suffix === "orderbooks") {
+      return ok(await loadOrderbooks(db));
+    }
+
+    if (suffix === "orderbook") {
+      const pair =
+        params.get("pair") || params.get("quote") || params.get("market") || "XDX/XRP";
+      return ok(await loadOrderbook(db, pair));
     }
 
     if (suffix === "top-holders" || suffix === "top-holders-v2") {

@@ -2,6 +2,7 @@ import { api, getHandshakeState, handshake, INDEXER_ORIGIN } from "../api";
 import { pairFromRow, XDX_TOTAL_SUPPLY } from "../constants/ledger";
 import { recordedXdxUsdFromPrices, xrpPerXdx } from "../utils/recordedPrice";
 import { poolAssetSplit, quoteUsdFromMap } from "../utils/poolSplit";
+import { asOrderbookPayload, emptyOrderbook, ORDERBOOK_PAIRS } from "../orderbook";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -300,6 +301,30 @@ export async function getAmm() {
       .filter(Boolean)
       .map((row) => withPoolSplit(row, row.xdxUsd, row.quote === "XRP" ? row.quote_usd : 0))
   );
+}
+
+export async function getOrderbooks() {
+  try {
+    const body = await api.orderbooks();
+    const books = {};
+    for (const pair of ORDERBOOK_PAIRS) {
+      books[pair] = asOrderbookPayload(body?.books?.[pair] || body?.[pair], pair);
+    }
+    return {
+      quotes: Array.isArray(body?.quotes) && body.quotes.length ? body.quotes : ["XRP", "RLUSD"],
+      default_pair: body?.default_pair || "XDX/XRP",
+      books,
+    };
+  } catch {
+    return {
+      quotes: ["XRP", "RLUSD"],
+      default_pair: "XDX/XRP",
+      books: {
+        "XDX/XRP": emptyOrderbook("XDX/XRP"),
+        "XDX/RLUSD": emptyOrderbook("XDX/RLUSD"),
+      },
+    };
+  }
 }
 
 export async function getTopHolders(onPage) {
