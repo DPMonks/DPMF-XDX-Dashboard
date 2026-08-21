@@ -157,17 +157,24 @@ function mapPool(row) {
     pool: pair,
     asset,
     quote,
-    tvl: numberOrNull(pick(row, ["tvl", "total_value_locked"])),
+    tvl: numberOrNull(pick(row, ["tvl", "tvl_usd", "total_value_locked", "liquidity"])),
     price: numberOrNull(pick(row, ["price", "price_usd"])),
     apr: numberOrNull(pick(row, ["apr", "apy"])),
     volume24h: numberOrNull(pick(row, ["volume24h", "volume_24h", "volume"])),
     reserve_asset: numberOrNull(
-      pick(row, ["reserve_asset", "amount", "asset_reserve", "xdx_reserve"])
+      pick(row, ["reserve_asset", "reserveAsset", "amount", "asset_reserve", "xdx_reserve"])
     ),
     reserve_currency: numberOrNull(
-      pick(row, ["reserve_currency", "amount2", "quote_reserve", "xrp_reserve"])
+      pick(row, [
+        "reserve_currency",
+        "reserveCurrency",
+        "amount2",
+        "quote_reserve",
+        "xrp_reserve",
+        "liquidity",
+      ])
     ),
-    lp_supply: numberOrNull(pick(row, ["lp_supply", "lp_token.value", "lpToken"])),
+    lp_supply: numberOrNull(pick(row, ["lp_supply", "lpSupply", "lp_token.value", "lpToken"])),
     trading_fee: numberOrNull(pick(row, ["trading_fee", "tradingFee", "fee"])),
     holder_count: numberOrNull(pick(row, ["holder_count", "lp_holder_count"])),
     updated: pick(row, ["updated", "timestamp", "updated_at"]),
@@ -318,7 +325,8 @@ export async function getTokenDetails() {
     blackholed: overview.blackholed,
     created: overview.created,
     price,
-    change24h: change.XDX ?? change.xdx,
+    change24h: change.xdx ?? change.XDX,
+    source: overview.source,
     ...overview,
     ...primary,
   };
@@ -377,14 +385,14 @@ function sparklineRows(payload, key) {
       return {
         timestamp,
         [key]: numberOrNull(
-          item?.value ?? item?.price ?? item?.[key] ?? item?.close ?? item?.y
+          item?.price_usd ?? item?.value ?? item?.price ?? item?.[key] ?? item?.close ?? item?.y
         ),
       };
     })
     .filter((row) => row[key] != null);
 }
 
-export async function getChartHistory(range = "Max") {
+export async function getChartHistory() {
   const state = await Promise.race([
     handshake(),
     sleep(1200).then(() => getHandshakeState()),
@@ -392,14 +400,6 @@ export async function getChartHistory(range = "Max") {
   const charts = state.snapshot?.charts || {};
   const merged = new Map();
   const errors = [];
-
-  const activity = await firstChartSeries([
-    () => charts.activity,
-    () => api.activityChart(range),
-    () => getJsonAliasPath(`/api/activity-chart?range=${encodeURIComponent(range)}`),
-  ]);
-  if (activity.error) errors.push(activity.error);
-  for (const row of activity.rows) mergeChartRow(merged, row);
 
   const tvl = await firstChartSeries([
     () => charts.tvl,
@@ -458,19 +458,6 @@ export async function getChartHistory(range = "Max") {
   return rows;
 }
 
-async function getJsonAliasPath(path) {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    headers: { accept: "application/json" },
-    signal: AbortSignal.timeout(8000),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || data.detail || `${res.status} ${res.statusText}`);
-  }
-  return data;
-}
-
 function amountFromBalances(payload, names) {
   if (payload == null) return null;
   if (typeof payload === "number" || typeof payload === "string") {
@@ -502,13 +489,17 @@ export async function getWalletBalances(address) {
 
   return {
     raw: payload,
-    xrp: amountFromBalances(payload, ["XRP"]),
-    xdx: amountFromBalances(payload, ["XDX", "5844580000000000000000000000000000000000"]),
-    lp: amountFromBalances(payload, [
-      "LP",
-      "03970105D80AE3C54085F6E97EE16CEDE6CE8200",
-      "03BCD44104644B711C58CD14CD13CBA65757CFBE",
-    ]),
+    xrp: numberOrNull(payload?.xrp) ?? amountFromBalances(payload, ["XRP"]),
+    xdx:
+      numberOrNull(payload?.xdx) ??
+      amountFromBalances(payload, ["XDX", "5844580000000000000000000000000000000000"]),
+    lp:
+      numberOrNull(payload?.lp) ??
+      amountFromBalances(payload, [
+        "LP",
+        "03970105D80AE3C54085F6E97EE16CEDE6CE8200",
+        "03BCD44104644B711C58CD14CD13CBA65757CFBE",
+      ]),
   };
 }
 

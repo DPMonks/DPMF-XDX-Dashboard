@@ -1,4 +1,4 @@
-export const PROTOCOL = "clusterv1";
+export const PROTOCOL = "indexer-catalog";
 export const VERSION = 1;
 export const CLIENT = "dpmf-xdx-dashboard";
 export const SERVICE = "dpmf-xdx-indexer";
@@ -8,15 +8,6 @@ export const DEFAULT_INDEXER_ORIGIN =
 
 export const CLUSTER_HEADERS = {
   accept: "application/json",
-  "x-dpmf-client": CLIENT,
-  "x-cluster-protocol": PROTOCOL,
-  "x-cluster-version": String(VERSION),
-};
-
-export const HANDSHAKE_BODY = {
-  client: CLIENT,
-  protocol: PROTOCOL,
-  version: VERSION,
 };
 
 export const DEFAULT_ENDPOINTS = {
@@ -27,7 +18,6 @@ export const DEFAULT_ENDPOINTS = {
   topLp: "/top-lp",
   holdersCount: "/holders/count",
   lpHoldersCount: "/lp-holders/count",
-  activityChart: "/activity-chart",
   tvlHistory: "/charts/tvl",
   holdersHistory: "/charts/holders",
   lpHoldersHistory: "/charts/lp-holders",
@@ -41,13 +31,12 @@ export const DEFAULT_ENDPOINTS = {
 export const ENDPOINT_ALIASES = {
   overview: ["overview", "publicOverview", "public_overview"],
   amm: ["amm", "publicAmm", "public_amm"],
-  pools: ["pools"],
+  pools: ["pools", "publicPools"],
   topHolders: ["topHolders", "top_holders", "holders", "topHoldersV2"],
   topLp: ["topLp", "top_lp", "lpHolders", "lp_holders"],
   holdersCount: ["holdersCount", "holders_count"],
   lpHoldersCount: ["lpHoldersCount", "lp_holders_count"],
-  activityChart: ["activityChart", "activity", "chartsActivity"],
-  tvlHistory: ["tvlHistory", "chartsTvl", "tvl"],
+  tvlHistory: ["tvlHistory", "chartsTvl"],
   holdersHistory: ["holdersHistory", "chartsHolders"],
   lpHoldersHistory: ["lpHoldersHistory", "chartsLpHolders"],
   balances: ["balances", "walletBalances"],
@@ -57,22 +46,7 @@ export const ENDPOINT_ALIASES = {
   sparkline: ["sparkline"],
 };
 
-export const SAME_ORIGIN_HANDSHAKE_PATHS = [
-  "/api/cluster/v1/handshake",
-  "/api/cluster/handshake",
-  "/api/v1/handshake",
-  "/api/handshake",
-  "/api/public/handshake",
-];
+export const CATALOG_PATHS = ["/api/", "/"];
+export const HEALTH_PATHS = ["/health", "/health/xrpl"];
 
-export const INDEXER_HANDSHAKE_PATHS = [
-  "/api/cluster/v1/handshake",
-  "/cluster/v1/handshake",
-  "/api/cluster/handshake",
-  "/api/v1/handshake",
-  "/api/handshake",
-  "/api/public/handshake",
-  "/handshake",
-];
-
-export const CATALOG_PATHS = ["/", "/api", "/api/"];
+export const INDEXER_HANDSHAKE_PATHS = ["/", "/api", "/api/"];

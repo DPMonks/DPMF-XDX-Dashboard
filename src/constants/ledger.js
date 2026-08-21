@@ -32,7 +32,7 @@ export const POOLS = [
 ];
 
 export function pairFromRow(row = {}) {
-  const named = row.pair || row.pool || row.pool_name || row.name;
+  const named = row.pair || row.pool || row.pool_name || row.poolName || row.name;
   if (named && String(named).includes("/")) {
     return String(named).replace(/\s+/g, "").toUpperCase();
   }

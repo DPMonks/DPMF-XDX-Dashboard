@@ -1,7 +1,6 @@
 import {
   CLUSTER_HEADERS,
   DEFAULT_INDEXER_ORIGIN,
-  HANDSHAKE_BODY,
   INDEXER_HANDSHAKE_PATHS,
 } from "../src/handshake/contract.js";
 
@@ -37,9 +36,9 @@ function isHandshakeSuffix(suffix) {
 }
 
 export function indexerPathsFor(suffix) {
-  if (suffix === "health") return ["/health", "/api/health"];
-  if (isHandshakeSuffix(suffix)) return INDEXER_HANDSHAKE_PATHS.slice(0, 2);
-  if (!suffix) return ["/api", "/"];
+  if (suffix === "health") return ["/health"];
+  if (suffix === "health/xrpl") return ["/health/xrpl"];
+  if (isHandshakeSuffix(suffix) || !suffix) return INDEXER_HANDSHAKE_PATHS;
   return [`/api/${suffix}`];
 }
 
@@ -87,9 +86,9 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
 
 export function handshakePostBody(incoming) {
   if (incoming && typeof incoming === "object" && !Array.isArray(incoming)) {
-    return { ...HANDSHAKE_BODY, ...incoming };
+    return incoming;
   }
-  return HANDSHAKE_BODY;
+  return undefined;
 }
 
 export function proxyCorsHeaders() {

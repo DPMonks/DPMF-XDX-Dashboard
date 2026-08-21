@@ -2,14 +2,14 @@
 
 Frontend for the DPMF XDX indexer. The browser never talks to the XRPL. Indexed holder, LP, AMM, chart, and wallet data come from the indexer through a same-origin `/api` proxy. Xaman sign-in stays on this repo (`/api/xaman/*`).
 
-The cluster v1 contract is in `handoff/dashboard-connect/HANDSHAKE.md` and `src/handshake/contract.js`. The dashboard applies those routes immediately, then tries a live `GET`/`POST /api/cluster/v1/handshake`. A handshake snapshot (holders, LP, pools, overview, charts) paints cards before the first paginated fetch.
+The indexer contract is in `handoff/dashboard-connect/INDEXER_CONNECT.md`. Confirmation is `GET /` and `GET /health` (not `/api/cluster/v1/*`). The dashboard applies those `/api/*` routes immediately. A live catalog can override paths. `/health/xrpl` is optional until indexer PR #3 is on Railway.
 
 ## Pairing
 
 | Layer | Source |
 | --- | --- |
 | Dashboard | this repo |
-| Handshake | bundled cluster v1 + live `GET`/`POST /api/cluster/v1/handshake` |
+| Handshake | `GET /` catalog + `GET /health` (same-origin proxy) |
 | Indexer data | same-origin `/api/*` → Railway production |
 | Xaman | dashboard `/api/xaman/create-payload` using `XUMM_API_KEY` / `XUMM_API_SECRET` |
 

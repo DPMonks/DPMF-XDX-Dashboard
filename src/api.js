@@ -3,9 +3,9 @@ import {
   DEFAULT_ENDPOINTS,
   DEFAULT_INDEXER_ORIGIN,
   ENDPOINT_ALIASES,
-  HANDSHAKE_BODY,
+  HEALTH_PATHS,
   PROTOCOL,
-  SAME_ORIGIN_HANDSHAKE_PATHS,
+  SERVICE,
   VERSION,
 } from "./handshake/contract";
 
@@ -126,22 +126,24 @@ function extractSnapshot(payload) {
 function looksLikeHandshake(payload) {
   const body = asObject(payload);
   return Boolean(
-    body.protocol ||
-      body.cluster ||
-      body.version ||
+    body.status === "online" ||
+      body.status === "ok" ||
       body.endpoints ||
-      body.snapshot ||
-      body.ok === true ||
       body.service ||
-      body.tables ||
-      body.overview ||
-      body.pools
+      body.workers ||
+      body.xrpl
   );
 }
 
 function requestUrl(path) {
   if (path.startsWith("http")) return path;
-  if (path.startsWith("/api/") || path === "/api" || path === "/api/") {
+  if (path === "/" || path === "/api" || path === "/api/") {
+    return `${REQUEST_ORIGIN}/api/`;
+  }
+  if (path.startsWith("/health")) {
+    return `${REQUEST_ORIGIN}${path}`;
+  }
+  if (path.startsWith("/api/")) {
     return `${REQUEST_ORIGIN}${path}`;
   }
   return `${API}${path}`;
@@ -261,16 +263,18 @@ function withParams(template, params = {}) {
   return path;
 }
 
-function acceptHandshake(raw, path) {
-  if (!looksLikeHandshake(raw)) return false;
+function acceptHandshake(raw, path, extra = {}) {
+  if (!looksLikeHandshake(raw) && !extra.health) return false;
   handshakeState = {
     ok: true,
-    protocol: raw.protocol || raw.cluster || PROTOCOL,
-    version: raw.version || raw.v || VERSION,
+    protocol: raw.service || extra.health?.status || PROTOCOL,
+    version: raw.version || VERSION,
     path,
     error: null,
     endpoints: mergeEndpoints(raw.endpoints || raw.routes),
     snapshot: extractSnapshot(raw),
+    health: extra.health || null,
+    xrpl: extra.xrpl || extra.health?.xrpl || raw.xrpl || null,
     raw,
   };
   return true;
@@ -281,55 +285,41 @@ const handshakeGet = (path) =>
 
 async function probeHandshake() {
   let lastError = null;
-  const primary = SAME_ORIGIN_HANDSHAKE_PATHS[0];
+  let catalog = null;
+  let health = null;
+  let xrpl = null;
 
-  try {
-    const raw = await handshakeGet(primary);
-    if (acceptHandshake(raw, primary)) return handshakeState;
-  } catch (error) {
-    lastError = error;
-  }
-
-  try {
-    const raw = await getJson(primary, {
-      method: "POST",
-      body: HANDSHAKE_BODY,
-      cache: false,
-      queue: false,
-      retries: 1,
-    });
-    if (acceptHandshake(raw, `POST ${primary}`)) return handshakeState;
-  } catch (error) {
-    lastError = error;
-  }
-
-  for (const path of SAME_ORIGIN_HANDSHAKE_PATHS.slice(1, 3)) {
+  for (const path of CATALOG_PATHS) {
     try {
       const raw = await handshakeGet(path);
-      if (acceptHandshake(raw, path)) return handshakeState;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  for (const path of CATALOG_PATHS.slice(0, 1)) {
-    try {
-      const catalog = await handshakeGet(path);
-      if (catalog?.endpoints || catalog?.status === "online" || looksLikeHandshake(catalog)) {
-        acceptHandshake(
-          {
-            protocol: catalog.protocol || "catalog",
-            version: catalog.version || VERSION,
-            endpoints: catalog.endpoints,
-            ...catalog,
-          },
-          path
-        );
-        return handshakeState;
+      if (raw?.endpoints || raw?.status === "online" || looksLikeHandshake(raw)) {
+        catalog = raw;
+        acceptHandshake(raw, path);
+        break;
       }
     } catch (error) {
       lastError = error;
     }
+  }
+
+  try {
+    health = await handshakeGet(HEALTH_PATHS[0]);
+  } catch (error) {
+    lastError = lastError || error;
+  }
+
+  try {
+    xrpl = await handshakeGet(HEALTH_PATHS[1]);
+  } catch {
+    // /health/xrpl is PR #3 only
+  }
+
+  if (catalog || health) {
+    acceptHandshake(catalog || { status: health?.status, service: SERVICE }, catalog ? "/api/" : "/health", {
+      health,
+      xrpl,
+    });
+    return handshakeState;
   }
 
   handshakeState = {
@@ -366,11 +356,16 @@ function endpoint(name, params) {
 export { API, INDEXER_ORIGIN, REQUEST_ORIGIN };
 
 export const api = {
+  health: () => getJson("/health"),
+  healthXrpl: () => getJson("/health/xrpl"),
   overview: () => getJson(endpoint("overview")),
   amm: () => getJson(endpoint("amm")),
   pools: async () => {
     const body = await getJson(endpoint("pools"));
-    return body.pools || body.data || body.rows || body;
+    if (Array.isArray(body?.pools)) return body.pools;
+    if (Array.isArray(body)) return body;
+    if (body && typeof body === "object" && !body.error) return [body];
+    return [];
   },
   topHolders: (limit = 50, offset = 0) => {
     const path = endpoint("topHolders");
@@ -384,11 +379,6 @@ export const api = {
   },
   holdersCount: () => getJson(endpoint("holdersCount")),
   lpHoldersCount: () => getJson(endpoint("lpHoldersCount")),
-  activityChart: (range = "Max") => {
-    const path = endpoint("activityChart");
-    const join = path.includes("?") ? "&" : "?";
-    return getJson(`${path}${join}range=${encodeURIComponent(range)}`);
-  },
   tvlHistory: () => getJson(endpoint("tvlHistory")),
   holdersHistory: () => getJson(endpoint("holdersHistory")),
   lpHoldersHistory: () => getJson(endpoint("lpHoldersHistory")),

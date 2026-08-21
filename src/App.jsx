@@ -43,6 +43,8 @@ export default function App() {
           protocol: hs.protocol,
           path: hs.path,
           error: hs.error,
+          health: hs.health?.status,
+          onV1: hs.xrpl?.onV1 ?? hs.health?.xrpl?.onV1,
         });
       });
 
@@ -128,6 +130,8 @@ export default function App() {
         <code>{INDEXER_ORIGIN}</code>
         {link.protocol ? ` · ${link.protocol}` : ""}
         {link.path ? ` · ${link.path}` : ""}
+        {link.health ? ` · health ${link.health}` : ""}
+        {link.onV1 != null ? ` · xrpl /v1 ${link.onV1 ? "yes" : "no"}` : ""}
       </p>
 
       <div className="dashboard-grid">
