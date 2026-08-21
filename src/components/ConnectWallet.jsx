@@ -1,82 +1,105 @@
-import React, { useState } from "react";
-import { createPayload } from "../xaman/xamanClient";
+import { useEffect, useRef, useState } from "react";
+import { useWallet } from "../context/WalletContext";
+import {
+  createPayload,
+  extractSignedAccount,
+  getPayloadResult,
+} from "../xaman/xamanClient";
+import { shortAddress } from "../utils/format";
+import WalletButton from "./WalletButton";
 import WalletModal from "./WalletModal";
-import xamanLogo from "../assets/Xaman.jpg";
 
-export default function ConnectWallet({ onSignedIn }) {
-  const [qrUrl, setQrUrl] = useState(null);
+export default function ConnectWallet() {
+  const { walletAddress, connectWallet, disconnectWallet } = useWallet();
+  const [qr, setQr] = useState(null);
   const [mobileUrl, setMobileUrl] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState(null);
+  const socketRef = useRef(null);
+  const timeoutRef = useRef(null);
 
-  const handleConnect = async () => {
-    const response = await createPayload();
-
-    // QR + mobile deep link
-    setQrUrl(response.refs.qr_png);
-    setMobileUrl(response.refs.deeplink_web);
-
-    // Show modal
-    setModalVisible(true);
-
-    // Auto‑close after 30 seconds (payload expiry)
-    const timeout = setTimeout(() => {
-      setModalVisible(false);
-    }, 30000);
-
-    // Listener: auto-close when signed in
-    const subscription = await response.created;
-
-    subscription.on("signed", (event) => {
-      clearTimeout(timeout); // cancel timeout if signed
-      const account = event.account;
-
-      // Save globally for future features (trading, AMM, LP, etc.)
-      window.userAccount = account;
-
-      // Close modal
-      setModalVisible(false);
-
-      // Pass account to parent (App.jsx)
-      if (onSignedIn) onSignedIn(account);
-    });
-
-    // Listener: payload expired
-    subscription.on("expired", () => {
-      clearTimeout(timeout);
-      setModalVisible(false);
-    });
+  const resetModal = () => {
+    setQr(null);
+    setMobileUrl(null);
+    setStatus("idle");
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
   };
+
+  useEffect(() => () => resetModal(), []);
+
+  const finishSignIn = (account) => {
+    if (!account) return;
+    connectWallet(account);
+    resetModal();
+    setStatus("signed");
+  };
+
+  async function startConnection() {
+    if (walletAddress) {
+      disconnectWallet();
+      return;
+    }
+
+    if (status === "loading" || status === "waiting") return;
+
+    try {
+      setError(null);
+      setStatus("loading");
+
+      const payload = await createPayload();
+      setQr(payload.qr);
+      setMobileUrl(payload.mobileUrl);
+      setStatus("waiting");
+
+      timeoutRef.current = setTimeout(() => {
+        resetModal();
+      }, 30000);
+
+      if (payload.websocket) {
+        const socket = new WebSocket(payload.websocket);
+        socketRef.current = socket;
+
+        socket.onmessage = async (event) => {
+          const data = JSON.parse(event.data);
+          if (!data.signed) return;
+
+          const result = await getPayloadResult(payload.uuid);
+          finishSignIn(extractSignedAccount(result) || data.account);
+        };
+
+        socket.onerror = () => {
+          setError("Wallet sign-in connection failed");
+        };
+      }
+    } catch (err) {
+      console.error("Wallet connect error:", err);
+      setError(err.message || "Failed to start Xaman sign-in");
+      resetModal();
+    }
+  }
 
   return (
     <>
-      <button
-        onClick={handleConnect}
-        style={{
-          padding: "12px 20px",
-          background: "#111",
-          color: "#fff",
-          borderRadius: "10px",
-          border: "none",
-          cursor: "pointer",
-          fontSize: "16px",
-          display: "flex",
-          alignItems: "center",
-          gap: "10px"
-        }}
-      >
-        <img
-          src={xamanLogo}
-          alt="Xaman"
-          style={{ width: "24px", height: "24px", borderRadius: "6px" }}
-        />
-        Connect Wallet
-      </button>
-
+      <WalletButton
+        onClick={startConnection}
+        disabled={status === "loading" || status === "waiting"}
+        connected={Boolean(walletAddress)}
+        address={shortAddress(walletAddress)}
+      />
+      {error && <p className="wallet-error">{error}</p>}
       <WalletModal
-        visible={modalVisible}
-        qrUrl={qrUrl}
+        visible={status === "loading" || status === "waiting"}
+        qrUrl={qr}
         mobileUrl={mobileUrl}
-        onClose={() => setModalVisible(false)}
+        status={status}
+        onClose={resetModal}
       />
     </>
   );

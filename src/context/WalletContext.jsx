@@ -1,85 +1,53 @@
-// src/context/WalletContext.jsx
+import { createContext, useContext, useEffect, useState } from "react";
 
-import { createContext, useContext, useState } from "react";
+const STORAGE_KEY = "dpmf-xdx-wallet";
 
-const WalletContext = createContext();
+const WalletContext = createContext(null);
 
-export const WalletProvider = ({ children }) => {
-  const [walletAddress, setWalletAddress] = useState(null);
-  const [qrData, setQrData] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const connectWallet = async () => {
+export function WalletProvider({ children }) {
+  const [walletAddress, setWalletAddress] = useState(() => {
     try {
-      setLoading(true);
-
-      // 1. Request XUMM SignIn payload from Railway backend
-      const response = await fetch(
-        "https://dpmf-xdx-indexer-production.up.railway.app/api/create-xumm-payload",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" }
-        }
-      );
-
-      const data = await response.json();
-
-      if (!data.uuid || !data.qr) {
-        console.error("Invalid payload:", data);
-        setLoading(false);
-        return;
-      }
-
-      // 2. Store QR + UUID for modal
-      setQrData({
-        qr: data.qr,
-        uuid: data.uuid,
-        websocket: data.websocket
-      });
-
-      // 3. Subscribe to XUMM WebSocket
-      const ws = new WebSocket(data.websocket);
-
-      ws.onmessage = (msg) => {
-        const event = JSON.parse(msg.data);
-
-        if (event.signed) {
-          // 4. Wallet signed — extract account
-          const account = event.account;
-          setWalletAddress(account);
-          ws.close();
-        }
-      };
-
-      ws.onerror = (err) => {
-        console.error("WebSocket error:", err);
-      };
-
-    } catch (err) {
-      console.error("Wallet connect error:", err);
-    } finally {
-      setLoading(false);
+      return sessionStorage.getItem(STORAGE_KEY);
+    } catch {
+      return null;
     }
+  });
+
+  useEffect(() => {
+    try {
+      if (walletAddress) {
+        sessionStorage.setItem(STORAGE_KEY, walletAddress);
+      } else {
+        sessionStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      // ignore storage failures (private mode, etc.)
+    }
+  }, [walletAddress]);
+
+  const connectWallet = (account) => {
+    setWalletAddress(account || null);
+    window.userAccount = account || null;
   };
 
   const disconnectWallet = () => {
     setWalletAddress(null);
-    setQrData(null);
+    window.userAccount = null;
   };
 
   return (
     <WalletContext.Provider
-      value={{
-        walletAddress,
-        connectWallet,
-        disconnectWallet,
-        qrData,
-        loading
-      }}
+      value={{ walletAddress, connectWallet, disconnectWallet }}
     >
       {children}
     </WalletContext.Provider>
   );
-};
+}
 
-export const useWallet = () => useContext(WalletContext);
+export function useWallet() {
+  const context = useContext(WalletContext);
+  if (!context) {
+    throw new Error("useWallet must be used within WalletProvider");
+  }
+  return context;
+}

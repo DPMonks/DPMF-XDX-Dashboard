@@ -1,3 +1,7 @@
 export function copyToClipboard(text) {
-  navigator.clipboard.writeText(text);
+  if (!text) return Promise.resolve();
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  return Promise.resolve();
 }

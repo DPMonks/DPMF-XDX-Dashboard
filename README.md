@@ -1,16 +1,37 @@
-# React + Vite
+# DPMF-XDX Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend for the [DPMF XDX indexer](https://dpmf-xdx-indexer-production.up.railway.app). This app reads live XRPL holder, LP, AMM, chart, and wallet data from the indexer API and uses the indexer’s Xaman routes for wallet sign-in.
 
-Currently, two official plugins are available:
+## Pairing
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Layer | Source |
+| --- | --- |
+| Dashboard | this repo (`DPMF-XDX-Dashboard`) |
+| Indexer API | `VITE_INDEXER_URL` (defaults to Railway production) |
 
-## React Compiler
+The dashboard never talks to Xaman or XRPL directly for indexed data. Wallet QR payloads are created by the indexer so API keys stay on the backend.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Local setup
 
-## Expanding the ESLint configuration
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Override `VITE_INDEXER_URL` to point at a local or staging indexer.
+
+## Indexer endpoints used
+
+- `/api/overview`, `/api/amm`, `/api/pools`
+- `/api/top-holders`, `/api/top-lp`
+- `/api/token-details-static`, `/api/token-details-live` (falls back to `/api/token-details`)
+- `/api/activity-chart` (falls back to `/api/charts/tvl`, `/api/charts/holders`, `/api/charts/lp-holders`)
+- `/api/wallet/balances/:address`, `/api/wallet/networth/:address`
+- `/api/xaman/create-payload` and `/api/xaman/payload-result` (with older path fallbacks)
+
+## Scripts
+
+- `npm run dev` — Vite dev server
+- `npm run build` — production build
+- `npm run lint` — ESLint
