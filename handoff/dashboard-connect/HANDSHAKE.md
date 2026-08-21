@@ -65,4 +65,4 @@ Full field table: `INDEXER_CONNECT.md` in this folder.
 - AMM: read `pool_name`/`poolName` and `reserve_asset`/`reserveAsset`.
 - Empty SQL is OK if `source` is `xrpl` and AMM reserves are present.
 - Do not call `/api/xaman/*` or `/api/cluster/v1/*` on the indexer.
-- Dashboard `/api` is SELECT-only on the XDX tables. Set server-only `DATABASE_URL` (same DB as the indexer) so Hikari 429 cannot hide history. This repo never starts or resets workers.
+- Dashboard `/api` is SELECT-only on the XDX tables. Set server-only `DATABASE_URL` (same DB as the indexer, no `?sslmode=require`) so Hikari 429 cannot hide history. This repo never starts or resets workers.

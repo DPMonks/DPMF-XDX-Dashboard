@@ -531,4 +531,4 @@ Private Railway URL: mentioned by the handshake agent, hostname not published.
 
 Redeploy the four Railway indexer services onto `cursor/tie-dashboard-clusterv1-2567` before expecting PR #3 fields (`source`, `pools[]`, `balances[]`, `/health/xrpl`).
 
-Dashboard `/api` can SELECT the same XDX tables when `DATABASE_URL` is set (server-only). That path does **not** start or reset workers. Do not boot workers together; they stagger (AMM 0s, prices 8s, LP 20s, holders 35s) and share the XRPL RPC budget.
+Dashboard `/api` can SELECT the same XDX tables when `DATABASE_URL` is set (server-only). Omit `?sslmode=require` (Railway TCP proxy cert). That path does **not** start or reset workers. Do not boot workers together; they stagger (AMM 0s, prices 8s, LP 20s, holders 35s) and share the XRPL RPC budget.

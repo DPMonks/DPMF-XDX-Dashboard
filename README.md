@@ -45,7 +45,7 @@ Do not commit `.env` files. Production and preview read encrypted store values, 
 | `XUMM_API_SECRET` | GitHub Actions secrets **and** Vercel env (Production + Preview) | Xaman API secret (server-only, no `VITE_` prefix) |
 | `VITE_API_BASE` | Vercel env (Production + Preview) | remote indexer label + server-side proxy target |
 | `INDEXER_ORIGIN` | Vercel env (optional) | override the server-side proxy target |
-| `DATABASE_URL` | Vercel env (Production + Preview), server-only | same Postgres the indexer writes. Used for read-only XDX SELECTs when Railway HTTP 429s. Never starts workers. |
+| `DATABASE_URL` | Vercel env (Production + Preview), server-only | same Postgres the indexer writes. No `VITE_` prefix, no `?sslmode=require` (Railway proxy cert). Used for read-only XDX SELECTs. Never starts workers. |
 
 GitHub: repository **Settings → Secrets and variables → Actions**.
 
