@@ -25,6 +25,7 @@ const CATALOG = {
     topHoldersV2: "/api/top-holders-v2",
     topLp: "/api/top-lp",
     holdersCount: "/api/holders/count",
+    trustlinesCount: "/api/trustlines/count",
     lpHoldersCount: "/api/lp-holders/count",
     tvlHistory: "/api/charts/tvl",
     holdersHistory: "/api/charts/holders",
@@ -916,6 +917,15 @@ export async function readIndexerDb(suffix, search = "") {
         present: source.present,
         catching_up: source.catching_up,
         source: source.kind,
+      });
+    }
+
+    if (suffix === "trustlines/count") {
+      const count = await tokenTrustlineCount(db);
+      return ok({
+        count,
+        as_of: new Date().toISOString(),
+        source: "db",
       });
     }
 

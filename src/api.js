@@ -121,6 +121,8 @@ function extractSnapshot(payload) {
     prices: snap.prices || root.prices || null,
     change24h: snap.change24h || snap.prices24h || root.change24h || null,
     holdersCount: snap.holdersCount || snap.holder_count || root.holdersCount || null,
+    trustlinesCount:
+      snap.trustlinesCount || snap.trustline_count || root.trustlinesCount || null,
   };
 }
 
@@ -394,6 +396,7 @@ export const api = {
     const join = path.includes("?") ? "&" : "?";
     return getJson(`${path}${join}snapshot=${encodeURIComponent(snapshot)}`);
   },
+  trustlinesCount: () => getJson(endpoint("trustlinesCount")),
   lpHoldersCount: () => getJson(endpoint("lpHoldersCount")),
   tvlHistory: () => getJson(endpoint("tvlHistory")),
   holdersHistory: () => getJson(endpoint("holdersHistory")),

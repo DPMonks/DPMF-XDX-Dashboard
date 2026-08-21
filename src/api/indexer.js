@@ -335,6 +335,9 @@ export async function getTokenDetails() {
   const holders =
     state.snapshot?.holdersCount ||
     (await api.holdersCount({ snapshot: "today" }).catch(() => ({})));
+  const trustlines =
+    state.snapshot?.trustlinesCount ||
+    (await api.trustlinesCount().catch(() => ({})));
   const ammRows = await getAmm().catch(() => []);
   const primary = ammRows[0] || {};
 
@@ -374,7 +377,9 @@ export async function getTokenDetails() {
       (typeof holders === "number" ? holders : holders.count) ??
       overview.holder_count,
     trustlines:
-      overview.trustline_count ?? overview.trustlines ?? overview.holder_count,
+      (typeof trustlines === "number" ? trustlines : trustlines.count) ??
+      overview.trustline_count ??
+      overview.trustlines,
     issuer: overview.issuer,
     issuerFee: overview.issuer_fee,
     blackholed: overview.blackholed,

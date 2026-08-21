@@ -87,6 +87,7 @@ function localDashboardStatus(suffix, extra = {}) {
     topHoldersV2: "/api/top-holders-v2",
     topLp: "/api/top-lp",
     holdersCount: "/api/holders/count",
+    trustlinesCount: "/api/trustlines/count",
     lpHoldersCount: "/api/lp-holders/count",
     tvlHistory: "/api/charts/tvl",
     holdersHistory: "/api/charts/holders",
