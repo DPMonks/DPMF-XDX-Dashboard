@@ -829,6 +829,16 @@ export async function readIndexerDb(suffix, search = "") {
         `SELECT day, holder_count FROM holders_history ORDER BY day ASC`
       );
       if (result.rows.length) return ok(result.rows);
+      const byScan = await tryQuery(
+        db,
+        `SELECT timestamp, COUNT(*) AS holder_count
+         FROM token_holders_history
+         WHERE ABS(balance::numeric) > 0
+         GROUP BY timestamp
+         ORDER BY timestamp`
+      );
+      const scanMax = Math.max(0, ...byScan.rows.map((row) => Number(row.holder_count || 0)));
+      if (byScan.rows.length && scanMax >= 10) return ok(byScan.rows);
       const fromLedger = await tryQuery(
         db,
         `SELECT day, COUNT(*) AS holder_count
@@ -846,10 +856,19 @@ export async function readIndexerDb(suffix, search = "") {
       );
       if (fromLedger.rows.length) return ok(fromLedger.rows);
       const count = await tokenHolderCount(db);
-      return ok(count ? [{ day: new Date().toISOString(), holder_count: count }] : []);
+      return ok(count ? [{ timestamp: new Date().toISOString(), holder_count: count }] : []);
     }
 
     if (suffix === "charts/trustlines") {
+      const byScan = await tryQuery(
+        db,
+        `SELECT timestamp, COUNT(*) AS trustline_count
+         FROM token_holders_history
+         GROUP BY timestamp
+         ORDER BY timestamp`
+      );
+      const scanMax = Math.max(0, ...byScan.rows.map((row) => Number(row.trustline_count || 0)));
+      if (byScan.rows.length && scanMax >= 10) return ok(byScan.rows);
       const fromLedger = await tryQuery(
         db,
         `SELECT day, COUNT(*) AS trustline_count
@@ -865,7 +884,7 @@ export async function readIndexerDb(suffix, search = "") {
       );
       if (fromLedger.rows.length) return ok(fromLedger.rows);
       const count = await tokenTrustlineCount(db);
-      return ok(count ? [{ day: new Date().toISOString(), trustline_count: count }] : []);
+      return ok(count ? [{ timestamp: new Date().toISOString(), trustline_count: count }] : []);
     }
 
     if (suffix === "charts/trades" || suffix === "trades") {

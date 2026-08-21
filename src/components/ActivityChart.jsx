@@ -36,17 +36,30 @@ function withTs(row) {
   return ts == null ? null : { ...row, ts };
 }
 
-function windowedSeries(rows, range, now) {
-  const all = rows.map(withTs).filter(Boolean).sort((a, b) => a.ts - b.ts);
+function windowedSeries(rows, range, now, metric) {
+  const all = rows
+    .map(withTs)
+    .filter(Boolean)
+    .sort((a, b) => a.ts - b.ts);
   if (!all.length) return [];
-  if (range === "Max") return all;
+
+  let lastKnown = null;
+  const filled = all.map((row) => {
+    const value = Number(metricValue(row, metric));
+    if (Number.isFinite(value)) lastKnown = value;
+    return { ...row, plot: lastKnown };
+  });
+
+  const usable = filled.filter((row) => Number.isFinite(row.plot));
+  if (!usable.length) return [];
+  if (range === "Max") return usable;
 
   const windowMs = RANGE_MS[range];
-  if (!windowMs) return all;
+  if (!windowMs) return usable;
   const start = now - windowMs;
-  const inside = all.filter((row) => row.ts >= start && row.ts <= now);
-  const lastBefore = [...all].reverse().find((row) => row.ts < start);
-  const seed = lastBefore || (inside[0] ? null : all[all.length - 1]);
+  const inside = usable.filter((row) => row.ts >= start && row.ts <= now);
+  const lastBefore = [...usable].reverse().find((row) => row.ts < start);
+  const seed = lastBefore || (inside[0] ? null : usable[usable.length - 1]);
   const out = [...inside];
 
   if (seed) {
@@ -59,7 +72,7 @@ function windowedSeries(rows, range, now) {
   if (last && last.ts < now) {
     out.push({ ...last, timestamp: new Date(now).toISOString(), ts: now });
   }
-  return out;
+  return out.filter((row) => Number.isFinite(row.plot));
 }
 
 function yDomain(values) {
@@ -170,11 +183,7 @@ export default function ActivityChart() {
   }, [t.noHistory]);
 
   const chartRows = useMemo(
-    () =>
-      windowedSeries(data, range, now).map((row) => ({
-        ...row,
-        plot: Number(metricValue(row, metric)),
-      })),
+    () => windowedSeries(data, range, now, metric),
     [data, range, metric, now]
   );
   const yValues = chartRows.map((row) => Number(row.plot));
@@ -191,7 +200,10 @@ export default function ActivityChart() {
     const start = range === "Max" ? 0 : now - windowMs;
     const visible = data
       .map(withTs)
-      .filter((row) => row && row.ts >= start)
+      .filter((row) => {
+        if (!row || row.ts < start) return false;
+        return Number.isFinite(Number(metricValue(row, metric)));
+      })
       .sort((a, b) => b.ts - a.ts)
       .map((row, index, list) => {
         const previous = list[index + 1];
@@ -324,6 +336,7 @@ export default function ActivityChart() {
                   strokeWidth={2.4}
                   dot={false}
                   activeDot={{ r: 5, fill: "#00ff6a", stroke: "#c770ff", strokeWidth: 2 }}
+                  connectNulls
                   isAnimationActive
                   animationDuration={900}
                   animationEasing="ease-in-out"

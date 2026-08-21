@@ -481,21 +481,6 @@ export async function getChartHistory() {
   if (trustlines.error) errors.push(trustlines.error);
   for (const row of trustlines.rows) mergeChartRow(merged, row);
 
-  try {
-    const tradeRows = chartArray(charts.trades || (await api.trades()));
-    for (const row of tradeRows) {
-      const timestamp = rowTimestamp(row);
-      if (!timestamp) continue;
-      const current = merged.get(timestamp) || { timestamp };
-      const volume = numberOrNull(row.volume ?? row.xdx ?? row.amount) ?? 0;
-      current.trades = (current.trades || 0) + (numberOrNull(row.trades) ?? 1);
-      current.volume = (current.volume || 0) + volume;
-      merged.set(timestamp, current);
-    }
-  } catch (error) {
-    errors.push(error);
-  }
-
   if (!merged.size) {
     for (const asset of ["XDX", "XRP", "LP"]) {
       try {
@@ -508,20 +493,18 @@ export async function getChartHistory() {
     }
   }
 
-  if (!merged.size) {
-    const live = await getTokenDetails().catch(() => null);
-    if (live && (live.tvl != null || live.holders != null || live.price != null)) {
-      mergeChartRow(merged, {
-        timestamp: new Date().toISOString(),
-        tvl: live.tvl,
-        holders: live.holders,
-        trustlines: live.trustlines,
-        lpHolders: live.lp_holder_count,
-        price: live.price,
-        volume: live.volume24h,
-        marketcap: live.xrplMarketCap,
-      });
-    }
+  const live = await getTokenDetails().catch(() => null);
+  if (live && (live.tvl != null || live.holders != null || live.price != null)) {
+    mergeChartRow(merged, {
+      timestamp: new Date().toISOString(),
+      tvl: live.tvl_usd ?? live.tvl,
+      holders: live.holders,
+      trustlines: live.trustlines,
+      lpHolders: live.lp_holder_count,
+      price: live.xdxUsd ?? live.price,
+      volume: live.volume24h,
+      marketcap: live.xrplMarketCap,
+    });
   }
 
   const rows = [...merged.values()].sort(
