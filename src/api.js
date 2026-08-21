@@ -173,9 +173,11 @@ async function fetchJson(url, { method = "GET", body } = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const error = new Error(
-      data.error || data.detail || `${res.status} ${res.statusText}`
-    );
+    const fallback =
+      res.status === 429
+        ? "Indexer rate-limited (Railway Hikari). The proxy will retry."
+        : `${res.status} ${res.statusText}`;
+    const error = new Error(data.error || data.detail || fallback);
     error.status = res.status;
     throw error;
   }
