@@ -3,7 +3,7 @@ import {
   DEFAULT_INDEXER_ORIGIN,
   INDEXER_HANDSHAKE_PATHS,
 } from "../src/handshake/contract.js";
-import { hasIndexerDatabase, readIndexerDb } from "./readIndexerDb.js";
+import { databaseUrlHint, hasIndexerDatabase, readIndexerDb } from "./readIndexerDb.js";
 
 export { DEFAULT_INDEXER_ORIGIN };
 
@@ -86,7 +86,9 @@ function indexerErrorHint(last) {
     source: "none",
     body: JSON.stringify({
       error: detail,
-      hint: "Cards are SELECT-only from the XDX Postgres tables (token_holders_latest, lp_holders_latest, amm_pool_latest, history). Railway HTTP did not return data. Set server-only DATABASE_URL on Vercel to the same database the indexer uses. This process does not start or reset workers.",
+      hint:
+        databaseUrlHint() ||
+        "Cards are SELECT-only from the XDX Postgres tables (token_holders_latest, lp_holders_latest, amm_pool_latest, history). Railway HTTP did not return data. Set server-only DATABASE_URL on Vercel to postgres://USER:PASS@HOST:PORT/DB (not the indexer HTTP host). This process does not start or reset workers.",
       source: "none",
     }),
   };
@@ -94,6 +96,10 @@ function indexerErrorHint(last) {
 
 export async function fetchIndexerFirst(paths, { method = "GET", body, search = "", suffix = "" } = {}) {
   let dbResult = null;
+  const dbHint = databaseUrlHint();
+  if (dbHint && !hasIndexerDatabase()) {
+    console.error(dbHint);
+  }
 
   // Prefer the XDX tables when a connection string is present so Hikari 429
   // cannot hide history. Never starts or resets indexer workers.

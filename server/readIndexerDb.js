@@ -30,12 +30,38 @@ const CATALOG = {
   },
 };
 
-function databaseUrl() {
+function rawDatabaseUrl() {
   return process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
 }
 
+export function databaseUrlKind() {
+  const raw = rawDatabaseUrl().trim();
+  if (!raw) return "missing";
+  if (/^postgres(ql)?:\/\//i.test(raw)) return "postgres";
+  if (/^https?:\/\//i.test(raw)) return "http";
+  return "invalid";
+}
+
+function databaseUrl() {
+  return databaseUrlKind() === "postgres" ? rawDatabaseUrl().trim() : "";
+}
+
 export function hasIndexerDatabase() {
-  return Boolean(databaseUrl());
+  return databaseUrlKind() === "postgres";
+}
+
+export function databaseUrlHint() {
+  const kind = databaseUrlKind();
+  if (kind === "http") {
+    return "DATABASE_URL is the indexer HTTP host (*.up.railway.app). That belongs in VITE_API_BASE only. DATABASE_URL must be postgres://USER:PASS@HOST:PORT/DB for the public TCP proxy, with no ?sslmode=require.";
+  }
+  if (kind === "invalid") {
+    return "DATABASE_URL is set but is not a postgres:// connection string.";
+  }
+  if (kind === "missing") {
+    return "DATABASE_URL is unset. Set the Postgres TCP proxy URL (not the indexer HTTP host).";
+  }
+  return "";
 }
 
 // Railway's public TCP proxy uses a cert chain node-pg rejects when the URL
