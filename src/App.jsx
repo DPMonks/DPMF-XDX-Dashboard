@@ -3,11 +3,13 @@ import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
 import { useWallet } from "./context/useWallet";
+import { useI18n } from "./i18n/useI18n";
 import TokenDetails from "./components/TokenDetails";
-import AccountList from "./components/AccountList";
+import RichList from "./components/RichList";
 import AmmCard from "./components/AmmCard";
 import WalletOverview from "./components/WalletOverview";
 import OverviewStrip from "./components/OverviewStrip";
+import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
 import { INDEXER_URL, getAmm, getOverview, getTopHolders, getTopLp } from "./api/indexer";
 
@@ -15,6 +17,7 @@ const DexChart = lazy(() => import("./components/DexChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 
 export default function App() {
+  const { t } = useI18n();
   const { walletAddress } = useWallet();
   const [holders, setHolders] = useState([]);
   const [lpHolders, setLpHolders] = useState([]);
@@ -64,35 +67,29 @@ export default function App() {
   return (
     <div className="dashboard-container">
       <header className="dashboard-header neon-border">
-        <h1 className="dashboard-title">DPMF‑XDX Dashboard</h1>
-        <p className="dashboard-subtitle">
-          Live XRPL intelligence from the XDX indexer
-        </p>
-        <div className="wallet-box-left">
+        <div className="header-bar">
+          <div className="header-brand">
+            <h1 className="dashboard-title">{t.title}</h1>
+            <p className="dashboard-subtitle">{t.subtitle}</p>
+          </div>
           <ConnectWallet />
         </div>
-        {walletAddress && (
-          <div className="wallet-status-box neon-button online-indicator">
-            <span className="wallet-status-online">●</span>
-            <span className="wallet-status-text">Online</span>
-          </div>
-        )}
       </header>
 
       <p className="indexer-source">
-        Indexer: <code>{INDEXER_URL}</code>
+        {t.indexer}: <code>{INDEXER_URL}</code>
       </p>
 
       <div className="dashboard-grid">
         {walletAddress && (
           <section className="dashboard-card neon-card">
-            <h2 className="card-title">Connected Wallet</h2>
+            <h2 className="card-title">{t.connectedWallet}</h2>
             <WalletOverview address={walletAddress} />
           </section>
         )}
 
         <section className="dashboard-card neon-card">
-          <h2 className="card-title">Network Snapshot</h2>
+          <h2 className="card-title">{t.snapshot}</h2>
           <OverviewStrip
             overview={overview}
             loading={loading}
@@ -101,51 +98,60 @@ export default function App() {
         </section>
 
         <section className="dashboard-card neon-card">
-          <h2 className="card-title">Token Details</h2>
+          <h2 className="card-title">{t.tokenDetails}</h2>
           <TokenDetails />
         </section>
 
         <section className="dashboard-card neon-card">
-          <h2 className="card-title">Activity Chart</h2>
+          <h2 className="card-title">{t.activityChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
             <ActivityChart />
           </Suspense>
         </section>
 
         <section className="dashboard-card neon-card">
-          <h2 className="card-title">XDX/XRP Trading Chart</h2>
+          <h2 className="card-title">{t.tradingChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
             <DexChart />
           </Suspense>
         </section>
 
-        <section className="dashboard-card neon-card">
-          <h2 className="card-title">Top XDX Holders</h2>
-          <AccountList
-            rows={holders}
-            loading={loading}
-            error={errors.holders}
-            valueKey="balance"
-            emptyLabel="No holder rows from the indexer yet."
-          />
-        </section>
+        <div className="lists-row">
+          <section className="dashboard-card neon-card">
+            <h2 className="card-title">{t.topHolders}</h2>
+            <RichList
+              rows={holders}
+              loading={loading}
+              error={errors.holders}
+              valueKey="balance"
+              unit="XDX"
+              emptyLabel={t.emptyHolders}
+              searchPlaceholder={t.searchHolders}
+            />
+          </section>
+
+          <section className="dashboard-card neon-card">
+            <h2 className="card-title">{t.lpHolders}</h2>
+            <RichList
+              rows={lpHolders}
+              loading={loading}
+              error={errors.lp}
+              valueKey="lp_balance"
+              unit="LP"
+              showPair
+              emptyLabel={t.emptyLp}
+              searchPlaceholder={t.searchLp}
+            />
+          </section>
+        </div>
 
         <section className="dashboard-card neon-card">
-          <h2 className="card-title">LP Holders</h2>
-          <AccountList
-            rows={lpHolders}
-            loading={loading}
-            error={errors.lp}
-            valueKey="lp_balance"
-            emptyLabel="No LP holder rows from the indexer yet."
-          />
-        </section>
-
-        <section className="dashboard-card neon-card">
-          <h2 className="card-title">AMM Pools</h2>
+          <h2 className="card-title">{t.ammPools}</h2>
           <AmmCard pools={ammData} loading={loading} error={errors.amm} />
         </section>
       </div>
+
+      <Footer />
     </div>
   );
 }

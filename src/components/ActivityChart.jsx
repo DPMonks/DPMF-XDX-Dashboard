@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Line,
   LineChart,
@@ -8,6 +8,8 @@ import {
   YAxis,
 } from "recharts";
 import { getActivityChart, getChartHistory } from "../api/indexer";
+import { formatDay, formatNumber } from "../utils/format";
+import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
 const METRICS = ["price", "volume", "marketcap", "rank", "traders", "holders"];
@@ -26,6 +28,7 @@ function filterRange(rows, range) {
 }
 
 export default function ActivityChart() {
+  const { t, locale } = useI18n();
   const [data, setData] = useState([]);
   const [metric, setMetric] = useState("price");
   const [range, setRange] = useState("1M");
@@ -63,7 +66,10 @@ export default function ActivityChart() {
             setData(rows);
             setUsingFallback(false);
             setError(null);
-            sessionStorage.setItem(cacheKey, JSON.stringify({ rows, fallback: false }));
+            sessionStorage.setItem(
+              cacheKey,
+              JSON.stringify({ rows, fallback: false })
+            );
             setLoading(false);
             return;
           }
@@ -79,15 +85,24 @@ export default function ActivityChart() {
 
         const merged = new Map();
         for (const row of tvl) {
-          merged.set(String(row.timestamp), { timestamp: row.timestamp, tvl: row.tvl });
+          merged.set(String(row.timestamp), {
+            timestamp: row.timestamp,
+            tvl: row.tvl,
+          });
         }
         for (const row of holders) {
           const key = String(row.timestamp);
-          merged.set(key, { ...(merged.get(key) || { timestamp: row.timestamp }), holders: row.holders });
+          merged.set(key, {
+            ...(merged.get(key) || { timestamp: row.timestamp }),
+            holders: row.holders,
+          });
         }
         for (const row of lp) {
           const key = String(row.timestamp);
-          merged.set(key, { ...(merged.get(key) || { timestamp: row.timestamp }), lpHolders: row.lpHolders });
+          merged.set(key, {
+            ...(merged.get(key) || { timestamp: row.timestamp }),
+            lpHolders: row.lpHolders,
+          });
         }
 
         const rows = filterRange(
@@ -103,8 +118,11 @@ export default function ActivityChart() {
           setMetric((current) =>
             FALLBACK_METRICS.includes(current) ? current : "tvl"
           );
-          setError(rows.length ? null : "No activity history from the indexer yet");
-          sessionStorage.setItem(cacheKey, JSON.stringify({ rows, fallback: true }));
+          setError(rows.length ? null : t.noHistory);
+          sessionStorage.setItem(
+            cacheKey,
+            JSON.stringify({ rows, fallback: true })
+          );
         }
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -119,9 +137,10 @@ export default function ActivityChart() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [range]);
+  }, [range, t.noHistory]);
 
   const metrics = usingFallback ? FALLBACK_METRICS : METRICS;
+  const history = useMemo(() => [...data].reverse().slice(0, 12), [data]);
 
   return (
     <div className="activity-chart-container">
@@ -134,7 +153,7 @@ export default function ActivityChart() {
               className={item === metric ? "tab active" : "tab"}
               onClick={() => setMetric(item)}
             >
-              {item.toUpperCase()}
+              {(t[item] || item).toUpperCase()}
             </button>
           ))}
         </div>
@@ -152,49 +171,74 @@ export default function ActivityChart() {
         </div>
       </div>
 
-      {usingFallback && (
-        <p className="chart-note">
-          Showing indexer TVL / holder history while `/api/activity-chart` is unavailable.
-        </p>
-      )}
+      {usingFallback && <p className="chart-note">{t.fallbackNote}</p>}
 
       {loading && data.length === 0 ? (
-        <Skeleton height={300} />
+        <Skeleton height={280} />
       ) : error && data.length === 0 ? (
         <p className="error-message">{error}</p>
       ) : (
-        <div style={{ width: "100%", height: 300 }}>
-          <ResponsiveContainer>
-            <LineChart data={data}>
-              <XAxis
-                dataKey="timestamp"
-                tick={{ fill: "#7f8ba8" }}
-                tickFormatter={(value) =>
-                  new Date(value).toLocaleDateString("en-GB", {
-                    day: "2-digit",
-                    month: "short",
-                  })
-                }
-              />
-              <YAxis tick={{ fill: "#7f8ba8" }} />
-              <Tooltip
-                contentStyle={{
-                  background: "#0b0f1a",
-                  border: "1px solid #1f2535",
-                  borderRadius: "8px",
-                  color: "#fff",
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey={metric}
-                stroke="#00ff6a"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        <>
+          <div className="activity-plot">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data}>
+                <XAxis
+                  dataKey="timestamp"
+                  tick={{ fill: "#7f8ba8", fontSize: 11 }}
+                  tickFormatter={(value) =>
+                    new Date(value).toLocaleDateString(locale, {
+                      day: "2-digit",
+                      month: "short",
+                    })
+                  }
+                />
+                <YAxis tick={{ fill: "#7f8ba8", fontSize: 11 }} width={56} />
+                <Tooltip
+                  contentStyle={{
+                    background: "#0b0f1a",
+                    border: "1px solid #1f2535",
+                    borderRadius: "8px",
+                    color: "#fff",
+                  }}
+                  labelFormatter={(value) => formatDay(value, locale)}
+                />
+                <Line
+                  type="monotone"
+                  dataKey={metric}
+                  stroke="#00ff6a"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="history-block">
+            <h3 className="history-title">{t.history}</h3>
+            <div className="rich-table-wrap">
+              <table className="rich-table compact">
+                <thead>
+                  <tr>
+                    <th>{t.updated}</th>
+                    <th>{t[metric] || metric}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((row) => (
+                    <tr key={String(row.timestamp)}>
+                      <td>{formatDay(row.timestamp, locale)}</td>
+                      <td className="col-num">
+                        {formatNumber(row[metric], locale, {
+                          maximumFractionDigits: 6,
+                        })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

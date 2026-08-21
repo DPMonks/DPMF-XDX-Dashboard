@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getTokenDetailsLive, getTokenDetailsStatic } from "../api/indexer";
 import { formatNumber, formatUsd } from "../utils/format";
+import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
 function Detail({ label, value }) {
@@ -21,6 +22,7 @@ function pick(data, keys) {
 }
 
 export default function TokenDetails() {
+  const { t, locale } = useI18n();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -64,7 +66,7 @@ export default function TokenDetails() {
     return (
       <div className="token-details-grid">
         {Array.from({ length: 8 }, (_, i) => (
-          <Skeleton key={i} height={72} />
+          <Skeleton key={i} height={58} />
         ))}
       </div>
     );
@@ -76,57 +78,58 @@ export default function TokenDetails() {
 
   const ath = data.ath || {};
   const atl = data.atl || {};
+  const blackholed = pick(data, ["blackholed"]);
 
   return (
     <div className="token-details-grid">
-      <Detail label="Token Type" value={pick(data, ["tokenType", "token_type"])} />
+      <Detail label={t.tokenType} value={pick(data, ["tokenType", "token_type"])} />
       <Detail
-        label="Rank"
+        label={t.rank}
         value={pick(data, ["rank"]) != null ? `#${pick(data, ["rank"])}` : "—"}
       />
       <Detail
-        label="XDX/USD Market Cap"
-        value={formatUsd(pick(data, ["xrplMarketCap", "marketCap", "market_cap"]))}
+        label={t.xrplMarketCap}
+        value={formatUsd(pick(data, ["xrplMarketCap", "marketCap", "market_cap"]), locale)}
       />
       <Detail
-        label="AMM Market Cap"
-        value={formatUsd(pick(data, ["ammMarketCap", "amm_market_cap"]))}
+        label={t.ammMarketCap}
+        value={formatUsd(pick(data, ["ammMarketCap", "amm_market_cap"]), locale)}
       />
       <Detail
-        label="Circulating Market Cap"
-        value={formatUsd(pick(data, ["circulatingMarketCap", "circulating_market_cap"]))}
+        label={t.circulatingMarketCap}
+        value={formatUsd(
+          pick(data, ["circulatingMarketCap", "circulating_market_cap"]),
+          locale
+        )}
       />
       <Detail
-        label="Circulating"
-        value={formatNumber(pick(data, ["circulating", "circulating_supply"]))}
+        label={t.circulating}
+        value={formatNumber(pick(data, ["circulating", "circulating_supply"]), locale)}
       />
       <Detail
-        label="Total Supply"
-        value={formatNumber(pick(data, ["totalSupply", "total_supply"]))}
+        label={t.totalSupply}
+        value={formatNumber(pick(data, ["totalSupply", "total_supply"]), locale)}
       />
       <Detail
-        label="Burned Supply"
-        value={formatNumber(pick(data, ["burnedSupply", "burned_supply"]))}
+        label={t.burnedSupply}
+        value={formatNumber(pick(data, ["burnedSupply", "burned_supply"]), locale)}
       />
-      <Detail label="Holders" value={formatNumber(pick(data, ["holders", "holder_count"]))} />
       <Detail
-        label="Trustlines"
-        value={formatNumber(pick(data, ["trustlines", "trustline_count"]))}
+        label={t.holders}
+        value={formatNumber(pick(data, ["holders", "holder_count"]), locale)}
       />
-      <Detail label="Issuer Fee" value={pick(data, ["issuerFee", "issuer_fee"])} />
       <Detail
-        label="Blackholed"
-        value={
-          pick(data, ["blackholed"]) == null
-            ? "—"
-            : pick(data, ["blackholed"])
-              ? "Yes"
-              : "No"
-        }
+        label={t.trustlines}
+        value={formatNumber(pick(data, ["trustlines", "trustline_count"]), locale)}
       />
-      <Detail label="Created" value={pick(data, ["created", "created_at"])} />
+      <Detail label={t.issuerFee} value={pick(data, ["issuerFee", "issuer_fee"])} />
       <Detail
-        label="ATH"
+        label={t.blackholed}
+        value={blackholed == null ? "—" : blackholed ? t.yes : t.no}
+      />
+      <Detail label={t.created} value={pick(data, ["created", "created_at"])} />
+      <Detail
+        label={t.ath}
         value={
           ath.price
             ? `${ath.price}${ath.date ? ` (${ath.date})` : ""}`
@@ -134,7 +137,7 @@ export default function TokenDetails() {
         }
       />
       <Detail
-        label="ATL"
+        label={t.atl}
         value={
           atl.price
             ? `${atl.price}${atl.date ? ` (${atl.date})` : ""}`

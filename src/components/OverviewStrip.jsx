@@ -1,12 +1,15 @@
 import { formatNumber, formatToken } from "../utils/format";
+import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
 export default function OverviewStrip({ overview, loading, error }) {
+  const { t, locale } = useI18n();
+
   if (loading && !overview) {
     return (
       <div className="token-details-grid">
         {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} height={72} />
+          <Skeleton key={i} height={58} />
         ))}
       </div>
     );
@@ -17,10 +20,10 @@ export default function OverviewStrip({ overview, loading, error }) {
   }
 
   const cards = [
-    ["TVL", formatToken(overview?.tvl)],
-    ["LP supply", formatToken(overview?.lp_supply)],
-    ["XDX holders", formatNumber(overview?.holder_count)],
-    ["LP holders", formatNumber(overview?.lp_holder_count)],
+    [t.tvl, formatToken(overview?.tvl, locale)],
+    [t.lpSupply, formatToken(overview?.lp_supply, locale)],
+    [t.xdxHolders, formatNumber(overview?.holder_count, locale)],
+    [t.lpHoldersCount, formatNumber(overview?.lp_holder_count, locale)],
   ];
 
   return (

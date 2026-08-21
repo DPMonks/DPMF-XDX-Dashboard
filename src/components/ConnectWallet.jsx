@@ -6,10 +6,12 @@ import {
   getPayloadResult,
 } from "../xaman/xamanClient";
 import { shortAddress } from "../utils/format";
+import { useI18n } from "../i18n/useI18n";
 import WalletButton from "./WalletButton";
 import WalletModal from "./WalletModal";
 
 export default function ConnectWallet() {
+  const { t } = useI18n();
   const { walletAddress, connectWallet, disconnectWallet } = useWallet();
   const [qr, setQr] = useState(null);
   const [mobileUrl, setMobileUrl] = useState(null);
@@ -17,6 +19,7 @@ export default function ConnectWallet() {
   const [error, setError] = useState(null);
   const socketRef = useRef(null);
   const timeoutRef = useRef(null);
+  const pollRef = useRef(null);
 
   const resetModal = () => {
     setQr(null);
@@ -30,9 +33,19 @@ export default function ConnectWallet() {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
   };
 
-  useEffect(() => () => resetModal(), []);
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) socketRef.current.close();
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const finishSignIn = (account) => {
     if (!account) return;
@@ -60,7 +73,17 @@ export default function ConnectWallet() {
 
       timeoutRef.current = setTimeout(() => {
         resetModal();
-      }, 30000);
+      }, 120000);
+
+      const settle = async () => {
+        const result = await getPayloadResult(payload.uuid);
+        const account = extractSignedAccount(result);
+        if (account) finishSignIn(account);
+      };
+
+      pollRef.current = setInterval(() => {
+        settle().catch(() => {});
+      }, 2500);
 
       if (payload.websocket) {
         const socket = new WebSocket(payload.websocket);
@@ -69,24 +92,23 @@ export default function ConnectWallet() {
         socket.onmessage = async (event) => {
           const data = JSON.parse(event.data);
           if (!data.signed) return;
-
           const result = await getPayloadResult(payload.uuid);
           finishSignIn(extractSignedAccount(result) || data.account);
         };
 
         socket.onerror = () => {
-          setError("Wallet sign-in connection failed");
+          setError(t.walletError);
         };
       }
     } catch (err) {
       console.error("Wallet connect error:", err);
-      setError(err.message || "Failed to start Xaman sign-in");
+      setError(err.message || t.walletError);
       resetModal();
     }
   }
 
   return (
-    <>
+    <div className="wallet-control">
       <WalletButton
         onClick={startConnection}
         disabled={status === "loading" || status === "waiting"}
@@ -101,6 +123,6 @@ export default function ConnectWallet() {
         status={status}
         onClose={resetModal}
       />
-    </>
+    </div>
   );
 }

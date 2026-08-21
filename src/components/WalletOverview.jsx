@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { getWalletBalances, getWalletNetworth } from "../api/indexer";
 import { formatToken, formatUsd, shortAddress } from "../utils/format";
 import { copyToClipboard } from "../utils/copy";
+import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
 export default function WalletOverview({ address }) {
+  const { t, locale } = useI18n();
   const [balances, setBalances] = useState(null);
   const [networth, setNetworth] = useState(null);
   const [error, setError] = useState(null);
@@ -37,7 +39,7 @@ export default function WalletOverview({ address }) {
   }, [address]);
 
   if (!balances && !error) {
-    return <Skeleton height={140} />;
+    return <Skeleton height={120} />;
   }
 
   if (error && !balances) {
@@ -55,20 +57,28 @@ export default function WalletOverview({ address }) {
       </button>
       <div className="token-details-grid">
         <div className="token-detail neon-card">
-          <span className="token-detail-label">XRP</span>
-          <span className="token-detail-value">{formatToken(balances?.xrp)}</span>
+          <span className="token-detail-label">{t.xrp}</span>
+          <span className="token-detail-value">
+            {formatToken(balances?.xrp, locale)}
+          </span>
         </div>
         <div className="token-detail neon-card">
-          <span className="token-detail-label">XDX</span>
-          <span className="token-detail-value">{formatToken(balances?.xdx)}</span>
+          <span className="token-detail-label">{t.xdx}</span>
+          <span className="token-detail-value">
+            {formatToken(balances?.xdx, locale)}
+          </span>
         </div>
         <div className="token-detail neon-card">
-          <span className="token-detail-label">LP</span>
-          <span className="token-detail-value">{formatToken(balances?.lp)}</span>
+          <span className="token-detail-label">{t.lp}</span>
+          <span className="token-detail-value">
+            {formatToken(balances?.lp, locale)}
+          </span>
         </div>
         <div className="token-detail neon-card">
-          <span className="token-detail-label">Net worth</span>
-          <span className="token-detail-value">{formatUsd(networth?.totalUsd)}</span>
+          <span className="token-detail-label">{t.networth}</span>
+          <span className="token-detail-value">
+            {formatUsd(networth?.totalUsd ?? networth?.usd ?? networth?.total, locale)}
+          </span>
         </div>
       </div>
     </div>

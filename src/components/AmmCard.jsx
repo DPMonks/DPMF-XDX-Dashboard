@@ -1,9 +1,19 @@
-import { formatNumber, formatToken, formatUsd } from "../utils/format";
+import { pairParts } from "../utils/currency";
+import { formatNumber, formatToken, formatUsd, formatWhen } from "../utils/format";
+import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
 export default function AmmCard({ pools, loading, error }) {
+  const { t, locale } = useI18n();
+
   if (loading && !pools.length) {
-    return <Skeleton height={120} />;
+    return (
+      <div className="pool-grid">
+        {Array.from({ length: 2 }, (_, i) => (
+          <Skeleton key={i} height={180} />
+        ))}
+      </div>
+    );
   }
 
   if (error && !pools.length) {
@@ -11,43 +21,72 @@ export default function AmmCard({ pools, loading, error }) {
   }
 
   if (!pools.length) {
-    return <p className="empty-message">No AMM pool snapshot from the indexer yet.</p>;
+    return <p className="empty-message">{t.emptyPools}</p>;
   }
 
   return (
-    <div className="scroll-area">
-      {pools.map((pool) => (
-        <div key={pool.pool} className="amm-block">
-          <div className="balance-row">
-            <span>{pool.pool}</span>
-            <span>TVL {formatToken(pool.tvl)}</span>
-          </div>
-          <div className="balance-row">
-            <span>XDX reserve</span>
-            <span>{formatToken(pool.reserve_asset)}</span>
-          </div>
-          <div className="balance-row">
-            <span>XRP reserve</span>
-            <span>{formatToken(pool.reserve_currency)}</span>
-          </div>
-          <div className="balance-row">
-            <span>LP supply</span>
-            <span>{formatToken(pool.lp_supply)}</span>
-          </div>
-          {pool.price != null && (
-            <div className="balance-row">
-              <span>Price</span>
-              <span>{formatUsd(pool.price)}</span>
-            </div>
-          )}
-          {pool.apr != null && (
-            <div className="balance-row">
-              <span>APR</span>
-              <span>{formatNumber(pool.apr)}%</span>
-            </div>
-          )}
-        </div>
-      ))}
+    <div className="pool-grid">
+      {pools.map((pool) => {
+        const { asset, quote } = pairParts(pool.pool);
+        return (
+          <article key={pool.pool} className="pool-card">
+            <header className="pool-card-head">
+              <span className="pair-badge">{pool.pool}</span>
+              {pool.updated && (
+                <span className="pool-updated">
+                  {t.updated} {formatWhen(pool.updated, locale)}
+                </span>
+              )}
+            </header>
+            <dl className="pool-stats">
+              <div>
+                <dt>{t.tvl}</dt>
+                <dd>{formatToken(pool.tvl, locale)}</dd>
+              </div>
+              <div>
+                <dt>{t.price}</dt>
+                <dd>{formatUsd(pool.price, locale)}</dd>
+              </div>
+              <div>
+                <dt>
+                  {t.reserve} {asset}
+                </dt>
+                <dd>{formatToken(pool.reserve_asset, locale)}</dd>
+              </div>
+              <div>
+                <dt>
+                  {t.reserve} {quote}
+                </dt>
+                <dd>{formatToken(pool.reserve_currency, locale)}</dd>
+              </div>
+              <div>
+                <dt>{t.lpSupply}</dt>
+                <dd>{formatToken(pool.lp_supply, locale)}</dd>
+              </div>
+              <div>
+                <dt>{t.fee}</dt>
+                <dd>
+                  {pool.trading_fee == null
+                    ? "—"
+                    : formatNumber(pool.trading_fee / (pool.trading_fee > 20 ? 1000 : 1), locale, {
+                        maximumFractionDigits: 3,
+                      })}
+                </dd>
+              </div>
+              <div>
+                <dt>{t.apr}</dt>
+                <dd>
+                  {pool.apr == null ? "—" : `${formatNumber(pool.apr, locale)}%`}
+                </dd>
+              </div>
+              <div>
+                <dt>{t.volume24h}</dt>
+                <dd>{formatToken(pool.volume24h, locale)}</dd>
+              </div>
+            </dl>
+          </article>
+        );
+      })}
     </div>
   );
 }

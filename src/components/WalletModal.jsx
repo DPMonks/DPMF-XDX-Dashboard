@@ -1,3 +1,5 @@
+import { useI18n } from "../i18n/useI18n";
+
 export default function WalletModal({
   visible,
   qrUrl,
@@ -5,13 +7,19 @@ export default function WalletModal({
   status,
   onClose,
 }) {
+  const { t } = useI18n();
   if (!visible) return null;
 
   return (
-    <div className="wallet-modal-overlay">
-      <div className="wallet-modal">
+    <div className="wallet-modal-overlay" onClick={onClose}>
+      <div
+        className="wallet-modal"
+        role="dialog"
+        aria-modal="true"
+        onClick={(event) => event.stopPropagation()}
+      >
         <h2 className="modal-title">
-          {status === "loading" ? "Preparing Xaman sign-in…" : "Scan with Xaman"}
+          {status === "loading" ? t.preparing : t.scan}
         </h2>
 
         {qrUrl && status !== "loading" && (
@@ -20,12 +28,12 @@ export default function WalletModal({
 
         {mobileUrl && (
           <a href={mobileUrl} className="mobile-link-btn">
-            Open in Xaman App
+            {t.openApp}
           </a>
         )}
 
         <button type="button" onClick={onClose} className="cancel-wallet-btn">
-          Cancel
+          {t.cancel}
         </button>
       </div>
     </div>

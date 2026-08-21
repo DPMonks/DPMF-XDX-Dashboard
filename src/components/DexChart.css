@@ -82,7 +82,17 @@
   100% { transform: translateX(40%); }
 }
 
-@media (max-width: 800px) {
+@media (max-width: 1100px) {
+  .dex-responsive {
+    padding-bottom: 78%;
+  }
+}
+
+@media (max-width: 700px) {
+  .dex-wrapper {
+    padding: 10px;
+  }
+
   .dex-responsive {
     padding-bottom: 120%;
   }
