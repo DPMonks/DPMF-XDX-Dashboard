@@ -1,25 +1,18 @@
 {
   "functions": {
-    "api/[...path].js": {
-      "maxDuration": 10
-    }
+    "api/index.js": { "maxDuration": 10 },
+    "api/overview.js": { "maxDuration": 10 },
+    "api/health.js": { "maxDuration": 10 },
+    "api/[...path].js": { "maxDuration": 10 }
   },
   "rewrites": [
-    {
-      "source": "/handshake",
-      "destination": "/api/handshake"
-    },
-    {
-      "source": "/cluster/:path*",
-      "destination": "/api/cluster/:path*"
-    },
-    {
-      "source": "/health",
-      "destination": "/api/health"
-    },
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/health", "destination": "/api/health" },
+    { "source": "/health/xrpl", "destination": "/api/health" },
+    { "source": "/handshake", "destination": "/api/index?path=handshake" },
+    { "source": "/cluster/:path*", "destination": "/api/index?path=cluster/:path*" },
+    { "source": "/api", "destination": "/api/index" },
+    { "source": "/api/", "destination": "/api/index" },
+    { "source": "/api/((?!xaman/).+)", "destination": "/api/index?path=$1" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

@@ -6,6 +6,8 @@ The indexer contract is in `handoff/dashboard-connect/INDEXER_CONNECT.md`. Confi
 
 If Railway Hikari 429s the HTTP API, set server-only `DATABASE_URL` on Vercel / `.env` so `/api/*` can read the same tables directly.
 
+`https://dpmf-xdx-dashboard.vercel.app` is still the old Production deploy: it calls `/api/overview` and Vercel returns **404**, which the browser reports as Failed to fetch. Env vars cannot fix that host until this branch is Production. Use the PR #4 preview (log in past Vercel SSO) or Promote the preview. `DATABASE_URL` must be `postgres://…`, not the indexer HTTP host.
+
 ## Pairing
 
 | Layer | Source |

@@ -182,7 +182,7 @@ async function fetchJson(url, { method = "GET", body } = {}) {
     const next = new Error(
       timedOut
         ? "Indexer proxy timed out"
-        : "Failed to fetch via /api proxy. Use Vite, `npm start`, or Vercel so /api is proxied — the browser must not call Railway."
+        : "Failed to fetch /api (not Postgres). Production dpmf-xdx-dashboard.vercel.app still has no /api function — open the PR #4 preview, or promote this branch. Preview SSO 302s also look like Failed to fetch. Do not put the Railway HTTP host in DATABASE_URL."
     );
     next.status = 0;
     throw next;
@@ -192,6 +192,8 @@ async function fetchJson(url, { method = "GET", body } = {}) {
     const fallback =
       res.status === 429
         ? "Indexer rate-limited (Railway Hikari). The proxy will retry."
+        : res.status === 404
+          ? "This host has no /api function. Open the PR #4 preview or promote that branch to Production — env vars do nothing on the old production deploy."
         : `${res.status} ${res.statusText}`;
     const error = new Error(
       [data.error || data.detail || fallback, data.hint].filter(Boolean).join(" — ")
