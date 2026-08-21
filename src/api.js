@@ -375,17 +375,25 @@ export const api = {
     if (body && typeof body === "object" && !body.error) return [body];
     return [];
   },
-  topHolders: (limit = 100, offset = 0) => {
+  topHolders: (limit = 100, offset = 0, extra = {}) => {
     const path = endpoint("topHolders");
     const join = path.includes("?") ? "&" : "?";
-    return getJson(`${path}${join}limit=${limit}&offset=${offset}`);
+    const snapshot = extra.snapshot || "today";
+    return getJson(
+      `${path}${join}limit=${limit}&offset=${offset}&snapshot=${encodeURIComponent(snapshot)}`
+    );
   },
   topLp: (limit = 100, offset = 0) => {
     const path = endpoint("topLp");
     const join = path.includes("?") ? "&" : "?";
     return getJson(`${path}${join}limit=${limit}&offset=${offset}`);
   },
-  holdersCount: () => getJson(endpoint("holdersCount")),
+  holdersCount: (extra = {}) => {
+    const path = endpoint("holdersCount");
+    const snapshot = extra.snapshot || "today";
+    const join = path.includes("?") ? "&" : "?";
+    return getJson(`${path}${join}snapshot=${encodeURIComponent(snapshot)}`);
+  },
   lpHoldersCount: () => getJson(endpoint("lpHoldersCount")),
   tvlHistory: () => getJson(endpoint("tvlHistory")),
   holdersHistory: () => getJson(endpoint("holdersHistory")),

@@ -212,6 +212,7 @@ function pickFreshness(payload, rows = []) {
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
     return {
       as_of: payload.as_of || payload.updated || null,
+      snapshot_day: payload.snapshot_day || null,
       source: payload.source || null,
       present: Boolean(payload.present),
       catching_up: Boolean(payload.catching_up),
@@ -266,7 +267,7 @@ export async function getTopHolders(onPage) {
   if (Array.isArray(cached) && cached.length) onPage?.(cached, null);
   if (cached?.rows?.length) onPage?.(cached.rows, cached.freshness || null);
 
-  const payload = await api.topHolders(FIRST_HOLDERS, 0);
+  const payload = await api.topHolders(FIRST_HOLDERS, 0, { snapshot: "today" });
   const first = asArray(payload);
   const firstMapped = finishHolders(first);
   const freshness = pickFreshness(payload, firstMapped);
@@ -278,7 +279,8 @@ export async function getTopHolders(onPage) {
   if (first.length < FIRST_HOLDERS) return firstMapped;
 
   const rest = await paginate(
-    (limit, offset) => api.topHolders(limit, FIRST_HOLDERS + offset),
+    (limit, offset) =>
+      api.topHolders(limit, FIRST_HOLDERS + offset, { snapshot: "today" }),
     PAGE_SIZE,
     (all) => {
       const mapped = finishHolders([...first, ...all]);
@@ -331,7 +333,8 @@ export async function getTokenDetails() {
   const change =
     state.snapshot?.change24h || (await api.change24h().catch(() => ({})));
   const holders =
-    state.snapshot?.holdersCount || (await api.holdersCount().catch(() => ({})));
+    state.snapshot?.holdersCount ||
+    (await api.holdersCount({ snapshot: "today" }).catch(() => ({})));
   const ammRows = await getAmm().catch(() => []);
   const primary = ammRows[0] || {};
 

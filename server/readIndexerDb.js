@@ -221,20 +221,37 @@ function asIso(value) {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
-function freshnessOf(asOf, { liveTable = false } = {}) {
+function utcDay(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function isSameUtcDay(value, day = utcDay()) {
+  const stamp = utcDay(value);
+  return Boolean(stamp && day && stamp === day);
+}
+
+function freshnessOf(asOf, { liveTable = false, todayOnly = false } = {}) {
   const iso = asIso(asOf);
+  const snapshotDay = utcDay(iso);
+  const today = utcDay();
   if (!iso) {
     return {
       as_of: null,
+      snapshot_day: liveTable ? today : null,
       present: liveTable,
       catching_up: !liveTable,
       age_seconds: null,
     };
   }
   const ageMs = Date.now() - new Date(iso).getTime();
-  const present = ageMs >= 0 && ageMs <= 36 * 3600 * 1000;
+  const present = todayOnly
+    ? isSameUtcDay(iso, today)
+    : ageMs >= 0 && ageMs <= 36 * 3600 * 1000;
   return {
     as_of: iso,
+    snapshot_day: snapshotDay,
     present,
     catching_up: !present,
     age_seconds: Number.isFinite(ageMs) ? Math.max(0, Math.round(ageMs / 1000)) : null,
@@ -254,7 +271,7 @@ async function probeCountAsOf(db, sqls) {
   return { count: 0, as_of: null };
 }
 
-async function pickHolderSource(db) {
+async function pickHolderSource(db, { todayOnly = false } = {}) {
   const latest = await probeCountAsOf(db, [
     `SELECT COUNT(*) FILTER (WHERE ABS(balance::numeric) > 0) AS count,
             MAX(timestamp) AS as_of
@@ -275,6 +292,28 @@ async function pickHolderSource(db) {
   const latestTs = latest.as_of ? new Date(latest.as_of).getTime() : 0;
   const historyTs = history.as_of ? new Date(history.as_of).getTime() : 0;
   const historyFresh = freshnessOf(history.as_of);
+
+  if (todayOnly) {
+    if (latest.count > 0 && (!latest.as_of || isSameUtcDay(latest.as_of))) {
+      return {
+        kind: "token_holders_latest",
+        count: latest.count,
+        ...freshnessOf(latest.as_of, { liveTable: true, todayOnly: true }),
+      };
+    }
+    if (history.count > 0 && isSameUtcDay(history.as_of)) {
+      return {
+        kind: "token_holders_history",
+        count: history.count,
+        ...freshnessOf(history.as_of, { todayOnly: true }),
+      };
+    }
+    return {
+      kind: "none",
+      count: 0,
+      ...freshnessOf(history.as_of || latest.as_of, { todayOnly: true }),
+    };
+  }
 
   if (latest.count > 0 && latestTs && (!historyTs || latestTs >= historyTs)) {
     return {
@@ -307,8 +346,8 @@ async function pickHolderSource(db) {
   return { kind: "none", count: 0, ...freshnessOf(null) };
 }
 
-async function freshTokenHolders(db, limit, offset) {
-  const source = await pickHolderSource(db);
+async function freshTokenHolders(db, limit, offset, options = {}) {
+  const source = await pickHolderSource(db, options);
   let rows = [];
 
   if (source.kind === "token_holders_latest") {
@@ -351,6 +390,7 @@ async function freshTokenHolders(db, limit, offset) {
   return {
     holders: mapHolderRows(rows, offset, source.as_of),
     as_of: source.as_of,
+    snapshot_day: source.snapshot_day || utcDay(source.as_of),
     source: source.kind,
     present: source.present,
     catching_up: source.catching_up,
@@ -389,8 +429,13 @@ async function tokenTrustlineCount(db) {
   return Number(latest.rows[0]?.count || 0);
 }
 
-async function tokenHoldersPage(db, limit, offset) {
-  const page = await freshTokenHolders(db, limit, offset);
+function wantsTodaySnapshot(params) {
+  const raw = String(params.get("snapshot") || params.get("as_of") || "").toLowerCase();
+  return raw === "today" || raw === "1" || raw === "true";
+}
+
+async function tokenHoldersPage(db, limit, offset, options = {}) {
+  const page = await freshTokenHolders(db, limit, offset, options);
   return {
     ...page,
     rows: page.holders,
@@ -861,10 +906,13 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "holders/count") {
-      const source = await pickHolderSource(db);
+      const source = await pickHolderSource(db, {
+        todayOnly: wantsTodaySnapshot(params),
+      });
       return ok({
         count: source.count,
         as_of: source.as_of,
+        snapshot_day: source.snapshot_day || utcDay(source.as_of),
         present: source.present,
         catching_up: source.catching_up,
         source: source.kind,
@@ -877,7 +925,11 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "top-holders" || suffix === "top-holders-v2") {
-      return ok(await tokenHoldersPage(db, limit, offset));
+      return ok(
+        await tokenHoldersPage(db, limit, offset, {
+          todayOnly: wantsTodaySnapshot(params),
+        })
+      );
     }
 
     if (suffix === "top-lp") {

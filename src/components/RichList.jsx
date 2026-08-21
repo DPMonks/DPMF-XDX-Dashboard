@@ -129,12 +129,14 @@ export default function RichList({
       >
         <span className="rich-freshness-dot" aria-hidden="true" />
         {freshness?.catching_up
-          ? `${t.balancesCatchingUp} ${
-              freshness.as_of ? formatWhen(freshness.as_of, locale) : "—"
-            }`
+          ? `${t.todaySnapshotWaiting} ${
+              freshness.as_of || freshness.snapshot_day
+                ? formatWhen(freshness.as_of || freshness.snapshot_day, locale)
+                : ""
+            }`.trim()
           : freshness?.as_of
-            ? `${t.balancesAsOf} ${formatWhen(freshness.as_of, locale)} · ${t.balancesPresent}`
-            : t.balancesLiveTable}
+            ? `${t.todaySnapshot} ${formatWhen(freshness.as_of, locale)}`
+            : t.todaySnapshotLive}
       </p>
 
       <div className="rich-table-wrap">
