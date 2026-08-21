@@ -3,6 +3,7 @@ import { copyToClipboard } from "../utils/copy";
 import {
   formatPercent,
   formatToken,
+  formatWhen,
   shareOf,
   shortAddress,
 } from "../utils/format";
@@ -20,6 +21,7 @@ export default function RichList({
   showPair = false,
   unit = "XDX",
   searchPlaceholder,
+  freshness = null,
 }) {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
@@ -120,6 +122,20 @@ export default function RichList({
           {t.showing} {filtered.length.toLocaleString(locale)} {t.addresses}
         </p>
       </div>
+      <p
+        className={`rich-freshness ${
+          freshness?.catching_up ? "is-catching-up" : "is-present"
+        }`}
+      >
+        <span className="rich-freshness-dot" aria-hidden="true" />
+        {freshness?.catching_up
+          ? `${t.balancesCatchingUp} ${
+              freshness.as_of ? formatWhen(freshness.as_of, locale) : "—"
+            }`
+          : freshness?.as_of
+            ? `${t.balancesAsOf} ${formatWhen(freshness.as_of, locale)} · ${t.balancesPresent}`
+            : t.balancesLiveTable}
+      </p>
 
       <div className="rich-table-wrap">
         <table className="rich-table">
@@ -154,8 +170,8 @@ export default function RichList({
                     <span className="pair-badge">{row.pair || "XDX/XRP"}</span>
                   </td>
                 )}
-                <td className="col-num">
-                  {formatToken(row[valueKey], locale)} {unit}
+                <td className="col-num col-balance">
+                  {formatToken(row[valueKey], locale, 8)} {unit}
                 </td>
                 <td className="col-num">
                   {formatPercent(shareOf(row[valueKey], total), locale)}

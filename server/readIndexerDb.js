@@ -197,95 +197,163 @@ async function tryQuery(db, sql, params) {
   }
 }
 
-function mapHolderRows(rows, offset) {
+function mapHolderRows(rows, offset, asOf) {
   return rows.map((row, index) => ({
     rank: offset + index + 1,
     account: row.account,
     balance: Number(row.balance),
     frozen: false,
+    updated: row.timestamp || row.updated || asOf || null,
   }));
 }
 
-async function freshTokenHolders(db, limit, offset) {
-  const snapCount = await tryQuery(
-    db,
-    `SELECT COUNT(*) AS count
+function asIso(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function freshnessOf(asOf, { liveTable = false } = {}) {
+  const iso = asIso(asOf);
+  if (!iso) {
+    return {
+      as_of: null,
+      present: liveTable,
+      catching_up: !liveTable,
+      age_seconds: null,
+    };
+  }
+  const ageMs = Date.now() - new Date(iso).getTime();
+  const present = ageMs >= 0 && ageMs <= 36 * 3600 * 1000;
+  return {
+    as_of: iso,
+    present,
+    catching_up: !present,
+    age_seconds: Number.isFinite(ageMs) ? Math.max(0, Math.round(ageMs / 1000)) : null,
+  };
+}
+
+async function probeCountAsOf(db, sqls) {
+  for (const sql of sqls) {
+    const result = await tryQuery(db, sql);
+    const row = result.rows[0];
+    if (!row) continue;
+    return {
+      count: Number(row.count || 0),
+      as_of: row.as_of || null,
+    };
+  }
+  return { count: 0, as_of: null };
+}
+
+async function pickHolderSource(db) {
+  const latest = await probeCountAsOf(db, [
+    `SELECT COUNT(*) FILTER (WHERE ABS(balance::numeric) > 0) AS count,
+            MAX(timestamp) AS as_of
+     FROM token_holders_latest`,
+    `SELECT COUNT(*) FILTER (WHERE ABS(balance::numeric) > 0) AS count,
+            MAX(updated_at) AS as_of
+     FROM token_holders_latest`,
+    `SELECT COUNT(*) AS count, NULL::timestamptz AS as_of
+     FROM token_holders_latest
+     WHERE ABS(balance::numeric) > 0`,
+  ]);
+  const history = await probeCountAsOf(db, [
+    `SELECT COUNT(*) FILTER (WHERE ABS(balance::numeric) > 0) AS count,
+            MAX(timestamp) AS as_of
      FROM token_holders_history
-     WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)
-       AND ABS(balance::numeric) > 0`
-  );
-  const useSnapshot = Number(snapCount.rows[0]?.count || 0) >= 20;
-  const snapshot = useSnapshot
-    ? await tryQuery(
+     WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)`,
+  ]);
+  const latestTs = latest.as_of ? new Date(latest.as_of).getTime() : 0;
+  const historyTs = history.as_of ? new Date(history.as_of).getTime() : 0;
+  const historyFresh = freshnessOf(history.as_of);
+
+  if (latest.count > 0 && latestTs && (!historyTs || latestTs >= historyTs)) {
+    return {
+      kind: "token_holders_latest",
+      count: latest.count,
+      ...freshnessOf(latest.as_of, { liveTable: true }),
+    };
+  }
+  if (history.count > 0 && historyTs && (!latestTs || historyTs > latestTs)) {
+    if (!latestTs && latest.count > 0 && historyFresh.catching_up) {
+      return {
+        kind: "token_holders_latest",
+        count: latest.count,
+        ...freshnessOf(null, { liveTable: true }),
+      };
+    }
+    return {
+      kind: "token_holders_history",
+      count: history.count,
+      ...historyFresh,
+    };
+  }
+  if (latest.count > 0) {
+    return {
+      kind: "token_holders_latest",
+      count: latest.count,
+      ...freshnessOf(latest.as_of, { liveTable: true }),
+    };
+  }
+  return { kind: "none", count: 0, ...freshnessOf(null) };
+}
+
+async function freshTokenHolders(db, limit, offset) {
+  const source = await pickHolderSource(db);
+  let rows = [];
+
+  if (source.kind === "token_holders_latest") {
+    const withTs = await tryQuery(
+      db,
+      `SELECT account, ABS(balance::numeric) AS balance, timestamp
+       FROM token_holders_latest
+       WHERE ABS(balance::numeric) > 0
+       ORDER BY ABS(balance::numeric) DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    rows = withTs.rows;
+    if (!rows.length) {
+      const plain = await tryQuery(
         db,
         `SELECT account, ABS(balance::numeric) AS balance
-         FROM token_holders_history
-         WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)
-           AND ABS(balance::numeric) > 0
+         FROM token_holders_latest
+         WHERE ABS(balance::numeric) > 0
          ORDER BY ABS(balance::numeric) DESC
          LIMIT $1 OFFSET $2`,
         [limit, offset]
-      )
-    : { rows: [] };
-  if (snapshot.rows.length) return mapHolderRows(snapshot.rows, offset);
-
-  const newest = await tryQuery(
-    db,
-    `SELECT account, ABS(balance::numeric) AS balance
-     FROM (
-       SELECT DISTINCT ON (account) account, balance
+      );
+      rows = plain.rows;
+    }
+  } else if (source.kind === "token_holders_history") {
+    const snapshot = await tryQuery(
+      db,
+      `SELECT account, ABS(balance::numeric) AS balance, timestamp
        FROM token_holders_history
-       WHERE ABS(balance::numeric) > 0
-       ORDER BY account, timestamp DESC
-     ) current
-     ORDER BY ABS(balance::numeric) DESC
-     LIMIT $1 OFFSET $2`,
-    [limit, offset]
-  );
-  if (newest.rows.length) return mapHolderRows(newest.rows, offset);
+       WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)
+         AND ABS(balance::numeric) > 0
+       ORDER BY ABS(balance::numeric) DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    rows = snapshot.rows;
+  }
 
-  const latest = await tryQuery(
-    db,
-    `SELECT account, ABS(balance::numeric) AS balance
-     FROM token_holders_latest
-     WHERE ABS(balance::numeric) > 0
-     ORDER BY ABS(balance::numeric) DESC
-     LIMIT $1 OFFSET $2`,
-    [limit, offset]
-  );
-  return mapHolderRows(latest.rows, offset);
+  return {
+    holders: mapHolderRows(rows, offset, source.as_of),
+    as_of: source.as_of,
+    source: source.kind,
+    present: source.present,
+    catching_up: source.catching_up,
+    age_seconds: source.age_seconds,
+    count: source.count,
+  };
 }
 
 async function tokenHolderCount(db) {
-  const snapshot = await tryQuery(
-    db,
-    `SELECT COUNT(*) AS count
-     FROM token_holders_history
-     WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)
-       AND ABS(balance::numeric) > 0`
-  );
-  const snapCount = Number(snapshot.rows[0]?.count || 0);
-  if (snapCount > 0) return snapCount;
-
-  const distinct = await tryQuery(
-    db,
-    `SELECT COUNT(*) AS count FROM (
-       SELECT DISTINCT ON (account) account, balance
-       FROM token_holders_history
-       WHERE ABS(balance::numeric) > 0
-       ORDER BY account, timestamp DESC
-     ) current`
-  );
-  const distinctCount = Number(distinct.rows[0]?.count || 0);
-  if (distinctCount > 0) return distinctCount;
-
-  const latest = await tryQuery(
-    db,
-    `SELECT COUNT(*) AS count
-     FROM token_holders_latest
-     WHERE ABS(balance::numeric) > 0`
-  );
-  return Number(latest.rows[0]?.count || 0);
+  const source = await pickHolderSource(db);
+  return source.count;
 }
 
 async function tokenTrustlineCount(db) {
@@ -314,7 +382,11 @@ async function tokenTrustlineCount(db) {
 }
 
 async function tokenHoldersPage(db, limit, offset) {
-  return freshTokenHolders(db, limit, offset);
+  const page = await freshTokenHolders(db, limit, offset);
+  return {
+    ...page,
+    rows: page.holders,
+  };
 }
 
 async function tokenBalanceFor(db, address) {
@@ -673,7 +745,14 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "holders/count") {
-      return ok({ count: await tokenHolderCount(db), source: "db" });
+      const source = await pickHolderSource(db);
+      return ok({
+        count: source.count,
+        as_of: source.as_of,
+        present: source.present,
+        catching_up: source.catching_up,
+        source: source.kind,
+      });
     }
 
     if (suffix === "lp-holders/count") {
@@ -686,16 +765,46 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "top-lp") {
+      const probe = await probeCountAsOf(db, [
+        `SELECT COUNT(*) AS count, MAX(timestamp) AS as_of FROM lp_holders_latest`,
+        `SELECT COUNT(*) AS count, MAX(updated_at) AS as_of FROM lp_holders_latest`,
+        `SELECT COUNT(*) AS count, NULL::timestamptz AS as_of FROM lp_holders_latest`,
+      ]);
+      const fresh = freshnessOf(probe.as_of, { liveTable: true });
       const result = await tryQuery(
         db,
         `SELECT ROW_NUMBER() OVER (ORDER BY lp_balance::numeric DESC) AS rank,
-                account, lp_balance::numeric AS lp_balance
+                account, lp_balance::numeric AS lp_balance, timestamp
          FROM lp_holders_latest
          ORDER BY lp_balance::numeric DESC
          LIMIT $1 OFFSET $2`,
         [Math.min(limit, 50) || 50, offset]
       );
-      return ok(result.rows);
+      const rows = (result.rows.length
+        ? result
+        : await tryQuery(
+            db,
+            `SELECT ROW_NUMBER() OVER (ORDER BY lp_balance::numeric DESC) AS rank,
+                    account, lp_balance::numeric AS lp_balance
+             FROM lp_holders_latest
+             ORDER BY lp_balance::numeric DESC
+             LIMIT $1 OFFSET $2`,
+            [Math.min(limit, 50) || 50, offset]
+          )
+      ).rows.map((row) => ({
+        ...row,
+        updated: row.timestamp || fresh.as_of,
+      }));
+      return ok({
+        rows,
+        holders: rows,
+        as_of: fresh.as_of,
+        source: "lp_holders_latest",
+        present: fresh.present,
+        catching_up: fresh.catching_up,
+        age_seconds: fresh.age_seconds,
+        count: probe.count,
+      });
     }
 
     if (suffix === "charts/tvl") {

@@ -137,6 +137,7 @@ function mapHolder(row, index) {
     account: pick(row, ["account", "address", "wallet"]),
     balance: numberOrNull(pick(row, ["balance", "xdx", "amount"])) ?? 0,
     frozen: Boolean(row.frozen),
+    updated: pick(row, ["updated", "timestamp", "as_of"]),
   };
 }
 
@@ -147,6 +148,7 @@ function mapLp(row, index) {
     lp_balance: numberOrNull(pick(row, ["lp_balance", "balance", "lp"])) ?? 0,
     pair: pairFromRow(row),
     frozen: Boolean(row.frozen),
+    updated: pick(row, ["updated", "timestamp", "as_of"]),
   };
 }
 
@@ -206,6 +208,26 @@ function finishHolders(rows) {
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
+function pickFreshness(payload, rows = []) {
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    return {
+      as_of: payload.as_of || payload.updated || null,
+      source: payload.source || null,
+      present: Boolean(payload.present),
+      catching_up: Boolean(payload.catching_up),
+      age_seconds: numberOrNull(payload.age_seconds),
+    };
+  }
+  const updated = rows.find((row) => row.updated)?.updated || null;
+  return {
+    as_of: updated,
+    source: null,
+    present: false,
+    catching_up: Boolean(updated),
+    age_seconds: null,
+  };
+}
+
 function finishLp(rows) {
   return rows
     .map(mapLp)
@@ -240,22 +262,17 @@ export async function getAmm() {
 }
 
 export async function getTopHolders(onPage) {
-  const snap = asArray(await snapshotField("holders"));
-  if (snap.length) {
-    const mapped = finishHolders(snap);
-    onPage?.(mapped);
-    sessionWrite("holders", mapped);
-    return mapped;
-  }
-
   const cached = sessionRead("holders");
-  if (cached?.length) onPage?.(cached);
+  if (Array.isArray(cached) && cached.length) onPage?.(cached, null);
+  if (cached?.rows?.length) onPage?.(cached.rows, cached.freshness || null);
 
-  const first = asArray(await api.topHolders(FIRST_HOLDERS, 0));
+  const payload = await api.topHolders(FIRST_HOLDERS, 0);
+  const first = asArray(payload);
   const firstMapped = finishHolders(first);
+  const freshness = pickFreshness(payload, firstMapped);
   if (firstMapped.length) {
-    onPage?.(firstMapped);
-    sessionWrite("holders", firstMapped);
+    onPage?.(firstMapped, freshness);
+    sessionWrite("holders", { rows: firstMapped, freshness });
   }
 
   if (first.length < FIRST_HOLDERS) return firstMapped;
@@ -265,8 +282,8 @@ export async function getTopHolders(onPage) {
     PAGE_SIZE,
     (all) => {
       const mapped = finishHolders([...first, ...all]);
-      onPage?.(mapped);
-      sessionWrite("holders", mapped);
+      onPage?.(mapped, freshness);
+      sessionWrite("holders", { rows: mapped, freshness });
     },
     MAX_ROWS - FIRST_HOLDERS
   );
@@ -274,22 +291,17 @@ export async function getTopHolders(onPage) {
 }
 
 export async function getTopLp(onPage) {
-  const snap = asArray(await snapshotField("lpHolders"));
-  if (snap.length) {
-    const mapped = finishLp(snap);
-    onPage?.(mapped);
-    sessionWrite("lpHolders", mapped);
-    return mapped;
-  }
-
   const cached = sessionRead("lpHolders");
-  if (cached?.length) onPage?.(cached);
+  if (Array.isArray(cached) && cached.length) onPage?.(cached, null);
+  if (cached?.rows?.length) onPage?.(cached.rows, cached.freshness || null);
 
-  const first = asArray(await api.topLp(FIRST_LP, 0));
+  const payload = await api.topLp(FIRST_LP, 0);
+  const first = asArray(payload);
   const firstMapped = finishLp(first);
+  const freshness = pickFreshness(payload, firstMapped);
   if (firstMapped.length) {
-    onPage?.(firstMapped);
-    sessionWrite("lpHolders", firstMapped);
+    onPage?.(firstMapped, freshness);
+    sessionWrite("lpHolders", { rows: firstMapped, freshness });
   }
 
   if (first.length < FIRST_LP) return firstMapped;
@@ -299,8 +311,8 @@ export async function getTopLp(onPage) {
     50,
     (all) => {
       const mapped = finishLp([...first, ...all]);
-      onPage?.(mapped);
-      sessionWrite("lpHolders", mapped);
+      onPage?.(mapped, freshness);
+      sessionWrite("lpHolders", { rows: mapped, freshness });
     },
     MAX_ROWS - FIRST_LP
   );

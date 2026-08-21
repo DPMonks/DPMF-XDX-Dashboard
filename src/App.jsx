@@ -24,7 +24,9 @@ export default function App() {
   const { t } = useI18n();
   const { walletAddress } = useWallet();
   const [holders, setHolders] = useState([]);
+  const [holderFreshness, setHolderFreshness] = useState(null);
   const [lpHolders, setLpHolders] = useState([]);
+  const [lpFreshness, setLpFreshness] = useState(null);
   const [ammData, setAmmData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
@@ -52,9 +54,10 @@ export default function App() {
       });
 
       try {
-        const nextHolders = await getTopHolders((rows) => {
+        const nextHolders = await getTopHolders((rows, meta) => {
           if (!cancelled) {
             setHolders(rows);
+            if (meta) setHolderFreshness(meta);
             setLoading(false);
           }
         });
@@ -67,8 +70,11 @@ export default function App() {
       if (cancelled) return;
 
       try {
-        const nextLp = await getTopLp((rows) => {
-          if (!cancelled) setLpHolders(rows);
+        const nextLp = await getTopLp((rows, meta) => {
+          if (!cancelled) {
+            setLpHolders(rows);
+            if (meta) setLpFreshness(meta);
+          }
         });
         if (!cancelled) setLpHolders(nextLp);
       } catch (error) {
@@ -184,6 +190,7 @@ export default function App() {
               unit="XDX"
               emptyLabel={t.emptyHolders}
               searchPlaceholder={t.searchHolders}
+              freshness={holderFreshness}
             />
           </section>
 
@@ -198,6 +205,7 @@ export default function App() {
               showPair
               emptyLabel={t.emptyLp}
               searchPlaceholder={t.searchLp}
+              freshness={lpFreshness}
             />
           </section>
         </div>
