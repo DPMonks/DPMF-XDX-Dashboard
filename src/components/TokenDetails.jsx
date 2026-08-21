@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { getTokenDetails } from "../api/indexer";
-import { formatNumber, formatUsd, formatUsdPrice, shortAddress } from "../utils/format";
+import {
+  formatNumber,
+  formatUsd,
+  formatUsdPrice,
+  formatXrpPrice,
+  shortAddress,
+} from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
@@ -68,13 +74,14 @@ export default function TokenDetails() {
   const blackholed = pick(data, ["blackholed"]);
   const issuer = pick(data, ["issuer"]);
   const usdPrice = pick(data, ["recorded_price", "xdxUsd"]);
+  const xrpPrice = pick(data, ["xdxPerXrp", "xdx_per_xrp"]);
   const recordedHint = `${t.recordedPrice} ${formatUsdPrice(usdPrice, locale)}`;
 
   return (
     <div className="token-details-grid">
       <Detail label={t.tokenType} value={pick(data, ["tokenType", "token_type"])} />
       <Detail label={t.price} value={formatUsdPrice(usdPrice, locale)} />
-      <Detail label={t.xdxPerXrp} value={formatUsdPrice(usdPrice, locale)} />
+      <Detail label={t.xdxPerXrp} value={formatXrpPrice(xrpPrice, locale)} />
       <Detail
         label={t.xrplMarketCap}
         value={formatUsd(pick(data, ["xrplMarketCap"]), locale)}

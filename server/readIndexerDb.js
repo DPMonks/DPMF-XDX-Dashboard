@@ -9,6 +9,7 @@ import {
   looksLikeXrpUsd,
   pickTrustlineCount,
   recordedXdxUsdFromPrices,
+  xrpPerXdx,
 } from "../src/utils/recordedPrice.js";
 import {
   asIso,
@@ -945,10 +946,6 @@ async function buildSnapshot(db) {
 
   const reserveAsset = Number(amm.reserve_asset || 0);
   const reserveCurrency = Number(amm.reserve_currency || 0);
-  const xdxPerXrp =
-    reserveAsset > 0 && reserveCurrency > 0
-      ? reserveCurrency / reserveAsset
-      : Number(amm.price || 0);
   const xrpUsd = Number(quote.usd || 0);
   const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
   const tvlUsd = reserveCurrency > 0 && xrpUsd > 0 ? reserveCurrency * 2 * xrpUsd : 0;
@@ -965,10 +962,11 @@ async function buildSnapshot(db) {
     price: xdxUsd,
     xdxUsd,
     recorded_price: xdxUsd,
-    xdxGbp: xdxPerXrp > 0 && quote.gbp ? xdxPerXrp * quote.gbp : 0,
+    xdxGbp: xdxUsd > 0 && quote.gbp && xrpUsd > 0 ? xdxUsd * (quote.gbp / xrpUsd) : 0,
     xrpUsd,
     xrpGbp: Number(quote.gbp || 0),
-    xdx_per_xrp: xdxPerXrp,
+    xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd),
+    xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd),
     apr: Number(amm.apr || 0),
     volume24h: Number(amm.volume24h || 0),
     reserve_asset: reserveAsset,

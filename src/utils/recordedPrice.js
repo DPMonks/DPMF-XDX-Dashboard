@@ -27,6 +27,13 @@ export function recordedXdxUsdFromPrices(prices = {}, fallbackXrpUsd) {
   return 0;
 }
 
+export function xrpPerXdx(xdxUsd, xrpUsd) {
+  const usd = Number(xdxUsd);
+  const xrp = Number(xrpUsd);
+  if (!(usd > 0) || !looksLikeXrpUsd(xrp)) return 0;
+  return recordUsdPrice(usd / xrp);
+}
+
 export function pickTrustlineCount(latestCount, historyCount) {
   const history = Number(historyCount) || 0;
   if (history > 0) return history;
