@@ -1,7 +1,19 @@
-const INDEXER_ORIGIN = (
-  import.meta.env.VITE_API_BASE ||
-  "https://dpmf-xdx-indexer-production.up.railway.app"
-).replace(/\/$/, "");
+function resolveIndexerOrigin() {
+  const candidates = [
+    import.meta.env.VITE_API_BASE,
+    import.meta.env.NEXT_PUBLIC_INDEXER_URL,
+    import.meta.env.VITE_INDEXER_URL,
+    import.meta.env.VITE_API_URL,
+  ].filter(Boolean);
+  const remote = candidates.find(
+    (url) => !/localhost|127\.0\.0\.1/i.test(String(url))
+  );
+  return (
+    remote || "https://dpmf-xdx-indexer-production.up.railway.app"
+  ).replace(/\/$/, "");
+}
+
+const INDEXER_ORIGIN = resolveIndexerOrigin();
 const API = INDEXER_ORIGIN.endsWith("/api")
   ? INDEXER_ORIGIN
   : `${INDEXER_ORIGIN}/api`;
