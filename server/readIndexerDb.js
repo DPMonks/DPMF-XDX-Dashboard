@@ -194,53 +194,99 @@ async function tryQuery(db, sql, params) {
   }
 }
 
-async function tokenHolderCount(db) {
-  const latest = await tryQuery(
-    db,
-    "SELECT COUNT(*) AS count FROM token_holders_latest"
-  );
-  const count = Number(latest.rows[0]?.count || 0);
-  if (count > 0) return count;
-  const history = await tryQuery(
-    db,
-    "SELECT COUNT(DISTINCT account) AS count FROM token_holders_history"
-  );
-  return Number(history.rows[0]?.count || 0);
-}
-
-async function tokenHoldersPage(db, limit, offset) {
-  const latest = await tryQuery(
-    db,
-    `SELECT account, ABS(balance::numeric) AS balance
-     FROM token_holders_latest
-     ORDER BY ABS(balance::numeric) DESC
-     LIMIT $1 OFFSET $2`,
-    [limit, offset]
-  );
-  if (latest.rows.length) {
-    return latest.rows.map((row, index) => ({
-      rank: offset + index + 1,
-      account: row.account,
-      balance: Number(row.balance),
-      frozen: false,
-    }));
-  }
-
-  const grouped = await tryQuery(
-    db,
-    `SELECT account, ABS(MAX(balance::numeric)) AS balance
-     FROM token_holders_history
-     GROUP BY account
-     ORDER BY ABS(MAX(balance::numeric)) DESC
-     LIMIT $1 OFFSET $2`,
-    [limit, offset]
-  );
-  return grouped.rows.map((row, index) => ({
+function mapHolderRows(rows, offset) {
+  return rows.map((row, index) => ({
     rank: offset + index + 1,
     account: row.account,
     balance: Number(row.balance),
     frozen: false,
   }));
+}
+
+async function freshTokenHolders(db, limit, offset) {
+  const snapCount = await tryQuery(
+    db,
+    `SELECT COUNT(*) AS count
+     FROM token_holders_history
+     WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)
+       AND ABS(balance::numeric) > 0`
+  );
+  const useSnapshot = Number(snapCount.rows[0]?.count || 0) >= 20;
+  const snapshot = useSnapshot
+    ? await tryQuery(
+        db,
+        `SELECT account, ABS(balance::numeric) AS balance
+         FROM token_holders_history
+         WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)
+           AND ABS(balance::numeric) > 0
+         ORDER BY ABS(balance::numeric) DESC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      )
+    : { rows: [] };
+  if (snapshot.rows.length) return mapHolderRows(snapshot.rows, offset);
+
+  const newest = await tryQuery(
+    db,
+    `SELECT account, ABS(balance::numeric) AS balance
+     FROM (
+       SELECT DISTINCT ON (account) account, balance
+       FROM token_holders_history
+       WHERE ABS(balance::numeric) > 0
+       ORDER BY account, timestamp DESC
+     ) current
+     ORDER BY ABS(balance::numeric) DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
+  );
+  if (newest.rows.length) return mapHolderRows(newest.rows, offset);
+
+  const latest = await tryQuery(
+    db,
+    `SELECT account, ABS(balance::numeric) AS balance
+     FROM token_holders_latest
+     WHERE ABS(balance::numeric) > 0
+     ORDER BY ABS(balance::numeric) DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
+  );
+  return mapHolderRows(latest.rows, offset);
+}
+
+async function tokenHolderCount(db) {
+  const snapshot = await tryQuery(
+    db,
+    `SELECT COUNT(*) AS count
+     FROM token_holders_history
+     WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)
+       AND ABS(balance::numeric) > 0`
+  );
+  const snapCount = Number(snapshot.rows[0]?.count || 0);
+  if (snapCount > 0) return snapCount;
+
+  const distinct = await tryQuery(
+    db,
+    `SELECT COUNT(*) AS count FROM (
+       SELECT DISTINCT ON (account) account, balance
+       FROM token_holders_history
+       WHERE ABS(balance::numeric) > 0
+       ORDER BY account, timestamp DESC
+     ) current`
+  );
+  const distinctCount = Number(distinct.rows[0]?.count || 0);
+  if (distinctCount > 0) return distinctCount;
+
+  const latest = await tryQuery(
+    db,
+    `SELECT COUNT(*) AS count
+     FROM token_holders_latest
+     WHERE ABS(balance::numeric) > 0`
+  );
+  return Number(latest.rows[0]?.count || 0);
+}
+
+async function tokenHoldersPage(db, limit, offset) {
+  return freshTokenHolders(db, limit, offset);
 }
 
 async function tokenBalanceFor(db, address) {

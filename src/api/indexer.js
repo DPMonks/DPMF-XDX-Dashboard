@@ -4,10 +4,10 @@ import { pairFromRow } from "../constants/ledger";
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
 
-const FIRST_HOLDERS = 50;
-const FIRST_LP = 25;
+const FIRST_HOLDERS = 100;
+const FIRST_LP = 100;
 const PAGE_SIZE = 100;
-const MAX_ROWS = 1000;
+const MAX_ROWS = 2500;
 const SESSION_TTL_MS = 5 * 60_000;
 
 function asArray(value) {

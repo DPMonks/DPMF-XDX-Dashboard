@@ -375,12 +375,12 @@ export const api = {
     if (body && typeof body === "object" && !body.error) return [body];
     return [];
   },
-  topHolders: (limit = 50, offset = 0) => {
+  topHolders: (limit = 100, offset = 0) => {
     const path = endpoint("topHolders");
     const join = path.includes("?") ? "&" : "?";
     return getJson(`${path}${join}limit=${limit}&offset=${offset}`);
   },
-  topLp: (limit = 25, offset = 0) => {
+  topLp: (limit = 100, offset = 0) => {
     const path = endpoint("topLp");
     const join = path.includes("?") ? "&" : "?";
     return getJson(`${path}${join}limit=${limit}&offset=${offset}`);

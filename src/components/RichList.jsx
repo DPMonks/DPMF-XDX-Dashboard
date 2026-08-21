@@ -9,7 +9,7 @@ import {
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 100;
 
 export default function RichList({
   rows,
