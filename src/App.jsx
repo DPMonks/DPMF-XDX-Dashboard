@@ -125,13 +125,15 @@ export default function App() {
 
       <p className={`indexer-source is-${link.status}`}>
         <span className="handshake-dot" aria-hidden="true" />
-        {link.database === "postgres" || link.source === "postgres"
-          ? t.handshakeOk
-          : link.status === "error"
-            ? t.handshakeError
-            : link.status === "connecting"
-              ? t.handshakeConnecting
-              : t.handshakeFallback}
+        {link.database === "auth-failed" || /password authentication failed/i.test(`${link.error || ""} ${link.hint || ""}`)
+          ? t.handshakeAuth
+          : link.database === "postgres" && link.health === "ok"
+            ? t.handshakeOk
+            : link.status === "error"
+              ? t.handshakeError
+              : link.status === "connecting"
+                ? t.handshakeConnecting
+                : t.handshakeFallback}
         {": "}
         <code>{INDEXER_ORIGIN}</code>
         {link.protocol ? ` · ${link.protocol}` : ""}

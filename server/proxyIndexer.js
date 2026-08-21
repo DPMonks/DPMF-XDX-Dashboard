@@ -75,9 +75,9 @@ function withSource(result, source) {
   return { ...result, source: result.source || source };
 }
 
-function localDashboardStatus(suffix) {
-  const database = databaseUrlKind();
-  const hint = databaseUrlHint();
+function localDashboardStatus(suffix, extra = {}) {
+  const database = extra.database || databaseUrlKind();
+  const hint = extra.hint || databaseUrlHint();
   const endpoints = {
     health: "/health",
     overview: "/api/overview",
@@ -177,6 +177,21 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
     dbResult = await readIndexerDb(suffix, search);
     if (dbResult && dbResult.status < 400) {
       return withSource(dbResult, "postgres");
+    }
+    if (dbResult && catalogOrHealth) {
+      let parsed;
+      try {
+        parsed = JSON.parse(dbResult.body);
+      } catch {
+        parsed = {};
+      }
+      const authFailed = /password authentication failed/i.test(
+        `${parsed.error || ""} ${dbResult.body || ""}`
+      );
+      return localDashboardStatus(suffix, {
+        database: authFailed ? "auth-failed" : "error",
+        hint: parsed.hint || databaseUrlHint(),
+      });
     }
   }
 

@@ -34,16 +34,60 @@ function rawDatabaseUrl() {
   return process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
 }
 
+function separatePassword() {
+  return process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD || "";
+}
+
+export function applyConnectionOverrides(raw) {
+  const password = separatePassword();
+  const user = process.env.PGUSER || "";
+  const host = process.env.PGHOST || "";
+  const port = process.env.PGPORT || "";
+  const dbname = process.env.PGDATABASE || "";
+  if (!raw && host) {
+    const authUser = encodeURIComponent(user || "postgres");
+    const auth = password
+      ? `${authUser}:${encodeURIComponent(password)}`
+      : authUser;
+    return `postgres://${auth}@${host}:${port || "5432"}/${dbname || "railway"}`;
+  }
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    const decode = (value, fallback) => {
+      try {
+        return decodeURIComponent(value || "") || fallback;
+      } catch {
+        return value || fallback;
+      }
+    };
+    const finalUser = user || decode(url.username, "postgres");
+    const finalPass = password || decode(url.password, "");
+    const finalHost = host || url.hostname;
+    const finalPort = port || url.port || "5432";
+    const finalDb = dbname || url.pathname.replace(/^\//, "") || "railway";
+    const auth = finalPass
+      ? `${encodeURIComponent(finalUser)}:${encodeURIComponent(finalPass)}`
+      : encodeURIComponent(finalUser);
+    return `postgres://${auth}@${finalHost}:${finalPort}/${finalDb}${url.search}`;
+  } catch {
+    return raw;
+  }
+}
+
 export function databaseUrlKind() {
   const raw = rawDatabaseUrl().trim();
-  if (!raw) return "missing";
   if (/^postgres(ql)?:\/\//i.test(raw)) return "postgres";
+  if (process.env.PGHOST && separatePassword()) return "postgres";
+  if (!raw) return "missing";
   if (/^https?:\/\//i.test(raw)) return "http";
   return "invalid";
 }
 
 function databaseUrl() {
-  return databaseUrlKind() === "postgres" ? rawDatabaseUrl().trim() : "";
+  return databaseUrlKind() === "postgres"
+    ? applyConnectionOverrides(rawDatabaseUrl().trim())
+    : "";
 }
 
 export function hasIndexerDatabase() {
@@ -95,7 +139,7 @@ function isConnectError(error) {
 function connectHint(error) {
   const message = safePgMessage(error);
   if (/password authentication failed/i.test(message)) {
-    return "DATABASE_URL reached Postgres but the password is wrong. In Railway → Postgres → Variables copy the current POSTGRES_PASSWORD (or the public TCP URL). Put postgres://postgres:PASSWORD@acela.proxy.rlwy.net:48994/railway on Vercel Preview + Production. URL-encode special characters in the password (@ → %40, # → %23, % → %25). No ?sslmode=require. Then Redeploy. Password is not logged.";
+    return "Postgres rejected the password. On Vercel set POSTGRES_PASSWORD to the Railway Postgres password (plain text, no URL encoding) and keep DATABASE_URL as postgres://postgres@acela.proxy.rlwy.net:48994/railway with no password and no ?sslmode=require. Preview + Production, then Redeploy. Password is not logged.";
   }
   if (/ssl|certificate|self-signed/i.test(message)) {
     return "Postgres TLS failed. DATABASE_URL must not use sslmode=require (Railway proxy cert). Use no query param or sslmode=no-verify. Password is not logged.";
