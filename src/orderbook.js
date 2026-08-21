@@ -1,4 +1,32 @@
 export const ORDERBOOK_PAIRS = ["XDX/XRP", "XDX/RLUSD"];
+export const ORDERBOOK_VISIBLE_LEVELS = 20;
+
+export function combineOrderbookSide(dexRows, ammRows, side = "bid") {
+  const dex = Array.isArray(dexRows) ? dexRows : [];
+  const amm = Array.isArray(ammRows) ? ammRows : [];
+  const rows = [
+    ...dex.map((row) => ({ ...row, source: row.source || "dex" })),
+    ...amm.map((row) => ({ ...row, source: row.source || "amm" })),
+  ].filter((row) => Number.isFinite(Number(row?.price)));
+  const ask = String(side).toLowerCase() === "ask";
+  rows.sort((a, b) => {
+    const delta = Number(a.price) - Number(b.price);
+    return ask ? delta : -delta;
+  });
+  return rows;
+}
+
+export function padOrderbookLevels(rows, count = ORDERBOOK_VISIBLE_LEVELS) {
+  const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
+  if (list.length >= count) return list;
+  const blanks = Array.from({ length: count - list.length }, () => ({
+    price: null,
+    base_size: null,
+    quote_size: null,
+    placeholder: true,
+  }));
+  return list.concat(blanks);
+}
 
 export function normalizeOrderbookPair(value) {
   const raw = String(value || "XDX/XRP")

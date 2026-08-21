@@ -814,18 +814,26 @@ body {
   color: #ff6b6b;
 }
 
-.orderbook-grid {
+.orderbook-board {
+  --orderbook-row-h: 26px;
+  --orderbook-rows: 20;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 0;
+  min-width: 0;
+  background: rgba(8, 8, 14, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .orderbook-side {
   min-width: 0;
-  background: rgba(8, 8, 14, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 12px;
-  padding: 10px;
+  padding: 10px 10px 8px;
+}
+
+.orderbook-side.is-ask {
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .orderbook-side-title {
@@ -834,43 +842,83 @@ body {
   color: var(--dpmf-text-main);
 }
 
+.orderbook-side.is-bid .orderbook-side-title {
+  color: #3dff8a;
+}
+
+.orderbook-side.is-ask .orderbook-side-title {
+  color: #ff6b6b;
+}
+
 .orderbook-tape {
-  max-height: 280px;
-  overflow: auto;
+  height: calc(var(--orderbook-row-h) * var(--orderbook-rows));
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .orderbook-row {
   position: relative;
   display: grid;
-  grid-template-columns: 1.4fr 0.9fr 0.9fr;
-  gap: 6px;
-  padding: 5px 4px;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 8px;
+  height: var(--orderbook-row-h);
+  padding: 0 6px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .orderbook-row.is-head {
+  height: 20px;
   color: var(--dpmf-text-muted);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
+.orderbook-row.is-empty {
+  color: rgba(255, 255, 255, 0.18);
+}
+
 .orderbook-depth {
   position: absolute;
-  inset: 0 auto 0 0;
+  inset: 1px auto 1px 0;
   background: rgba(61, 255, 138, 0.16);
   pointer-events: none;
 }
 
+.orderbook-row.is-bid .orderbook-depth {
+  inset: 1px 0 1px auto;
+}
+
 .orderbook-row.is-ask .orderbook-depth {
+  inset: 1px auto 1px 0;
   background: rgba(255, 107, 107, 0.16);
 }
 
 .orderbook-price,
+.orderbook-amount,
 .orderbook-row > span:not(.orderbook-depth) {
   position: relative;
   z-index: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orderbook-row.is-bid .orderbook-amount,
+.orderbook-row.is-ask .orderbook-price,
+.orderbook-row.is-bid.is-head span:first-child,
+.orderbook-row.is-ask.is-head span:first-child {
+  text-align: left;
+}
+
+.orderbook-row.is-bid .orderbook-price,
+.orderbook-row.is-ask .orderbook-amount,
+.orderbook-row.is-bid.is-head span:last-child,
+.orderbook-row.is-ask.is-head span:last-child {
+  text-align: right;
 }
 
 .orderbook-row.is-bid .orderbook-price {
@@ -884,10 +932,6 @@ body {
 .orderbook-row.is-amm {
   outline: 1px dashed rgba(199, 112, 255, 0.45);
   outline-offset: -1px;
-}
-
-.orderbook-amm {
-  margin-top: 12px;
 }
 
 .orderbook-empty,
@@ -1094,8 +1138,14 @@ body {
     height: 200px;
   }
 
-  .orderbook-grid {
-    grid-template-columns: 1fr;
+  .orderbook-board {
+    --orderbook-row-h: 24px;
+  }
+
+  .orderbook-row {
+    font-size: 11px;
+    gap: 4px;
+    padding: 0 4px;
   }
 
   .orderbook-header {

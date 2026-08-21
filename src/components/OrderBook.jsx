@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { getOrderbooks } from "../api/indexer";
-import { emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
+import {
+  combineOrderbookSide,
+  emptyOrderbook,
+  normalizeOrderbookPair,
+  padOrderbookLevels,
+} from "../orderbook";
 import { formatQuotePerBase, formatToken, formatUsdPrice, formatWhen } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
@@ -12,35 +17,61 @@ function depthWidth(row, maxCumulative) {
   return Math.min(100, (value / max) * 100);
 }
 
-function BookSide({ title, rows, quote, side, locale, t }) {
-  const max = Math.max(0, ...rows.map((row) => Number(row.cumulative_base || 0)));
+function BookSide({ title, rows, side, locale, t }) {
+  const filled = rows.filter((row) => !row.placeholder && Number(row.base_size) > 0);
+  const max = Math.max(0, ...filled.map((row) => Number(row.cumulative_base || row.base_size || 0)));
+  const isAsk = side === "ask";
+
+  const amount = (row) =>
+    row.placeholder || row.base_size == null ? "—" : formatToken(row.base_size, locale, 2);
+  const price = (row) =>
+    row.placeholder || row.price == null ? "—" : formatQuotePerBase(row.price, locale, "");
+
   return (
     <div className={`orderbook-side is-${side}`}>
       <h3 className="orderbook-side-title">{title}</h3>
-      <div className="orderbook-row is-head">
-        <span>{t.price}</span>
-        <span>XDX</span>
-        <span>{quote}</span>
+      <div className={`orderbook-row is-head is-${side}`}>
+        {isAsk ? (
+          <>
+            <span>{t.price}</span>
+            <span>{t.orderAmount}</span>
+          </>
+        ) : (
+          <>
+            <span>{t.orderAmount}</span>
+            <span>{t.price}</span>
+          </>
+        )}
       </div>
-      <div className="orderbook-tape">
+      <div className="orderbook-tape" role="list" aria-label={title}>
         {rows.map((row, index) => (
           <div
-            key={`${side}-${row.level || index}-${row.price}`}
-            className={`orderbook-row is-${side} ${row.source === "amm" ? "is-amm" : ""}`}
+            key={`${side}-${row.level ?? index}-${row.price ?? "empty"}`}
+            className={`orderbook-row is-${side}${row.source === "amm" ? " is-amm" : ""}${
+              row.placeholder ? " is-empty" : ""
+            }`}
+            role="listitem"
           >
-            <span
-              className="orderbook-depth"
-              style={{ width: `${depthWidth(row, max)}%` }}
-              aria-hidden="true"
-            />
-            <span className="orderbook-price">
-              {formatQuotePerBase(row.price, locale, "")}
-            </span>
-            <span>{formatToken(row.base_size, locale, 2)}</span>
-            <span>{formatToken(row.quote_size ?? row.cumulative_quote, locale, 4)}</span>
+            {!row.placeholder ? (
+              <span
+                className="orderbook-depth"
+                style={{ width: `${depthWidth(row, max)}%` }}
+                aria-hidden="true"
+              />
+            ) : null}
+            {isAsk ? (
+              <>
+                <span className="orderbook-price">{price(row)}</span>
+                <span className="orderbook-amount">{amount(row)}</span>
+              </>
+            ) : (
+              <>
+                <span className="orderbook-amount">{amount(row)}</span>
+                <span className="orderbook-price">{price(row)}</span>
+              </>
+            )}
           </div>
         ))}
-        {!rows.length ? <p className="orderbook-empty">{t.emptyOrderbookSide}</p> : null}
       </div>
     </div>
   );
@@ -80,6 +111,18 @@ export default function OrderBook() {
     return books?.books?.[name] || emptyOrderbook(name);
   }, [books, pair]);
 
+  const bidRows = useMemo(() => {
+    const ammLevels = Array.isArray(book.amm?.levels) ? book.amm.levels : [];
+    const ammBids = ammLevels.filter((row) => String(row.side).toLowerCase() === "bid");
+    return padOrderbookLevels(combineOrderbookSide(book.bids, ammBids, "bid"));
+  }, [book]);
+
+  const askRows = useMemo(() => {
+    const ammLevels = Array.isArray(book.amm?.levels) ? book.amm.levels : [];
+    const ammAsks = ammLevels.filter((row) => String(row.side).toLowerCase() === "ask");
+    return padOrderbookLevels(combineOrderbookSide(book.asks, ammAsks, "ask"));
+  }, [book]);
+
   if (!books && !error) {
     return (
       <div className="orderbook">
@@ -93,11 +136,7 @@ export default function OrderBook() {
   }
 
   const quote = book.quote || pair.split("/")[1] || "XRP";
-  const bids = book.bids || [];
-  const asks = book.asks || [];
-  const ammLevels = Array.isArray(book.amm?.levels) ? book.amm.levels : [];
-  const ammBids = ammLevels.filter((row) => String(row.side).toLowerCase() === "bid");
-  const ammAsks = ammLevels.filter((row) => String(row.side).toLowerCase() === "ask");
+  const midUsd = Number(book.mid_usd);
 
   return (
     <div className="orderbook">
@@ -136,57 +175,18 @@ export default function OrderBook() {
         </div>
         <div>
           <dt>{t.midUsdHint}</dt>
-          <dd>{formatUsdPrice(book.mid_usd, locale)}</dd>
+          <dd>{midUsd > 0 ? formatUsdPrice(midUsd, locale) : "—"}</dd>
         </div>
       </dl>
 
+      <div className="orderbook-board">
+        <BookSide title={t.bids} rows={bidRows} side="bid" locale={locale} t={t} />
+        <BookSide title={t.asks} rows={askRows} side="ask" locale={locale} t={t} />
+      </div>
+
       {book.catching_up && !book.present ? (
-        <p className="empty-message">{t.emptyOrderbook}</p>
-      ) : (
-        <>
-          <div className="orderbook-grid">
-            <BookSide
-              title={t.bids}
-              rows={bids}
-              quote={quote}
-              side="bid"
-              locale={locale}
-              t={t}
-            />
-            <BookSide
-              title={t.asks}
-              rows={asks}
-              quote={quote}
-              side="ask"
-              locale={locale}
-              t={t}
-            />
-          </div>
-          {ammLevels.length ? (
-            <div className="orderbook-amm">
-              <h3 className="orderbook-side-title">{t.ammDepth}</h3>
-              <div className="orderbook-grid">
-                <BookSide
-                  title={`${t.amm} ${t.bids}`}
-                  rows={ammBids}
-                  quote={quote}
-                  side="bid"
-                  locale={locale}
-                  t={t}
-                />
-                <BookSide
-                  title={`${t.amm} ${t.asks}`}
-                  rows={ammAsks}
-                  quote={quote}
-                  side="ask"
-                  locale={locale}
-                  t={t}
-                />
-              </div>
-            </div>
-          ) : null}
-        </>
-      )}
+        <p className="orderbook-asof">{t.emptyOrderbook}</p>
+      ) : null}
 
       {book.as_of ? (
         <p className="orderbook-asof">
