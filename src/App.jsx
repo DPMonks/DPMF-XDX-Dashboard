@@ -13,6 +13,7 @@ import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
 import { handshake } from "./api";
 import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
+import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 
 const DexChart = lazy(() => import("./components/DexChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
@@ -193,6 +194,7 @@ export default function App() {
               error={errors.holders}
               valueKey="balance"
               unit="XDX"
+              shareTotal={XDX_TOTAL_SUPPLY}
               emptyLabel={t.emptyHolders}
               searchPlaceholder={t.searchHolders}
               freshness={holderFreshness}

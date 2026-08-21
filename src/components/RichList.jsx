@@ -22,6 +22,7 @@ export default function RichList({
   unit = "XDX",
   searchPlaceholder,
   freshness = null,
+  shareTotal = null,
 }) {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
@@ -46,7 +47,14 @@ export default function RichList({
     });
   }, [rows, query, pairFilter, showPair]);
 
-  const total = filtered.reduce((sum, row) => sum + Number(row[valueKey] || 0), 0);
+  const listedTotal = filtered.reduce(
+    (sum, row) => sum + Number(row[valueKey] || 0),
+    0
+  );
+  const total =
+    Number.isFinite(Number(shareTotal)) && Number(shareTotal) > 0
+      ? Number(shareTotal)
+      : listedTotal;
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageRows = filtered.slice(
