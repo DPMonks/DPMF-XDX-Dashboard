@@ -1,30 +1,14 @@
-const DEFAULT_REMOTE = "https://dpmf-xdx-indexer-production.up.railway.app";
-
-const DEFAULT_ENDPOINTS = {
-  overview: "/overview",
-  amm: "/amm",
-  pools: "/pools",
-  topHolders: "/top-holders",
-  topLp: "/top-lp",
-  holdersCount: "/holders/count",
-  lpHoldersCount: "/lp-holders/count",
-  tvlHistory: "/charts/tvl",
-  holdersHistory: "/charts/holders",
-  lpHoldersHistory: "/charts/lp-holders",
-  balances: "/wallet/balances/:address",
-  networth: "/wallet/networth/:address",
-  prices: "/prices",
-  change24h: "/prices/change24h",
-  sparkline: "/sparkline/:asset",
-};
-
-const HANDSHAKE_PATHS = [
-  "/api/cluster/v1/handshake",
-  "/api/v1/handshake",
-  "/api/handshake",
-  "/cluster/v1/handshake",
-  "/handshake",
-];
+import {
+  CATALOG_PATHS,
+  CLUSTER_HEADERS,
+  DEFAULT_ENDPOINTS,
+  DEFAULT_INDEXER_ORIGIN,
+  ENDPOINT_ALIASES,
+  HANDSHAKE_BODY,
+  PROTOCOL,
+  SAME_ORIGIN_HANDSHAKE_PATHS,
+  VERSION,
+} from "./handshake/contract";
 
 function resolveRemoteOrigin() {
   const candidates = [
@@ -36,7 +20,7 @@ function resolveRemoteOrigin() {
   const remote = candidates.find(
     (url) => !/localhost|127\.0\.0\.1/i.test(String(url))
   );
-  return (remote || DEFAULT_REMOTE).replace(/\/$/, "");
+  return (remote || DEFAULT_INDEXER_ORIGIN).replace(/\/$/, "");
 }
 
 function resolveRequestOrigin() {
@@ -54,12 +38,17 @@ const API = REQUEST_ORIGIN
     : `${REQUEST_ORIGIN}/api`
   : "/api";
 
+const inflight = new Map();
+const responseCache = new Map();
+const CACHE_MS = 15_000;
+let requestTail = Promise.resolve();
+
 let handshakePromise = null;
 let handshakeState = {
   ok: false,
-  protocol: null,
-  version: null,
-  path: null,
+  protocol: PROTOCOL,
+  version: VERSION,
+  path: "contract",
   error: null,
   endpoints: { ...DEFAULT_ENDPOINTS },
   snapshot: {},
@@ -92,25 +81,8 @@ function normalizeEndpoint(value) {
 function mergeEndpoints(raw) {
   const source = asObject(raw);
   const next = { ...DEFAULT_ENDPOINTS };
-  const alias = {
-    overview: ["overview", "publicOverview"],
-    amm: ["amm", "publicAmm"],
-    pools: ["pools"],
-    topHolders: ["topHolders", "top_holders", "holders"],
-    topLp: ["topLp", "top_lp", "lpHolders", "lp_holders"],
-    holdersCount: ["holdersCount", "holders_count"],
-    lpHoldersCount: ["lpHoldersCount", "lp_holders_count"],
-    tvlHistory: ["tvlHistory", "chartsTvl", "tvl"],
-    holdersHistory: ["holdersHistory", "chartsHolders"],
-    lpHoldersHistory: ["lpHoldersHistory", "chartsLpHolders"],
-    balances: ["balances", "walletBalances"],
-    networth: ["networth", "walletNetworth"],
-    prices: ["prices"],
-    change24h: ["change24h", "priceChange"],
-    sparkline: ["sparkline"],
-  };
 
-  for (const [key, names] of Object.entries(alias)) {
+  for (const [key, names] of Object.entries(ENDPOINT_ALIASES)) {
     for (const name of names) {
       const normalized = normalizeEndpoint(source[name]);
       if (normalized) {
@@ -162,12 +134,43 @@ function looksLikeHandshake(payload) {
       body.snapshot ||
       body.ok === true ||
       body.service ||
-      body.tables
+      body.tables ||
+      body.overview ||
+      body.pools
   );
 }
 
-async function fetchJson(url) {
-  const res = await fetch(url, { headers: { accept: "application/json" } });
+function requestUrl(path) {
+  if (path.startsWith("http")) return path;
+  if (path.startsWith("/api/") || path === "/api" || path === "/api/") {
+    return `${REQUEST_ORIGIN}${path}`;
+  }
+  return `${API}${path}`;
+}
+
+function cacheGet(url) {
+  const hit = responseCache.get(url);
+  if (!hit) return null;
+  if (Date.now() - hit.at > CACHE_MS) {
+    responseCache.delete(url);
+    return null;
+  }
+  return hit.data;
+}
+
+function cacheSet(url, data) {
+  responseCache.set(url, { at: Date.now(), data });
+}
+
+async function fetchJson(url, { method = "GET", body } = {}) {
+  const res = await fetch(url, {
+    method,
+    headers: {
+      ...CLUSTER_HEADERS,
+      ...(body ? { "content-type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const error = new Error(
@@ -179,23 +182,60 @@ async function fetchJson(url) {
   return data;
 }
 
-async function getJsonOnce(path) {
-  const url = path.startsWith("/api/") || path.startsWith("http")
-    ? `${REQUEST_ORIGIN}${path}`
-    : `${API}${path}`;
-  return fetchJson(url);
+async function queued(task) {
+  const run = requestTail.then(task, task);
+  requestTail = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
 }
 
-async function getJson(path) {
-  try {
-    return await getJsonOnce(path);
-  } catch (error) {
-    if (error.status === 429) {
-      await sleep(1500);
-      return getJsonOnce(path);
-    }
-    throw error;
+async function getJsonOnce(path, options) {
+  return fetchJson(requestUrl(path), options);
+}
+
+async function getJson(path, options = {}) {
+  const {
+    method = "GET",
+    body,
+    cache = method === "GET",
+    queue: useQueue = true,
+    retries = 4,
+  } = options;
+  const url = requestUrl(path);
+  const cacheKey = `${method} ${url}`;
+
+  if (cache) {
+    const cached = cacheGet(cacheKey);
+    if (cached) return cached;
+    const pending = inflight.get(cacheKey);
+    if (pending) return pending;
   }
+
+  const run = async () => {
+    let lastError;
+    for (let attempt = 0; attempt < retries; attempt += 1) {
+      try {
+        const data = await getJsonOnce(path, { method, body });
+        if (cache) cacheSet(cacheKey, data);
+        return data;
+      } catch (error) {
+        lastError = error;
+        if (error.status !== 429 || attempt === retries - 1) break;
+        await sleep(800 * (attempt + 1));
+      }
+    }
+    throw lastError;
+  };
+
+  const task = useQueue ? queued(run) : run();
+
+  if (cache) {
+    inflight.set(cacheKey, task);
+    task.finally(() => inflight.delete(cacheKey));
+  }
+  return task;
 }
 
 function withParams(template, params = {}) {
@@ -206,53 +246,85 @@ function withParams(template, params = {}) {
   return path;
 }
 
+function acceptHandshake(raw, path) {
+  if (!looksLikeHandshake(raw)) return false;
+  handshakeState = {
+    ok: true,
+    protocol: raw.protocol || raw.cluster || PROTOCOL,
+    version: raw.version || raw.v || VERSION,
+    path,
+    error: null,
+    endpoints: mergeEndpoints(raw.endpoints || raw.routes),
+    snapshot: extractSnapshot(raw),
+    raw,
+  };
+  return true;
+}
+
+const handshakeGet = (path) =>
+  getJson(path, { cache: false, queue: false, retries: 1 });
+
 async function probeHandshake() {
   let lastError = null;
-  for (const path of HANDSHAKE_PATHS) {
+  const primary = SAME_ORIGIN_HANDSHAKE_PATHS[0];
+
+  try {
+    const raw = await handshakeGet(primary);
+    if (acceptHandshake(raw, primary)) return handshakeState;
+  } catch (error) {
+    lastError = error;
+  }
+
+  try {
+    const raw = await getJson(primary, {
+      method: "POST",
+      body: HANDSHAKE_BODY,
+      cache: false,
+      queue: false,
+      retries: 1,
+    });
+    if (acceptHandshake(raw, `POST ${primary}`)) return handshakeState;
+  } catch (error) {
+    lastError = error;
+  }
+
+  for (const path of SAME_ORIGIN_HANDSHAKE_PATHS.slice(1, 3)) {
     try {
-      const raw = await getJson(path);
-      if (!looksLikeHandshake(raw) && !raw.overview && !raw.pools) {
-        continue;
-      }
-      handshakeState = {
-        ok: true,
-        protocol: raw.protocol || raw.cluster || "clusterv1",
-        version: raw.version || raw.v || 1,
-        path,
-        error: null,
-        endpoints: mergeEndpoints(raw.endpoints || raw.routes),
-        snapshot: extractSnapshot(raw),
-        raw,
-      };
-      return handshakeState;
+      const raw = await handshakeGet(path);
+      if (acceptHandshake(raw, path)) return handshakeState;
     } catch (error) {
       lastError = error;
     }
   }
 
-  try {
-    const catalog = await getJson("/");
-    if (catalog?.endpoints || catalog?.status === "online") {
-      handshakeState = {
-        ok: true,
-        protocol: "catalog",
-        version: catalog.version || 1,
-        path: "/api/",
-        error: null,
-        endpoints: mergeEndpoints(catalog.endpoints),
-        snapshot: extractSnapshot(catalog),
-        raw: catalog,
-      };
-      return handshakeState;
+  for (const path of CATALOG_PATHS.slice(0, 1)) {
+    try {
+      const catalog = await handshakeGet(path);
+      if (catalog?.endpoints || catalog?.status === "online" || looksLikeHandshake(catalog)) {
+        acceptHandshake(
+          {
+            protocol: catalog.protocol || "catalog",
+            version: catalog.version || VERSION,
+            endpoints: catalog.endpoints,
+            ...catalog,
+          },
+          path
+        );
+        return handshakeState;
+      }
+    } catch (error) {
+      lastError = error;
     }
-  } catch (error) {
-    lastError = error;
   }
 
   handshakeState = {
     ...handshakeState,
     ok: false,
-    error: lastError?.message || "Handshake failed",
+    protocol: PROTOCOL,
+    version: VERSION,
+    path: "contract",
+    error: lastError?.message || null,
+    endpoints: { ...DEFAULT_ENDPOINTS },
   };
   return handshakeState;
 }
@@ -285,12 +357,12 @@ export const api = {
     const body = await getJson(endpoint("pools"));
     return body.pools || body.data || body.rows || body;
   },
-  topHolders: (limit = 200, offset = 0) => {
+  topHolders: (limit = 50, offset = 0) => {
     const path = endpoint("topHolders");
     const join = path.includes("?") ? "&" : "?";
     return getJson(`${path}${join}limit=${limit}&offset=${offset}`);
   },
-  topLp: (limit = 50, offset = 0) => {
+  topLp: (limit = 25, offset = 0) => {
     const path = endpoint("topLp");
     const join = path.includes("?") ? "&" : "?";
     return getJson(`${path}${join}limit=${limit}&offset=${offset}`);

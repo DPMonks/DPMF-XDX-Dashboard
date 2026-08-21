@@ -41,7 +41,7 @@ export default function TokenDetails() {
       }
     }
 
-    const timeout = setTimeout(load, 800);
+    const timeout = setTimeout(load, 200);
     const id = setInterval(load, 60000);
     return () => {
       cancelled = true;

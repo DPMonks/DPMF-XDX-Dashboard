@@ -35,15 +35,16 @@ export default function App() {
 
     async function load() {
       const nextErrors = {};
-      const hs = await handshake();
-      if (!cancelled) {
+      const hsPromise = handshake();
+      hsPromise.then((hs) => {
+        if (cancelled) return;
         setLink({
           status: hs.ok ? "ok" : "fallback",
           protocol: hs.protocol,
           path: hs.path,
           error: hs.error,
         });
-      }
+      });
 
       try {
         const nextHolders = await getTopHolders((rows) => {
@@ -82,6 +83,7 @@ export default function App() {
       if (!cancelled) {
         setErrors(nextErrors);
         setLoading(false);
+        const hs = await hsPromise.catch(() => ({ ok: false }));
         if (nextErrors.holders && nextErrors.lp && nextErrors.amm && !hs.ok) {
           setLink({
             status: "error",

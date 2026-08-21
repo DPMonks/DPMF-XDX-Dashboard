@@ -1,5 +1,11 @@
-export const DEFAULT_INDEXER_ORIGIN =
-  "https://dpmf-xdx-indexer-production.up.railway.app";
+import {
+  CLUSTER_HEADERS,
+  DEFAULT_INDEXER_ORIGIN,
+  HANDSHAKE_BODY,
+  INDEXER_HANDSHAKE_PATHS,
+} from "../src/handshake/contract.js";
+
+export { DEFAULT_INDEXER_ORIGIN };
 
 export function indexerOrigin(env = process.env) {
   const candidates = [
@@ -24,26 +30,47 @@ export function joinIndexerUrl(origin, path, search = "") {
   return `${prefix}${suffix}${search || ""}`;
 }
 
-export async function fetchIndexer(url, { method = "GET" } = {}) {
+function isHandshakeSuffix(suffix) {
+  return (
+    suffix === "handshake" ||
+    suffix === "cluster/v1/handshake" ||
+    suffix === "cluster/handshake" ||
+    suffix === "v1/handshake" ||
+    suffix === "public/handshake"
+  );
+}
+
+export function indexerPathsFor(suffix) {
+  if (suffix === "health") return ["/health", "/api/health"];
+  if (isHandshakeSuffix(suffix)) return INDEXER_HANDSHAKE_PATHS;
+  return [`/api/${suffix}`];
+}
+
+export async function fetchIndexer(url, { method = "GET", body } = {}) {
   let lastError;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  const payload =
+    body == null || typeof body === "string" ? body : JSON.stringify(body);
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
       const response = await fetch(url, {
         method,
         headers: {
-          accept: "application/json",
-          "user-agent": "DPMF-XDX-Dashboard/1.0",
+          ...CLUSTER_HEADERS,
+          "user-agent": "DPMF-XDX-Dashboard/1.1",
+          ...(payload ? { "content-type": "application/json" } : {}),
         },
+        body: payload,
       });
-      if (response.status === 429 && attempt < 3) {
-        await sleep(700 * (attempt + 1));
+      if (response.status === 429 && attempt < 4) {
+        await sleep(900 * 2 ** attempt);
         continue;
       }
-      const body = await response.text();
+      const text = await response.text();
       return {
         status: response.status,
         contentType: response.headers.get("content-type") || "application/json",
-        body,
+        body: text,
       };
     } catch (error) {
       lastError = error;
@@ -53,14 +80,21 @@ export async function fetchIndexer(url, { method = "GET" } = {}) {
   throw lastError || new Error("Indexer proxy failed");
 }
 
-export async function fetchIndexerFirst(paths, search = "") {
+export async function fetchIndexerFirst(paths, { method = "GET", body, search = "" } = {}) {
   const origin = indexerOrigin();
   let last;
   for (const path of paths) {
-    last = await fetchIndexer(joinIndexerUrl(origin, path, search));
+    last = await fetchIndexer(joinIndexerUrl(origin, path, search), { method, body });
     if (last.status < 500 && last.status !== 404 && last.status !== 429) {
       return last;
     }
   }
   return last;
+}
+
+export function handshakePostBody(incoming) {
+  if (incoming && typeof incoming === "object" && !Array.isArray(incoming)) {
+    return { ...HANDSHAKE_BODY, ...incoming };
+  }
+  return HANDSHAKE_BODY;
 }

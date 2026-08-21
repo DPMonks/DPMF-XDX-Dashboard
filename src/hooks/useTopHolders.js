@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { getTopHolders } from "../api/indexer";
 
 export default function useTopHolders() {
   const [data, setData] = useState([]);
@@ -11,20 +11,15 @@ export default function useTopHolders() {
 
     async function load() {
       try {
-        const pageSize = 200;
-        const all = [];
-        let offset = 0;
-        while (offset < 5000) {
-          const page = await api.topHolders(pageSize, offset);
-          const rows = Array.isArray(page) ? page : [];
-          if (!rows.length) break;
-          all.push(...rows);
-          if (rows.length < pageSize) break;
-          offset += rows.length;
-        }
+        const rows = await getTopHolders((page) => {
+          if (!cancelled) {
+            setData(page);
+            setCount(page.length);
+          }
+        });
         if (!cancelled) {
-          setData(all);
-          setCount(all.length);
+          setData(rows);
+          setCount(rows.length);
           setError(null);
         }
       } catch (err) {

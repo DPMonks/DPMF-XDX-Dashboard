@@ -1,11 +1,14 @@
-import { api, handshake, INDEXER_ORIGIN } from "../api";
+import { api, getHandshakeState, handshake, INDEXER_ORIGIN } from "../api";
 import { pairFromRow } from "../constants/ledger";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
 
-const PAGE_SIZE = 200;
-const MAX_ROWS = 5000;
+const FIRST_HOLDERS = 50;
+const FIRST_LP = 25;
+const PAGE_SIZE = 100;
+const MAX_ROWS = 1000;
+const SESSION_TTL_MS = 5 * 60_000;
 
 function asArray(value) {
   if (Array.isArray(value)) return value;
@@ -38,25 +41,48 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function paginate(fetchPage, pageSize = PAGE_SIZE, onPage) {
+function sessionRead(key) {
+  try {
+    const raw = sessionStorage.getItem(`dpmf:${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.at || Date.now() - parsed.at > SESSION_TTL_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function sessionWrite(key, data) {
+  try {
+    sessionStorage.setItem(`dpmf:${key}`, JSON.stringify({ at: Date.now(), data }));
+  } catch {
+    // private mode / quota
+  }
+}
+
+async function paginate(fetchPage, pageSize = PAGE_SIZE, onPage, maxRows = MAX_ROWS) {
   const all = [];
   let offset = 0;
 
-  while (offset < MAX_ROWS) {
+  while (offset < maxRows) {
     const page = asArray(await fetchPage(pageSize, offset));
     if (!page.length) break;
     all.push(...page);
     onPage?.(all);
     if (page.length < pageSize) break;
     offset += page.length;
-    await sleep(400);
+    await sleep(600);
   }
 
   return all;
 }
 
 async function snapshotField(name) {
-  const state = await handshake();
+  const state = await Promise.race([
+    handshake(),
+    sleep(1200).then(() => getHandshakeState()),
+  ]);
   return state.snapshot?.[name];
 }
 
@@ -147,15 +173,33 @@ export async function getTopHolders(onPage) {
   if (snap.length) {
     const mapped = finishHolders(snap);
     onPage?.(mapped);
+    sessionWrite("holders", mapped);
     return mapped;
   }
 
-  const rows = await paginate(
-    (limit, offset) => api.topHolders(limit, offset),
+  const cached = sessionRead("holders");
+  if (cached?.length) onPage?.(cached);
+
+  const first = asArray(await api.topHolders(FIRST_HOLDERS, 0));
+  const firstMapped = finishHolders(first);
+  if (firstMapped.length) {
+    onPage?.(firstMapped);
+    sessionWrite("holders", firstMapped);
+  }
+
+  if (first.length < FIRST_HOLDERS) return firstMapped;
+
+  const rest = await paginate(
+    (limit, offset) => api.topHolders(limit, FIRST_HOLDERS + offset),
     PAGE_SIZE,
-    (all) => onPage?.(finishHolders(all))
+    (all) => {
+      const mapped = finishHolders([...first, ...all]);
+      onPage?.(mapped);
+      sessionWrite("holders", mapped);
+    },
+    MAX_ROWS - FIRST_HOLDERS
   );
-  return finishHolders(rows);
+  return finishHolders([...first, ...rest]);
 }
 
 export async function getTopLp(onPage) {
@@ -163,19 +207,40 @@ export async function getTopLp(onPage) {
   if (snap.length) {
     const mapped = finishLp(snap);
     onPage?.(mapped);
+    sessionWrite("lpHolders", mapped);
     return mapped;
   }
 
-  const rows = await paginate(
-    (limit, offset) => api.topLp(limit, offset),
+  const cached = sessionRead("lpHolders");
+  if (cached?.length) onPage?.(cached);
+
+  const first = asArray(await api.topLp(FIRST_LP, 0));
+  const firstMapped = finishLp(first);
+  if (firstMapped.length) {
+    onPage?.(firstMapped);
+    sessionWrite("lpHolders", firstMapped);
+  }
+
+  if (first.length < FIRST_LP) return firstMapped;
+
+  const rest = await paginate(
+    (limit, offset) => api.topLp(limit, FIRST_LP + offset),
     50,
-    (all) => onPage?.(finishLp(all))
+    (all) => {
+      const mapped = finishLp([...first, ...all]);
+      onPage?.(mapped);
+      sessionWrite("lpHolders", mapped);
+    },
+    MAX_ROWS - FIRST_LP
   );
-  return finishLp(rows);
+  return finishLp([...first, ...rest]);
 }
 
 export async function getTokenDetails() {
-  const state = await handshake();
+  const state = await Promise.race([
+    handshake(),
+    sleep(1200).then(() => getHandshakeState()),
+  ]);
   const overview =
     state.snapshot?.overview || (await api.overview().catch(() => ({})));
   const prices =
@@ -216,7 +281,10 @@ export async function getTokenDetails() {
 }
 
 export async function getChartHistory() {
-  const state = await handshake();
+  const state = await Promise.race([
+    handshake(),
+    sleep(1200).then(() => getHandshakeState()),
+  ]);
   const charts = state.snapshot?.charts || {};
   const tvl = asArray(charts.tvl || (await api.tvlHistory().catch(() => [])));
   const holders = asArray(

@@ -64,7 +64,7 @@ export default function ActivityChart() {
       }
     }
 
-    const timeout = setTimeout(() => load(), 1200);
+    const timeout = setTimeout(() => load(), 400);
     const id = setInterval(() => load(false), 60000);
     return () => {
       cancelled = true;
