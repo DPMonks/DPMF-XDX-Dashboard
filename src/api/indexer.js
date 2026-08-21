@@ -409,6 +409,7 @@ function mergeChartRow(target, row) {
       current.lpHolders,
     trustlines:
       numberOrNull(row.trustlines ?? row.trustline_count) ?? current.trustlines,
+    traders: numberOrNull(row.traders ?? row.trader_count) ?? current.traders,
     trades: numberOrNull(row.trades ?? row.trade_count) ?? current.trades,
     price: numberOrNull(row.price ?? row.xdxUsd ?? row.xdx_usd) ?? current.price,
     volume:
@@ -453,12 +454,12 @@ export async function getChartHistory() {
   const merged = new Map();
   const errors = [];
 
-  const tvl = await firstChartSeries([
-    () => charts.tvl,
-    () => api.tvlHistory(),
+  const activity = await firstChartSeries([
+    () => charts.activity,
+    () => api.activityHistory(),
   ]);
-  if (tvl.error) errors.push(tvl.error);
-  for (const row of tvl.rows) mergeChartRow(merged, row);
+  if (activity.error) errors.push(activity.error);
+  for (const row of activity.rows) mergeChartRow(merged, row);
 
   const holders = await firstChartSeries([
     () => charts.holders,
@@ -467,19 +468,19 @@ export async function getChartHistory() {
   if (holders.error) errors.push(holders.error);
   for (const row of holders.rows) mergeChartRow(merged, row);
 
-  const lp = await firstChartSeries([
-    () => charts.lpHolders || charts.lp_holders,
-    () => api.lpHoldersHistory(),
-  ]);
-  if (lp.error) errors.push(lp.error);
-  for (const row of lp.rows) mergeChartRow(merged, row);
-
   const trustlines = await firstChartSeries([
     () => charts.trustlines,
     () => api.trustlinesHistory(),
   ]);
   if (trustlines.error) errors.push(trustlines.error);
   for (const row of trustlines.rows) mergeChartRow(merged, row);
+
+  const traders = await firstChartSeries([
+    () => charts.traders,
+    () => api.tradersHistory(),
+  ]);
+  if (traders.error) errors.push(traders.error);
+  for (const row of traders.rows) mergeChartRow(merged, row);
 
   if (!merged.size) {
     for (const asset of ["XDX", "XRP", "LP"]) {
@@ -500,7 +501,6 @@ export async function getChartHistory() {
       tvl: live.tvl_usd ?? live.tvl,
       holders: live.holders,
       trustlines: live.trustlines,
-      lpHolders: live.lp_holder_count,
       price: live.xdxUsd ?? live.price,
       volume: live.volume24h,
       marketcap: live.xrplMarketCap,
@@ -516,12 +516,19 @@ export async function getChartHistory() {
   return rows;
 }
 
-export async function getTradeHistory() {
-  const rows = asArray(await api.trades().catch(() => []));
+export async function getXdxFlows() {
+  let payload;
+  try {
+    payload = await api.xdxFlows();
+  } catch {
+    payload = await api.trades().catch(() => []);
+  }
+  const rows = asArray(payload);
   return rows
     .map((row) => ({
       timestamp: rowTimestamp(row),
-      pool: row.pool || row.pool_name || "XDX/XRP",
+      account: row.account || row.address || row.wallet || null,
+      pool: row.pool || row.pool_name || null,
       side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
       xdx: numberOrNull(row.xdx ?? row.amount) ?? 0,
       quote: numberOrNull(row.quote) ?? 0,
@@ -529,6 +536,10 @@ export async function getTradeHistory() {
     }))
     .filter((row) => row.timestamp)
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+}
+
+export async function getTradeHistory() {
+  return getXdxFlows();
 }
 
 function amountFromBalances(payload, names) {

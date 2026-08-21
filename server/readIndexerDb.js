@@ -1,5 +1,10 @@
 import pg from "pg";
-import { XDX_ISSUER, XDX_TOTAL_SUPPLY, XDX_XRP_AMM } from "../src/constants/ledger.js";
+import {
+  XDX_ISSUER,
+  XDX_RLUSD_AMM,
+  XDX_TOTAL_SUPPLY,
+  XDX_XRP_AMM,
+} from "../src/constants/ledger.js";
 import { recordUsdPrice } from "../src/utils/format.js";
 
 let pool = null;
@@ -25,7 +30,10 @@ const CATALOG = {
     holdersHistory: "/api/charts/holders",
     lpHoldersHistory: "/api/charts/lp-holders",
     trustlinesHistory: "/api/charts/trustlines",
+    activityHistory: "/api/charts/activity",
+    tradersHistory: "/api/charts/traders",
     trades: "/api/trades",
+    xdxFlows: "/api/xdx-flows",
     walletBalances: "/api/wallet/balances/:address",
     prices: "/api/prices",
     priceChange: "/api/prices/change24h",
@@ -387,6 +395,114 @@ async function tokenHoldersPage(db, limit, offset) {
     ...page,
     rows: page.holders,
   };
+}
+
+const NON_TRADER_ACCOUNTS = [XDX_ISSUER, XDX_XRP_AMM, XDX_RLUSD_AMM];
+
+async function nativeSnapshotSeries(db) {
+  const scans = await tryQuery(
+    db,
+    `SELECT timestamp,
+            COUNT(*) FILTER (WHERE ABS(balance::numeric) > 0) AS holders,
+            COUNT(*) AS trustlines
+     FROM token_holders_history
+     GROUP BY timestamp
+     ORDER BY timestamp`
+  );
+  const scanMax = Math.max(0, ...scans.rows.map((row) => Number(row.holders || 0)));
+  if (scans.rows.length && scanMax >= 10) return scans.rows;
+
+  const daily = await tryQuery(
+    db,
+    `SELECT day AS timestamp, holder_count AS holders, NULL::numeric AS trustlines
+     FROM holders_history
+     ORDER BY day`
+  );
+  return daily.rows;
+}
+
+async function nativeTraderSeries(db) {
+  const hourly = await tryQuery(
+    db,
+    `WITH ordered AS (
+       SELECT account, timestamp, ABS(balance::numeric) AS balance,
+              LAG(ABS(balance::numeric)) OVER (PARTITION BY account ORDER BY timestamp) AS prev
+       FROM token_holders_history
+       WHERE account <> ALL($1::text[])
+     )
+     SELECT date_trunc('hour', timestamp) AS timestamp,
+            COUNT(DISTINCT account) FILTER (WHERE prev IS NOT NULL AND balance <> prev) AS traders,
+            COUNT(*) FILTER (WHERE prev IS NOT NULL AND balance > prev) AS buys,
+            COUNT(*) FILTER (WHERE prev IS NOT NULL AND balance < prev) AS sells,
+            COALESCE(SUM(ABS(balance - prev)) FILTER (WHERE prev IS NOT NULL AND balance <> prev), 0) AS volume
+     FROM ordered
+     GROUP BY 1
+     ORDER BY 1`,
+    [NON_TRADER_ACCOUNTS]
+  );
+  return hourly.rows;
+}
+
+async function nativeActivitySeries(db) {
+  const [snaps, traders, holders, trustlines] = await Promise.all([
+    nativeSnapshotSeries(db),
+    nativeTraderSeries(db),
+    tokenHolderCount(db),
+    tokenTrustlineCount(db),
+  ]);
+  const merged = new Map();
+  for (const row of snaps) {
+    if (!row.timestamp) continue;
+    const timestamp = new Date(row.timestamp).toISOString();
+    merged.set(timestamp, {
+      timestamp,
+      holders: Number(row.holders || 0) || null,
+      trustlines: Number(row.trustlines || 0) || null,
+    });
+  }
+  for (const row of traders) {
+    if (!row.timestamp) continue;
+    const timestamp = new Date(row.timestamp).toISOString();
+    const current = merged.get(timestamp) || { timestamp };
+    current.traders = Number(row.traders || 0);
+    current.buys = Number(row.buys || 0);
+    current.sells = Number(row.sells || 0);
+    current.volume = Number(row.volume || 0);
+    merged.set(timestamp, current);
+  }
+  merged.set(new Date().toISOString(), {
+    timestamp: new Date().toISOString(),
+    holders,
+    trustlines,
+  });
+  return [...merged.values()].sort(
+    (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+  );
+}
+
+async function nativeXdxFlows(db) {
+  const result = await tryQuery(
+    db,
+    `WITH ordered AS (
+       SELECT account, timestamp, ABS(balance::numeric) AS balance,
+              LAG(ABS(balance::numeric)) OVER (PARTITION BY account ORDER BY timestamp) AS prev
+       FROM token_holders_history
+       WHERE account <> ALL($1::text[])
+     )
+     SELECT timestamp, account, balance, (balance - prev) AS delta
+     FROM ordered
+     WHERE prev IS NOT NULL AND ABS(balance - prev) > 1e-8
+     ORDER BY timestamp DESC
+     LIMIT 500`,
+    [NON_TRADER_ACCOUNTS]
+  );
+  return result.rows.map((row) => ({
+    timestamp: row.timestamp,
+    account: row.account,
+    side: Number(row.delta) > 0 ? "buy" : "sell",
+    xdx: Math.abs(Number(row.delta || 0)),
+    balance: Number(row.balance || 0),
+  }));
 }
 
 async function tokenBalanceFor(db, address) {
@@ -887,7 +1003,21 @@ export async function readIndexerDb(suffix, search = "") {
       return ok(count ? [{ timestamp: new Date().toISOString(), trustline_count: count }] : []);
     }
 
+    if (suffix === "charts/activity") {
+      return ok(await nativeActivitySeries(db));
+    }
+
+    if (suffix === "charts/traders") {
+      return ok(await nativeTraderSeries(db));
+    }
+
+    if (suffix === "xdx-flows") {
+      return ok(await nativeXdxFlows(db));
+    }
+
     if (suffix === "charts/trades" || suffix === "trades") {
+      const flows = await nativeXdxFlows(db);
+      if (flows.length) return ok(flows);
       const trades = await readAmmTrades(db);
       if (suffix === "trades") return ok(trades);
       return ok(

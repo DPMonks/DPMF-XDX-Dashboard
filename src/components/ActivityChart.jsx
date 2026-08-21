@@ -7,12 +7,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { getChartHistory, getTradeHistory } from "../api/indexer";
-import { formatDay, formatNumber, formatUsdPrice, formatWhen } from "../utils/format";
+import { getChartHistory, getXdxFlows } from "../api/indexer";
+import { formatDay, formatNumber, formatWhen, shortAddress } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
-const METRICS = ["tvl", "holders", "trustlines", "lpHolders", "trades", "price"];
+const METRICS = ["holders", "trustlines", "traders"];
 const RANGES = ["1H", "4H", "12H", "24H", "1W", "1M", "3M", "1Y", "Max"];
 const RANGE_MS = {
   "1H": 3600000,
@@ -93,7 +93,7 @@ function isIntraday(range) {
 }
 
 function metricValue(row, metric) {
-  if (metric === "trades") return row.volume ?? row.trades;
+  if (metric === "traders") return row.traders ?? row.trades;
   return row[metric];
 }
 
@@ -145,7 +145,7 @@ export default function ActivityChart() {
   const { t, locale } = useI18n();
   const [data, setData] = useState([]);
   const [trades, setTrades] = useState([]);
-  const [metric, setMetric] = useState("tvl");
+  const [metric, setMetric] = useState("holders");
   const [range, setRange] = useState("24H");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -158,7 +158,7 @@ export default function ActivityChart() {
       try {
         const [rows, tradeRows] = await Promise.all([
           getChartHistory(),
-          getTradeHistory().catch(() => []),
+          getXdxFlows().catch(() => []),
         ]);
         if (!cancelled) {
           setData(rows);
@@ -224,19 +224,7 @@ export default function ActivityChart() {
     });
   }, [trades, range, now]);
 
-  const metrics = useMemo(() => {
-    const available = METRICS.filter(
-      (item) =>
-        item === metric ||
-        item === "tvl" ||
-        item === "holders" ||
-        item === "trustlines" ||
-        item === "lpHolders" ||
-        (item === "trades" && (trades.length || data.some((row) => row.trades != null || row.volume != null))) ||
-        (item === "price" && data.some((row) => row.price != null))
-    );
-    return available;
-  }, [data, metric, trades.length]);
+  const metrics = METRICS;
 
   return (
     <div className="activity-chart-container">
@@ -305,13 +293,9 @@ export default function ActivityChart() {
                   tick={{ fill: "#7f8ba8", fontSize: 11 }}
                   width={64}
                   domain={yDomain(yValues)}
-                  allowDecimals={metric === "price" || metric === "tvl" || metric === "trades"}
+                  allowDecimals={false}
                   tickFormatter={(value) =>
-                    metric === "price"
-                      ? formatUsdPrice(value, locale)
-                      : formatNumber(value, locale, {
-                          maximumFractionDigits: metric === "tvl" || metric === "trades" ? 2 : 0,
-                        })
+                    formatNumber(value, locale, { maximumFractionDigits: 0 })
                   }
                 />
                 <Tooltip
@@ -323,9 +307,7 @@ export default function ActivityChart() {
                   }}
                   labelFormatter={(value) => formatWhen(value, locale)}
                   formatter={(value) => [
-                    metric === "price"
-                      ? formatUsdPrice(value, locale)
-                      : formatNumber(value, locale, { maximumFractionDigits: 6 }),
+                    formatNumber(value, locale, { maximumFractionDigits: 0 }),
                     t[metric] || metric,
                   ]}
                 />
@@ -360,6 +342,7 @@ export default function ActivityChart() {
                   <th>{t.change}</th>
                   <th>{t.holders}</th>
                   <th>{t.trustlines}</th>
+                  <th>{t.traders}</th>
                 </tr>
               )}
               renderRow={(row) => (
@@ -370,16 +353,12 @@ export default function ActivityChart() {
                       : formatDay(row.timestamp, locale)}
                   </td>
                   <td className="col-num">
-                    {metric === "price"
-                      ? formatUsdPrice(row.value, locale)
-                      : formatNumber(row.value, locale, { maximumFractionDigits: 6 })}
+                    {formatNumber(row.value, locale, { maximumFractionDigits: 0 })}
                   </td>
                   <td className="col-num">
                     {row.previous == null
                       ? "—"
-                      : metric === "price"
-                        ? formatUsdPrice(row.previous, locale)
-                        : formatNumber(row.previous, locale, { maximumFractionDigits: 6 })}
+                      : formatNumber(row.previous, locale, { maximumFractionDigits: 0 })}
                   </td>
                   <td
                     className={`col-num ${
@@ -392,28 +371,28 @@ export default function ActivityChart() {
                   </td>
                   <td className="col-num">{formatNumber(row.holders, locale)}</td>
                   <td className="col-num">{formatNumber(row.trustlines, locale)}</td>
+                  <td className="col-num">{formatNumber(row.traders, locale)}</td>
                 </tr>
               )}
             />
           </div>
 
           <div className="history-block">
-            <h3 className="history-title">{t.trades}</h3>
+            <h3 className="history-title">{t.xdxFlows}</h3>
             {visibleTrades.length ? (
               <HistoryPager
-                key={`trades-${range}`}
+                key={`flows-${range}`}
                 rows={visibleTrades}
                 renderHead={() => (
                   <tr>
                     <th>{t.updated}</th>
                     <th>{t.side}</th>
                     <th>{t.xdxAmount}</th>
-                    <th>{t.pair}</th>
-                    <th>{t.price}</th>
+                    <th>{t.address}</th>
                   </tr>
                 )}
                 renderRow={(row, index) => (
-                  <tr key={`trade-${row.timestamp}-${row.pool}-${index}`}>
+                  <tr key={`flow-${row.timestamp}-${row.account || row.pool}-${index}`}>
                     <td>
                       {isIntraday(range)
                         ? formatWhen(row.timestamp, locale)
@@ -425,20 +404,14 @@ export default function ActivityChart() {
                     <td className={`col-num ${row.side === "sell" ? "trade-sell" : "trade-buy"}`}>
                       {formatNumber(row.xdx, locale, { maximumFractionDigits: 6 })}
                     </td>
-                    <td>{row.pool}</td>
-                    <td className="col-num">
-                      {row.price == null
-                        ? "—"
-                        : formatNumber(row.price, locale, {
-                            minimumFractionDigits: 8,
-                            maximumFractionDigits: 8,
-                          })}
+                    <td title={row.account || row.pool || ""}>
+                      {row.account ? shortAddress(row.account) : row.pool || "—"}
                     </td>
                   </tr>
                 )}
               />
             ) : (
-              <p className="empty-message">{t.noTrades}</p>
+              <p className="empty-message">{t.noXdxFlows}</p>
             )}
           </div>
         </>
