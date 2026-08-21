@@ -2,6 +2,10 @@ const en = {
   title: "DPMF‑XDX Dashboard",
   subtitle: "Operational Intelligence Interface",
   indexer: "Indexer",
+  handshakeConnecting: "Connecting to indexer",
+  handshakeOk: "Indexer handshake live",
+  handshakeFallback: "Indexer routes (handshake pending)",
+  handshakeError: "Indexer fetch failed",
   connectWallet: "Connect Wallet",
   connected: "Connected",
   disconnect: "Disconnect",
@@ -1218,5 +1222,5 @@ export const MESSAGES = {
 export const SUPPORTED_LANGS = Object.keys(MESSAGES);
 
 export function getMessages(lang) {
-  return MESSAGES[lang] || en;
+  return { ...en, ...(MESSAGES[lang] || {}) };
 }

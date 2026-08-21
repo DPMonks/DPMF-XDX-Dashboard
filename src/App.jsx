@@ -10,6 +10,7 @@ import AmmCard from "./components/AmmCard";
 import WalletOverview from "./components/WalletOverview";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
+import { handshake } from "./api";
 import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
 
 const DexChart = lazy(() => import("./components/DexChart"));
@@ -27,15 +28,30 @@ export default function App() {
   const [ammData, setAmmData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
+  const [link, setLink] = useState({ status: "connecting" });
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       const nextErrors = {};
+      const hs = await handshake();
+      if (!cancelled) {
+        setLink({
+          status: hs.ok ? "ok" : "fallback",
+          protocol: hs.protocol,
+          path: hs.path,
+          error: hs.error,
+        });
+      }
 
       try {
-        const nextHolders = await getTopHolders();
+        const nextHolders = await getTopHolders((rows) => {
+          if (!cancelled) {
+            setHolders(rows);
+            setLoading(false);
+          }
+        });
         if (!cancelled) setHolders(nextHolders);
       } catch (error) {
         nextErrors.holders = error.message;
@@ -45,7 +61,9 @@ export default function App() {
       if (cancelled) return;
 
       try {
-        const nextLp = await getTopLp();
+        const nextLp = await getTopLp((rows) => {
+          if (!cancelled) setLpHolders(rows);
+        });
         if (!cancelled) setLpHolders(nextLp);
       } catch (error) {
         nextErrors.lp = error.message;
@@ -64,6 +82,14 @@ export default function App() {
       if (!cancelled) {
         setErrors(nextErrors);
         setLoading(false);
+        if (nextErrors.holders && nextErrors.lp && nextErrors.amm && !hs.ok) {
+          setLink({
+            status: "error",
+            protocol: hs.protocol,
+            path: hs.path,
+            error: hs.error || nextErrors.holders,
+          });
+        }
       }
     }
 
@@ -87,8 +113,19 @@ export default function App() {
         </div>
       </header>
 
-      <p className="indexer-source">
-        {t.indexer}: <code>{INDEXER_ORIGIN}</code>
+      <p className={`indexer-source is-${link.status}`}>
+        <span className="handshake-dot" aria-hidden="true" />
+        {link.status === "ok"
+          ? t.handshakeOk
+          : link.status === "error"
+            ? t.handshakeError
+            : link.status === "fallback"
+              ? t.handshakeFallback
+              : t.handshakeConnecting}
+        {": "}
+        <code>{INDEXER_ORIGIN}</code>
+        {link.protocol ? ` · ${link.protocol}` : ""}
+        {link.path ? ` · ${link.path}` : ""}
       </p>
 
       <div className="dashboard-grid">

@@ -76,10 +76,38 @@ body {
   text-align: center;
   margin: 14px 0 0;
   overflow-wrap: anywhere;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .indexer-source code {
   color: var(--dpmf-neon-cyan);
+}
+
+.handshake-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7a7a90;
+  box-shadow: 0 0 8px rgba(122, 122, 144, 0.6);
+}
+
+.indexer-source.is-ok .handshake-dot {
+  background: #2ee59d;
+  box-shadow: 0 0 10px rgba(46, 229, 157, 0.8);
+}
+
+.indexer-source.is-fallback .handshake-dot {
+  background: #ffd166;
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.7);
+}
+
+.indexer-source.is-error .handshake-dot {
+  background: #ff5d73;
+  box-shadow: 0 0 10px rgba(255, 93, 115, 0.7);
 }
 
 .wallet-control {

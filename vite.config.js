@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { DEFAULT_INDEXER_ORIGIN, indexerOrigin } from "./server/proxyIndexer.js";
 
 function xamanDevPlugin(env) {
   const headers = () => {
@@ -60,12 +61,35 @@ function xamanDevPlugin(env) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const remote = indexerOrigin(env);
   return {
     envPrefix: ["VITE_", "NEXT_PUBLIC_"],
     plugins: [react(), xamanDevPlugin(env)],
     server: {
       host: true,
       port: 5173,
+      proxy: {
+        "/handshake": {
+          target: remote || DEFAULT_INDEXER_ORIGIN,
+          changeOrigin: true,
+        },
+        "/cluster": {
+          target: remote || DEFAULT_INDEXER_ORIGIN,
+          changeOrigin: true,
+        },
+        "/health": {
+          target: remote || DEFAULT_INDEXER_ORIGIN,
+          changeOrigin: true,
+        },
+        "/api": {
+          target: remote || DEFAULT_INDEXER_ORIGIN,
+          changeOrigin: true,
+          bypass(req) {
+            if (req.url?.startsWith("/api/xaman")) return req.url;
+            return null;
+          },
+        },
+      },
     },
   };
 });

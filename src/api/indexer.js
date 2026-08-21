@@ -1,4 +1,4 @@
-import { api, INDEXER_ORIGIN } from "../api";
+import { api, handshake, INDEXER_ORIGIN } from "../api";
 import { pairFromRow } from "../constants/ledger";
 
 export { INDEXER_ORIGIN };
@@ -34,7 +34,11 @@ function pick(row, keys) {
   return null;
 }
 
-async function paginate(fetchPage, pageSize = PAGE_SIZE) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function paginate(fetchPage, pageSize = PAGE_SIZE, onPage) {
   const all = [];
   let offset = 0;
 
@@ -42,11 +46,18 @@ async function paginate(fetchPage, pageSize = PAGE_SIZE) {
     const page = asArray(await fetchPage(pageSize, offset));
     if (!page.length) break;
     all.push(...page);
+    onPage?.(all);
     if (page.length < pageSize) break;
     offset += page.length;
+    await sleep(400);
   }
 
   return all;
+}
+
+async function snapshotField(name) {
+  const state = await handshake();
+  return state.snapshot?.[name];
 }
 
 function mapHolder(row, index) {
@@ -93,21 +104,7 @@ function mapPool(row) {
   };
 }
 
-export async function getOverview() {
-  return api.overview();
-}
-
-export async function getAmm() {
-  const pools = await api.pools();
-  const mapped = asArray(pools).map(mapPool).filter(Boolean);
-  if (mapped.length) return mapped;
-
-  const amm = await api.amm();
-  return asArray(amm).map(mapPool).filter(Boolean);
-}
-
-export async function getTopHolders() {
-  const rows = await paginate((limit, offset) => api.topHolders(limit, offset));
+function finishHolders(rows) {
   return rows
     .map(mapHolder)
     .filter((row) => row.account)
@@ -115,8 +112,7 @@ export async function getTopHolders() {
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
-export async function getTopLp() {
-  const rows = await paginate((limit, offset) => api.topLp(limit, offset), 50);
+function finishLp(rows) {
   return rows
     .map(mapLp)
     .filter((row) => row.account)
@@ -124,11 +120,70 @@ export async function getTopLp() {
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
+export async function getOverview() {
+  const snapshot = await snapshotField("overview");
+  if (snapshot && typeof snapshot === "object") return snapshot;
+  return api.overview();
+}
+
+export async function getAmm() {
+  const snapshotPools = asArray(await snapshotField("pools")).map(mapPool).filter(Boolean);
+  if (snapshotPools.length) return snapshotPools;
+
+  try {
+    const pools = await api.pools();
+    const mapped = asArray(pools).map(mapPool).filter(Boolean);
+    if (mapped.length) return mapped;
+  } catch {
+    // fall through to /amm
+  }
+
+  const amm = await api.amm();
+  return asArray(amm).map(mapPool).filter(Boolean);
+}
+
+export async function getTopHolders(onPage) {
+  const snap = asArray(await snapshotField("holders"));
+  if (snap.length) {
+    const mapped = finishHolders(snap);
+    onPage?.(mapped);
+    return mapped;
+  }
+
+  const rows = await paginate(
+    (limit, offset) => api.topHolders(limit, offset),
+    PAGE_SIZE,
+    (all) => onPage?.(finishHolders(all))
+  );
+  return finishHolders(rows);
+}
+
+export async function getTopLp(onPage) {
+  const snap = asArray(await snapshotField("lpHolders"));
+  if (snap.length) {
+    const mapped = finishLp(snap);
+    onPage?.(mapped);
+    return mapped;
+  }
+
+  const rows = await paginate(
+    (limit, offset) => api.topLp(limit, offset),
+    50,
+    (all) => onPage?.(finishLp(all))
+  );
+  return finishLp(rows);
+}
+
 export async function getTokenDetails() {
-  const overview = await api.overview().catch(() => ({}));
-  const prices = await api.prices().catch(() => ({}));
-  const change = await api.change24h().catch(() => ({}));
-  const holders = await api.holdersCount().catch(() => ({}));
+  const state = await handshake();
+  const overview =
+    state.snapshot?.overview || (await api.overview().catch(() => ({})));
+  const prices =
+    state.snapshot?.prices || (await api.prices().catch(() => ({})));
+  const change =
+    state.snapshot?.change24h || (await api.change24h().catch(() => ({})));
+  const holders =
+    state.snapshot?.holdersCount || (await api.holdersCount().catch(() => ({})));
   const ammRows = await getAmm().catch(() => []);
   const primary = ammRows[0] || {};
 
@@ -146,7 +201,9 @@ export async function getTokenDetails() {
     circulating,
     totalSupply: overview.total_supply,
     burnedSupply: overview.burned_supply,
-    holders: holders.count ?? overview.holder_count,
+    holders:
+      (typeof holders === "number" ? holders : holders.count) ??
+      overview.holder_count,
     trustlines: overview.trustline_count ?? overview.trustlines,
     issuerFee: overview.issuer_fee,
     blackholed: overview.blackholed,
@@ -159,9 +216,15 @@ export async function getTokenDetails() {
 }
 
 export async function getChartHistory() {
-  const tvl = asArray(await api.tvlHistory().catch(() => []));
-  const holders = asArray(await api.holdersHistory().catch(() => []));
-  const lp = asArray(await api.lpHoldersHistory().catch(() => []));
+  const state = await handshake();
+  const charts = state.snapshot?.charts || {};
+  const tvl = asArray(charts.tvl || (await api.tvlHistory().catch(() => [])));
+  const holders = asArray(
+    charts.holders || (await api.holdersHistory().catch(() => []))
+  );
+  const lp = asArray(
+    charts.lpHolders || charts.lp_holders || (await api.lpHoldersHistory().catch(() => []))
+  );
 
   const merged = new Map();
   for (const row of tvl) {
@@ -235,11 +298,9 @@ export async function getWalletBalances(address) {
 }
 
 async function getJsonAlias(address) {
-  const base = INDEXER_ORIGIN.replace(/\/$/, "");
-  const res = await fetch(
-    `${base}/api/balances/${encodeURIComponent(address)}`,
-    { headers: { accept: "application/json" } }
-  );
+  const res = await fetch(`/api/balances/${encodeURIComponent(address)}`, {
+    headers: { accept: "application/json" },
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data.error || data.detail || `${res.status} ${res.statusText}`);

@@ -1,6 +1,18 @@
 {
   "rewrites": [
     {
+      "source": "/handshake",
+      "destination": "https://dpmf-xdx-indexer-production.up.railway.app/handshake"
+    },
+    {
+      "source": "/cluster/:path*",
+      "destination": "https://dpmf-xdx-indexer-production.up.railway.app/cluster/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://dpmf-xdx-indexer-production.up.railway.app/health"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
