@@ -31,6 +31,7 @@ import {
   asOrderbookPayload,
   emptyOrderbook,
   normalizeOrderbookPair,
+  orderBookRowStamp,
   ORDERBOOK_PAIRS,
 } from "../src/orderbook.js";
 
@@ -865,9 +866,11 @@ async function loadAllLpSupply(db) {
 
 async function loadOrderbook(db, pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(pair);
+  // Worker 2 writes `timestamp`. Do not SELECT updated_at — that column is
+  // missing and tryQuery would swallow the error as an empty book.
   const stored = await tryQuery(
     db,
-    `SELECT payload, pair, updated_at
+    `SELECT payload, pair, timestamp
      FROM order_book_latest
      WHERE pair = $1
      LIMIT 1`,
@@ -877,7 +880,7 @@ async function loadOrderbook(db, pair = "XDX/XRP") {
   const book = asOrderbookPayload(stored.rows[0].payload, name);
   return {
     ...book,
-    as_of: book.as_of || asIso(stored.rows[0].updated_at),
+    as_of: book.as_of || asIso(orderBookRowStamp(stored.rows[0])),
     source: "db",
   };
 }

@@ -64,6 +64,11 @@ export function emptyOrderbook(pair = "XDX/XRP") {
   };
 }
 
+export function orderBookRowStamp(row = {}) {
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  return row.as_of || payload.as_of || row.timestamp || row.updated_at || null;
+}
+
 export function asOrderbookPayload(raw, pair = "XDX/XRP") {
   let body = raw;
   if (typeof raw === "string") {

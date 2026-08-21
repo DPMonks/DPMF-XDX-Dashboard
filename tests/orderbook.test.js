@@ -6,6 +6,7 @@ import {
   emptyOrderbook,
   normalizeOrderbookPair,
   ORDERBOOK_VISIBLE_LEVELS,
+  orderBookRowStamp,
   padOrderbookLevels,
 } from "../src/orderbook.js";
 
@@ -57,6 +58,17 @@ test("combineOrderbookSide mirrors GateHub: best bid high, best ask low", () => 
     "ask"
   );
   assert.equal(asks[0].price, 0.000031);
+});
+
+test("order book stamp prefers Worker 2 timestamp, not updated_at", () => {
+  assert.equal(
+    orderBookRowStamp({ timestamp: "2026-08-21T23:40:00.000Z", updated_at: "stale" }),
+    "2026-08-21T23:40:00.000Z"
+  );
+  assert.equal(
+    orderBookRowStamp({ payload: { as_of: "2026-08-21T23:41:00.000Z" } }),
+    "2026-08-21T23:41:00.000Z"
+  );
 });
 
 test("asOrderbookPayload does not treat quote-per-XDX as xdxUsd", () => {
