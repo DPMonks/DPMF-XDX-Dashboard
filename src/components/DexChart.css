@@ -82,7 +82,17 @@
   100% { transform: translateX(40%); }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1180px) {
+  .dex-wrapper {
+    padding: 14px;
+  }
+
+  .dex-responsive {
+    padding-bottom: 72%;
+  }
+}
+
+@media (max-width: 834px) {
   .dex-responsive {
     padding-bottom: 78%;
   }
@@ -91,9 +101,24 @@
 @media (max-width: 700px) {
   .dex-wrapper {
     padding: 10px;
+    border-radius: 16px;
   }
 
   .dex-responsive {
-    padding-bottom: 120%;
+    padding-bottom: 92%;
+  }
+
+  .dex-loading {
+    font-size: 15px;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .dex-wrapper {
+    padding: 8px;
+  }
+
+  .dex-responsive {
+    padding-bottom: 52%;
   }
 }

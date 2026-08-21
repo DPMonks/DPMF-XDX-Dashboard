@@ -38,8 +38,9 @@ body {
   width: min(1280px, 100%);
   max-width: 100%;
   margin: 0 auto;
-  padding: calc(20px + var(--header-safe)) 20px 32px;
-  padding-inline: max(12px, var(--side-safe));
+  padding: calc(20px + var(--header-safe)) 20px max(32px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(12px, env(safe-area-inset-left, 0px), var(--side-safe));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
   box-sizing: border-box;
 }
 
@@ -586,7 +587,7 @@ body {
 
 .pool-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -612,6 +613,7 @@ body {
   justify-content: space-between;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
   margin-bottom: 14px;
 }
 
@@ -635,7 +637,8 @@ body {
 .pool-split-labels {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
+  flex-wrap: wrap;
   margin-bottom: 8px;
   font-size: 14px;
   font-weight: 700;
@@ -705,6 +708,7 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: #d8caff;
+  overflow-wrap: anywhere;
 }
 
 .skeleton {
@@ -775,6 +779,12 @@ body {
   text-decoration: underline;
 }
 
+@media (max-width: 1180px) {
+  .pool-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1100px) {
   .lists-row {
     grid-template-columns: 1fr;
@@ -812,18 +822,73 @@ body {
     align-items: center;
   }
 
-  .pool-stats {
-    grid-template-columns: 1fr 1fr;
+  .wallet-modal-overlay {
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 834px) {
+  .dashboard-container {
+    padding-top: calc(16px + var(--header-safe));
+  }
+
+  .dashboard-card {
+    padding: 1rem 0.95rem 1.1rem;
+  }
+
+  .pool-card {
+    padding: 18px 16px 16px;
+    min-height: 0;
+  }
+
+  .token-details-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .activity-plot {
+    height: 220px;
   }
 }
 
 @media (max-width: 700px) {
   .dashboard-container {
-    padding: 16px 10px 28px;
+    padding: calc(14px + var(--header-safe)) 10px max(24px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(10px, env(safe-area-inset-left, 0px));
+    padding-right: max(10px, env(safe-area-inset-right, 0px));
   }
 
   .dashboard-card {
     padding: 0.9rem 0.7rem;
+  }
+
+  .pool-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .pool-card {
+    padding: 16px 14px 14px;
+  }
+
+  .pool-card .pair-badge {
+    font-size: 12px;
+    padding: 4px 10px;
+  }
+
+  .pool-split-labels {
+    font-size: 13px;
+  }
+
+  .pool-split-labels .is-lead {
+    font-size: 14px;
+  }
+
+  .pool-split-bar {
+    height: 10px;
+  }
+
+  .pool-stats dd {
+    font-size: 13px;
   }
 
   .token-details-grid {
@@ -857,5 +922,47 @@ body {
   .pair-chip {
     padding: 5px 8px;
     font-size: 11px;
+  }
+}
+
+@media (max-width: 420px) {
+  .token-details-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pool-stats {
+    gap: 8px 10px;
+  }
+
+  .indexer-source {
+    font-size: 0.72rem;
+    justify-content: flex-start;
+    text-align: start;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .activity-plot {
+    height: 170px;
+  }
+
+  .pool-card {
+    min-height: 0;
+  }
+}
+
+@media (pointer: coarse) {
+  .tab,
+  .range,
+  .pair-chip,
+  .pagination button,
+  .connect-wallet-btn,
+  .mobile-link-btn,
+  .cancel-wallet-btn {
+    min-height: 44px;
+  }
+
+  .neon-card:hover {
+    box-shadow: 0 0 20px rgba(200, 100, 255, 0.25);
   }
 }
