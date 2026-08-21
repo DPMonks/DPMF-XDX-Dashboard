@@ -92,6 +92,17 @@ function isConnectError(error) {
   );
 }
 
+function connectHint(error) {
+  const message = safePgMessage(error);
+  if (/password authentication failed/i.test(message)) {
+    return "DATABASE_URL reached Postgres but the password is wrong. In Railway → Postgres → Variables copy the current POSTGRES_PASSWORD (or the public TCP URL). Put postgres://postgres:PASSWORD@acela.proxy.rlwy.net:48994/railway on Vercel Preview + Production. URL-encode special characters in the password (@ → %40, # → %23, % → %25). No ?sslmode=require. Then Redeploy. Password is not logged.";
+  }
+  if (/ssl|certificate|self-signed/i.test(message)) {
+    return "Postgres TLS failed. DATABASE_URL must not use sslmode=require (Railway proxy cert). Use no query param or sslmode=no-verify. Password is not logged.";
+  }
+  return "Postgres connect failed. Check host acela.proxy.rlwy.net:48994, user postgres, database railway, and the current password. Password is not logged.";
+}
+
 function logDbError(error) {
   console.error("Indexer Postgres failed (password redacted)", {
     code: error?.code || null,
@@ -534,7 +545,7 @@ export async function readIndexerDb(suffix, search = "") {
       body: JSON.stringify({
         error: safePgMessage(error),
         source: "db",
-        hint: "Postgres connect failed. DATABASE_URL must not use sslmode=require (Railway proxy cert). Use no query param or sslmode=no-verify. Password is not logged.",
+        hint: connectHint(error),
       }),
       source: "postgres",
     };
