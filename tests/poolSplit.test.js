@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { poolAssetSplit, quoteUsdFromMap } from "../src/utils/poolSplit.js";
+import { formatPoolPct, poolAssetSplit, quoteUsdFromMap } from "../src/utils/poolSplit.js";
 
 test("poolAssetSplit is a USD value share, not a raw unit share", () => {
   const split = poolAssetSplit({
@@ -10,9 +10,22 @@ test("poolAssetSplit is a USD value share, not a raw unit share", () => {
     quoteUsd: 1.41,
   });
   assert.ok(split);
-  assert.equal(split.xdxPct + split.quotePct, 100);
+  assert.equal(Number((split.xdxPct + split.quotePct).toFixed(1)), 100);
   assert.ok(split.xdxPct > 40 && split.xdxPct < 70);
   assert.ok(split.quotePct > 30 && split.quotePct < 60);
+  assert.equal(formatPoolPct(split.xdxPct).includes("."), true);
+});
+
+test("poolAssetSplit reports one decimal like 40.0 / 60.0", () => {
+  const split = poolAssetSplit({
+    reserveXdx: 40,
+    reserveQuote: 60,
+    xdxUsd: 1,
+    quoteUsd: 1,
+  });
+  assert.deepEqual(split, { xdxPct: 40.0, quotePct: 60.0, lead: "quote" });
+  assert.equal(formatPoolPct(40), "40.0");
+  assert.equal(formatPoolPct(50), "50.0");
 });
 
 test("poolAssetSplit stays hidden when a side or price is missing", () => {

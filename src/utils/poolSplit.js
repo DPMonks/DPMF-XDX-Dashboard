@@ -20,13 +20,23 @@ export function poolAssetSplit({
   const total = xdxValue + quoteValue;
   if (!(total > 0)) return null;
 
-  const xdxPct = Math.round((xdxValue / total) * 100);
-  const quotePct = 100 - xdxPct;
+  const xdxPct = roundPoolPct((xdxValue / total) * 100);
+  const quotePct = roundPoolPct(100 - xdxPct);
   return {
     xdxPct,
     quotePct,
     lead: xdxPct >= quotePct ? "xdx" : "quote",
   };
+}
+
+export function roundPoolPct(value) {
+  return Math.round(Number(value) * 10) / 10;
+}
+
+export function formatPoolPct(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  return num.toFixed(1);
 }
 
 export function quoteUsdFromMap(quote, prices = {}) {

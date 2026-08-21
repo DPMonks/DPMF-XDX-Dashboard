@@ -1,28 +1,43 @@
 import { pairParts } from "../utils/currency";
+import { formatPoolPct } from "../utils/poolSplit";
 import { formatNumber, formatToken, formatUsd, formatUsdPrice, formatWhen, shortAddress } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
 function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
-  if (xdxPct == null || quotePct == null) return null;
-  const xdxLead = lead === "xdx" || xdxPct >= quotePct;
+  const ready = xdxPct != null && quotePct != null;
+  const xdxLead = ready && (lead === "xdx" || xdxPct >= quotePct);
+  const xdxLabel = ready ? `${formatPoolPct(xdxPct)}% ${asset}` : `${asset} —`;
+  const quoteLabel = ready ? `${formatPoolPct(quotePct)}% ${quote}` : `${quote} —`;
+  const xdxWidth = ready ? Math.max(xdxPct, 0) : 50;
+  const quoteWidth = ready ? Math.max(quotePct, 0) : 50;
+
   return (
-    <div className={`pool-split ${xdxLead ? "is-xdx-lead" : "is-quote-lead"}`}>
+    <div className={`pool-split ${ready ? (xdxLead ? "is-xdx-lead" : "is-quote-lead") : "is-pending"}`}>
       <div className="pool-split-labels">
         <span className={`pool-split-xdx ${xdxLead ? "is-lead" : ""}`}>
-          {xdxPct}% {asset}
+          <i className="pool-split-swatch is-xdx" aria-hidden="true" />
+          {xdxLabel}
         </span>
-        <span className={`pool-split-quote ${xdxLead ? "" : "is-lead"}`}>
-          {quotePct}% {quote}
+        <span className="pool-split-ratio" aria-hidden={!ready}>
+          {ready ? `${formatPoolPct(xdxPct)} / ${formatPoolPct(quotePct)}` : "— / —"}
+        </span>
+        <span className={`pool-split-quote ${ready && !xdxLead ? "is-lead" : ""}`}>
+          {quoteLabel}
+          <i className="pool-split-swatch is-quote" aria-hidden="true" />
         </span>
       </div>
       <div
-        className={`pool-split-bar ${xdxLead ? "is-xdx-lead" : "is-quote-lead"}`}
+        className={`pool-split-bar ${ready ? (xdxLead ? "is-xdx-lead" : "is-quote-lead") : "is-pending"}`}
         role="img"
-        aria-label={`${xdxPct}% ${asset}, ${quotePct}% ${quote}`}
+        aria-label={
+          ready
+            ? `${formatPoolPct(xdxPct)} percent ${asset}, ${formatPoolPct(quotePct)} percent ${quote}`
+            : `${asset} / ${quote} split not in the indexer yet`
+        }
       >
-        <span className="pool-split-bar-xdx" style={{ width: `${xdxPct}%` }} />
-        <span className="pool-split-bar-quote" style={{ width: `${quotePct}%` }} />
+        <span className="pool-split-bar-xdx" style={{ width: `${xdxWidth}%` }} />
+        <span className="pool-split-bar-quote" style={{ width: `${quoteWidth}%` }} />
       </div>
     </div>
   );
