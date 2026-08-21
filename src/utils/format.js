@@ -24,8 +24,19 @@ export function formatUsd(value, locale) {
   return num.toLocaleString(localeOf(locale), {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: 2,
+    minimumFractionDigits: digits === 8 ? 8 : 2,
     maximumFractionDigits: digits,
+  });
+}
+
+export function formatUsdPrice(value, locale) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString(localeOf(locale), {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 8,
+    maximumFractionDigits: 8,
   });
 }
 

@@ -160,16 +160,16 @@ export default function App() {
         </section>
 
         <section className="dashboard-card neon-card">
-          <h2 className="card-title">{t.activityChart}</h2>
+          <h2 className="card-title">{t.tradingChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
-            <ActivityChart />
+            <DexChart />
           </Suspense>
         </section>
 
         <section className="dashboard-card neon-card">
-          <h2 className="card-title">{t.tradingChart}</h2>
+          <h2 className="card-title">{t.activityChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
-            <DexChart />
+            <ActivityChart />
           </Suspense>
         </section>
 

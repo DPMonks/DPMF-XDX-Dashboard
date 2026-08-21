@@ -3,6 +3,7 @@
 export const XDX_ISSUER = "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo";
 export const XDX_CURRENCY = "XDX";
 export const XDX_HEX = "5844580000000000000000000000000000000000";
+export const XDX_TOTAL_SUPPLY = 10_000_000_000;
 
 export const XDX_XRP_AMM = "rhEwhutV5EyYzTbBYDdK7dHxwdi5omqffB";
 export const XDX_XRP_LP_HEX = "03970105D80AE3C54085F6E97EE16CEDE6CE8200";
@@ -36,6 +37,7 @@ export function pairFromRow(row = {}) {
   if (named && String(named).includes("/")) {
     return String(named).replace(/\s+/g, "").toUpperCase();
   }
+  if (named) return String(named);
 
   const haystack = [
     row.amm,
@@ -59,6 +61,12 @@ export function pairFromRow(row = {}) {
   }
   if (haystack.includes("RLUSD") || haystack.includes(RLUSD_HEX)) {
     return "XDX/RLUSD";
+  }
+
+  const amm = row.amm_account || row.amm;
+  if (amm && String(amm).length >= 8) {
+    const text = String(amm);
+    return `XDX/${text.slice(0, 4)}…${text.slice(-4)}`;
   }
   return "XDX/XRP";
 }

@@ -1,5 +1,5 @@
 import { api, getHandshakeState, handshake, INDEXER_ORIGIN } from "../api";
-import { pairFromRow } from "../constants/ledger";
+import { pairFromRow, XDX_TOTAL_SUPPLY } from "../constants/ledger";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -153,12 +153,14 @@ function mapPool(row) {
   if (!row || typeof row !== "object") return null;
   const pair = pairFromRow(row);
   const [asset, quote] = pair.split("/");
+  const ammAccount = pick(row, ["amm_account", "amm", "account"]);
   return {
     pool: pair,
     asset,
     quote,
+    amm_account: ammAccount || null,
     tvl: numberOrNull(pick(row, ["tvl_usd", "tvl", "total_value_locked", "liquidity"])),
-    price: numberOrNull(pick(row, ["price", "price_usd"])),
+    price: numberOrNull(pick(row, ["price", "price_usd", "xdxUsd"])),
     apr: numberOrNull(pick(row, ["apr", "apy"])),
     volume24h: numberOrNull(pick(row, ["volume24h", "volume_24h", "volume"])),
     reserve_asset: numberOrNull(
@@ -171,7 +173,6 @@ function mapPool(row) {
         "amount2",
         "quote_reserve",
         "xrp_reserve",
-        "liquidity",
       ])
     ),
     lp_supply: numberOrNull(pick(row, ["lp_supply", "lpSupply", "lp_token.value", "lpToken"])),
@@ -179,6 +180,21 @@ function mapPool(row) {
     holder_count: numberOrNull(pick(row, ["holder_count", "lp_holder_count"])),
     updated: pick(row, ["updated", "timestamp", "updated_at"]),
   };
+}
+
+function uniquePools(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const row of rows) {
+    const key = String(
+      row.amm_account ||
+        `${row.pool}|${row.reserve_asset}|${row.reserve_currency}|${row.lp_supply}`
+    );
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
 }
 
 function finishHolders(rows) {
@@ -204,19 +220,22 @@ export async function getOverview() {
 }
 
 export async function getAmm() {
-  const snapshotPools = asArray(await snapshotField("pools")).map(mapPool).filter(Boolean);
-  if (snapshotPools.length) return snapshotPools;
-
   try {
     const pools = await api.pools();
     const mapped = asArray(pools).map(mapPool).filter(Boolean);
-    if (mapped.length) return mapped;
+    if (mapped.length) return uniquePools(mapped);
   } catch {
-    // fall through to /amm
+    // fall through to snapshot /amm
+  }
+
+  const snap = await snapshotField("pools");
+  if (Array.isArray(snap) || Array.isArray(snap?.pools)) {
+    const mapped = asArray(snap).map(mapPool).filter(Boolean);
+    if (mapped.length) return uniquePools(mapped);
   }
 
   const amm = await api.amm();
-  return asArray(amm).map(mapPool).filter(Boolean);
+  return uniquePools(asArray(amm).map(mapPool).filter(Boolean));
 }
 
 export async function getTopHolders(onPage) {
@@ -303,13 +322,23 @@ export async function getTokenDetails() {
   const ammRows = await getAmm().catch(() => []);
   const primary = ammRows[0] || {};
 
-  const circulating = numberOrNull(
+  const totalSupply =
+    numberOrNull(overview.total_supply || overview.totalSupply) || XDX_TOTAL_SUPPLY;
+  const issuerLocked =
+    numberOrNull(overview.issuer_locked || overview.burned_supply || overview.issuerLocked) || 0;
+  const rawCirc = numberOrNull(
     overview.circulating || overview.circulating_supply || overview.xdx_supply
   );
+  const circulating =
+    rawCirc && rawCirc > 0 ? rawCirc : Math.max(totalSupply - issuerLocked, 0);
   const price = numberOrNull(
     prices.xdxUsd || prices.xdx_usd || overview.xdxUsd || overview.price || primary.price
   );
   const tvlUsd = numberOrNull(overview.tvl_usd || primary.tvl_usd || overview.tvl || primary.tvl);
+  const poolTvl = ammRows.reduce((sum, row) => sum + (Number(row.tvl) || 0), 0);
+  const ammMarketCap =
+    numberOrNull(overview.ammMarketCap) || (poolTvl > 0 ? poolTvl : tvlUsd);
+  const fdv = price != null ? totalSupply * price : null;
 
   return {
     ...primary,
@@ -317,19 +346,18 @@ export async function getTokenDetails() {
     tokenType: "XDX",
     price,
     xdxUsd: price,
-    xrplMarketCap:
-      circulating != null && price != null ? circulating * price : overview.market_cap,
-    ammMarketCap: tvlUsd,
-    circulatingMarketCap:
-      circulating != null && price != null ? circulating * price : null,
+    xrplMarketCap: fdv ?? overview.xrplMarketCap ?? overview.market_cap,
+    ammMarketCap,
+    circulatingMarketCap: price != null ? circulating * price : overview.circulatingMarketCap,
     circulating,
-    totalSupply: overview.total_supply,
-    burnedSupply: overview.burned_supply || overview.issuer_locked,
-    issuerLocked: overview.issuer_locked || overview.burned_supply,
+    totalSupply,
+    burnedSupply: issuerLocked,
+    issuerLocked,
     holders:
       (typeof holders === "number" ? holders : holders.count) ??
       overview.holder_count,
-    trustlines: overview.trustline_count ?? overview.trustlines ?? overview.holder_count,
+    trustlines:
+      overview.trustline_count ?? overview.trustlines ?? overview.holder_count,
     issuer: overview.issuer,
     issuerFee: overview.issuer_fee,
     blackholed: overview.blackholed,
@@ -365,6 +393,9 @@ function mergeChartRow(target, row) {
     lpHolders:
       numberOrNull(row.lpHolders ?? row.lp_holders ?? row.lp_holder_count) ??
       current.lpHolders,
+    trustlines:
+      numberOrNull(row.trustlines ?? row.trustline_count) ?? current.trustlines,
+    trades: numberOrNull(row.trades ?? row.trade_count) ?? current.trades,
     price: numberOrNull(row.price ?? row.xdxUsd ?? row.xdx_usd) ?? current.price,
     volume:
       numberOrNull(row.volume ?? row.volume24h ?? row.volume_24h) ?? current.volume,
@@ -429,6 +460,28 @@ export async function getChartHistory() {
   if (lp.error) errors.push(lp.error);
   for (const row of lp.rows) mergeChartRow(merged, row);
 
+  const trustlines = await firstChartSeries([
+    () => charts.trustlines,
+    () => api.trustlinesHistory(),
+  ]);
+  if (trustlines.error) errors.push(trustlines.error);
+  for (const row of trustlines.rows) mergeChartRow(merged, row);
+
+  try {
+    const tradeRows = chartArray(charts.trades || (await api.trades()));
+    for (const row of tradeRows) {
+      const timestamp = rowTimestamp(row);
+      if (!timestamp) continue;
+      const current = merged.get(timestamp) || { timestamp };
+      const volume = numberOrNull(row.volume ?? row.xdx ?? row.amount) ?? 0;
+      current.trades = (current.trades || 0) + (numberOrNull(row.trades) ?? 1);
+      current.volume = (current.volume || 0) + volume;
+      merged.set(timestamp, current);
+    }
+  } catch (error) {
+    errors.push(error);
+  }
+
   if (!merged.size) {
     for (const asset of ["XDX", "XRP", "LP"]) {
       try {
@@ -448,6 +501,7 @@ export async function getChartHistory() {
         timestamp: new Date().toISOString(),
         tvl: live.tvl,
         holders: live.holders,
+        trustlines: live.trustlines,
         lpHolders: live.lp_holder_count,
         price: live.price,
         volume: live.volume24h,
@@ -463,6 +517,21 @@ export async function getChartHistory() {
     throw errors[0];
   }
   return rows;
+}
+
+export async function getTradeHistory() {
+  const rows = asArray(await api.trades().catch(() => []));
+  return rows
+    .map((row) => ({
+      timestamp: rowTimestamp(row),
+      pool: row.pool || row.pool_name || "XDX/XRP",
+      side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
+      xdx: numberOrNull(row.xdx ?? row.amount) ?? 0,
+      quote: numberOrNull(row.quote) ?? 0,
+      price: numberOrNull(row.price),
+    }))
+    .filter((row) => row.timestamp)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 }
 
 function amountFromBalances(payload, names) {

@@ -91,6 +91,8 @@ function localDashboardStatus(suffix, extra = {}) {
     tvlHistory: "/api/charts/tvl",
     holdersHistory: "/api/charts/holders",
     lpHoldersHistory: "/api/charts/lp-holders",
+    trustlinesHistory: "/api/charts/trustlines",
+    trades: "/api/trades",
     walletBalances: "/api/wallet/balances/:address",
     prices: "/api/prices",
     priceChange: "/api/prices/change24h",

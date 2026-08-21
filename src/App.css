@@ -351,6 +351,36 @@ body {
   height: 260px;
 }
 
+.activity-plot.is-live .recharts-line-curve,
+.activity-plot.is-live .activity-line {
+  filter: drop-shadow(0 0 5px #00ff6a) drop-shadow(0 0 12px rgba(0, 255, 106, 0.35));
+  animation: activity-glow 2.8s ease-in-out infinite;
+}
+
+@keyframes activity-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px #00ff6a) drop-shadow(0 0 8px rgba(199, 112, 255, 0.2));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px #00ff6a) drop-shadow(0 0 18px rgba(199, 112, 255, 0.45));
+  }
+}
+
+.trade-buy {
+  color: #3dff8a;
+  font-weight: 600;
+}
+
+.trade-sell {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+
+.history-scroll {
+  max-height: 420px;
+}
+
 .tabs,
 .ranges,
 .pair-filters {

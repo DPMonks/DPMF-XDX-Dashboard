@@ -1,5 +1,5 @@
 import { pairParts } from "../utils/currency";
-import { formatNumber, formatToken, formatUsd, formatWhen } from "../utils/format";
+import { formatNumber, formatToken, formatUsd, formatUsdPrice, formatWhen } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
@@ -26,10 +26,13 @@ export default function AmmCard({ pools, loading, error }) {
 
   return (
     <div className="pool-grid">
-      {pools.map((pool) => {
+      {pools.map((pool, index) => {
         const { asset, quote } = pairParts(pool.pool);
         return (
-          <article key={pool.pool} className="pool-card">
+          <article
+            key={pool.amm_account || `${pool.pool}-${index}`}
+            className="pool-card"
+          >
             <header className="pool-card-head">
               <span className="pair-badge">{pool.pool}</span>
               {pool.updated && (
@@ -45,7 +48,7 @@ export default function AmmCard({ pools, loading, error }) {
               </div>
               <div>
                 <dt>{t.price}</dt>
-                <dd>{formatUsd(pool.price, locale)}</dd>
+                <dd>{formatUsdPrice(pool.price, locale)}</dd>
               </div>
               <div>
                 <dt>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getTokenDetails } from "../api/indexer";
-import { formatNumber, formatUsd, shortAddress } from "../utils/format";
+import { formatNumber, formatUsd, formatUsdPrice, shortAddress } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
@@ -53,7 +53,7 @@ export default function TokenDetails() {
   if (!data && !error) {
     return (
       <div className="token-details-grid">
-        {Array.from({ length: 14 }, (_, i) => (
+        {Array.from({ length: 15 }, (_, i) => (
           <Skeleton key={i} height={58} />
         ))}
       </div>
@@ -66,23 +66,16 @@ export default function TokenDetails() {
 
   const blackholed = pick(data, ["blackholed"]);
   const issuer = pick(data, ["issuer"]);
+  const usdPrice = pick(data, ["price", "xdxUsd"]);
 
   return (
     <div className="token-details-grid">
       <Detail label={t.tokenType} value={pick(data, ["tokenType", "token_type"])} />
-      <Detail
-        label={t.price}
-        value={formatUsd(pick(data, ["price", "xdxUsd"]), locale)}
-      />
-      <Detail
-        label={t.xdxPerXrp}
-        value={formatNumber(pick(data, ["xdx_per_xrp"]), locale, {
-          maximumFractionDigits: 10,
-        })}
-      />
+      <Detail label={t.price} value={formatUsdPrice(usdPrice, locale)} />
+      <Detail label={t.xdxPerXrp} value={formatUsdPrice(usdPrice, locale)} />
       <Detail
         label={t.xrplMarketCap}
-        value={formatUsd(pick(data, ["xrplMarketCap", "circulatingMarketCap"]), locale)}
+        value={formatUsd(pick(data, ["xrplMarketCap"]), locale)}
       />
       <Detail
         label={t.circulatingMarketCap}
@@ -103,10 +96,6 @@ export default function TokenDetails() {
       <Detail
         label={t.burnedSupply}
         value={formatNumber(pick(data, ["burnedSupply", "burned_supply", "issuer_locked"]), locale)}
-      />
-      <Detail
-        label={t.issuerLocked}
-        value={formatNumber(pick(data, ["issuerLocked", "issuer_locked"]), locale)}
       />
       <Detail
         label={t.holders}

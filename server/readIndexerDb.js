@@ -1,5 +1,5 @@
 import pg from "pg";
-import { XDX_ISSUER, XDX_XRP_AMM } from "../src/constants/ledger.js";
+import { XDX_ISSUER, XDX_TOTAL_SUPPLY, XDX_XRP_AMM } from "../src/constants/ledger.js";
 
 let pool = null;
 
@@ -23,6 +23,8 @@ const CATALOG = {
     tvlHistory: "/api/charts/tvl",
     holdersHistory: "/api/charts/holders",
     lpHoldersHistory: "/api/charts/lp-holders",
+    trustlinesHistory: "/api/charts/trustlines",
+    trades: "/api/trades",
     walletBalances: "/api/wallet/balances/:address",
     prices: "/api/prices",
     priceChange: "/api/prices/change24h",
@@ -285,6 +287,31 @@ async function tokenHolderCount(db) {
   return Number(latest.rows[0]?.count || 0);
 }
 
+async function tokenTrustlineCount(db) {
+  const snapshot = await tryQuery(
+    db,
+    `SELECT COUNT(*) AS count
+     FROM token_holders_history
+     WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)`
+  );
+  const snapCount = Number(snapshot.rows[0]?.count || 0);
+  if (snapCount > 0) return snapCount;
+
+  const distinct = await tryQuery(
+    db,
+    `SELECT COUNT(*) AS count FROM (
+       SELECT DISTINCT ON (account) account
+       FROM token_holders_history
+       ORDER BY account, timestamp DESC
+     ) current`
+  );
+  const distinctCount = Number(distinct.rows[0]?.count || 0);
+  if (distinctCount > 0) return distinctCount;
+
+  const latest = await tryQuery(db, "SELECT COUNT(*) AS count FROM token_holders_latest");
+  return Number(latest.rows[0]?.count || 0);
+}
+
 async function tokenHoldersPage(db, limit, offset) {
   return freshTokenHolders(db, limit, offset);
 }
@@ -366,26 +393,155 @@ async function hydrateAmm(db) {
   return row;
 }
 
+function poolKey(row, fallback) {
+  return String(row?.amm_account || row?.pool_name || row?.pool || fallback || "").toLowerCase();
+}
+
+function poolTvlUsd(name, asset, quote, xdxUsd, xrpUsd) {
+  if (/\/XRP$/i.test(String(name || "")) && quote > 0 && xrpUsd > 0) {
+    return quote * 2 * xrpUsd;
+  }
+  if (asset > 0 && xdxUsd > 0) return asset * 2 * xdxUsd;
+  return 0;
+}
+
+function presentPool(row, xdxUsd, xrpUsd) {
+  const reserveAsset = Number(row.reserve_asset || 0);
+  const reserveCurrency = Number(row.reserve_currency || 0);
+  const name = row.pool_name || row.pool || "XDX/XRP";
+  const tvl = poolTvlUsd(name, reserveAsset, reserveCurrency, xdxUsd, xrpUsd);
+  return {
+    pool: name,
+    pool_name: name,
+    amm_account: row.amm_account || row.amm || null,
+    tvl,
+    tvl_usd: tvl,
+    price: xdxUsd,
+    reserve_asset: reserveAsset,
+    reserve_currency: reserveCurrency,
+    lp_supply: Number(row.lp_supply || 0),
+    trading_fee: Number(row.trading_fee || 0) || null,
+    apr: Number(row.apr || 0) || null,
+    volume24h: Number(row.volume24h || row.volume_24h || 0) || null,
+    updated: row.timestamp || row.updated || null,
+  };
+}
+
+async function listXdxPools(db) {
+  const latest = await tryQuery(db, "SELECT * FROM amm_pool_latest");
+  const history = await tryQuery(
+    db,
+    `SELECT pool_name, reserve_asset, reserve_currency, lp_supply, price, timestamp
+     FROM amm_pool_history
+     ORDER BY timestamp DESC
+     LIMIT 4000`
+  );
+  const byKey = new Map();
+
+  const take = (row, overwrite) => {
+    let key = poolKey(row);
+    if (!key) {
+      key = `anon-${byKey.size}-${Number(row.reserve_asset || 0)}-${Number(row.lp_supply || 0)}`;
+    }
+    const prev = byKey.get(key);
+    if (!prev || overwrite) {
+      byKey.set(key, { ...prev, ...row });
+      return;
+    }
+    const next = { ...prev };
+    if (!(Number(next.reserve_asset) > 0) && Number(row.reserve_asset) > 0) {
+      next.reserve_asset = row.reserve_asset;
+    }
+    if (!(Number(next.reserve_currency) > 0) && Number(row.reserve_currency) > 0) {
+      next.reserve_currency = row.reserve_currency;
+    }
+    if (!(Number(next.lp_supply) > 0) && Number(row.lp_supply) > 0) {
+      next.lp_supply = row.lp_supply;
+    }
+    if (!(Number(next.price) > 0) && Number(row.price) > 0) {
+      next.price = row.price;
+    }
+    byKey.set(key, next);
+  };
+
+  for (const row of latest.rows) take(row, true);
+  for (const row of history.rows) {
+    const key = poolKey(row);
+    if (!key) continue;
+    if (!byKey.has(key)) take(row, true);
+    else take(row, false);
+  }
+
+  return [...byKey.values()];
+}
+
+function inferTradesFromHistory(rows) {
+  const prev = new Map();
+  const trades = [];
+  for (const row of rows) {
+    const key = String(row.pool_name || row.pool || "pool");
+    const asset = Number(row.reserve_asset || 0);
+    const quote = Number(row.reserve_currency || 0);
+    const last = prev.get(key);
+    if (last) {
+      const dAsset = asset - last.asset;
+      const dQuote = quote - last.quote;
+      if (Math.abs(dAsset) > 1e-8 || Math.abs(dQuote) > 1e-8) {
+        const side = dAsset < 0 ? "buy" : dAsset > 0 ? "sell" : dQuote > 0 ? "buy" : "sell";
+        trades.push({
+          timestamp: row.timestamp,
+          pool: key,
+          side,
+          xdx: Math.abs(dAsset),
+          quote: Math.abs(dQuote),
+          price: Number(row.price || 0),
+        });
+      }
+    }
+    prev.set(key, { asset, quote });
+  }
+  return trades.reverse();
+}
+
+async function readAmmTrades(db) {
+  const named = await tryQuery(
+    db,
+    `SELECT timestamp, pool_name, side, amount, xdx, price, account
+     FROM trades
+     ORDER BY timestamp DESC
+     LIMIT 500`
+  );
+  if (named.rows.length) {
+    return named.rows.map((row) => ({
+      timestamp: row.timestamp,
+      pool: row.pool_name || "XDX/XRP",
+      side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
+      xdx: Number(row.xdx || row.amount || 0),
+      quote: Number(row.quote || 0),
+      price: Number(row.price || 0),
+    }));
+  }
+
+  const history = await tryQuery(
+    db,
+    `SELECT timestamp, pool_name, reserve_asset::numeric AS reserve_asset,
+            reserve_currency::numeric AS reserve_currency, price
+     FROM amm_pool_history
+     ORDER BY pool_name, timestamp ASC
+     LIMIT 4000`
+  );
+  return inferTradesFromHistory(history.rows);
+}
+
 async function buildSnapshot(db) {
-  const [amm, quote, holders, lp, totals, issuer, ammHeld] = await Promise.all([
+  const [amm, quote, holders, trustlines, lp, issuerLocked, ammXdx] = await Promise.all([
     hydrateAmm(db),
     loadXrpQuote(db),
     tokenHolderCount(db),
+    tokenTrustlineCount(db),
     tryQuery(db, "SELECT COUNT(*) AS lp_holder_count FROM lp_holders_latest"),
-    tryQuery(
-      db,
-      "SELECT COALESCE(SUM(ABS(balance::numeric)), 0) AS total FROM token_holders_latest"
-    ),
-    tryQuery(
-      db,
-      "SELECT COALESCE(ABS(balance::numeric), 0) AS balance FROM token_holders_latest WHERE account = $1 LIMIT 1",
-      [XDX_ISSUER]
-    ),
-    tryQuery(
-      db,
-      "SELECT COALESCE(ABS(balance::numeric), 0) AS balance FROM token_holders_latest WHERE account = $1 LIMIT 1",
-      [XDX_XRP_AMM]
-    ),
+    tokenBalanceFor(db, XDX_ISSUER),
+    tokenBalanceFor(db, XDX_XRP_AMM),
   ]);
 
   const reserveAsset = Number(amm.reserve_asset || 0);
@@ -397,16 +553,17 @@ async function buildSnapshot(db) {
   const xrpUsd = Number(quote.usd || 0);
   const xdxUsd = xdxPerXrp > 0 && xrpUsd > 0 ? xdxPerXrp * xrpUsd : 0;
   const tvlUsd = reserveCurrency > 0 && xrpUsd > 0 ? reserveCurrency * 2 * xrpUsd : 0;
-  const totalSupply = Number(totals.rows[0]?.total || 0);
-  const issuerLocked = Number(issuer.rows[0]?.balance || 0);
-  const ammXdx = Number(ammHeld.rows[0]?.balance || reserveAsset || 0);
-  const circulating = Math.max(totalSupply - issuerLocked, 0);
+  const totalSupply = XDX_TOTAL_SUPPLY;
+  const burned = Math.abs(Number(issuerLocked || 0));
+  const circulating = Math.max(totalSupply - burned, 0);
+  const pools = (await listXdxPools(db)).map((row) => presentPool(row, xdxUsd, xrpUsd));
+  const ammMarketCap = pools.reduce((sum, pool) => sum + Number(pool.tvl || 0), 0) || tvlUsd;
 
   return {
     pool: amm.pool_name || "XDX/XRP",
     tvl: tvlUsd || reserveCurrency || 0,
     tvl_usd: tvlUsd,
-    price: xdxUsd || xdxPerXrp,
+    price: xdxUsd,
     xdxUsd,
     xdxGbp: xdxPerXrp > 0 && quote.gbp ? xdxPerXrp * quote.gbp : 0,
     xrpUsd,
@@ -423,11 +580,15 @@ async function buildSnapshot(db) {
     circulating,
     circulating_supply: circulating,
     total_supply: totalSupply,
-    burned_supply: issuerLocked,
-    issuer_locked: issuerLocked,
-    amm_xdx: ammXdx,
-    trustlines: holders,
-    trustline_count: holders,
+    burned_supply: burned,
+    issuer_locked: burned,
+    amm_xdx: Number(ammXdx || reserveAsset || 0),
+    trustlines,
+    trustline_count: trustlines,
+    ammMarketCap,
+    xrplMarketCap: totalSupply * xdxUsd,
+    circulatingMarketCap: circulating * xdxUsd,
+    pools,
     issuer: XDX_ISSUER,
     amm_account: XDX_XRP_AMM,
     updated: amm.timestamp,
@@ -530,15 +691,54 @@ export async function readIndexerDb(suffix, search = "") {
       if (result.rows.length) return ok(result.rows);
       const fromLedger = await tryQuery(
         db,
-        `SELECT date_trunc('day', timestamp)::date AS day,
-                COUNT(DISTINCT account) AS holder_count
-         FROM token_holders_history
-         GROUP BY 1
-         ORDER BY 1`
+        `SELECT day, COUNT(*) AS holder_count
+         FROM (
+           SELECT DISTINCT ON (date_trunc('day', timestamp), account)
+                  date_trunc('day', timestamp)::date AS day,
+                  account,
+                  balance
+           FROM token_holders_history
+           ORDER BY date_trunc('day', timestamp), account, timestamp DESC
+         ) latest
+         WHERE ABS(balance::numeric) > 0
+         GROUP BY day
+         ORDER BY day`
       );
       if (fromLedger.rows.length) return ok(fromLedger.rows);
       const count = await tokenHolderCount(db);
       return ok(count ? [{ day: new Date().toISOString(), holder_count: count }] : []);
+    }
+
+    if (suffix === "charts/trustlines") {
+      const fromLedger = await tryQuery(
+        db,
+        `SELECT day, COUNT(*) AS trustline_count
+         FROM (
+           SELECT DISTINCT ON (date_trunc('day', timestamp), account)
+                  date_trunc('day', timestamp)::date AS day,
+                  account
+           FROM token_holders_history
+           ORDER BY date_trunc('day', timestamp), account, timestamp DESC
+         ) latest
+         GROUP BY day
+         ORDER BY day`
+      );
+      if (fromLedger.rows.length) return ok(fromLedger.rows);
+      const count = await tokenTrustlineCount(db);
+      return ok(count ? [{ day: new Date().toISOString(), trustline_count: count }] : []);
+    }
+
+    if (suffix === "charts/trades" || suffix === "trades") {
+      const trades = await readAmmTrades(db);
+      if (suffix === "trades") return ok(trades);
+      return ok(
+        trades.map((row) => ({
+          timestamp: row.timestamp,
+          trades: 1,
+          volume: row.xdx,
+          side: row.side,
+        }))
+      );
     }
 
     if (suffix === "charts/lp-holders") {
@@ -559,25 +759,9 @@ export async function readIndexerDb(suffix, search = "") {
 
     if (suffix === "pools") {
       const snap = await buildSnapshot(db);
-      const allPools = await tryQuery(db, "SELECT * FROM amm_pool_latest");
       return ok({
         ...snap,
-        pools: allPools.rows.map((item) => ({
-          pool: item.pool_name,
-          tvl:
-            item.pool_name === "XDX/XRP"
-              ? snap.tvl
-              : Number(item.reserve_asset || 0) + Number(item.reserve_currency || 0),
-          price: item.pool_name === "XDX/XRP" ? snap.price : Number(item.price || 0),
-          reserve_asset: Number(item.reserve_asset || 0),
-          reserve_currency:
-            item.pool_name === "XDX/XRP"
-              ? snap.reserve_currency
-              : Number(item.reserve_currency || 0),
-          lp_supply: Number(item.lp_supply || 0),
-          trading_fee: Number(item.trading_fee || 0) || null,
-          updated: item.timestamp,
-        })),
+        pools: snap.pools || [],
       });
     }
 
