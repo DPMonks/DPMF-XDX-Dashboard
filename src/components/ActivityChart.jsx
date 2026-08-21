@@ -133,7 +133,7 @@ export default function ActivityChart() {
   const [data, setData] = useState([]);
   const [trades, setTrades] = useState([]);
   const [metric, setMetric] = useState("tvl");
-  const [range, setRange] = useState("Max");
+  const [range, setRange] = useState("24H");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [now, setNow] = useState(0);
