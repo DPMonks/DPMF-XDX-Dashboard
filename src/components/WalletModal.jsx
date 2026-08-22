@@ -50,7 +50,7 @@ export default function WalletModal({
         </h2>
 
         {!phone && qrUrl && status !== "loading" ? (
-          <img src={qrUrl} alt="Xaman QR" className="qr-image" />
+          <img src={qrUrl} alt={t.xamanQr || t.scan} className="qr-image" />
         ) : null}
 
         {phone && status !== "loading" && (appHref || webHref) ? (

@@ -43,7 +43,7 @@ import {
 import { issuedActivitySeries } from "../src/activityHistory.js";
 import { inferTradesFromHistory } from "../src/xdxTrades.js";
 import { loadIssuedHolderHistory } from "./issuedHolderHistory.js";
-import { fillNativeBookFromXrpl } from "./xrplBookOffers.js";
+import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
 
 let pool = null;
 
@@ -81,6 +81,8 @@ const CATALOG = {
     trades: "/api/trades",
     xdxFlows: "/api/xdx-flows",
     walletBalances: "/api/wallet/balances/:address",
+    walletAccount: "/api/wallet/account/:address",
+    walletLp: "/api/wallet/lp/:address",
     prices: "/api/prices",
     priceChange: "/api/prices/change24h",
     networth: "/api/wallet/networth/:address",
@@ -1215,6 +1217,81 @@ async function loadQuoteUsdMap(db, xrpUsd) {
   return prices;
 }
 
+const accountCache = new Map();
+
+async function loadWalletAccount(address) {
+  const key = String(address || "");
+  const hit = accountCache.get(key);
+  if (hit && Date.now() - hit.at < 20_000) return hit.body;
+  try {
+    const [info, state] = await Promise.all([
+      xrplRpc("account_info", { account: key, ledger_index: "validated" }),
+      xrplRpc("server_state", {}),
+    ]);
+    const data = info.account_data || {};
+    const ledger = state.validated_ledger || {};
+    const body = {
+      account: key,
+      balance_drops: Number(data.Balance || 0),
+      owner_count: Number(data.OwnerCount || 0),
+      reserve_base_drops: Number(ledger.reserve_base || 1_000_000),
+      reserve_inc_drops: Number(ledger.reserve_inc || 200_000),
+      source: "xrpl",
+    };
+    accountCache.set(key, { at: Date.now(), body });
+    return body;
+  } catch {
+    return {
+      account: key,
+      balance_drops: null,
+      owner_count: null,
+      reserve_base_drops: 1_000_000,
+      reserve_inc_drops: 200_000,
+      source: "empty",
+    };
+  }
+}
+
+async function loadWalletLp(db, address) {
+  const rows = await tryQuery(
+    db,
+    `SELECT COALESCE(pool_name, 'XDX/XRP') AS pool_name,
+            lp_balance::numeric AS lp_balance
+     FROM lp_holders_latest
+     WHERE account = $1 AND ABS(lp_balance::numeric) > 0
+     ORDER BY lp_balance::numeric DESC`,
+    [address]
+  );
+  const lp = await loadXdxLpPools(db);
+  const byName = new Map(
+    (lp.pools || []).map((pool) => [
+      String(pool.pool_name || pool.pool || "").toUpperCase(),
+      pool,
+    ])
+  );
+  const positions = (rows.rows || []).map((row) => {
+    const pool = byName.get(String(row.pool_name).toUpperCase()) || {};
+    const tokens = Number(row.lp_balance || 0);
+    const supply = Number(pool.lp_supply || 0);
+    const share = supply > 0 ? tokens / supply : 0;
+    return {
+      pool: row.pool_name,
+      pool_name: row.pool_name,
+      quote: pool.quote || String(row.pool_name).split("/")[1] || "XRP",
+      lp_balance: tokens,
+      lp_supply: supply || null,
+      reserve_asset: Number(pool.reserve_xdx || pool.reserve_asset || 0),
+      reserve_currency: Number(pool.reserve_currency || pool.reserve_quote || 0),
+      lp_share_percent: share * 100,
+      withdraw_estimate_xdx: share * Number(pool.reserve_xdx || pool.reserve_asset || 0),
+      withdraw_estimate_quote: share * Number(pool.reserve_currency || pool.reserve_quote || 0),
+      xdx_pct: Number(pool.xdx_pct || 0) || null,
+      quote_pct: Number(pool.quote_pct || 0) || null,
+    };
+  });
+  return { account: address, positions, source: "db" };
+}
+
 async function loadXdxLpPools(db) {
   const stored = await tryQuery(
     db,
@@ -2087,6 +2164,18 @@ export async function readIndexerDb(suffix, search = "") {
         lp: Number(lp.rows[0]?.lp_balance || 0),
         source: "db",
       });
+    }
+
+    const walletAccount = suffix.match(/^wallet\/account\/([^/]+)$/);
+    if (walletAccount) {
+      const address = decodeURIComponent(walletAccount[1]);
+      return ok(await loadWalletAccount(address));
+    }
+
+    const walletLp = suffix.match(/^wallet\/lp\/([^/]+)$/);
+    if (walletLp) {
+      const address = decodeURIComponent(walletLp[1]);
+      return ok(await loadWalletLp(db, address));
     }
 
     const networth = suffix.match(/^wallet\/networth\/([^/]+)$/);

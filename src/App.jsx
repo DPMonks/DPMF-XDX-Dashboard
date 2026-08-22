@@ -2,13 +2,12 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
-import { useWallet } from "./context/useWallet";
 import { useI18n } from "./i18n/useI18n";
 import TokenDetails from "./components/TokenDetails";
 import RichList from "./components/RichList";
 import AmmCard from "./components/AmmCard";
 import OrderBook from "./components/OrderBook";
-import WalletOverview from "./components/WalletOverview";
+import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
 import { handshake } from "./api";
@@ -21,7 +20,6 @@ const ActivityChart = lazy(() => import("./components/ActivityChart"));
 
 export default function App() {
   const { t } = useI18n();
-  const { walletAddress } = useWallet();
   const [holders, setHolders] = useState([]);
   const [holderFreshness, setHolderFreshness] = useState(null);
   const [holdersLoading, setHoldersLoading] = useState(true);
@@ -147,8 +145,11 @@ export default function App() {
       <header className="dashboard-header neon-border">
         <div className="header-bar">
           <div className="header-brand">
-            <h1 className="dashboard-title">{t.title}</h1>
-            <p className="dashboard-subtitle">{t.subtitle}</p>
+            <img src="/favicon.png" alt="" className="header-mark" />
+            <div className="header-brand-copy">
+              <h1 className="dashboard-title">{t.title}</h1>
+              <p className="dashboard-subtitle">{t.subtitle}</p>
+            </div>
           </div>
           <ConnectWallet />
         </div>
@@ -160,17 +161,16 @@ export default function App() {
       </p>
 
       <div className="dashboard-grid">
-        {walletAddress && (
+        <div className="wallet-token-row">
           <section className="dashboard-card neon-card">
             <h2 className="card-title">{t.connectedWallet}</h2>
-            <WalletOverview address={walletAddress} />
+            <ConnectedWallet />
           </section>
-        )}
-
-        <section className="dashboard-card neon-card">
-          <h2 className="card-title">{t.tokenDetails}</h2>
-          <TokenDetails />
-        </section>
+          <section className="dashboard-card neon-card">
+            <h2 className="card-title">{t.tokenDetails}</h2>
+            <TokenDetails />
+          </section>
+        </div>
 
         <section className="dashboard-card neon-card">
           <h2 className="card-title">{t.tradingChart}</h2>

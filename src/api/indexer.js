@@ -18,6 +18,7 @@ import {
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
 } from "../orderbook";
+import { composeWalletSnapshot, emptyWalletSnapshot } from "../wallet/composeWallet";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -680,6 +681,46 @@ export async function getWalletNetworth(address) {
   return api.networth(address);
 }
 
+export async function getWalletAccount(address) {
+  return api.walletAccount(address);
+}
+
+export async function getWalletLp(address) {
+  const body = await api.walletLp(address);
+  return asArray(body?.positions || body);
+}
+
 export async function getPrices() {
   return api.prices();
+}
+
+export async function getConnectedWallet(address) {
+  const name = String(address || "").trim();
+  if (!name) return emptyWalletSnapshot(null);
+
+  const [balances, networth, account, lpRows, prices, token, pools, books, flows] =
+    await Promise.all([
+      getWalletBalances(name).catch(() => ({})),
+      getWalletNetworth(name).catch(() => ({})),
+      getWalletAccount(name).catch(() => ({})),
+      getWalletLp(name).catch(() => []),
+      getPrices().catch(() => ({})),
+      getTokenDetails().catch(() => ({})),
+      getAmm().catch(() => []),
+      getOrderbooks().catch(() => null),
+      getXdxFlows().catch(() => []),
+    ]);
+
+  return composeWalletSnapshot({
+    address: name,
+    balances,
+    account,
+    networth,
+    prices,
+    token,
+    pools,
+    lpRows,
+    books,
+    flows,
+  });
 }

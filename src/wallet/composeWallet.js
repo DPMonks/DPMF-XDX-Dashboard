@@ -1,0 +1,220 @@
+export const DROPS = 1_000_000;
+export const DEFAULT_RESERVE_BASE_DROPS = 1_000_000;
+export const DEFAULT_RESERVE_INC_DROPS = 200_000;
+
+function num(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function dropsToXrp(drops) {
+  const n = Number(drops);
+  if (!Number.isFinite(n)) return null;
+  return n / DROPS;
+}
+
+export function xrpReserveBreakdown({
+  balance,
+  balanceDrops,
+  ownerCount = 0,
+  reserveBaseDrops = DEFAULT_RESERVE_BASE_DROPS,
+  reserveIncDrops = DEFAULT_RESERVE_INC_DROPS,
+} = {}) {
+  const total =
+    num(balance) ??
+    (Number.isFinite(Number(balanceDrops)) ? Number(balanceDrops) / DROPS : null);
+  if (total == null) {
+    return {
+      balance: null,
+      spendable: null,
+      reserved: null,
+      baseReserve: null,
+      ownerReserve: null,
+      ownerCount: null,
+    };
+  }
+  const base = (num(reserveBaseDrops) ?? DEFAULT_RESERVE_BASE_DROPS) / DROPS;
+  const increment = (num(reserveIncDrops) ?? DEFAULT_RESERVE_INC_DROPS) / DROPS;
+  const owners = Math.max(0, Number(ownerCount) || 0);
+  const ownerReserve = owners * increment;
+  const reserved = base + ownerReserve;
+  return {
+    balance: total,
+    spendable: Math.max(0, total - reserved),
+    reserved,
+    baseReserve: base,
+    ownerReserve,
+    ownerCount: owners,
+  };
+}
+
+export function supplyShares(xdx, circulating, ammXdx) {
+  const bal = num(xdx);
+  const circ = num(circulating);
+  const amm = num(ammXdx);
+  return {
+    circulatingPct: bal != null && circ > 0 ? (bal / circ) * 100 : null,
+    ammPct: bal != null && amm > 0 ? (bal / amm) * 100 : null,
+  };
+}
+
+export function xdxFiatValues(xdx, prices = {}) {
+  const bal = num(xdx);
+  const usd = num(prices.xdxUsd ?? prices.recorded_price);
+  const gbp = num(prices.xdxGbp);
+  const xrp = num(prices.xdxXrp ?? prices.xdxPerXrp);
+  if (bal == null) {
+    return { xdx: null, usd: null, gbp: null, xrp: null };
+  }
+  return {
+    xdx: bal,
+    usd: usd != null ? bal * usd : null,
+    gbp: gbp != null ? bal * gbp : usd != null && num(prices.xrpGbp) && num(prices.xrpUsd)
+      ? bal * usd * (Number(prices.xrpGbp) / Number(prices.xrpUsd))
+      : null,
+    xrp: xrp != null ? bal * xrp : null,
+  };
+}
+
+export function lpPositionFromPool(lpBalance, pool = {}) {
+  const tokens = num(lpBalance);
+  if (tokens == null || tokens <= 0) return null;
+  const supply = num(pool.lp_supply);
+  const share = supply > 0 ? tokens / supply : 0;
+  const reserveXdx = num(pool.reserve_asset ?? pool.reserve_xdx) || 0;
+  const reserveQuote = num(pool.reserve_currency ?? pool.reserve_quote) || 0;
+  return {
+    pool: pool.pool_name || pool.pool || "XDX/XRP",
+    quote: pool.quote || String(pool.pool_name || "XDX/XRP").split("/")[1] || "XRP",
+    lp_balance: tokens,
+    lp_share_percent: share * 100,
+    withdraw_estimate_xdx: share * reserveXdx,
+    withdraw_estimate_quote: share * reserveQuote,
+    fees_earned: num(pool.fees_earned),
+    composition_xdx_percent: num(pool.xdx_pct),
+    composition_quote_percent: num(pool.quote_pct),
+  };
+}
+
+export function walletOrdersFromBooks(books, address) {
+  const name = String(address || "").trim();
+  if (!name) return [];
+  const out = [];
+  for (const book of Object.values(books?.books || {})) {
+    for (const side of ["bids", "asks"]) {
+      for (const row of book[side] || []) {
+        if (String(row.account || "").toLowerCase() !== name.toLowerCase()) continue;
+        out.push({
+          pair: book.pair,
+          side: side === "asks" ? "ask" : "bid",
+          price: Number(row.price),
+          amount: Number(row.base_size),
+        });
+      }
+    }
+  }
+  return out;
+}
+
+export function walletActivity(rows, address) {
+  const name = String(address || "").trim().toLowerCase();
+  if (!name) return [];
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => String(row.account || "").toLowerCase() === name)
+    .slice(0, 3);
+}
+
+export function emptyWalletSnapshot(address = null) {
+  return {
+    address,
+    signedIn: Boolean(address),
+    filled: false,
+    xrp: xrpReserveBreakdown({}),
+    xdx: xdxFiatValues(null),
+    supply: { circulatingPct: null, ammPct: null, circulating: null, ammXdx: null },
+    lp: [],
+    book: null,
+    orders: [],
+    activity: [],
+  };
+}
+
+export function composeWalletSnapshot({
+  address,
+  balances = {},
+  account = {},
+  networth = {},
+  prices = {},
+  token = {},
+  pools = [],
+  lpRows = [],
+  books = null,
+  flows = [],
+} = {}) {
+  if (!address) return emptyWalletSnapshot(null);
+
+  const xrp = xrpReserveBreakdown({
+    balance: balances.xrp,
+    balanceDrops: account.balance_drops,
+    ownerCount: account.owner_count,
+    reserveBaseDrops: account.reserve_base_drops,
+    reserveIncDrops: account.reserve_inc_drops,
+  });
+  const xdxBal = num(balances.xdx);
+  const xdxPerXrp = num(token.xdxPerXrp ?? prices.xdxPerXrp);
+  const fiat = xdxFiatValues(xdxBal, {
+    xdxUsd: prices.xdxUsd ?? prices.recorded_price ?? token.xdxUsd,
+    xdxGbp: prices.xdxGbp,
+    xrpUsd: prices.xrpUsd,
+    xrpGbp: prices.xrpGbp,
+    xdxXrp: xdxPerXrp,
+  });
+  if (fiat.usd == null && num(networth.totalUsd)) fiat.usd = Number(networth.totalUsd);
+  if (fiat.gbp == null && num(networth.totalGbp)) fiat.gbp = Number(networth.totalGbp);
+
+  const ammXdx = (Array.isArray(pools) ? pools : []).reduce(
+    (sum, pool) => sum + (num(pool.reserve_asset) || 0),
+    0
+  );
+  const circulating = num(token.circulating);
+  const shares = supplyShares(xdxBal, circulating, ammXdx);
+
+  const poolByName = new Map(
+    (Array.isArray(pools) ? pools : []).map((pool) => [
+      String(pool.pool_name || pool.pool || "").toUpperCase(),
+      pool,
+    ])
+  );
+  const lp = (Array.isArray(lpRows) ? lpRows : [])
+    .map((row) => {
+      const name = row.pool_name || row.pool;
+      return lpPositionFromPool(row.lp_balance ?? row.lp, poolByName.get(String(name || "").toUpperCase()) || row);
+    })
+    .filter(Boolean);
+
+  const xrpBook = books?.books?.["XDX/XRP"] || null;
+  return {
+    address,
+    signedIn: true,
+    filled: xdxBal != null || xrp.balance != null || lp.length > 0,
+    xrp,
+    xdx: fiat,
+    supply: {
+      ...shares,
+      circulating,
+      ammXdx,
+    },
+    lp,
+    book: xrpBook
+      ? {
+          bestBid: xrpBook.best_bid,
+          bestAsk: xrpBook.best_ask,
+          mid: xrpBook.mid,
+          spreadBps: xrpBook.spread_bps,
+          ammDepth: Number(xrpBook.asks?.[0]?.amm_opposing || xrpBook.bids?.[0]?.amm_opposing || 0),
+        }
+      : null,
+    orders: walletOrdersFromBooks(books, address),
+    activity: walletActivity(flows, address),
+  };
+}

@@ -24,6 +24,17 @@ export function recordUsdPrice(value) {
   return Math.round(num * 1e8) / 1e8;
 }
 
+export function formatFiat(value, locale, currency = "USD") {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString(localeOf(locale), {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export function formatUsd(value, locale) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
@@ -78,6 +89,20 @@ export function formatPercent(value, locale) {
   if (!Number.isFinite(num)) return "—";
   return `${num.toLocaleString(localeOf(locale), {
     maximumFractionDigits: 2,
+  })}%`;
+}
+
+export function formatGbp(value, locale) {
+  return formatFiat(value, locale, "GBP");
+}
+
+export function formatSharePercent(value, locale) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  const digits = Math.abs(num) < 1 ? 3 : 2;
+  return `${num.toLocaleString(localeOf(locale), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   })}%`;
 }
 

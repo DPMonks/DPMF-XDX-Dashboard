@@ -93,8 +93,10 @@ export function I18nProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    const t = getMessages(lang);
     document.documentElement.lang = lang;
     document.documentElement.dir = RTL_LANGS.has(lang) ? "rtl" : "ltr";
+    document.title = t.title;
   }, [lang]);
 
   const value = useMemo(() => {

@@ -357,10 +357,10 @@ export default function ActivityChart() {
                 <Line
                   type="monotone"
                   dataKey="plot"
-                  stroke="#00ff6a"
+                  stroke="#98f050"
                   strokeWidth={2.4}
                   dot={false}
-                  activeDot={{ r: 5, fill: "#00ff6a", stroke: "#c770ff", strokeWidth: 2 }}
+                  activeDot={{ r: 5, fill: "#98f050", stroke: "#c770ff", strokeWidth: 2 }}
                   connectNulls
                   isAnimationActive={false}
                   className="activity-line"

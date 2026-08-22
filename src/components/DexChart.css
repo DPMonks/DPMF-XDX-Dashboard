@@ -5,9 +5,9 @@
   border-radius: 22px;
   background: linear-gradient(145deg, #12001f, #1a002d);
   box-shadow:
-    0 0 40px #7a2bffaa,
-    0 0 80px #7a2bff55,
-    inset 0 0 35px #7a2bff33;
+    0 0 40px #9818f0aa,
+    0 0 80px #9818f055,
+    inset 0 0 35px #9818f033;
   position: relative;
   overflow: hidden;
 }
@@ -21,9 +21,9 @@
   background: linear-gradient(
     120deg,
     transparent 0%,
-    #7a2bff15 45%,
-    #7a2bff33 50%,
-    #7a2bff15 55%,
+    #9818f015 45%,
+    #9818f033 50%,
+    #9818f015 55%,
     transparent 100%
   );
   animation: shimmer 7s infinite linear;
@@ -57,7 +57,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  color: #7a2bff;
+  color: #9818f0;
   font-size: 18px;
   border-radius: 16px;
   z-index: 10;
@@ -69,7 +69,7 @@
   left: 50%;
   transform: translateX(-50%);
   padding: 10px 20px;
-  background: #7a2bff;
+  background: #9818f0;
   border: 0;
   border-radius: 8px;
   cursor: pointer;
