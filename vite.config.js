@@ -2,6 +2,8 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { attachIndexerProxy } from "./server/attachProxy.js";
 import { indexerOrigin } from "./server/proxyIndexer.js";
+import lockedCandles from "./src/data/lockedCandles.json" with { type: "json" };
+import { hasIndexerDatabase, readIndexerDb } from "./server/readIndexerDb.js";
 import {
   buildXamanPayload,
   readJson,
@@ -29,6 +31,24 @@ function xamanDevPlugin() {
             response.ok ? data : { error: xamanErrorMessage(data), code: data?.error?.code }
           )
         );
+        return;
+      }
+
+      if (req.url?.startsWith("/api/chart/candles") && req.method === "GET") {
+        let db = null;
+        if (hasIndexerDatabase()) {
+          const result = await readIndexerDb("chart/candles");
+          if (result?.status < 400) {
+            try {
+              db = JSON.parse(result.body);
+            } catch {
+              db = null;
+            }
+          }
+        }
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ locked: true, snapshot: lockedCandles, db }));
         return;
       }
 

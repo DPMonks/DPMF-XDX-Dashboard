@@ -87,6 +87,13 @@ body {
   min-width: 0;
 }
 
+.hybrid-mode-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
 .header-actions {
   flex: 0 1 auto;
   display: flex;

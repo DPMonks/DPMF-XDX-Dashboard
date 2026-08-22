@@ -6,7 +6,8 @@
     "api/[...path].js": { "maxDuration": 20 },
     "api/top-holders.js": { "maxDuration": 20 },
     "api/xaman/create-payload.js": { "maxDuration": 15 },
-    "api/xaman/payload-result.js": { "maxDuration": 15 }
+    "api/xaman/payload-result.js": { "maxDuration": 15 },
+    "api/chart/candles.js": { "maxDuration": 15 }
   },
   "rewrites": [
     { "source": "/health", "destination": "/api/health" },
@@ -15,7 +16,7 @@
     { "source": "/cluster/:path*", "destination": "/api/index?path=cluster/:path*" },
     { "source": "/api", "destination": "/api/index" },
     { "source": "/api/", "destination": "/api/index" },
-    { "source": "/api/((?!xaman/).+)", "destination": "/api/index?path=$1" },
+    { "source": "/api/((?!xaman/|chart/).+)", "destination": "/api/index?path=$1" },
     {
       "source": "/((?!api/|favicon\\.png|apple-touch-icon\\.png|og-image\\.png|og-image\\.jpg|icons\\.svg|robots\\.txt).*)",
       "destination": "/index.html"

@@ -1,0 +1,144 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { ticksToCandles, sma, appendLiveClose, resampleCandles } from "../src/chart/candles.js";
+import { bucketTime } from "../src/chart/intervals.js";
+import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
+import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from "../src/chart/overlays.js";
+import { walletChartMarks } from "../src/chart/walletMarks.js";
+import { composePairCandles } from "../src/chart/composeChart.js";
+
+test("bucketTime uses UTC midnight and Monday weeks", () => {
+  assert.equal(bucketTime(Date.parse("2021-10-24T13:31:20.000Z"), "1D"), Date.parse("2021-10-24T00:00:00.000Z"));
+  assert.equal(bucketTime(Date.parse("2021-10-24T13:31:20.000Z"), "1W"), Date.parse("2021-10-18T00:00:00.000Z"));
+});
+
+test("ticksToCandles builds exact OHLC and continuous opens", () => {
+  const day = Date.parse("2021-10-24T00:00:00.000Z");
+  const candles = ticksToCandles(
+    [
+      { t: day + 3600_000, p: 0.00004, v: 10 },
+      { t: day + 7200_000, p: 0.00006, v: 5 },
+      { t: day + 86_400_000 + 1000, p: 0.00005, v: 2 },
+    ],
+    "1D",
+    { continuous: true }
+  );
+  assert.equal(candles.length, 2);
+  assert.equal(candles[0].o, 0.00004);
+  assert.equal(candles[0].h, 0.00006);
+  assert.equal(candles[0].l, 0.00004);
+  assert.equal(candles[0].c, 0.00006);
+  assert.equal(candles[0].v, 15);
+  assert.equal(candles[1].o, 0.00006);
+  assert.equal(candles[1].c, 0.00005);
+});
+
+test("sma is the arithmetic mean of the last N closes", () => {
+  assert.deepEqual(sma([1, 2, 3, 4], 2), [null, 1.5, 2.5, 3.5]);
+});
+
+test("XDX/RLUSD backdate is XDX/XRP times that day's XRP/USD", () => {
+  const candle = { t: Date.parse("2021-10-24T00:00:00.000Z"), o: 0.00002, h: 0.00003, l: 0.00001, c: 0.00002, v: 1 };
+  const rlusd = backdateRlusdCandle(candle, 1.1);
+  assert.ok(Math.abs(rlusd.c - 0.000022) < 1e-12);
+  assert.equal(rlusd.source, "backdated");
+  assert.ok(Math.abs(quotePerXdx({ pair: "XDX/RLUSD", xdxXrp: 0.00002, xrpUsd: 1.1 }) - 0.000022) < 1e-12);
+  assert.ok(Math.abs(quotePerXdx({ pair: "XDX/XRP", xdxUsd: 0.000044, xrpUsd: 1.1 }) - 0.00004) < 1e-12);
+});
+
+test("stitchRlusdCandles prefers native AMM prints after RLUSD exists", () => {
+  const t = Date.parse("2025-01-01T00:00:00.000Z");
+  const rows = stitchRlusdCandles({
+    xrpCandles: [{ t, o: 0.00002, h: 0.00002, l: 0.00002, c: 0.00002, v: 1 }],
+    xrpUsd: [{ t, c: 2 }],
+    native: [{ t, o: 0.00005, h: 0.00005, l: 0.00005, c: 0.00005, v: 3, source: "native" }],
+  });
+  assert.equal(rows[0].c, 0.00005);
+  assert.equal(rows[0].source, "native");
+});
+
+test("arbitrage window is (mid - AMM) / AMM", () => {
+  const row = arbitrageWindow(0.00003129, 0.00003459);
+  assert.ok(Math.abs(row.pct - 10.5465) < 0.01);
+  assert.equal(row.highlight, true);
+});
+
+test("AMM buy impact follows constant product", () => {
+  const impact = ammImpact({ reserveBase: 1000, reserveQuote: 10, amount: 100, side: "buy" });
+  assert.equal(impact.spot, 0.01);
+  assert.ok(impact.next > impact.spot);
+  assert.equal(ammImpact({ reserveBase: 1000, reserveQuote: 10, amount: 100, side: "addLp" }).impactPct, 0);
+});
+
+test("liquidity walls keep levels at least 2x the median size", () => {
+  const walls = liquidityWalls({
+    bids: [{ price: 1, base_size: 10, side: "bid" }],
+    asks: [
+      { price: 2, base_size: 10, side: "ask" },
+      { price: 3, base_size: 50, side: "ask" },
+    ],
+  });
+  assert.equal(walls.length, 1);
+  assert.equal(walls[0].price, 3);
+});
+
+test("wallet marks stay empty until an address is signed in", () => {
+  const hidden = walletChartMarks({
+    address: "",
+    orders: [{ price: 1, amount: 2, pair: "XDX/XRP" }],
+    fills: [{ account: "rA", timestamp: "2021-10-24T13:31:20.000Z", price: 1, pool: "XDX/XRP" }],
+    pair: "XDX/XRP",
+  });
+  assert.deepEqual(hidden, { orders: [], fills: [] });
+  const shown = walletChartMarks({
+    address: "rA",
+    orders: [{ price: 0.00003, amount: 5, pair: "XDX/XRP", side: "bid" }],
+    fills: [{ account: "rA", timestamp: "2021-10-24T13:31:20.000Z", price: 0.00003, pool: "XDX/XRP" }],
+    pair: "XDX/XRP",
+  });
+  assert.equal(shown.orders.length, 1);
+  assert.equal(shown.fills.length, 1);
+});
+
+test("pressure is down when the AMM holds more XDX than quote", () => {
+  assert.equal(liquidityPressure({ xdxPct: 77.6, quotePct: 22.4 }).bias, "down");
+  assert.equal(liquidityPressure({ xdxPct: 22.4, quotePct: 77.6 }).bias, "up");
+});
+
+test("composePairCandles appends a live close onto locked history", () => {
+  const t = Date.parse("2021-10-24T00:00:00.000Z");
+  const candles = composePairCandles({
+    pair: "XDX/XRP",
+    interval: "1D",
+    range: "Max",
+    locked: {
+      pairs: { "XDX/XRP": { candles: [{ t, o: 0.00002, h: 0.00002, l: 0.00002, c: 0.00002, v: 1 }] } },
+      xrpUsd: [],
+    },
+    livePrice: 0.0000313,
+    now: Date.parse("2026-08-22T00:00:00.000Z"),
+  });
+  assert.ok(candles.length >= 2);
+  assert.equal(candles[candles.length - 1].c, 0.0000313);
+});
+
+test("resampleCandles weekly uses Monday buckets", () => {
+  const rows = [
+    { t: Date.parse("2021-10-18T00:00:00.000Z"), o: 1, h: 2, l: 1, c: 1.5, v: 1 },
+    { t: Date.parse("2021-10-20T00:00:00.000Z"), o: 1.5, h: 3, l: 1.2, c: 2, v: 2 },
+  ];
+  const week = resampleCandles(rows, "1W");
+  assert.equal(week.length, 1);
+  assert.equal(week[0].o, 1);
+  assert.equal(week[0].h, 3);
+  assert.equal(week[0].c, 2);
+  assert.equal(week[0].v, 3);
+});
+
+test("appendLiveClose updates the current UTC day instead of inventing a second candle", () => {
+  const t = Date.parse("2026-08-22T00:00:00.000Z");
+  const next = appendLiveClose([{ t, o: 1, h: 1, l: 1, c: 1, v: 0 }], 1.5, t + 3600_000, "1D");
+  assert.equal(next.length, 1);
+  assert.equal(next[0].c, 1.5);
+  assert.equal(next[0].h, 1.5);
+});

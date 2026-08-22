@@ -16,7 +16,7 @@ import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
 import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 
-const DexChart = lazy(() => import("./components/DexChart"));
+const TradingChart = lazy(() => import("./components/TradingChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 
 export default function App() {
@@ -179,7 +179,7 @@ export default function App() {
         <section className="dashboard-card neon-card">
           <h2 className="card-title">{t.tradingChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
-            <DexChart />
+            <TradingChart />
           </Suspense>
           <div className="orderbook-wrap">
             <h3 className="card-title orderbook-title">{t.orderbook}</h3>

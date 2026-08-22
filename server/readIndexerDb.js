@@ -101,6 +101,7 @@ const CATALOG = {
     priceChange: "/api/prices/change24h",
     networth: "/api/wallet/networth/:address",
     sparkline: "/api/sparkline/:asset",
+    chartCandles: "/api/chart/candles",
     issuerLocked: "/api/issuer-locked",
     orderbook: "/api/orderbook",
     orderbooks: "/api/orderbooks",
@@ -2444,6 +2445,31 @@ export async function readIndexerDb(suffix, search = "") {
         [asset]
       );
       return ok(result.rows.reverse());
+    }
+
+    if (suffix === "chart/candles" || suffix === "charts/candles") {
+      const history = await tryQuery(
+        db,
+        `SELECT timestamp, asset, price_usd
+         FROM price_history
+         WHERE asset IN ('XDX', 'xdx', 'XRP', 'xrp')
+         ORDER BY timestamp ASC
+         LIMIT 20000`
+      );
+      const amm = await tryQuery(
+        db,
+        `SELECT timestamp, pool_name, reserve_asset, reserve_currency, price
+         FROM amm_pool_history
+         WHERE pool_name IN ('XDX/XRP', 'XDX/RLUSD')
+         ORDER BY timestamp ASC
+         LIMIT 20000`
+      );
+      return ok({
+        source: "db",
+        locked: true,
+        price_history: history.rows,
+        amm_pool_history: amm.rows,
+      });
     }
 
     return null;
