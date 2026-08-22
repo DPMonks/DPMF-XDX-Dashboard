@@ -212,6 +212,9 @@ function withPoolSplit(row, fallbackXdxUsd, fallbackXrpUsd) {
     reserveXdx: row.reserve_asset,
     reserveQuote: row.reserve_currency,
     lpSupply: row.lp_supply,
+    price: row.price,
+    xdxUsd: row.xdxUsd || fallbackXdxUsd,
+    quoteUsd,
   });
   return {
     ...row,

@@ -80,6 +80,15 @@ test("resolvePoolSplit is XDX versus LP tokens, not an inferred 50/50", () => {
   );
 
   assert.equal(resolvePoolSplit({ reserveXdx: 63_105_563.3193 }), null);
+
+  const fromPrice = resolvePoolSplit({
+    reserveXdx: 51_000_000,
+    price: 0.002,
+  });
+  assert.ok(fromPrice);
+  assert.equal(fromPrice.xdxPct, 99.8);
+  assert.equal(fromPrice.quotePct, 0.2);
+  assert.equal(fromPrice.inferred, true);
 });
 
 test("quoteUsdFromMap uses recorded prices and treats RLUSD as one dollar", () => {

@@ -1117,12 +1117,22 @@ async function loadXdxLpPools(db) {
     `SELECT amm_account, reserve_quote, reserve_currency
      FROM xdx_amm_pools`
   );
-  const optionalByAmm = new Map(
-    optional.rows.map((row) => [
-      row.amm_account,
-      Number(row.reserve_quote || row.reserve_currency || 0),
-    ])
+  const lpOptional = await tryQuery(
+    db,
+    `SELECT amm_account, lp_supply FROM xdx_amm_pools`
   );
+  const optionalByAmm = new Map();
+  for (const row of optional.rows) {
+    optionalByAmm.set(row.amm_account, {
+      quote: Number(row.reserve_quote || row.reserve_currency || 0),
+      lp_supply: null,
+    });
+  }
+  for (const row of lpOptional.rows) {
+    const current = optionalByAmm.get(row.amm_account) || { quote: 0, lp_supply: null };
+    current.lp_supply = Number(row.lp_supply || 0) || null;
+    optionalByAmm.set(row.amm_account, current);
+  }
 
   const reserves = await loadAmmReserveIndex(db);
   const quote = await loadXrpQuote(db);
@@ -1136,21 +1146,25 @@ async function loadXdxLpPools(db) {
       const extra =
         reserves.byAmm.get(row.amm_account) ||
         reserves.byName.get(String(row.pool_name || "").toUpperCase()) ||
+        reserves.byName.get(`XDX/${String(row.quote || "").toUpperCase()}`) ||
         {};
+      const optional = optionalByAmm.get(row.amm_account) || {};
       const reserveXdx = Number(row.reserve_xdx || extra.reserve_asset || 0);
       const measuredQuote =
-        Number(optionalByAmm.get(row.amm_account) || 0) ||
-        Number(extra.reserve_currency || 0) ||
-        0;
+        Number(optional.quote || 0) || Number(extra.reserve_currency || 0) || 0;
       const quoteUsd = quoteUsdFromMap(row.quote, quotePrices);
+      const lpSupply = extra.lp_supply || optional.lp_supply || null;
       const reserveQuote =
         measuredQuote ||
         inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) ||
         null;
       const split = resolvePoolSplit({
         reserveXdx,
-        reserveQuote: measuredQuote,
-        lpSupply: extra.lp_supply,
+        reserveQuote: measuredQuote || reserveQuote,
+        lpSupply,
+        price: extra.price,
+        xdxUsd,
+        quoteUsd,
       });
       return {
         pool_name: row.pool_name,
@@ -1167,7 +1181,7 @@ async function loadXdxLpPools(db) {
         xdx_pct: split?.xdxPct ?? null,
         quote_pct: split?.quotePct ?? null,
         lead: split?.lead || null,
-        lp_supply: extra.lp_supply,
+        lp_supply: lpSupply,
         trading_fee: extra.trading_fee,
         updated: extra.timestamp || row.updated_at,
       };

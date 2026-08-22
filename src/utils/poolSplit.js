@@ -48,17 +48,44 @@ export function inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) {
   return (xdx * xdxPrice) / quotePrice;
 }
 
+export function opposingPoolAsset({
+  reserveXdx,
+  reserveQuote,
+  lpSupply,
+  price,
+  xdxUsd,
+  quoteUsd,
+} = {}) {
+  const lp = Number(lpSupply);
+  if (lp > 0) return lp;
+  const quote = Number(reserveQuote);
+  if (quote > 0) return quote;
+  const xdx = Number(reserveXdx);
+  const px = Number(price);
+  if (xdx > 0 && px > 0 && px < 10) return xdx * px;
+  return inferQuoteReserve(xdx, xdxUsd, quoteUsd);
+}
+
 export function resolvePoolSplit({
   reserveXdx,
   reserveQuote,
   lpSupply,
+  price,
+  xdxUsd,
+  quoteUsd,
 } = {}) {
   const xdx = Number(reserveXdx);
   if (!(xdx > 0)) return null;
 
-  const lp = Number(lpSupply);
   const quote = Number(reserveQuote);
-  const other = lp > 0 ? lp : quote > 0 ? quote : 0;
+  const other = opposingPoolAsset({
+    reserveXdx: xdx,
+    reserveQuote: quote,
+    lpSupply,
+    price,
+    xdxUsd,
+    quoteUsd,
+  });
   if (!(other > 0)) return null;
 
   const xdxPct = roundPoolPct((xdx / (xdx + other)) * 100);
@@ -67,8 +94,8 @@ export function resolvePoolSplit({
     xdxPct,
     quotePct,
     lead: xdxPct >= quotePct ? "xdx" : "quote",
-    reserveQuote: quote > 0 ? quote : null,
-    inferred: false,
+    reserveQuote: quote > 0 ? quote : other,
+    inferred: !(Number(lpSupply) > 0) && !(quote > 0),
   };
 }
 
