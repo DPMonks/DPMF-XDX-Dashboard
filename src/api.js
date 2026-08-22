@@ -458,7 +458,11 @@ export const api = {
   orderbook: (pair = "XDX/XRP") => {
     const path = endpoint("orderbook") || "/orderbook";
     const join = path.includes("?") ? "&" : "?";
-    return getJson(`${path}${join}pair=${encodeURIComponent(pair)}`);
+    return getJson(`${path}${join}pair=${encodeURIComponent(pair)}`, {
+      queue: false,
+      retries: 1,
+    });
   },
-  orderbooks: () => getJson(endpoint("orderbooks") || "/orderbooks"),
+  orderbooks: () =>
+    getJson(endpoint("orderbooks") || "/orderbooks", { queue: false, retries: 1 }),
 };

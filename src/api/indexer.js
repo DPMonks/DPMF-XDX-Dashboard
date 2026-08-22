@@ -15,6 +15,7 @@ import {
   composeAmmBook,
   emptyOrderbook,
   mergeOrderbookPayloads,
+  normalizeOrderbookPair,
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
 } from "../orderbook";
@@ -320,38 +321,65 @@ export async function getAmm() {
 
 let lastOrderbooks = null;
 
-export async function getOrderbooks() {
-  try {
-    const body = await api.orderbooks();
+function emptyCatalog() {
+  const names = [...FEATURED_ORDERBOOK_PAIRS];
+  return {
+    quotes: names.map((pair) => pair.split("/")[1]),
+    featured: names,
+    pairs: names,
+    default_pair: "XDX/XRP",
+    books: {},
+  };
+}
+
+function ingestOrderbooks(body, pairHint = "XDX/XRP") {
+  if (!body || typeof body !== "object") return lastOrderbooks;
+  if (body.books && typeof body.books === "object") {
     const names = sortOrderbookPairs([
       ...FEATURED_ORDERBOOK_PAIRS,
-      ...(Array.isArray(body?.pairs) ? body.pairs : []),
-      ...Object.keys(body?.books || {}),
+      ...(Array.isArray(body.pairs) ? body.pairs : []),
+      ...Object.keys(body.books),
     ]);
     const books = {};
     for (const pair of names) {
-      const raw = body?.books?.[pair] || body?.[pair] || emptyOrderbook(pair);
+      const raw = body.books[pair] || body[pair] || emptyOrderbook(pair);
       books[pair] = composeAmmBook(raw, raw.amm || {}, pair);
     }
-    const next = {
+    lastOrderbooks = mergeOrderbookPayloads(lastOrderbooks, {
       quotes: names.map((pair) => pair.split("/")[1]).filter(Boolean),
       featured: FEATURED_ORDERBOOK_PAIRS,
       pairs: names,
-      default_pair: body?.default_pair || "XDX/XRP",
+      default_pair: body.default_pair || "XDX/XRP",
       books,
-    };
-    lastOrderbooks = mergeOrderbookPayloads(lastOrderbooks, next);
+    });
     return lastOrderbooks;
+  }
+
+  const name = normalizeOrderbookPair(pairHint || body.pair || "XDX/XRP");
+  const raw = body.book || body;
+  const book = composeAmmBook(raw, raw.amm || {}, name);
+  lastOrderbooks = mergeOrderbookPayloads(lastOrderbooks || emptyCatalog(), {
+    books: { [name]: book },
+  });
+  return lastOrderbooks;
+}
+
+export async function getOrderbook(pair = "XDX/XRP") {
+  const name = normalizeOrderbookPair(pair);
+  try {
+    return ingestOrderbooks(await api.orderbook(name), name);
   } catch {
     if (lastOrderbooks) return lastOrderbooks;
-    const names = [...FEATURED_ORDERBOOK_PAIRS];
-    return {
-      quotes: names.map((pair) => pair.split("/")[1]),
-      featured: names,
-      pairs: names,
-      default_pair: "XDX/XRP",
-      books: Object.fromEntries(names.map((pair) => [pair, emptyOrderbook(pair)])),
-    };
+    throw new Error("Waiting for XRPL book_offers on this pair.");
+  }
+}
+
+export async function getOrderbooks() {
+  try {
+    return ingestOrderbooks(await api.orderbooks());
+  } catch {
+    if (lastOrderbooks) return lastOrderbooks;
+    throw new Error("Waiting for XRPL book_offers on this pair.");
   }
 }
 

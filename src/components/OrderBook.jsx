@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getOrderbooks } from "../api/indexer";
+import { getOrderbook, getOrderbooks } from "../api/indexer";
 import {
   bookHeader,
   emptyOrderbook,
@@ -106,25 +106,33 @@ export default function OrderBook() {
     let cancelled = false;
 
     async function load() {
-      try {
-        const next = await getOrderbooks();
-        if (!cancelled) {
-          setBooks((current) => mergeOrderbookPayloads(current, next));
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) setError(err.message);
+      const [one, all] = await Promise.allSettled([
+        getOrderbook(pair),
+        getOrderbooks(),
+      ]);
+      if (cancelled) return;
+      const next =
+        all.status === "fulfilled"
+          ? all.value
+          : one.status === "fulfilled"
+            ? one.value
+            : null;
+      if (next) {
+        setBooks((current) => mergeOrderbookPayloads(current, next));
+        setError(null);
+        return;
       }
+      setError(all.reason?.message || one.reason?.message || t.emptyOrderbook);
     }
 
-    const timeout = setTimeout(load, 250);
+    const timeout = setTimeout(load, 50);
     const id = setInterval(load, 30000);
     return () => {
       cancelled = true;
       clearTimeout(timeout);
       clearInterval(id);
     };
-  }, []);
+  }, [pair, t.emptyOrderbook]);
 
   const pairs = books?.pairs || FEATURED_ORDERBOOK_PAIRS;
   const matches = useMemo(
