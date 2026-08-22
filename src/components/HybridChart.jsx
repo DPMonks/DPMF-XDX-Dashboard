@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getAmm, getOrderbooks, getPrices, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
 import { CHART_PAIRS, CHART_VISIBLE_BARS, DEFAULT_INTERVAL, INTERVALS } from "../chart/intervals";
@@ -27,6 +27,49 @@ import { moveDrawingHandle, nextDrawingState } from "../chart/drawings";
 import ChartTools from "./ChartTools";
 import HybridPlot from "./HybridPlot";
 import "./HybridChart.css";
+
+function MaTypeMenu({ value, t, onChange }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  const current = MA_TYPES.find((row) => row.id === value) || MA_TYPES[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function onDoc(event) {
+      if (!box.current?.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="hybrid-ma-select" ref={box}>
+      <button type="button" className="hybrid-ma-select-btn" onClick={() => setOpen((on) => !on)}>
+        {current.short}
+      </button>
+      {open ? (
+        <ul className="hybrid-ma-menu" role="listbox">
+          {MA_TYPES.map((row) => (
+            <li key={row.id}>
+              <button
+                type="button"
+                className={row.id === value ? "active" : undefined}
+                role="option"
+                aria-selected={row.id === value}
+                onClick={() => {
+                  onChange(row.id);
+                  setOpen(false);
+                }}
+              >
+                {t[row.labelKey] || row.short}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 function poolForPair(pools, pair) {
   return (Array.isArray(pools) ? pools : []).find(
@@ -233,13 +276,7 @@ export default function HybridChart() {
         <div className="hybrid-ma">
           <label className="hybrid-toggle">
             {t.chartMa}
-            <select value={maType} onChange={(event) => setMaType(event.target.value)}>
-              {MA_TYPES.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {t[row.labelKey] || row.id.toUpperCase()}
-                </option>
-              ))}
-            </select>
+            <MaTypeMenu value={maType} t={t} onChange={setMaType} />
           </label>
           {MA_PERIODS.map((row) => (
             <label key={row.period} className="hybrid-toggle">

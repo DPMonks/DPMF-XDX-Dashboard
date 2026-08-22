@@ -254,12 +254,12 @@ export function hma(values, period) {
 }
 
 export const MA_TYPES = [
-  { id: "sma", labelKey: "chartSma" },
-  { id: "ema", labelKey: "chartEma" },
-  { id: "wma", labelKey: "chartWma" },
-  { id: "smma", labelKey: "chartSmma" },
-  { id: "vwma", labelKey: "chartVwma" },
-  { id: "hma", labelKey: "chartHma" },
+  { id: "sma", short: "SMA", labelKey: "chartSma" },
+  { id: "ema", short: "EMA", labelKey: "chartEma" },
+  { id: "wma", short: "WMA", labelKey: "chartWma" },
+  { id: "smma", short: "SMMA", labelKey: "chartSmma" },
+  { id: "vwma", short: "VWMA", labelKey: "chartVwma" },
+  { id: "hma", short: "HMA", labelKey: "chartHma" },
 ];
 
 export const MA_PERIODS = [
