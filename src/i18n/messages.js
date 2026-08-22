@@ -30,6 +30,8 @@ const en = {
   reservedXrp: "Reserved",
   totalXrp: "Total XRP",
   richListPosition: "XDX rich list",
+  lpFeeEarnings: "LP fee earnings",
+  lpFees24h: "24h",
   supplyShare: "Supply share",
   xdxSupplyShare: "XDX supply share",
   borrowed: "Borrowed",

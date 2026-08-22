@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import {
   composeWalletSnapshot,
   emptyWalletSnapshot,
+  lpFeeEarnings,
   lpPositionFromPool,
   normalizeWalletPair,
   supplyShares,
+  tradingFeeRate,
   walletActivity,
   xrpBarPercents,
   xrpReserveBreakdown,
@@ -188,6 +190,63 @@ test("composeWalletSnapshot stays blank until an address is signed in", () => {
   assert.equal(filled.signedIn, true);
   assert.equal(filled.filled, true);
   assert.equal(filled.xdx.usd, 0.2);
+});
+
+test("lpFeeEarnings sums 24h pool fees across every LP position", () => {
+  assert.equal(tradingFeeRate(1000), 0.01);
+  const now = Date.parse("2026-08-22T12:00:00.000Z");
+  const fees = lpFeeEarnings(
+    [
+      {
+        pool: "XDX/XRP",
+        lp_share_percent: 10,
+        withdraw_estimate_xdx: 1000,
+        trading_fee: 1000,
+      },
+      {
+        pool: "XDX/USDC",
+        lp_share_percent: 1,
+        withdraw_estimate_xdx: 800,
+        trading_fee: 500,
+        volume24h: 20_000,
+      },
+    ],
+    {
+      xdxUsd: 0.00004,
+      now,
+      flows: [
+        { pool: "XDX/XRP", xdx: 10_000, timestamp: "2026-08-22T10:00:00.000Z" },
+        { pool: "XDX/XRP", xdx: 5_000, timestamp: "2026-08-21T10:00:00.000Z" },
+      ],
+    }
+  );
+  assert.equal(fees.xdx, 10_000 * 0.01 * 0.1 + 20_000 * 0.005 * 0.01);
+  assert.ok(Math.abs(fees.usd - fees.xdx * 0.00004) < 1e-12);
+  assert.ok(fees.pct24h > 0);
+  assert.ok(fees.pct24h <= 100);
+});
+
+test("composeWalletSnapshot totals LP fee earnings after sign-in", () => {
+  const filled = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 10, xdx: 1 },
+    prices: { xdxUsd: 0.00004 },
+    token: { circulating: 10_000_000_000 },
+    pools: [
+      {
+        pool_name: "XDX/XRP",
+        lp_supply: 1000,
+        reserve_asset: 50_000,
+        reserve_currency: 2,
+        trading_fee: 1000,
+      },
+    ],
+    lpRows: [{ pool_name: "XDX/XRP", lp_balance: 100 }],
+    flows: [{ pool: "XDX/XRP", xdx: 5_000, timestamp: new Date().toISOString() }],
+  });
+  assert.ok(filled.fees.xdx > 0);
+  assert.ok(filled.fees.usd > 0);
+  assert.equal(emptyWalletSnapshot(null).fees.xdx, null);
 });
 
 test("walletActivity only keeps the signed-in account", () => {

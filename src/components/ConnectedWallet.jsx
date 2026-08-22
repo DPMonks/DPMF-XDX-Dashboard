@@ -171,6 +171,23 @@ function LpInfographic({ position, locale, t, empty }) {
   );
 }
 
+function LpFeeTracker({ fees, locale, t, empty }) {
+  const blank = empty || fees?.xdx == null;
+  const pct = Number(fees?.pct24h);
+  return (
+    <div className={`wallet-fees${blank ? " is-empty" : " is-filled"}`}>
+      <p className="wallet-fees-label">{t.lpFeeEarnings}</p>
+      <p className="wallet-fees-xdx">{blank ? "—" : `${formatToken(fees.xdx, locale, 4)} ${t.xdx}`}</p>
+      <p className="wallet-fees-usd">{blank ? "—" : formatUsd(fees.usd, locale)}</p>
+      <p className="wallet-fees-pct">
+        {blank || !Number.isFinite(pct)
+          ? "—"
+          : `+${formatSupplySharePercent(pct, locale)} ${t.lpFees24h}`}
+      </p>
+    </div>
+  );
+}
+
 export default function ConnectedWallet() {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
@@ -246,6 +263,7 @@ export default function ConnectedWallet() {
                 ? "—"
                 : `#${formatNumber(view.rank, locale, { maximumFractionDigits: 0 })}`}
             </p>
+            <LpFeeTracker fees={view.fees} locale={locale} t={t} empty={empty} />
           </div>
         ) : (
           <p className="wallet-hero-hint">{t.connectWalletHint}</p>

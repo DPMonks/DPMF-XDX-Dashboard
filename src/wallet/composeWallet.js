@@ -189,6 +189,8 @@ export function lpPositionFromPool(lpBalance, pool = {}, pairHint = "") {
     withdraw_estimate_xdx: withdrawXdx ?? share * reserveXdx,
     withdraw_estimate_quote: withdrawQuote ?? share * reserveQuote,
     fees_earned: num(pool.fees_earned),
+    trading_fee: num(pool.trading_fee),
+    volume24h: num(pool.volume24h ?? pool.volume_24h),
     composition_xdx_percent: num(pool.xdx_pct ?? pool.composition_xdx_percent),
     composition_quote_percent: num(pool.quote_pct ?? pool.composition_quote_percent),
     xdx_pct: num(pool.xdx_pct ?? pool.composition_xdx_percent),
@@ -226,6 +228,44 @@ export function walletActivity(rows, address) {
     .slice(0, 3);
 }
 
+export function tradingFeeRate(tradingFee) {
+  const raw = Number(tradingFee);
+  if (!(raw > 0)) return 1000 / 100_000;
+  return raw > 20 ? raw / 100_000 : raw / 100;
+}
+
+export function volume24hByPool(flows = [], now = Date.now()) {
+  const cutoff = now - 24 * 60 * 60 * 1000;
+  const map = new Map();
+  for (const row of Array.isArray(flows) ? flows : []) {
+    const ts = new Date(row.timestamp).getTime();
+    if (!Number.isFinite(ts) || ts < cutoff) continue;
+    const pair = normalizeWalletPair(row.pool || row.pool_name || row.pair);
+    if (!pair) continue;
+    map.set(pair, (map.get(pair) || 0) + Math.abs(Number(row.xdx) || 0));
+  }
+  return map;
+}
+
+export function lpFeeEarnings(positions = [], { flows = [], xdxUsd = null, now = Date.now() } = {}) {
+  const vol = volume24hByPool(flows, now);
+  let xdx = 0;
+  let stake = 0;
+  for (const row of Array.isArray(positions) ? positions : []) {
+    const share = (num(row.lp_share_percent) || 0) / 100;
+    if (!(share > 0)) continue;
+    const volume = num(row.volume24h) || vol.get(normalizeWalletPair(row.pool || row.pool_name)) || 0;
+    xdx += volume * tradingFeeRate(row.trading_fee) * share;
+    stake += num(row.withdraw_estimate_xdx) || 0;
+  }
+  const usd = num(xdxUsd) != null ? xdx * Number(xdxUsd) : null;
+  return {
+    xdx,
+    usd,
+    pct24h: stake > 0 ? Math.min(100, (xdx / stake) * 100) : xdx > 0 ? null : 0,
+  };
+}
+
 export function emptyWalletSnapshot(address = null) {
   return {
     address,
@@ -234,6 +274,7 @@ export function emptyWalletSnapshot(address = null) {
     xrp: xrpReserveBreakdown({}),
     xdx: xdxFiatValues(null),
     supply: { circulatingPct: null, supplyPct: null, circulating: null, totalSupply: null },
+    fees: { xdx: null, usd: null, pct24h: null },
     lp: [],
     rank: null,
     book: null,
@@ -309,6 +350,10 @@ export function composeWalletSnapshot({
       circulating,
       totalSupply,
     },
+    fees: lpFeeEarnings(lp, {
+      flows,
+      xdxUsd: num(prices.xdxUsd ?? prices.recorded_price ?? token.xdxUsd),
+    }),
     lp,
     rank: num(rank ?? token.rank ?? balances.rank),
     book: xrpBook
