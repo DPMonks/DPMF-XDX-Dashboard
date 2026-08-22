@@ -13,6 +13,7 @@ import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/cha
 import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
+import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../src/chart/axis.js";
 
 test("bucketTime uses UTC midnight and Monday weeks", () => {
   assert.equal(bucketTime(Date.parse("2021-10-24T13:31:20.000Z"), "1D"), Date.parse("2021-10-24T00:00:00.000Z"));
@@ -198,6 +199,23 @@ test("locked XDX/RLUSD daily history paints one candle per UTC day on 1M", () =>
   assert.equal(new Date(month[month.length - 1].t).toISOString().slice(0, 10), "2026-08-22");
   const uniqueDays = new Set(month.map((row) => row.t));
   assert.equal(uniqueDays.size, 30);
+});
+
+test("priceTicks and timeTicks fill left and bottom chart scales", () => {
+  const prices = priceTicks(0.00001214, 0.00025542, 6);
+  assert.ok(prices.length >= 4 && prices.length <= 8);
+  assert.ok(prices[0] >= 0.00001214);
+  assert.ok(prices[prices.length - 1] <= 0.00025542);
+  assert.match(formatAxisPrice(0.00004538), /^0\.000045/);
+
+  const start = Date.parse("2026-07-24T00:00:00.000Z");
+  const end = Date.parse("2026-08-22T00:00:00.000Z");
+  const stamps = timeTicks(start, end, { count: 6, intervalId: "1D" });
+  assert.ok(stamps.length >= 4 && stamps.length <= 10);
+  assert.ok(stamps.every((stamp) => stamp >= start && stamp <= end));
+  assert.equal(formatAxisTime(start, { spanMs: end - start, intervalId: "1D", locale: "en-GB" }), "24 Jul");
+  assert.match(formatCursorWhen(start, "en-GB"), /24 Jul 2026/);
+  assert.match(formatCursorWhen(start, "en-GB"), /00:00/);
 });
 
 test("appendLiveClose updates the current UTC day instead of inventing a second candle", () => {

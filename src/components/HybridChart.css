@@ -156,9 +156,39 @@
   fill: #00eaff;
 }
 
+.hybrid-plot-frame {
+  fill: none;
+  stroke: rgba(152, 24, 240, 0.35);
+}
+
+.hybrid-grid {
+  stroke: rgba(152, 24, 240, 0.22);
+  stroke-width: 1;
+}
+
+.hybrid-grid.is-time {
+  stroke: rgba(0, 234, 255, 0.1);
+}
+
 .hybrid-axis {
   fill: #9aa0c8;
   font-size: 10px;
+}
+
+.hybrid-axis.is-price {
+  font-variant-numeric: tabular-nums;
+}
+
+.hybrid-cursor-tag rect {
+  fill: #1a0530;
+  stroke: #00eaff;
+  stroke-width: 1;
+}
+
+.hybrid-cursor-tag text {
+  fill: #ffffff;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .hybrid-ohlc,
@@ -174,7 +204,7 @@
 .hybrid-ohlc {
   position: absolute;
   top: 8px;
-  left: 16px;
+  left: 86px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

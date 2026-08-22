@@ -262,6 +262,7 @@ export default function HybridChart() {
           <HybridPlot
             candles={candles}
             quote={quote}
+            interval={timeframe}
             view={view}
             bands={bands}
             walls={walls}
