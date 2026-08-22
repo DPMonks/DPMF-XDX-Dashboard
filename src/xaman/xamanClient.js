@@ -28,10 +28,24 @@ export function normalizePayload(raw) {
   return {
     uuid,
     qr,
-    mobileUrl,
+    mobileUrl: uuid ? xamanSignUrl(uuid) : mobileUrl,
     websocket,
     raw,
   };
+}
+
+export function xamanSignUrl(uuid) {
+  const id = String(uuid || "").trim();
+  return id ? `https://xumm.app/sign/${encodeURIComponent(id)}` : "";
+}
+
+export function xamanAppUrl(uuid) {
+  const id = String(uuid || "").trim();
+  return id ? `xumm://xumm.app/sign/${encodeURIComponent(id)}` : "";
+}
+
+export function isPhoneDevice(userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "") {
+  return /Android|iPhone|iPod/i.test(String(userAgent || ""));
 }
 
 export async function createPayload() {

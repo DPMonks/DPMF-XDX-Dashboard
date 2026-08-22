@@ -308,18 +308,28 @@ body {
   justify-content: center;
   align-items: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
   z-index: 9999;
 }
 
 .wallet-modal {
-  background: #101020;
+  background: #0d0d14;
   border: 1px solid var(--dpmf-border-soft);
-  border-radius: 12px;
-  padding: 28px 24px;
+  border-radius: 16px;
+  padding: 28px 24px 22px;
   text-align: center;
-  width: min(380px, calc(100vw - 32px));
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.28);
+  width: min(400px, calc(100vw - 32px));
+  box-shadow: 0 0 28px rgba(0, 255, 255, 0.22);
+}
+
+.wallet-modal-logo {
+  display: block;
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  margin: 0 auto 12px;
+  border-radius: 12px;
 }
 
 .modal-title {
@@ -330,10 +340,12 @@ body {
 
 .qr-image {
   display: block;
-  margin: 1rem auto;
-  max-width: 220px;
-  width: 100%;
+  margin: 0.5rem auto 1rem;
+  width: min(260px, 72vw);
+  height: auto;
+  aspect-ratio: 1;
   border-radius: 12px;
+  background: #fff;
 }
 
 .mobile-link-btn,
@@ -1378,6 +1390,16 @@ body {
 
   .wallet-modal-overlay {
     padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  }
+
+  .wallet-modal {
+    width: min(400px, calc(100vw - 24px));
+    padding: 32px 20px 20px;
+  }
+
+  .mobile-link-btn {
+    background: var(--xaman-blue);
+    font-size: 16px;
   }
 }
 

@@ -15,6 +15,7 @@ export default function ConnectWallet() {
   const { walletAddress, connectWallet, disconnectWallet } = useWallet();
   const [qr, setQr] = useState(null);
   const [mobileUrl, setMobileUrl] = useState(null);
+  const [uuid, setUuid] = useState(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState(null);
   const socketRef = useRef(null);
@@ -24,6 +25,7 @@ export default function ConnectWallet() {
   const resetModal = () => {
     setQr(null);
     setMobileUrl(null);
+    setUuid(null);
     setStatus("idle");
     if (socketRef.current) {
       socketRef.current.close();
@@ -69,6 +71,7 @@ export default function ConnectWallet() {
       const payload = await createPayload();
       setQr(payload.qr);
       setMobileUrl(payload.mobileUrl);
+      setUuid(payload.uuid);
       setStatus("waiting");
 
       timeoutRef.current = setTimeout(() => {
@@ -120,6 +123,7 @@ export default function ConnectWallet() {
         visible={status === "loading" || status === "waiting"}
         qrUrl={qr}
         mobileUrl={mobileUrl}
+        uuid={uuid}
         status={status}
         onClose={resetModal}
       />

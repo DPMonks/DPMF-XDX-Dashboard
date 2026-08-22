@@ -56,7 +56,8 @@ export function buildSignInPayload(origin, txjson) {
       submit: false,
       expire: 5,
       return_url: {
-        web,
+        // App-only: identical web+app URLs make Xaman steal the current
+        // browser tab and show their hosted sign-in page.
         app: web,
       },
     },

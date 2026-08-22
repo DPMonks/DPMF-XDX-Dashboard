@@ -7,7 +7,12 @@ import {
   xamanErrorMessage,
   xummConfigured,
 } from "../api/xaman/_xumm.js";
-import { normalizePayload } from "../src/xaman/xamanClient.js";
+import {
+  isPhoneDevice,
+  normalizePayload,
+  xamanAppUrl,
+  xamanSignUrl,
+} from "../src/xaman/xamanClient.js";
 
 test("cleanCredential strips quotes and whitespace", () => {
   assert.equal(cleanCredential('  "abc-def" \n'), "abc-def");
@@ -15,10 +20,11 @@ test("cleanCredential strips quotes and whitespace", () => {
   assert.equal(cleanCredential(null), "");
 });
 
-test("buildSignInPayload sends the site as the Xaman return URL", () => {
+test("buildSignInPayload returns to the site from the app, not a Xaman web page", () => {
   const payload = buildSignInPayload("https://xdx-exchange.dpmf.technology/");
   assert.equal(payload.txjson.TransactionType, "SignIn");
-  assert.equal(payload.options.return_url.web, "https://xdx-exchange.dpmf.technology");
+  assert.equal(payload.options.return_url.app, "https://xdx-exchange.dpmf.technology");
+  assert.equal(payload.options.return_url.web, undefined);
   assert.equal(payload.options.submit, false);
 });
 
@@ -56,4 +62,12 @@ test("normalizePayload reads the Xaman QR refs", () => {
   });
   assert.equal(payload.uuid, "payload-1");
   assert.ok(payload.qr.includes("payload-1"));
+  assert.equal(payload.mobileUrl, "https://xumm.app/sign/payload-1");
+});
+
+test("xaman sign links stay on the payload uuid and phones are detected", () => {
+  assert.equal(xamanSignUrl("abc-1"), "https://xumm.app/sign/abc-1");
+  assert.equal(xamanAppUrl("abc-1"), "xumm://xumm.app/sign/abc-1");
+  assert.equal(isPhoneDevice("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), true);
+  assert.equal(isPhoneDevice("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), false);
 });
