@@ -13,79 +13,64 @@ import {
   shortAddress,
 } from "../utils/format";
 import { copyToClipboard } from "../utils/copy";
-import { emptyWalletSnapshot } from "../wallet/composeWallet";
+import { compareBarPercents, emptyWalletSnapshot } from "../wallet/composeWallet";
 import { useMorph } from "../wallet/useMorph";
 
-function Ring({ value, max = 1, radius, color, empty }) {
-  const circ = 2 * Math.PI * radius;
-  const pct = empty || !(max > 0) ? 0 : Math.min(1, Math.max(0, value / max));
+function XrpColumn({ label, tone, percent, value, locale, empty }) {
   return (
-    <circle
-      cx="60"
-      cy="60"
-      r={radius}
-      fill="none"
-      stroke={color}
-      strokeWidth="7"
-      strokeLinecap="round"
-      strokeDasharray={`${circ * pct} ${circ}`}
-      transform="rotate(-90 60 60)"
-      className="wallet-dial-ring"
-    />
-  );
-}
-
-function XrpReserveBar({ xrp, locale, t, empty }) {
-  const spendable = useMorph(empty ? 0 : xrp.spendable);
-  const reserved = useMorph(empty ? 0 : xrp.reserved);
-  const total = Number(xrp.balance) || Number(spendable) + Number(reserved) || 1;
-  const spendPct = empty ? 0 : Math.min(100, ((Number(spendable) || 0) / total) * 100);
-  const reservePct = empty ? 0 : Math.min(100 - spendPct, ((Number(reserved) || 0) / total) * 100);
-
-  return (
-    <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
-      <p className="wallet-panel-title">{t.xrpReserve}</p>
+    <div className="wallet-xrp-col">
       <div className="wallet-xrp-bar" aria-hidden="true">
-        <span className="is-spend" style={{ height: `${spendPct}%` }} />
-        <span className="is-reserve" style={{ height: `${reservePct}%` }} />
+        <span className={tone} style={{ height: `${empty ? 0 : percent}%` }} />
       </div>
-      <dl className="wallet-mini-list">
-        <div>
-          <dt>{t.spendableXrp}</dt>
-          <dd>{empty ? "—" : formatToken(spendable, locale, 4)}</dd>
-        </div>
-        <div>
-          <dt>{t.reservedXrp}</dt>
-          <dd>{empty ? "—" : formatToken(reserved, locale, 4)}</dd>
-        </div>
-        <div>
-          <dt>{t.xrp}</dt>
-          <dd>{empty ? "—" : formatToken(xrp.balance, locale, 4)}</dd>
-        </div>
-      </dl>
+      <small>{label}</small>
+      <b>{empty ? "—" : formatToken(value, locale, 4)}</b>
     </div>
   );
 }
 
-function XdxBalanceDial({ xdx, locale, t, empty }) {
-  const usd = useMorph(empty ? 0 : xdx.usd);
+function XrpBalanceBars({ xrp, locale, t, empty }) {
+  const spendable = useMorph(empty ? 0 : xrp.spendable);
+  const reserved = useMorph(empty ? 0 : xrp.reserved);
+  const total = useMorph(empty ? 0 : xrp.balance);
+  const [reservePct, spendPct, totalPct] = compareBarPercents(reserved, spendable, total);
+
   return (
-    <div className={`wallet-panel wallet-dial-panel${empty ? " is-empty" : " is-filled"}`}>
-      <p className="wallet-panel-title">{t.xdxValue}</p>
-      <div className="wallet-dial-wrap">
-        <svg viewBox="0 0 120 120" className="wallet-dial" aria-hidden="true">
-          <circle cx="60" cy="60" r="50" className="wallet-dial-track" />
-          <circle cx="60" cy="60" r="38" className="wallet-dial-track" />
-          <circle cx="60" cy="60" r="26" className="wallet-dial-track" />
-          <Ring value={empty ? 0 : 1} max={1} radius={50} color="var(--dpmf-neon-violet)" empty={empty} />
-          <Ring value={empty ? 0 : 0.72} max={1} radius={38} color="var(--dpmf-neon-cyan)" empty={empty} />
-          <Ring value={empty ? 0 : 0.48} max={1} radius={26} color="var(--dpmf-neon-lime)" empty={empty} />
-        </svg>
-        <div className="wallet-dial-center">
-          <strong>{empty ? "—" : formatUsd(usd, locale)}</strong>
-          <span>{empty ? "—" : formatGbp(xdx.gbp, locale)}</span>
-        </div>
+    <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
+      <p className="wallet-panel-title">{t.xrpBalance}</p>
+      <div className="wallet-xrp-bars">
+        <XrpColumn
+          label={t.reservedXrp}
+          tone="is-reserve"
+          percent={reservePct}
+          value={reserved}
+          locale={locale}
+          empty={empty}
+        />
+        <XrpColumn
+          label={t.spendableXrp}
+          tone="is-spend"
+          percent={spendPct}
+          value={spendable}
+          locale={locale}
+          empty={empty}
+        />
+        <XrpColumn
+          label={t.xrp}
+          tone="is-total"
+          percent={totalPct}
+          value={total}
+          locale={locale}
+          empty={empty}
+        />
       </div>
+    </div>
+  );
+}
+
+function XdxBalancePanel({ xdx, locale, t, empty }) {
+  return (
+    <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
+      <p className="wallet-panel-title">{t.xdxValue}</p>
       <dl className="wallet-mini-list">
         <div>
           <dt>{t.xdx}</dt>
@@ -121,6 +106,20 @@ function SupplyShareBars({ supply, locale, t, empty }) {
           <i className="is-amm" style={{ width: `${ammWidth}%` }} />
         </span>
         <b>{empty ? "—" : formatSharePercent(amm, locale)}</b>
+      </div>
+      <div className="wallet-micro is-pending">
+        <span>{t.borrowed}</span>
+        <span className="wallet-micro-track">
+          <i />
+        </span>
+        <b>—</b>
+      </div>
+      <div className="wallet-micro is-pending">
+        <span>{t.lending}</span>
+        <span className="wallet-micro-track">
+          <i />
+        </span>
+        <b>—</b>
       </div>
     </div>
   );
@@ -234,8 +233,8 @@ export default function ConnectedWallet() {
       </header>
 
       <div className="wallet-infographics">
-        <XrpReserveBar xrp={view.xrp} locale={locale} t={t} empty={empty} />
-        <XdxBalanceDial xdx={view.xdx} locale={locale} t={t} empty={empty} />
+        <XrpBalanceBars xrp={view.xrp} locale={locale} t={t} empty={empty} />
+        <XdxBalancePanel xdx={view.xdx} locale={locale} t={t} empty={empty} />
         <SupplyShareBars supply={view.supply} locale={locale} t={t} empty={empty} />
       </div>
 

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  compareBarPercents,
   composeWalletSnapshot,
   emptyWalletSnapshot,
   lpPositionFromPool,
@@ -21,6 +22,14 @@ test("xrpReserveBreakdown stacks spendable on top of base and owner reserve", ()
   assert.equal(row.ownerReserve, 2);
   assert.equal(row.reserved, 3);
   assert.equal(row.spendable, 22);
+});
+
+test("compareBarPercents sizes three XRP bars against the largest value", () => {
+  const [reserve, spendable, total] = compareBarPercents(3, 22, 25);
+  assert.equal(reserve, 12);
+  assert.equal(spendable, 88);
+  assert.equal(total, 100);
+  assert.deepEqual(compareBarPercents(0, 0, 0), [0, 0, 0]);
 });
 
 test("supplyShares uses circulating and AMM XDX, not arcs", () => {

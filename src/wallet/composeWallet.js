@@ -48,6 +48,13 @@ export function xrpReserveBreakdown({
   };
 }
 
+export function compareBarPercents(...values) {
+  const nums = values.map((value) => Math.max(0, Number(value) || 0));
+  const max = Math.max(...nums, 0);
+  if (!(max > 0)) return nums.map(() => 0);
+  return nums.map((value) => (value / max) * 100);
+}
+
 export function supplyShares(xdx, circulating, ammXdx) {
   const bal = num(xdx);
   const circ = num(circulating);
