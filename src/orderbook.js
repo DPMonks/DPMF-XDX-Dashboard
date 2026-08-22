@@ -1,4 +1,4 @@
-import { ammCurveLevels } from "./ammCurve.js";
+import { ammSpot, measureAmmAgainstDex } from "./ammCurve.js";
 
 export const ORDERBOOK_PAIRS = ["XDX/XRP", "XDX/RLUSD"];
 export const FEATURED_ORDERBOOK_PAIRS = [
@@ -102,16 +102,17 @@ export function emptyOrderbook(pair = "XDX/XRP") {
   };
 }
 
+function nativeBest(rows, side) {
+  const prices = (Array.isArray(rows) ? rows : [])
+    .filter((row) => Number(row?.price) > 0 && String(row.source || "dex") !== "amm")
+    .map((row) => Number(row.price));
+  if (!prices.length) return null;
+  return side === "ask" ? Math.min(...prices) : Math.max(...prices);
+}
+
 export function bookHeader(book = {}) {
-  const ammLevels = Array.isArray(book.amm?.levels) ? book.amm.levels : [];
-  const ammBids = ammLevels
-    .filter((row) => String(row.side).toLowerCase() === "bid" && Number(row.price) > 0)
-    .sort((a, b) => Number(b.price) - Number(a.price));
-  const ammAsks = ammLevels
-    .filter((row) => String(row.side).toLowerCase() === "ask" && Number(row.price) > 0)
-    .sort((a, b) => Number(a.price) - Number(b.price));
-  const best_bid = Number(book.best_bid) > 0 ? Number(book.best_bid) : ammBids[0]?.price ?? null;
-  const best_ask = Number(book.best_ask) > 0 ? Number(book.best_ask) : ammAsks[0]?.price ?? null;
+  const best_bid = Number(book.best_bid) > 0 ? Number(book.best_bid) : nativeBest(book.bids, "bid");
+  const best_ask = Number(book.best_ask) > 0 ? Number(book.best_ask) : nativeBest(book.asks, "ask");
   const mid =
     Number(book.mid) > 0
       ? Number(book.mid)
@@ -135,6 +136,37 @@ export function orderBookRowStamp(row = {}) {
   return row.as_of || payload.as_of || row.timestamp || row.updated_at || null;
 }
 
+export function nativeDexRows(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => {
+      if (!row || row.placeholder) return false;
+      if (String(row.source || "dex").toLowerCase() === "amm") return false;
+      const price = Number(row.price);
+      const size = Number(row.base_size ?? row.amount ?? row.size);
+      return price > 0 && size > 0;
+    })
+    .map((row, index) => ({
+      ...row,
+      level: row.level ?? index + 1,
+      price: Number(row.price),
+      base_size: Number(row.base_size ?? row.amount ?? row.size),
+      source: "dex",
+    }));
+}
+
+function withCumulative(rows, side) {
+  const ask = String(side).toLowerCase() === "ask";
+  const sorted = [...rows].sort((a, b) => {
+    const delta = Number(a.price) - Number(b.price);
+    return ask ? delta : -delta;
+  });
+  let cumulative = 0;
+  return sorted.map((row, index) => {
+    cumulative += Number(row.base_size) || 0;
+    return { ...row, level: row.level ?? index + 1, cumulative_base: cumulative };
+  });
+}
+
 export function composeAmmBook(stored, reserves = {}, pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(stored?.pair || pair);
   const base = asOrderbookPayload(stored, name);
@@ -144,43 +176,49 @@ export function composeAmmBook(stored, reserves = {}, pair = "XDX/XRP") {
   const reserveQuote = Number(
     reserves.reserve_currency ?? reserves.reserve_quote ?? base.amm?.reserve_currency ?? 0
   );
-  const tradingFee = Number(
-    reserves.trading_fee ?? base.amm?.trading_fee ?? 1000
+  const tradingFee = Number(reserves.trading_fee ?? base.amm?.trading_fee ?? 1000);
+  const spot =
+    Number(reserves.price) > 0
+      ? Number(reserves.price)
+      : ammSpot(reserveBase, reserveQuote) || Number(base.amm?.price) || null;
+
+  const reserveMeta = { reserveBase, reserveQuote, tradingFee };
+  const bids = withCumulative(
+    measureAmmAgainstDex(nativeDexRows(base.bids), reserveMeta, "bid"),
+    "bid"
   );
-  const curve = ammCurveLevels({
-    reserveBase,
-    reserveQuote,
-    tradingFee,
-    steps: ORDERBOOK_VISIBLE_LEVELS,
-  });
-  const ammLevels = [...curve.asks, ...curve.bids];
-  const useCurve = curve.asks.length >= ORDERBOOK_VISIBLE_LEVELS &&
-    curve.bids.length >= ORDERBOOK_VISIBLE_LEVELS;
-  const levels = useCurve
-    ? ammLevels
-    : Array.isArray(base.amm?.levels) && base.amm.levels.length
-      ? base.amm.levels
-      : ammLevels;
-  const present =
-    base.bids.length > 0 ||
-    base.asks.length > 0 ||
-    levels.length > 0;
-  const amm = {
-    ...(base.amm || {}),
-    reserve_asset: reserveBase || base.amm?.reserve_asset || null,
-    reserve_currency: reserveQuote || base.amm?.reserve_currency || null,
-    trading_fee: tradingFee,
-    price: curve.price || base.amm?.price || null,
-    levels,
-    source: useCurve ? "amm_curve" : base.amm?.source || "db",
-  };
+  const asks = withCumulative(
+    measureAmmAgainstDex(nativeDexRows(base.asks), reserveMeta, "ask"),
+    "ask"
+  );
+  const present = bids.length > 0 || asks.length > 0;
+  const best_bid = nativeBest(bids, "bid");
+  const best_ask = nativeBest(asks, "ask");
+  const mid =
+    best_bid > 0 && best_ask > 0
+      ? (best_bid + best_ask) / 2
+      : spot || best_bid || best_ask || null;
+
   return {
     ...base,
     pair: name,
     quote: base.quote || name.split("/")[1] || "XRP",
+    bids,
+    asks,
     present,
     catching_up: !present,
-    amm: levels.length ? amm : base.amm,
+    best_bid,
+    best_ask,
+    mid,
+    amm: {
+      ...(base.amm || {}),
+      reserve_asset: reserveBase || null,
+      reserve_currency: reserveQuote || null,
+      trading_fee: tradingFee,
+      price: spot,
+      levels: [],
+      source: "opposing",
+    },
     mid_usd:
       Number(base.mid_usd) > 0
         ? Number(base.mid_usd)
@@ -203,7 +241,7 @@ export function asOrderbookPayload(raw, pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(body.pair || pair);
   const bids = Array.isArray(body.bids) ? body.bids : [];
   const asks = Array.isArray(body.asks) ? body.asks : [];
-  const present = body.present !== false && (bids.length > 0 || asks.length > 0 || Boolean(body.amm));
+  const present = body.present !== false && (bids.length > 0 || asks.length > 0);
   return {
     ...emptyOrderbook(name),
     ...body,

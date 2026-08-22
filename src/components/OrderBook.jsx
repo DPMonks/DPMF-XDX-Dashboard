@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { getOrderbooks } from "../api/indexer";
 import {
   bookHeader,
-  combineOrderbookSide,
   emptyOrderbook,
   FEATURED_ORDERBOOK_PAIRS,
   filterOrderbookPairs,
@@ -13,16 +12,21 @@ import { formatQuotePerBase, formatToken, formatUsdPrice, formatWhen } from "../
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
-function depthWidth(row, maxCumulative) {
-  const value = Number(row?.cumulative_base || row?.base_size || 0);
-  const max = Number(maxCumulative || 0);
-  if (!(value > 0) || !(max > 0)) return 0;
-  return Math.min(100, (value / max) * 100);
+function depthWidth(value, max) {
+  const size = Number(value || 0);
+  const cap = Number(max || 0);
+  if (!(size > 0) || !(cap > 0)) return 0;
+  return Math.min(100, (size / cap) * 100);
+}
+
+function ammMeasure(row) {
+  return Number(row?.amm_opposing || 0) || Number(row?.amm_through || 0) || 0;
 }
 
 function BookSide({ title, rows, side, locale, t }) {
   const filled = rows.filter((row) => !row.placeholder && Number(row.base_size) > 0);
   const max = Math.max(0, ...filled.map((row) => Number(row.cumulative_base || row.base_size || 0)));
+  const maxAmm = Math.max(0, ...filled.map((row) => ammMeasure(row)));
   const isAsk = side === "ask";
 
   const amount = (row) =>
@@ -50,17 +54,25 @@ function BookSide({ title, rows, side, locale, t }) {
         {rows.map((row, index) => (
           <div
             key={`${side}-${row.level ?? index}-${row.price ?? "empty"}`}
-            className={`orderbook-row is-${side}${row.source === "amm" ? " is-amm" : ""}${
-              row.placeholder ? " is-empty" : ""
-            }`}
+            className={`orderbook-row is-${side}${row.placeholder ? " is-empty" : ""}`}
             role="listitem"
           >
             {!row.placeholder ? (
-              <span
-                className="orderbook-depth"
-                style={{ width: `${depthWidth(row, max)}%` }}
-                aria-hidden="true"
-              />
+              <>
+                <span
+                  className="orderbook-depth"
+                  style={{ width: `${depthWidth(row.cumulative_base || row.base_size, max)}%` }}
+                  aria-hidden="true"
+                />
+                {ammMeasure(row) > 0 ? (
+                  <span
+                    className="orderbook-depth is-amm"
+                    style={{ width: `${depthWidth(ammMeasure(row), maxAmm)}%` }}
+                    title={t.ammDepth}
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </>
             ) : null}
             {isAsk ? (
               <>
@@ -122,17 +134,8 @@ export default function OrderBook() {
     return books?.books?.[name] || books?.books?.[pair] || emptyOrderbook(name);
   }, [books, pair]);
 
-  const bidRows = useMemo(() => {
-    const ammLevels = Array.isArray(book.amm?.levels) ? book.amm.levels : [];
-    const ammBids = ammLevels.filter((row) => String(row.side).toLowerCase() === "bid");
-    return padOrderbookLevels(combineOrderbookSide(book.bids, ammBids, "bid"));
-  }, [book]);
-
-  const askRows = useMemo(() => {
-    const ammLevels = Array.isArray(book.amm?.levels) ? book.amm.levels : [];
-    const ammAsks = ammLevels.filter((row) => String(row.side).toLowerCase() === "ask");
-    return padOrderbookLevels(combineOrderbookSide(book.asks, ammAsks, "ask"));
-  }, [book]);
+  const bidRows = useMemo(() => padOrderbookLevels(book.bids || []), [book]);
+  const askRows = useMemo(() => padOrderbookLevels(book.asks || []), [book]);
 
   if (!books && !error) {
     return (
@@ -229,6 +232,8 @@ export default function OrderBook() {
 
       {book.catching_up && !book.present ? (
         <p className="orderbook-asof">{t.emptyOrderbook}</p>
+      ) : book.present ? (
+        <p className="orderbook-asof">{t.ammDepth}</p>
       ) : null}
 
       {book.as_of ? (

@@ -329,7 +329,8 @@ body {
 
 .token-details-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-auto-rows: 76px;
   gap: 8px;
 }
 
@@ -338,10 +339,12 @@ body {
   background: var(--dpmf-bg-elevated);
   border: 1px solid var(--dpmf-border-soft);
   border-radius: 10px;
-  min-height: 58px;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .token-detail-label {
@@ -367,6 +370,9 @@ body {
   font-size: 10px;
   color: var(--dpmf-text-muted);
   font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .activity-chart-container,
@@ -1013,9 +1019,8 @@ body {
   color: #ff6b6b;
 }
 
-.orderbook-row.is-amm {
-  outline: 1px dashed rgba(199, 112, 255, 0.45);
-  outline-offset: -1px;
+.orderbook-depth.is-amm {
+  background: rgba(199, 112, 255, 0.28);
 }
 
 .orderbook-empty,

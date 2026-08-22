@@ -13,7 +13,7 @@ import {
   padOrderbookLevels,
   sortOrderbookPairs,
 } from "../src/orderbook.js";
-import { ammCurveLevels } from "../src/ammCurve.js";
+import { ammSizeToPrice, ammSpot } from "../src/ammCurve.js";
 
 test("normalizeOrderbookPair maps quote aliases onto featured and detected AMM pairs", () => {
   assert.equal(normalizeOrderbookPair("XRP"), "XDX/XRP");
@@ -43,31 +43,73 @@ test("filterOrderbookPairs matches quote search without requiring the XDX/ prefi
   assert.deepEqual(rows, ["XDX/XIO"]);
 });
 
-test("ammCurveLevels fills 20 bids and 20 asks from pool reserves", () => {
-  const curve = ammCurveLevels({
-    reserveBase: 63_000_000,
-    reserveQuote: 1875,
-    tradingFee: 1000,
+test("ammSizeToPrice grows as price walks further from spot", () => {
+  const reserveBase = 63_000_000;
+  const reserveQuote = 1875;
+  const spot = ammSpot(reserveBase, reserveQuote);
+  const near = ammSizeToPrice({
+    reserveBase,
+    reserveQuote,
+    targetPrice: spot * 0.995,
   });
-  assert.equal(curve.asks.length, 20);
-  assert.equal(curve.bids.length, 20);
-  assert.ok(curve.asks[0].price > curve.price);
-  assert.ok(curve.bids[0].price < curve.price);
-  assert.equal(curve.asks[0].source, "amm");
+  const far = ammSizeToPrice({
+    reserveBase,
+    reserveQuote,
+    targetPrice: spot * 0.95,
+  });
+  const up = ammSizeToPrice({
+    reserveBase,
+    reserveQuote,
+    targetPrice: spot * 1.01,
+  });
+  assert.equal(near.side, "bid");
+  assert.equal(far.side, "bid");
+  assert.equal(up.side, "ask");
+  assert.ok(far.base_size > near.base_size);
+  assert.notEqual(near.base_size, far.base_size);
 });
 
-test("composeAmmBook blends an empty DEX book with a 20-level AMM curve", () => {
+test("composeAmmBook does not invent a perfect AMM tape when DEX is empty", () => {
   const book = composeAmmBook(emptyOrderbook("XDX/XIO"), {
     reserve_asset: 51_000_000,
     reserve_currency: 120_000,
     trading_fee: 1000,
   }, "XDX/XIO");
-  const asks = (book.amm.levels || []).filter((row) => row.side === "ask");
-  const bids = (book.amm.levels || []).filter((row) => row.side === "bid");
   assert.equal(book.pair, "XDX/XIO");
+  assert.equal(book.present, false);
+  assert.equal(book.catching_up, true);
+  assert.deepEqual(book.bids, []);
+  assert.deepEqual(book.asks, []);
+  assert.deepEqual(book.amm.levels, []);
+  assert.ok(book.amm.price > 0);
+});
+
+test("composeAmmBook keeps native sizes and measures AMM opposing at those prices", () => {
+  const book = composeAmmBook(
+    {
+      pair: "XDX/XRP",
+      bids: [
+        { price: 0.0000295, base_size: 5_000 },
+        { price: 0.000028, base_size: 12_400 },
+      ],
+      asks: [{ price: 0.000031, base_size: 8_000 }],
+    },
+    {
+      reserve_asset: 63_000_000,
+      reserve_currency: 1875,
+      trading_fee: 1000,
+    },
+    "XDX/XRP"
+  );
   assert.equal(book.present, true);
-  assert.equal(asks.length, 20);
-  assert.equal(bids.length, 20);
+  assert.equal(book.bids[0].source, "dex");
+  assert.equal(book.bids[0].base_size, 5_000);
+  assert.equal(book.bids[1].base_size, 12_400);
+  assert.notEqual(book.bids[0].base_size, book.bids[1].base_size);
+  assert.ok(book.bids[1].amm_through > book.bids[0].amm_through);
+  assert.equal(book.asks[0].amm_opposing, 0);
+  assert.ok(book.asks[0].amm_through > 0);
+  assert.deepEqual(book.amm.levels, []);
 });
 
 test("empty order book matches the catching_up envelope", () => {
@@ -113,12 +155,14 @@ test("combineOrderbookSide mirrors GateHub: best bid high, best ask low", () => 
   assert.equal(asks[0].price, 0.000031);
 });
 
-test("bookHeader uses AMM quote-per-XDX when DEX bid/ask are zero", () => {
+test("bookHeader uses native DEX bid/ask and only falls mid back to AMM spot", () => {
   const header = bookHeader({
     best_bid: 0,
     best_ask: 0,
-    mid: 0.000029697395,
+    mid: 0,
     mid_usd: 0.00004336,
+    bids: [],
+    asks: [],
     amm: {
       price: 0.000029697395,
       levels: [
@@ -127,11 +171,11 @@ test("bookHeader uses AMM quote-per-XDX when DEX bid/ask are zero", () => {
       ],
     },
   });
-  assert.equal(header.best_bid, 0.000029623152);
-  assert.equal(header.best_ask, 0.000029771638);
+  assert.equal(header.best_bid, null);
+  assert.equal(header.best_ask, null);
   assert.equal(header.mid, 0.000029697395);
   assert.equal(header.mid_usd, 0.00004336);
-  assert.ok(header.spread_bps > 0);
+  assert.equal(header.spread_bps, null);
 });
 
 test("order book stamp prefers Worker 2 timestamp, not updated_at", () => {

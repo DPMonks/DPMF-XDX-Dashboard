@@ -951,9 +951,10 @@ async function loadOrderbooks(db) {
       (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
     );
     const reserves = loadPairReserves(pair, reserveIndex, xrpPool, pool);
+    const composed = composeAmmBook(stored, reserves, pair);
     books[pair] = {
-      ...composeAmmBook(stored, reserves, pair),
-      as_of: stored.as_of || asIso(reserves.timestamp) || stored.as_of,
+      ...composed,
+      as_of: storedByPair.has(pair.toUpperCase()) ? stored.as_of : null,
       source: "db",
     };
   }
