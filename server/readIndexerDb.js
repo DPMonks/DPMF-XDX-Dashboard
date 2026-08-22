@@ -12,7 +12,7 @@ import {
   recordedXdxUsdFromPrices,
   xrpPerXdx,
 } from "../src/utils/recordedPrice.js";
-import { poolAssetSplit, quoteUsdFromMap } from "../src/utils/poolSplit.js";
+import { inferQuoteReserve, poolAssetSplit, quoteUsdFromMap } from "../src/utils/poolSplit.js";
 import {
   asIso,
   buildTodayOwnersPayload,
@@ -889,13 +889,20 @@ async function loadOrderbook(db, pair = "XDX/XRP") {
   };
 }
 
-async function loadPairReserves(pair, reserveIndex, xrpPool) {
+function loadPairReserves(pair, reserveIndex, xrpPool, pool) {
   const name = normalizeOrderbookPair(pair);
-  const extra = reserveIndex?.byName?.get(name.toUpperCase()) || {};
-  let reserveBase = Number(extra.reserve_asset || 0);
-  let reserveQuote = Number(extra.reserve_currency || 0);
+  const extra =
+    reserveIndex?.byName?.get(name.toUpperCase()) ||
+    reserveIndex?.byAmm?.get(pool?.amm_account) ||
+    {};
+  let reserveBase = Number(
+    extra.reserve_asset || pool?.reserve_xdx || pool?.reserve_asset || 0
+  );
+  let reserveQuote = Number(
+    extra.reserve_currency || pool?.reserve_currency || pool?.reserve_quote || 0
+  );
   const price = Number(extra.price || 0);
-  const tradingFee = Number(extra.trading_fee || 1000);
+  const tradingFee = Number(extra.trading_fee || pool?.trading_fee || 1000);
 
   if (name === "XDX/XRP") {
     if (!(reserveBase > 0)) reserveBase = Number(xrpPool?.reserve_asset || 0);
@@ -904,6 +911,9 @@ async function loadPairReserves(pair, reserveIndex, xrpPool) {
 
   if (reserveBase > 0 && !(reserveQuote > 0) && price > 0 && price < 10) {
     reserveQuote = reserveBase * price;
+  }
+  if (reserveBase > 0 && !(reserveQuote > 0)) {
+    reserveQuote = inferQuoteReserve(reserveBase, pool?.xdxUsd, pool?.quote_usd);
   }
 
   return {
@@ -937,7 +947,10 @@ async function loadOrderbooks(db) {
   const books = {};
   for (const pair of pairs) {
     const stored = storedByPair.get(pair.toUpperCase()) || emptyOrderbook(pair);
-    const reserves = loadPairReserves(pair, reserveIndex, xrpPool);
+    const pool = (lp.pools || []).find(
+      (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
+    );
+    const reserves = loadPairReserves(pair, reserveIndex, xrpPool, pool);
     books[pair] = {
       ...composeAmmBook(stored, reserves, pair),
       as_of: stored.as_of || asIso(reserves.timestamp) || stored.as_of,
@@ -993,6 +1006,8 @@ async function loadAmmReserveIndex(db) {
       timestamp: row.timestamp || null,
     };
     if (name && (overwrite || !byName.has(name))) byName.set(name, extra);
+    const slash = name.replace(/-/g, "/");
+    if (slash && (overwrite || !byName.has(slash))) byName.set(slash, extra);
     if (row.amm_account && (overwrite || !byAmm.has(row.amm_account))) {
       byAmm.set(row.amm_account, extra);
     }

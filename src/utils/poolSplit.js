@@ -39,6 +39,14 @@ export function formatPoolPct(value) {
   return num.toFixed(1);
 }
 
+export function inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) {
+  const xdx = Number(reserveXdx);
+  const xdxPrice = Number(xdxUsd);
+  const quotePrice = Number(quoteUsd);
+  if (!(xdx > 0) || !(xdxPrice > 0) || !(quotePrice > 0)) return 0;
+  return (xdx * xdxPrice) / quotePrice;
+}
+
 export function quoteUsdFromMap(quote, prices = {}) {
   const key = String(quote || "").toUpperCase();
   if (!key) return 0;

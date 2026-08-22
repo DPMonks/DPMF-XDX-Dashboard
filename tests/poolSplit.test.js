@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatPoolPct, poolAssetSplit, quoteUsdFromMap } from "../src/utils/poolSplit.js";
+import { formatPoolPct, inferQuoteReserve, poolAssetSplit, quoteUsdFromMap } from "../src/utils/poolSplit.js";
 
 test("poolAssetSplit is a USD value share, not a raw unit share", () => {
   const split = poolAssetSplit({
@@ -37,6 +37,11 @@ test("poolAssetSplit stays hidden when a side or price is missing", () => {
     poolAssetSplit({ reserveXdx: 1000, reserveQuote: 10, xdxUsd: 0.00004, quoteUsd: 0 }),
     null
   );
+});
+
+test("inferQuoteReserve fills the missing AMM quote side from equal USD value", () => {
+  const quote = inferQuoteReserve(674_386, 0.000045, 1);
+  assert.ok(quote > 30 && quote < 31);
 });
 
 test("quoteUsdFromMap uses recorded prices and treats RLUSD as one dollar", () => {
