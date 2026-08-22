@@ -14,7 +14,13 @@ import {
   shortAddress,
 } from "../utils/format";
 import { copyToClipboard } from "../utils/copy";
-import { emptyWalletSnapshot, normalizeWalletPair, xrpBarPercents } from "../wallet/composeWallet";
+import {
+  emptyWalletSnapshot,
+  normalizeWalletPair,
+  preferredWalletPair,
+  sortWalletPairs,
+  xrpBarPercents,
+} from "../wallet/composeWallet";
 import { useMorph } from "../wallet/useMorph";
 
 function XrpColumn({ label, tone, percent, value, locale, empty }) {
@@ -192,7 +198,7 @@ export default function ConnectedWallet() {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
   const [snap, setSnap] = useState(() => emptyWalletSnapshot(null));
-  const [pair, setPair] = useState("");
+  const [pair, setPair] = useState("XDX/XRP");
 
   useEffect(() => {
     if (!walletAddress) return undefined;
@@ -204,12 +210,12 @@ export default function ConnectedWallet() {
       );
       if (cancelled) return;
       setSnap(next);
-      setPair((current) => {
-        const names = next.lp.map((row) => normalizeWalletPair(row.pool));
-        const wanted = normalizeWalletPair(current);
-        if (wanted && names.includes(wanted)) return wanted;
-        return names[0] || "";
-      });
+      setPair((current) =>
+        preferredWalletPair(
+          next.lp.map((row) => row.pool),
+          current
+        )
+      );
     }
 
     load();
@@ -222,7 +228,7 @@ export default function ConnectedWallet() {
 
   const view = walletAddress ? snap : emptyWalletSnapshot(null);
   const empty = !view.signedIn || !view.filled;
-  const pools = [...new Set(view.lp.map((row) => normalizeWalletPair(row.pool)).filter(Boolean))];
+  const pools = sortWalletPairs(view.lp.map((row) => row.pool));
   const selected = normalizeWalletPair(pair);
   const position = useMemo(
     () => view.lp.find((row) => normalizeWalletPair(row.pool) === selected) || null,

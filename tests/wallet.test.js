@@ -6,6 +6,8 @@ import {
   lpFeeEarnings,
   lpPositionFromPool,
   normalizeWalletPair,
+  preferredWalletPair,
+  sortWalletPairs,
   supplyShares,
   tradingFeeRate,
   walletActivity,
@@ -73,6 +75,18 @@ test("supplyShares compares the wallet to circulating and total XDX, never above
   const capped = supplyShares(20_000_000_000, 5_000_000_000, 10_000_000_000);
   assert.equal(capped.circulatingPct, 100);
   assert.equal(capped.supplyPct, 100);
+});
+
+test("preferredWalletPair always defaults to XDX/XRP when that pool is held", () => {
+  assert.deepEqual(sortWalletPairs(["XDX/USDC", "XDX/XRP", "XDX/RLUSD"]), [
+    "XDX/XRP",
+    "XDX/RLUSD",
+    "XDX/USDC",
+  ]);
+  assert.equal(preferredWalletPair(["XDX/USDC", "XDX/XRP"], ""), "XDX/XRP");
+  assert.equal(preferredWalletPair(["XDX/USDC", "XDX/XRP"], "XDX/XRP"), "XDX/XRP");
+  assert.equal(preferredWalletPair(["XDX/USDC", "XDX/XRP"], "XDX/USDC"), "XDX/USDC");
+  assert.equal(preferredWalletPair(["XDX/USDC"], ""), "XDX/USDC");
 });
 
 test("xdxFiatValues keeps USD and GBP from recorded prices", () => {

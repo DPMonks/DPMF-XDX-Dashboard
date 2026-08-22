@@ -71,6 +71,24 @@ export function compareBarPercents(...values) {
   return nums.map((value) => (value / max) * 100);
 }
 
+export function sortWalletPairs(names = []) {
+  return [...new Set((names || []).map((name) => normalizeWalletPair(name)).filter(Boolean))].sort(
+    (left, right) => {
+      if (left === "XDX/XRP") return -1;
+      if (right === "XDX/XRP") return 1;
+      return left.localeCompare(right);
+    }
+  );
+}
+
+export function preferredWalletPair(names = [], current = "") {
+  const list = sortWalletPairs(names);
+  const wanted = normalizeWalletPair(current);
+  if (wanted && wanted !== "XDX/XRP" && list.includes(wanted)) return wanted;
+  if (list.includes("XDX/XRP")) return "XDX/XRP";
+  return list[0] || "XDX/XRP";
+}
+
 export function normalizeWalletPair(value) {
   const raw = String(value || "")
     .trim()
