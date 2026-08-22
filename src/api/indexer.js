@@ -1,5 +1,6 @@
 import { api, INDEXER_ORIGIN } from "../api";
 import { pairFromRow } from "../constants/ledger";
+import { keepLastGoodOwners } from "../todayOwners";
 import {
   issuedActivitySeries,
   mergeActivityRows,
@@ -354,43 +355,78 @@ export async function getOrderbooks() {
   }
 }
 
+const lastOwnerLists = new Map();
+
 async function loadPagedOwners({
   cacheKey,
   requestFirst,
   requestRest,
+  requestLast,
+  requestLastRest,
   finish,
   onPage,
   firstSize,
   restPageSize,
 }) {
-  const cached = sessionRead(cacheKey);
-  if (cached?.rows?.length) onPage?.(cached.rows, cached.freshness || null);
-  else if (Array.isArray(cached) && cached.length) onPage?.(cached, null);
+  const cached = sessionRead(cacheKey) || lastOwnerLists.get(cacheKey);
+  const lastGood = cached?.rows?.length
+    ? cached
+    : Array.isArray(cached) && cached.length
+      ? { rows: cached, freshness: null }
+      : lastOwnerLists.get(cacheKey) || null;
+  if (lastGood?.rows?.length) onPage?.(lastGood.rows, lastGood.freshness || null);
 
-  const payload = await requestFirst();
-  const first = asArray(payload);
+  let payload = await requestFirst();
+  let first = asArray(payload);
+  let freshness = pickFreshness(payload, finish(first));
+  let restFetch = requestRest;
+
+  if (!first.length && freshness.catching_up && requestLast) {
+    try {
+      const lastPayload = await requestLast();
+      const lastRows = asArray(lastPayload);
+      if (lastRows.length) {
+        payload = lastPayload;
+        first = lastRows;
+        freshness = {
+          ...pickFreshness(lastPayload, finish(lastRows)),
+          catching_up: true,
+          present: false,
+        };
+        restFetch = requestLastRest || requestRest;
+      }
+    } catch {
+      // keep the empty today envelope and fall back to the last painted list
+    }
+  }
+
   const firstMapped = finish(first);
-  const freshness = pickFreshness(payload, firstMapped);
-  onPage?.(firstMapped, freshness);
-  sessionWrite(cacheKey, { rows: firstMapped, freshness });
+  const kept = keepLastGoodOwners(lastGood, { rows: firstMapped, freshness });
+  lastOwnerLists.set(cacheKey, kept);
+  onPage?.(kept.rows, kept.freshness);
+  sessionWrite(cacheKey, kept);
 
-  if (!shouldFetchMoreRows(first.length, firstSize, freshness.count)) {
-    return firstMapped;
+  if (!firstMapped.length || !shouldFetchMoreRows(first.length, firstSize, freshness.count)) {
+    return kept.rows;
   }
 
   const rest = await paginate(
-    requestRest,
+    restFetch,
     restPageSize,
     (all) => {
       const mapped = finish([...first, ...all]);
-      onPage?.(mapped, freshness);
-      sessionWrite(cacheKey, { rows: mapped, freshness });
+      const next = keepLastGoodOwners(kept, { rows: mapped, freshness });
+      lastOwnerLists.set(cacheKey, next);
+      onPage?.(next.rows, next.freshness);
+      sessionWrite(cacheKey, next);
     },
     MAX_ROWS - firstSize
   );
   const mapped = finish([...first, ...rest]);
-  sessionWrite(cacheKey, { rows: mapped, freshness });
-  return mapped;
+  const next = keepLastGoodOwners(kept, { rows: mapped, freshness });
+  lastOwnerLists.set(cacheKey, next);
+  sessionWrite(cacheKey, next);
+  return next.rows;
 }
 
 export async function getTopHolders(onPage) {
@@ -399,6 +435,9 @@ export async function getTopHolders(onPage) {
     requestFirst: () => api.topHolders(FIRST_HOLDERS, 0, { snapshot: "today" }),
     requestRest: (limit, offset) =>
       api.topHolders(limit, FIRST_HOLDERS + offset, { snapshot: "today" }),
+    requestLast: () => api.topHolders(FIRST_HOLDERS, 0, { snapshot: "latest" }),
+    requestLastRest: (limit, offset) =>
+      api.topHolders(limit, FIRST_HOLDERS + offset, { snapshot: "latest" }),
     finish: finishHolders,
     onPage,
     firstSize: FIRST_HOLDERS,
@@ -412,6 +451,9 @@ export async function getTopLp(onPage) {
     requestFirst: () => api.topLp(FIRST_LP, 0, { snapshot: "today", pool: "all" }),
     requestRest: (limit, offset) =>
       api.topLp(limit, FIRST_LP + offset, { snapshot: "today", pool: "all" }),
+    requestLast: () => api.topLp(FIRST_LP, 0, { snapshot: "latest", pool: "all" }),
+    requestLastRest: (limit, offset) =>
+      api.topLp(limit, FIRST_LP + offset, { snapshot: "latest", pool: "all" }),
     finish: finishLp,
     onPage,
     firstSize: FIRST_LP,

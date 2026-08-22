@@ -4,6 +4,7 @@ import {
   buildTodayLpOwnersPayload,
   normalizeLpPool,
   pickAllPoolCount,
+  pickLastLpScan,
   pickTodayLpSource,
   remapLpSourceKind,
 } from "../src/todayLpOwners.js";
@@ -77,6 +78,34 @@ test("buildTodayLpOwnersPayload matches the today-LP envelope", () => {
   assert.equal(present.holders[1].lp_balance, 1);
   assert.equal(present.holders[1].pool_name, "XDX/SOLO");
   assert.equal(present.pool, "all");
+});
+
+test("pickLastLpScan remaps the newest token scan onto LP tables", () => {
+  const last = pickLastLpScan({
+    latestTs: "2026-08-21T22:15:00.000Z",
+    latestCount: 80,
+    historyTs: "2026-08-20T22:15:00.000Z",
+    historyCount: 12,
+  });
+  assert.equal(last.kind, "lp_holders_latest");
+  assert.equal(last.count, 80);
+});
+
+test("catching_up LP owners keep the last scan rows on the payload", () => {
+  const payload = buildTodayLpOwnersPayload({
+    source: {
+      kind: "lp_holders_latest",
+      ts: "2026-08-21T22:15:00.000Z",
+      count: 1,
+      present: false,
+    },
+    holders: [{ account: "rOne", lp_balance: 12.5, pool_name: "XDX/XRP" }],
+    pool: "XDX/XRP",
+  });
+  assert.equal(payload.catching_up, true);
+  assert.equal(payload.present, false);
+  assert.equal(payload.holders[0].lp_balance, 12.5);
+  assert.equal(payload.count, 1);
 });
 
 test("pickAllPoolCount uses every pool, not one leftover scan", () => {

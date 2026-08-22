@@ -35,6 +35,37 @@ export function currentOwners(holders) {
   return (holders || []).filter((row) => row?.account && Number(row.balance) > 0);
 }
 
+export function pickLastOwnerScan({
+  latestTs = null,
+  latestCount = 0,
+  historyTs = null,
+  historyCount = 0,
+} = {}) {
+  const candidates = [];
+  if (Number(latestCount) > 0 && latestTs) {
+    candidates.push({
+      kind: "token_holders_latest",
+      ts: latestTs,
+      count: Number(latestCount),
+    });
+  }
+  if (Number(historyCount) > 0 && historyTs) {
+    candidates.push({
+      kind: "token_holders_history",
+      ts: historyTs,
+      count: Number(historyCount),
+    });
+  }
+  if (!candidates.length) {
+    return {
+      kind: "none",
+      ts: latestTs || historyTs || null,
+      count: 0,
+    };
+  }
+  return candidates.sort((a, b) => new Date(b.ts) - new Date(a.ts))[0];
+}
+
 export function pickTodayOwnerSource({
   latestTs = null,
   latestCount = 0,
@@ -56,32 +87,70 @@ export function pickTodayOwnerSource({
   return { kind: "none", ts: lastTs, count: 0, present: false };
 }
 
+export function mapOwnerRows(holders = [], offset = 0) {
+  return currentOwners(holders).map((row, index) => ({
+    rank: Number(row.rank) || offset + index + 1,
+    account: row.account,
+    balance: Number(row.balance),
+    frozen: Boolean(row.frozen),
+  }));
+}
+
+export function keepLastGoodOwners(previous, next) {
+  const prevRows = Array.isArray(previous?.rows)
+    ? previous.rows
+    : Array.isArray(previous)
+      ? previous
+      : [];
+  const nextRows = Array.isArray(next?.rows)
+    ? next.rows
+    : Array.isArray(next)
+      ? next
+      : [];
+  const prevFresh =
+    previous?.freshness && typeof previous.freshness === "object" ? previous.freshness : null;
+  const nextFresh = next?.freshness && typeof next.freshness === "object" ? next.freshness : null;
+
+  if (nextRows.length) {
+    return { rows: nextRows, freshness: nextFresh || prevFresh };
+  }
+  if (prevRows.length) {
+    return {
+      rows: prevRows,
+      freshness: {
+        ...(prevFresh || {}),
+        ...(nextFresh || {}),
+        catching_up: true,
+        present: false,
+        count: Number(prevFresh?.count) || prevRows.length,
+      },
+    };
+  }
+  return { rows: nextRows, freshness: nextFresh || prevFresh || null };
+}
+
 export function buildTodayOwnersPayload({ source, holders = [], offset = 0 } = {}) {
   const asOf = asIso(source?.ts);
+  const rows = mapOwnerRows(holders, offset);
   if (!source?.present) {
     return {
-      holders: [],
+      holders: rows,
       as_of: asOf,
       snapshot_day: utcDay(asOf),
       present: false,
       catching_up: true,
-      count: 0,
+      count: rows.length ? Number(source?.count || rows.length) : 0,
       source: source?.kind || "none",
     };
   }
 
   return {
-    holders: holders.map((row, index) => ({
-      rank: Number(row.rank) || offset + index + 1,
-      account: row.account,
-      balance: Number(row.balance),
-      frozen: Boolean(row.frozen),
-    })),
+    holders: rows,
     as_of: asOf,
     snapshot_day: utcDay(asOf),
     present: true,
     catching_up: false,
-    count: Number(source.count || holders.length),
+    count: Number(source.count || rows.length),
     source: source.kind,
   };
 }

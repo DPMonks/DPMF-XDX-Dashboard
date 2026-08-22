@@ -1,5 +1,7 @@
 import {
   asIso,
+  currentOwners,
+  pickLastOwnerScan,
   pickTodayOwnerSource,
   utcDay,
 } from "./todayOwners.js";
@@ -41,28 +43,41 @@ export function buildTodayLpOwnersPayload({
     };
   };
 
+  const rows = currentOwners(holders.map((row) => ({
+    ...row,
+    balance: row.lp_balance ?? row.balance,
+  }))).map((row, index) => mapRow(row, index));
+
   if (!source?.present) {
     return {
-      holders: [],
+      holders: rows,
       as_of: asOf,
       snapshot_day: utcDay(asOf),
       present: false,
       catching_up: true,
-      count: 0,
+      count: rows.length ? Number(source?.count || rows.length) : 0,
       source: source?.kind || "none",
       pool,
     };
   }
 
   return {
-    holders: holders.map(mapRow),
+    holders: rows,
     as_of: asOf,
     snapshot_day: utcDay(asOf),
     present: true,
     catching_up: false,
-    count: Number(source.count || holders.length),
+    count: Number(source.count || rows.length),
     source: source.kind,
     pool,
+  };
+}
+
+export function pickLastLpScan(input) {
+  const picked = pickLastOwnerScan(input);
+  return {
+    ...picked,
+    kind: remapLpSourceKind(picked.kind),
   };
 }
 

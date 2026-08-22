@@ -16,6 +16,7 @@ import {
   asIso,
   buildTodayOwnersPayload,
   isSameUtcDay,
+  pickLastOwnerScan,
   pickTodayOwnerSource,
   utcDay,
   wantsTodaySnapshot,
@@ -24,6 +25,7 @@ import {
   buildTodayLpOwnersPayload,
   normalizeLpPool,
   pickAllPoolCount,
+  pickLastLpScan,
   pickTodayLpSource,
 } from "../src/todayLpOwners.js";
 import {
@@ -359,15 +361,22 @@ async function loadTodayOwners(db, { limit = 200, offset = 0, includeHolders = t
   const latest = await lastSameTimeScan(db, "token_holders_latest");
   const history = await lastSameTimeScan(db, "token_holders_history");
 
-  const source = pickTodayOwnerSource({
+  const today = pickTodayOwnerSource({
     latestTs: latest.ts,
     latestCount: latest.count,
     historyTs: history.ts,
     historyCount: history.count,
   });
+  const last = pickLastOwnerScan({
+    latestTs: latest.ts,
+    latestCount: latest.count,
+    historyTs: history.ts,
+    historyCount: history.count,
+  });
+  const source = today.present ? today : { ...last, present: false };
 
   let holders = [];
-  if (includeHolders && source.present) {
+  if (includeHolders && source.kind !== "none" && source.ts) {
     holders = await pageSameTimeScan(db, source.kind, source.ts, limit, offset);
   }
 
@@ -819,14 +828,21 @@ async function loadTodayLpOwners(db, { limit = 50, offset = 0, includeHolders = 
   }
   const latest = await lastSameTimeLpScan(db, "lp_holders_latest", pair, true);
   const history = await lastSameTimeLpScan(db, "lp_holders_history", pair, true);
-  const source = pickTodayLpSource({
+  const today = pickTodayLpSource({
     latestTs: latest.ts,
     latestCount: latest.count,
     historyTs: history.ts,
     historyCount: history.count,
   });
+  const last = pickLastLpScan({
+    latestTs: latest.ts,
+    latestCount: latest.count,
+    historyTs: history.ts,
+    historyCount: history.count,
+  });
+  const source = today.present ? today : { ...last, present: false };
   let holders = [];
-  if (includeHolders && source.present) {
+  if (includeHolders && source.kind !== "none" && source.ts) {
     holders = await pageSameTimeLpScan(db, source.kind, source.ts, pair, limit, offset);
   }
   return buildTodayLpOwnersPayload({ source, holders, offset, pool: pair });
