@@ -20,13 +20,16 @@ export function rowsFromXrplToGraph(payload) {
     const timestamp = new Date(ms > 1e12 ? ms : ms * 1000).toISOString();
     const holders = Number(point?.holders);
     const trustlines = Number(point?.length ?? point?.trustlines);
-    if (!(holders > 0) && !(trustlines > 0)) continue;
+    const traders = Number(point?.active24H ?? point?.traders);
+    if (!(holders > 0) && !(trustlines > 0) && !(traders > 0)) continue;
     rows.push({
       timestamp,
       holders: holders > 0 ? holders : null,
       holder_count: holders > 0 ? holders : null,
       trustlines: trustlines > 0 ? trustlines : null,
       trustline_count: trustlines > 0 ? trustlines : null,
+      traders: Number.isFinite(traders) ? traders : null,
+      trader_count: Number.isFinite(traders) ? traders : null,
       source: "issued",
     });
   }

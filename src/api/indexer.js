@@ -519,11 +519,15 @@ export async function getChartHistory() {
 
   const live = await api.overview().catch(() => null);
   if (live && (live.tvl != null || live.holder_count != null || live.xdxUsd != null)) {
+    const lastTraders = [...merged.values()]
+      .reverse()
+      .find((row) => numberOrNull(row.traders ?? row.trader_count) != null);
     mergeChartRow(merged, {
       timestamp: new Date().toISOString(),
       tvl: live.tvl_usd ?? live.tvl,
       holders: live.holder_count ?? live.holders,
       trustlines: live.trustline_count ?? live.trustlines,
+      traders: lastTraders?.traders ?? lastTraders?.trader_count,
       price: live.xdxUsd ?? live.price,
       volume: live.volume24h,
       marketcap: live.xrplMarketCap,

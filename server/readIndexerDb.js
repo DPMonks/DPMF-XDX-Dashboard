@@ -35,7 +35,8 @@ import {
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
 } from "../src/orderbook.js";
-import { issuedActivitySeries, mergeActivityRows } from "../src/activityHistory.js";
+import { issuedActivitySeries } from "../src/activityHistory.js";
+import { inferTradesFromHistory } from "../src/xdxTrades.js";
 import { loadIssuedHolderHistory } from "./issuedHolderHistory.js";
 
 let pool = null;
@@ -1135,47 +1136,37 @@ async function tokenHoldersPage(db, limit, offset, options = {}) {
   };
 }
 
-async function nativeTraderSeries(db) {
-  const hourly = await tryQuery(
-    db,
-    `SELECT date_trunc('hour', timestamp) AS timestamp,
-            COUNT(DISTINCT account)::int AS traders,
-            COUNT(*)::int AS trades,
-            COALESCE(SUM(ABS(COALESCE(xdx, amount)::numeric)), 0) AS volume
-     FROM trades
-     GROUP BY 1
-     ORDER BY 1`
-  );
-  return hourly.rows;
-}
-
 async function loadLongHolderSeries(db) {
   const [issued, holders, trustlines] = await Promise.all([
     loadIssuedHolderHistory().catch(() => []),
     tokenHolderCount(db),
     tokenTrustlineCount(db),
   ]);
+  const last = issued[issued.length - 1];
+  const liveTraders = Number(last?.traders ?? last?.trader_count);
   return issuedActivitySeries(
     issued,
-    holders || trustlines
+    holders || trustlines || Number.isFinite(liveTraders)
       ? {
           timestamp: new Date().toISOString(),
           holders,
           holder_count: holders,
           trustlines,
           trustline_count: trustlines,
+          traders: Number.isFinite(liveTraders) ? liveTraders : null,
+          trader_count: Number.isFinite(liveTraders) ? liveTraders : null,
           source: "live",
         }
       : null
   );
 }
 
+async function nativeTraderSeries(db) {
+  return loadLongHolderSeries(db);
+}
+
 async function nativeActivitySeries(db) {
-  const [longSeries, traders] = await Promise.all([
-    loadLongHolderSeries(db),
-    nativeTraderSeries(db),
-  ]);
-  return mergeActivityRows(longSeries, traders);
+  return loadLongHolderSeries(db);
 }
 
 async function nativeXdxFlows(db) {
@@ -1442,34 +1433,6 @@ async function listXdxPools(db) {
   return [...byKey.values()];
 }
 
-function inferTradesFromHistory(rows) {
-  const prev = new Map();
-  const trades = [];
-  for (const row of rows) {
-    const key = String(row.pool_name || row.pool || "pool");
-    const asset = Number(row.reserve_asset || 0);
-    const quote = Number(row.reserve_currency || 0);
-    const last = prev.get(key);
-    if (last) {
-      const dAsset = asset - last.asset;
-      const dQuote = quote - last.quote;
-      if (Math.abs(dAsset) > 1e-8 || Math.abs(dQuote) > 1e-8) {
-        const side = dAsset < 0 ? "buy" : dAsset > 0 ? "sell" : dQuote > 0 ? "buy" : "sell";
-        trades.push({
-          timestamp: row.timestamp,
-          pool: key,
-          side,
-          xdx: Math.abs(dAsset),
-          quote: Math.abs(dQuote),
-          price: Number(row.price || 0),
-        });
-      }
-    }
-    prev.set(key, { asset, quote });
-  }
-  return trades.reverse();
-}
-
 async function readAmmTrades(db) {
   const named = await tryQuery(
     db,
@@ -1493,11 +1456,25 @@ async function readAmmTrades(db) {
     db,
     `SELECT timestamp, pool_name, reserve_asset::numeric AS reserve_asset,
             reserve_currency::numeric AS reserve_currency, price
-     FROM amm_pool_history
-     ORDER BY pool_name, timestamp ASC
-     LIMIT 4000`
+     FROM (
+       SELECT timestamp, pool_name, reserve_asset, reserve_currency, price
+       FROM amm_pool_history
+       WHERE reserve_asset IS NOT NULL
+       ORDER BY timestamp DESC
+       LIMIT 4000
+     ) recent
+     ORDER BY pool_name ASC, timestamp ASC`
   );
-  return inferTradesFromHistory(history.rows);
+  const latest = await tryQuery(
+    db,
+    `SELECT timestamp, pool_name, reserve_asset::numeric AS reserve_asset,
+            reserve_currency::numeric AS reserve_currency, price
+     FROM amm_pool_latest`
+  );
+  const rows = [...history.rows, ...latest.rows].sort(
+    (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+  );
+  return inferTradesFromHistory(rows);
 }
 
 async function loadCatalogAmmMarketCap(db, xdxUsd) {

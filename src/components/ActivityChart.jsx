@@ -344,7 +344,9 @@ export default function ActivityChart() {
             </ResponsiveContainer>
             )}
             {chartRows.length ? (
-              <p className="orderbook-asof">{t.historyFromIssuance}</p>
+              <p className="orderbook-asof">
+                {metric === "traders" ? t.tradersFromIssuance : t.historyFromIssuance}
+              </p>
             ) : null}
           </div>
 
@@ -399,6 +401,8 @@ export default function ActivityChart() {
           <div className="history-block">
             <h3 className="history-title">{t.xdxFlows}</h3>
             {visibleTrades.length ? (
+              <>
+              <p className="orderbook-asof">{t.xdxTradesFromAmm}</p>
               <HistoryPager
                 key={`flows-${range}`}
                 rows={visibleTrades}
@@ -429,6 +433,7 @@ export default function ActivityChart() {
                   </tr>
                 )}
               />
+              </>
             ) : (
               <p className="empty-message">{t.noXdxFlows}</p>
             )}
