@@ -252,11 +252,7 @@
 }
 
 .hybrid-sma-glow {
-  fill: none;
-  stroke-width: 9;
-  stroke-linecap: round;
-  stroke-dasharray: 0.018 1;
-  filter: drop-shadow(0 0 7px currentColor);
+  filter: drop-shadow(0 0 6px currentColor);
   animation: hybrid-ma-tip 2.6s linear both;
   pointer-events: none;
 }
@@ -271,11 +267,17 @@
 }
 
 @keyframes hybrid-ma-tip {
-  from {
-    stroke-dashoffset: 0.018;
+  0% {
+    opacity: 0;
   }
-  to {
-    stroke-dashoffset: -1;
+  2% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
   }
 }
 

@@ -99,6 +99,15 @@ export function maCurvePoints(candles = [], values = []) {
   return out;
 }
 
+export function maRevealState(id, { seen, armed } = {}) {
+  const key = String(id || "");
+  const isArmed = Array.isArray(armed) && armed.includes(key);
+  const isSeen = seen instanceof Set && seen.has(key);
+  if (!isSeen && !isArmed) return "wait";
+  if (isArmed) return "drawing";
+  return "ready";
+}
+
 export function extendMaPoints(points = [], { right, top, bottom } = {}) {
   const rows = (Array.isArray(points) ? points : []).filter(
     (row) => Number.isFinite(row?.x) && Number.isFinite(row?.y)

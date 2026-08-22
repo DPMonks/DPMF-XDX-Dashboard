@@ -26,7 +26,7 @@ import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from ".
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
-import { extendMaPoints, maCurvePoints, maPath, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
+import { extendMaPoints, maCurvePoints, maPath, maRevealState, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   applyPlaceOffset,
   drawingHandles,
@@ -189,6 +189,15 @@ test("extendMaPoints pins a high 200 MA to the plot top and continues to the rig
   assert.equal(out[0].y, 16);
   assert.equal(out[out.length - 1].x, 858);
   assert.equal(out[out.length - 1].y, 80);
+});
+
+test("maRevealState keeps a new MA unmounted until the glow is armed", () => {
+  const seen = new Set();
+  assert.equal(maRevealState("sma-9", { seen, armed: [] }), "wait");
+  assert.equal(maRevealState("sma-9", { seen, armed: ["sma-9"] }), "drawing");
+  seen.add("sma-9");
+  assert.equal(maRevealState("sma-9", { seen, armed: ["sma-9"] }), "drawing");
+  assert.equal(maRevealState("sma-9", { seen, armed: [] }), "ready");
 });
 
 test("maCurvePoints keeps value changes so the line can curve instead of stair-step", () => {

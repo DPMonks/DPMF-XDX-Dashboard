@@ -1,8 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks } from "../chart/axis";
 import { candleBodyBox, candleBodyWidth } from "../chart/candles";
-import { extendMaPoints, maCurvePoints, maPath, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
+import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
 import { applyPlaceOffset, hitDrawingHandle, snapPoint } from "../chart/drawings";
 import { hideToolPreview, paintPlaceMark, paintToolPreview } from "../chart/paintPreview";
@@ -100,12 +100,15 @@ export default function HybridPlot({
   const yTicks = useMemo(() => priceTicks(scale.min, scale.max, 6), [scale.min, scale.max]);
   const xTicks = useMemo(() => scale.ticks(6), [scale]);
   const volumes = useMemo(() => volumeWaveValues(candles), [candles]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const ids = averages.map((row) => row.id);
-    const added = ids.filter((id) => !seenMa.current.has(id));
-    seenMa.current = new Set(ids);
+    const live = new Set(ids);
+    for (const id of [...seenMa.current]) {
+      if (!live.has(id)) seenMa.current.delete(id);
+    }
+    const added = ids.filter((id) => !seenMa.current.has(id) && !glowIds.includes(id));
     if (added.length) setGlowIds((current) => [...new Set([...current, ...added])]);
-  }, [averages]);
+  }, [averages, glowIds]);
   useEffect(() => {
     if (tool === "cursor") hideToolPreview(previewRef.current, placeMarkRef.current);
   }, [tool]);
@@ -490,7 +493,9 @@ export default function HybridPlot({
           ) : null}
 
           {averages.map((row) => {
-            const drawing = glowIds.includes(row.id) || !seenMa.current.has(row.id);
+            const reveal = maRevealState(row.id, { seen: seenMa.current, armed: glowIds });
+            if (reveal === "wait") return null;
+            const drawing = reveal === "drawing";
             const d = maPath(
               extendMaPoints(
                 maCurvePoints(candles, row.values).map((point) => ({
@@ -501,6 +506,10 @@ export default function HybridPlot({
               )
             );
             if (!d) return null;
+            const finishDraw = () => {
+              seenMa.current.add(row.id);
+              setGlowIds((current) => current.filter((id) => id !== row.id));
+            };
             return (
               <g key={row.id}>
                 <path
@@ -511,15 +520,12 @@ export default function HybridPlot({
                     stroke: row.color,
                     ...(drawing ? { strokeDasharray: 1, strokeDashoffset: 1 } : {}),
                   }}
+                  onAnimationEnd={drawing ? finishDraw : undefined}
                 />
                 {drawing ? (
-                  <path
-                    className="hybrid-sma-glow"
-                    d={d}
-                    pathLength="1"
-                    style={{ stroke: row.color, color: row.color }}
-                    onAnimationEnd={() => setGlowIds((current) => current.filter((id) => id !== row.id))}
-                  />
+                  <circle className="hybrid-sma-glow" r="5" style={{ fill: row.color, color: row.color }}>
+                    <animateMotion dur="2.6s" fill="freeze" path={d} rotate="0" />
+                  </circle>
                 ) : null}
               </g>
             );
