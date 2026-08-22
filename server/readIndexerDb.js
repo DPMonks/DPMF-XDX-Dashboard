@@ -1559,6 +1559,92 @@ async function readAmmTrades(db) {
   return inferTradesFromHistory(history.rows);
 }
 
+async function loadCatalogAmmMarketCap(db, xdxUsd) {
+  if (!(xdxUsd > 0)) return 0;
+  const catalog = await tryQuery(
+    db,
+    `SELECT COALESCE(SUM(reserve_xdx::numeric), 0) AS n FROM xdx_amm_pools`
+  );
+  const xdx = Number(catalog.rows[0]?.n || 0);
+  return xdx > 0 ? xdx * 2 * xdxUsd : 0;
+}
+
+async function buildPrices(db) {
+  const quote = await loadXrpQuote(db);
+  const xrpUsd = Number(quote.usd || 0);
+  const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
+  return {
+    xrpUsd,
+    xrpGbp: Number(quote.gbp || 0),
+    xdxUsd,
+    recorded_price: xdxUsd,
+    xdxGbp: xdxUsd > 0 && quote.gbp && xrpUsd > 0 ? xdxUsd * (quote.gbp / xrpUsd) : 0,
+    source: "db",
+  };
+}
+
+async function buildTokenOverview(db) {
+  const [amm, quote, holders, trustlines, issuerLocked, ammXdx] = await Promise.all([
+    hydrateAmm(db),
+    loadXrpQuote(db),
+    tokenHolderCount(db),
+    tokenTrustlineCount(db),
+    loadIssuerLocked(db),
+    tokenBalanceFor(db, XDX_XRP_AMM),
+  ]);
+
+  const reserveAsset = Number(amm.reserve_asset || 0);
+  const reserveCurrency = Number(amm.reserve_currency || 0);
+  const xrpUsd = Number(quote.usd || 0);
+  const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
+  const tvlUsd = reserveCurrency > 0 && xrpUsd > 0 ? reserveCurrency * 2 * xrpUsd : 0;
+  const totalSupply = XDX_TOTAL_SUPPLY;
+  const burned = Number(issuerLocked.locked || 0);
+  const circulating = Math.max(totalSupply - burned, 0);
+  const ammMarketCap = (await loadCatalogAmmMarketCap(db, xdxUsd)) || tvlUsd;
+
+  return {
+    pool: amm.pool_name || "XDX/XRP",
+    tvl: tvlUsd || reserveCurrency || 0,
+    tvl_usd: tvlUsd,
+    price: xdxUsd,
+    xdxUsd,
+    recorded_price: xdxUsd,
+    xdxGbp: xdxUsd > 0 && quote.gbp && xrpUsd > 0 ? xdxUsd * (quote.gbp / xrpUsd) : 0,
+    xrpUsd,
+    xrpGbp: Number(quote.gbp || 0),
+    xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd),
+    xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd),
+    apr: Number(amm.apr || 0),
+    volume24h: Number(amm.volume24h || 0),
+    reserve_asset: reserveAsset,
+    reserve_currency: reserveCurrency,
+    lp_supply: Number(amm.lp_supply || 0) || null,
+    trading_fee: Number(amm.trading_fee || 0) || null,
+    holder_count: holders,
+    lp_holder_count: null,
+    lp_trustline_count: null,
+    circulating,
+    circulating_supply: circulating,
+    total_supply: totalSupply,
+    burned_supply: burned,
+    issuer_locked: burned,
+    issued_xdx: Number(issuerLocked.issued || 0),
+    issuer_source: issuerLocked.source,
+    amm_xdx: Number(ammXdx || reserveAsset || 0),
+    trustlines,
+    trustline_count: trustlines,
+    ammMarketCap,
+    xrplMarketCap: totalSupply * xdxUsd,
+    circulatingMarketCap: circulating * xdxUsd,
+    issuer: XDX_ISSUER,
+    amm_account: XDX_XRP_AMM,
+    updated: amm.timestamp,
+    reserve_source: amm.reserve_source || "amm_pool_latest",
+    source: "db",
+  };
+}
+
 async function buildSnapshot(db) {
   const [amm, quote, holders, trustlines, lpOwners, lpTrustlines, lpSupply, issuerLocked, ammXdx] =
     await Promise.all([
@@ -1664,7 +1750,7 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "overview" || suffix === "token-details") {
-      return ok(await buildSnapshot(db));
+      return ok(await buildTokenOverview(db));
     }
 
     if (suffix === "issuer-locked") {
@@ -1848,15 +1934,7 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "prices") {
-      const snap = await buildSnapshot(db);
-      return ok({
-        xrpUsd: snap.xrpUsd,
-        xrpGbp: snap.xrpGbp,
-        xdxUsd: snap.xdxUsd,
-        recorded_price: snap.xdxUsd,
-        xdxGbp: snap.xdxGbp,
-        source: "db",
-      });
+      return ok(await buildPrices(db));
     }
 
     if (suffix === "prices/change24h") {

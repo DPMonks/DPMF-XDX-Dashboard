@@ -102,10 +102,11 @@ export default function OrderBook() {
       }
     }
 
-    load();
+    const timeout = setTimeout(load, 250);
     const id = setInterval(load, 30000);
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
       clearInterval(id);
     };
   }, []);

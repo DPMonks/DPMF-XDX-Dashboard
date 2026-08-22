@@ -179,7 +179,7 @@ export default function ActivityChart() {
       }
     }
 
-    const timeout = setTimeout(load, 400);
+    const timeout = setTimeout(load, 800);
     const id = setInterval(load, 60000);
     return () => {
       cancelled = true;

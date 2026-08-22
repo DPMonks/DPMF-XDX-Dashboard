@@ -8,6 +8,7 @@ import {
   SERVICE,
   VERSION,
 } from "./handshake/contract";
+import { createRequestScheduler } from "./utils/requestScheduler";
 
 function resolveRemoteOrigin() {
   const candidates = [
@@ -40,7 +41,7 @@ const API = REQUEST_ORIGIN
 const inflight = new Map();
 const responseCache = new Map();
 const CACHE_MS = 15_000;
-let requestTail = Promise.resolve();
+const scheduleRequest = createRequestScheduler({ concurrency: 2 });
 
 let handshakePromise = null;
 let handshakeState = {
@@ -206,13 +207,8 @@ async function fetchJson(url, { method = "GET", body } = {}) {
   return data;
 }
 
-async function queued(task) {
-  const run = requestTail.then(task, task);
-  requestTail = run.then(
-    () => undefined,
-    () => undefined
-  );
-  return run;
+async function queued(task, priority = 0) {
+  return scheduleRequest(task, { priority });
 }
 
 async function getJsonOnce(path, options) {
@@ -225,6 +221,8 @@ async function getJson(path, options = {}) {
     body,
     cache = method === "GET",
     queue: useQueue = true,
+    immediate = false,
+    priority = 0,
     retries = 2,
   } = options;
   const url = requestUrl(path);
@@ -253,7 +251,7 @@ async function getJson(path, options = {}) {
     throw lastError;
   };
 
-  const task = useQueue ? queued(run) : run();
+  const task = immediate || !useQueue ? run() : queued(run, priority);
 
   if (cache) {
     inflight.set(cacheKey, task);
@@ -296,36 +294,54 @@ const handshakeGet = (path) =>
 async function probeHandshake() {
   let lastError = null;
   let catalog = null;
+  let catalogPath = CATALOG_PATHS[0];
   let health = null;
   let xrpl = null;
 
-  for (const path of CATALOG_PATHS) {
-    try {
-      const raw = await handshakeGet(path);
-      if (raw?.endpoints || raw?.status === "online" || looksLikeHandshake(raw)) {
-        catalog = raw;
-        acceptHandshake(raw, path);
-        break;
+  const [catalogAttempt, healthAttempt, xrplAttempt] = await Promise.allSettled([
+    handshakeGet(CATALOG_PATHS[0]),
+    handshakeGet(HEALTH_PATHS[0]),
+    handshakeGet(HEALTH_PATHS[1]),
+  ]);
+
+  if (catalogAttempt.status === "fulfilled") {
+    const raw = catalogAttempt.value;
+    if (raw?.endpoints || raw?.status === "online" || looksLikeHandshake(raw)) {
+      catalog = raw;
+      acceptHandshake(raw, catalogPath);
+    }
+  } else {
+    lastError = catalogAttempt.reason;
+  }
+
+  if (!catalog) {
+    for (const path of CATALOG_PATHS.slice(1)) {
+      try {
+        const raw = await handshakeGet(path);
+        if (raw?.endpoints || raw?.status === "online" || looksLikeHandshake(raw)) {
+          catalog = raw;
+          catalogPath = path;
+          acceptHandshake(raw, path);
+          break;
+        }
+      } catch (error) {
+        lastError = lastError || error;
       }
-    } catch (error) {
-      lastError = error;
     }
   }
 
-  try {
-    health = await handshakeGet(HEALTH_PATHS[0]);
-  } catch (error) {
-    lastError = lastError || error;
+  if (healthAttempt.status === "fulfilled") {
+    health = healthAttempt.value;
+  } else {
+    lastError = lastError || healthAttempt.reason;
   }
 
-  try {
-    xrpl = await handshakeGet(HEALTH_PATHS[1]);
-  } catch {
-    // /health/xrpl is PR #3 only
+  if (xrplAttempt.status === "fulfilled") {
+    xrpl = xrplAttempt.value;
   }
 
   if (catalog || health) {
-    acceptHandshake(catalog || { status: health?.status, service: SERVICE }, catalog ? "/api/" : "/health", {
+    acceptHandshake(catalog || { status: health?.status, service: SERVICE }, catalog ? catalogPath : "/health", {
       health,
       xrpl,
     });
@@ -368,7 +384,7 @@ export { API, INDEXER_ORIGIN, REQUEST_ORIGIN };
 export const api = {
   health: () => getJson("/health"),
   healthXrpl: () => getJson("/health/xrpl"),
-  overview: () => getJson(endpoint("overview")),
+  overview: () => getJson(endpoint("overview"), { queue: false }),
   amm: () => getJson(endpoint("amm")),
   pools: async () => {
     const body = await getJson(endpoint("pools"));
@@ -398,9 +414,11 @@ export const api = {
     const path = endpoint("holdersCount");
     const snapshot = extra.snapshot || "today";
     const join = path.includes("?") ? "&" : "?";
-    return getJson(`${path}${join}snapshot=${encodeURIComponent(snapshot)}`);
+    return getJson(`${path}${join}snapshot=${encodeURIComponent(snapshot)}`, {
+      queue: false,
+    });
   },
-  trustlinesCount: () => getJson(endpoint("trustlinesCount")),
+  trustlinesCount: () => getJson(endpoint("trustlinesCount"), { queue: false }),
   lpHoldersCount: (extra = {}) => {
     const path = endpoint("lpHoldersCount");
     const pool = extra.pool || extra.pair || "all";
@@ -433,8 +451,8 @@ export const api = {
   xdxFlows: () => getJson(endpoint("xdxFlows")),
   balances: (address) => getJson(endpoint("balances", { address })),
   networth: (address) => getJson(endpoint("networth", { address })),
-  prices: () => getJson(endpoint("prices")),
-  change24h: () => getJson(endpoint("change24h")),
+  prices: () => getJson(endpoint("prices"), { queue: false }),
+  change24h: () => getJson(endpoint("change24h"), { queue: false }),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),
   issuerLocked: () => getJson(endpoint("issuerLocked")),
   orderbook: (pair = "XDX/XRP") => {

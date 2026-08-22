@@ -1,6 +1,6 @@
-import { api, getHandshakeState, handshake, INDEXER_ORIGIN } from "../api";
-import { pairFromRow, XDX_TOTAL_SUPPLY } from "../constants/ledger";
-import { recordedXdxUsdFromPrices, xrpPerXdx } from "../utils/recordedPrice";
+import { api, INDEXER_ORIGIN } from "../api";
+import { pairFromRow } from "../constants/ledger";
+import { composeTokenDetails } from "../tokenDetails";
 import { poolAssetSplit, quoteUsdFromMap } from "../utils/poolSplit";
 import {
   asOrderbookPayload,
@@ -128,14 +128,6 @@ async function paginate(fetchPage, pageSize = PAGE_SIZE, onPage, maxRows = MAX_R
   }
 
   return all;
-}
-
-async function snapshotField(name) {
-  const state = await Promise.race([
-    handshake(),
-    sleep(1200).then(() => getHandshakeState()),
-  ]);
-  return state.snapshot?.[name];
 }
 
 function mapHolder(row, index) {
@@ -286,8 +278,6 @@ function finishLp(rows) {
 }
 
 export async function getOverview() {
-  const snapshot = await snapshotField("overview");
-  if (snapshot && typeof snapshot === "object") return snapshot;
   return api.overview();
 }
 
@@ -407,89 +397,30 @@ export async function getTopLp(onPage) {
   return finishLp([...first, ...rest]);
 }
 
-export async function getTokenDetails() {
-  const state = await Promise.race([
-    handshake(),
-    sleep(1200).then(() => getHandshakeState()),
+export async function getTokenDetails(onPartial) {
+  const [overview, prices, change] = await Promise.all([
+    api.overview().catch(() => ({})),
+    api.prices().catch(() => ({})),
+    api.change24h().catch(() => ({})),
   ]);
-  const overview =
-    state.snapshot?.overview || (await api.overview().catch(() => ({})));
-  const prices =
-    state.snapshot?.prices || (await api.prices().catch(() => ({})));
-  const change =
-    state.snapshot?.change24h || (await api.change24h().catch(() => ({})));
-  const holders =
-    state.snapshot?.holdersCount ||
-    (await api.holdersCount({ snapshot: "today" }).catch(() => ({})));
-  const trustlines =
-    state.snapshot?.trustlinesCount ||
-    (await api.trustlinesCount().catch(() => ({})));
-  const lpHolders =
-    (await api.lpHoldersCount({ pool: "all" }).catch(() => ({})));
-  const lpTrustlines =
-    (await api.lpTrustlinesCount({ pool: "all" }).catch(() => ({})));
+  const core = composeTokenDetails({ overview, prices, change });
+  onPartial?.(core);
 
-  const totalSupply =
-    numberOrNull(overview.total_supply || overview.totalSupply) || XDX_TOTAL_SUPPLY;
-  const issuerLocked =
-    numberOrNull(overview.issuer_locked || overview.burned_supply || overview.issuerLocked) || 0;
-  const rawCirc = numberOrNull(
-    overview.circulating || overview.circulating_supply || overview.xdx_supply
-  );
-  const circulating =
-    rawCirc && rawCirc > 0 ? rawCirc : Math.max(totalSupply - issuerLocked, 0);
-  const price =
-    recordedXdxUsdFromPrices(prices, prices.xrpUsd || overview.xrpUsd) ||
-    recordedXdxUsdFromPrices(
-      {
-        recorded_price: overview.recorded_price,
-        xdxUsd: overview.xdxUsd,
-        xrpUsd: overview.xrpUsd,
-      },
-      overview.xrpUsd
-    );
-  const tvlUsd = numberOrNull(overview.tvl_usd || overview.tvl);
-  const ammMarketCap = numberOrNull(overview.ammMarketCap) || tvlUsd;
-  const fdv = totalSupply * price;
-  const xrpUsd = numberOrNull(prices.xrpUsd || prices.xrp_usd || overview.xrpUsd);
-  const xdxPerXrp = xrpPerXdx(price, xrpUsd);
-
-  return {
-    ...overview,
-    tokenType: "XDX",
-    price,
-    xdxUsd: price,
-    recorded_price: price,
-    xdxPerXrp,
-    xdx_per_xrp: xdxPerXrp,
-    xrplMarketCap: fdv ?? overview.xrplMarketCap ?? overview.market_cap,
-    ammMarketCap,
-    circulatingMarketCap: price != null ? circulating * price : overview.circulatingMarketCap,
-    circulating,
-    totalSupply,
-    burnedSupply: issuerLocked,
-    issuerLocked,
-    holders:
-      (typeof holders === "number" ? holders : holders.count) ??
-      overview.holder_count,
-    trustlines:
-      (typeof trustlines === "number" ? trustlines : trustlines.count) ??
-      overview.trustline_count ??
-      overview.trustlines,
-    lp_holder_count:
-      (typeof lpHolders === "number" ? lpHolders : lpHolders.count) ??
-      overview.lp_holder_count,
-    lp_trustline_count:
-      (typeof lpTrustlines === "number" ? lpTrustlines : lpTrustlines.count) ??
-      overview.lp_trustline_count,
-    lp_supply: numberOrNull(overview.lp_supply),
-    issuer: overview.issuer,
-    issuerFee: overview.issuer_fee,
-    blackholed: overview.blackholed,
-    created: overview.created,
-    change24h: change.xdx ?? change.XDX,
-    source: overview.source,
-  };
+  const [holders, trustlines, lpHolders, lpTrustlines] = await Promise.all([
+    api.holdersCount({ snapshot: "today" }).catch(() => ({})),
+    api.trustlinesCount().catch(() => ({})),
+    api.lpHoldersCount({ pool: "all" }).catch(() => ({})),
+    api.lpTrustlinesCount({ pool: "all" }).catch(() => ({})),
+  ]);
+  return composeTokenDetails({
+    overview,
+    prices,
+    change,
+    holders,
+    trustlines,
+    lpHolders,
+    lpTrustlines,
+  });
 }
 
 function mergeChartRow(target, row) {
@@ -544,11 +475,6 @@ function sparklineRows(payload, key) {
 }
 
 export async function getChartHistory() {
-  const state = await Promise.race([
-    handshake(),
-    sleep(1200).then(() => getHandshakeState()),
-  ]);
-  const charts = state.snapshot?.charts || {};
   const merged = new Map();
   const errors = [];
 
@@ -567,14 +493,14 @@ export async function getChartHistory() {
   }
 
   await Promise.all([
-    absorb([() => charts.holders, () => api.holdersHistory()]),
-    absorb([() => charts.trustlines, () => api.trustlinesHistory()]),
+    absorb([() => api.holdersHistory()]),
+    absorb([() => api.trustlinesHistory()]),
   ]);
 
   await Promise.race([
     Promise.all([
-      absorb([() => charts.activity, () => api.activityHistory()]),
-      absorb([() => charts.traders, () => api.tradersHistory()]),
+      absorb([() => api.activityHistory()]),
+      absorb([() => api.tradersHistory()]),
     ]),
     sleep(4000),
   ]);
@@ -591,13 +517,13 @@ export async function getChartHistory() {
     }
   }
 
-  const live = await getTokenDetails().catch(() => null);
-  if (live && (live.tvl != null || live.holders != null || live.price != null)) {
+  const live = await api.overview().catch(() => null);
+  if (live && (live.tvl != null || live.holder_count != null || live.xdxUsd != null)) {
     mergeChartRow(merged, {
       timestamp: new Date().toISOString(),
       tvl: live.tvl_usd ?? live.tvl,
-      holders: live.holders,
-      trustlines: live.trustlines,
+      holders: live.holder_count ?? live.holders,
+      trustlines: live.trustline_count ?? live.trustlines,
       price: live.xdxUsd ?? live.price,
       volume: live.volume24h,
       marketcap: live.xrplMarketCap,

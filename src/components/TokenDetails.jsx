@@ -38,7 +38,12 @@ export default function TokenDetails() {
 
     async function load() {
       try {
-        const next = await getTokenDetails();
+        const next = await getTokenDetails((partial) => {
+          if (!cancelled) {
+            setData(partial);
+            setError(null);
+          }
+        });
         if (!cancelled) {
           setData(next);
           setError(null);
@@ -48,11 +53,10 @@ export default function TokenDetails() {
       }
     }
 
-    const timeout = setTimeout(load, 200);
+    load();
     const id = setInterval(load, 30000);
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
       clearInterval(id);
     };
   }, []);

@@ -19,96 +19,116 @@ import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 const DexChart = lazy(() => import("./components/DexChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export default function App() {
   const { t } = useI18n();
   const { walletAddress } = useWallet();
   const [holders, setHolders] = useState([]);
   const [holderFreshness, setHolderFreshness] = useState(null);
+  const [holdersLoading, setHoldersLoading] = useState(true);
   const [lpHolders, setLpHolders] = useState([]);
   const [lpFreshness, setLpFreshness] = useState(null);
+  const [lpLoading, setLpLoading] = useState(true);
   const [ammData, setAmmData] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [ammLoading, setAmmLoading] = useState(true);
   const [errors, setErrors] = useState({});
   const [link, setLink] = useState({ status: "connecting" });
 
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
-      const nextErrors = {};
-      const hsPromise = handshake();
-      hsPromise.then((hs) => {
-        if (cancelled) return;
-        setLink({
-          status: hs.ok ? "ok" : "fallback",
-          protocol: hs.protocol,
-          path: hs.path,
-          error: hs.error,
-          health: hs.health?.status,
-          source: hs.source || hs.health?.source || hs.raw?.source,
-          database: hs.database || hs.health?.database || hs.raw?.database,
-          hint: hs.hint || hs.health?.hint || hs.raw?.hint,
-          onV1: hs.xrpl?.onV1 ?? hs.health?.xrpl?.onV1,
-        });
+    function applyLink(hs, extra = {}) {
+      if (cancelled) return;
+      setLink({
+        status: extra.status || (hs.ok ? "ok" : "fallback"),
+        protocol: hs.protocol,
+        path: hs.path,
+        error: extra.error || hs.error,
+        health: hs.health?.status,
+        source: hs.source || hs.health?.source || hs.raw?.source,
+        database: hs.database || hs.health?.database || hs.raw?.database,
+        hint: extra.hint || hs.hint || hs.health?.hint || hs.raw?.hint,
+        onV1: hs.xrpl?.onV1 ?? hs.health?.xrpl?.onV1,
       });
+    }
 
+    async function loadHolders() {
       try {
         const nextHolders = await getTopHolders((rows, meta) => {
           if (!cancelled) {
             setHolders(rows);
             if (meta) setHolderFreshness(meta);
-            setLoading(false);
+            setHoldersLoading(false);
           }
         });
-        if (!cancelled) setHolders(nextHolders);
+        if (!cancelled) {
+          setHolders(nextHolders);
+          setErrors((current) => ({ ...current, holders: undefined }));
+        }
+        return null;
       } catch (error) {
-        nextErrors.holders = error.message;
+        if (!cancelled) setErrors((current) => ({ ...current, holders: error.message }));
+        return error.message;
+      } finally {
+        if (!cancelled) setHoldersLoading(false);
       }
+    }
 
-      await sleep(250);
-      if (cancelled) return;
-
+    async function loadLp() {
       try {
         const nextLp = await getTopLp((rows, meta) => {
           if (!cancelled) {
             setLpHolders(rows);
             if (meta) setLpFreshness(meta);
+            setLpLoading(false);
           }
         });
-        if (!cancelled) setLpHolders(nextLp);
+        if (!cancelled) {
+          setLpHolders(nextLp);
+          setErrors((current) => ({ ...current, lp: undefined }));
+        }
+        return null;
       } catch (error) {
-        nextErrors.lp = error.message;
+        if (!cancelled) setErrors((current) => ({ ...current, lp: error.message }));
+        return error.message;
+      } finally {
+        if (!cancelled) setLpLoading(false);
       }
+    }
 
-      await sleep(250);
-      if (cancelled) return;
-
+    async function loadAmm() {
       try {
         const nextAmm = await getAmm();
-        if (!cancelled) setAmmData(nextAmm);
-      } catch (error) {
-        nextErrors.amm = error.message;
-      }
-
-      if (!cancelled) {
-        setErrors(nextErrors);
-        setLoading(false);
-        const hs = await hsPromise.catch(() => ({ ok: false }));
-        if (nextErrors.holders && nextErrors.lp && nextErrors.amm && !hs.ok) {
-          setLink({
-            status: "error",
-            protocol: hs.protocol,
-            path: hs.path,
-            error: hs.error || nextErrors.holders,
-            source: hs.source,
-            database: hs.database,
-            hint: hs.hint || hs.error || nextErrors.holders,
-          });
+        if (!cancelled) {
+          setAmmData(nextAmm);
+          setErrors((current) => ({ ...current, amm: undefined }));
         }
+        return null;
+      } catch (error) {
+        if (!cancelled) setErrors((current) => ({ ...current, amm: error.message }));
+        return error.message;
+      } finally {
+        if (!cancelled) setAmmLoading(false);
+      }
+    }
+
+    async function load() {
+      const hsPromise = handshake();
+      hsPromise.then((hs) => applyLink(hs));
+
+      const [holderErr, lpErr, ammErr] = await Promise.all([
+        loadHolders(),
+        loadLp(),
+        loadAmm(),
+      ]);
+      if (cancelled) return;
+
+      const hs = await hsPromise.catch(() => ({ ok: false }));
+      if (holderErr && lpErr && ammErr && !hs.ok) {
+        applyLink(hs, {
+          status: "error",
+          error: hs.error || holderErr,
+          hint: hs.hint || hs.error || holderErr,
+        });
       }
     }
 
@@ -175,7 +195,7 @@ export default function App() {
             <h2 className="card-title">{t.topHolders}</h2>
             <RichList
               rows={holders}
-              loading={loading}
+              loading={holdersLoading}
               error={errors.holders}
               valueKey="balance"
               unit="XDX"
@@ -190,7 +210,7 @@ export default function App() {
             <h2 className="card-title">{t.lpHolders}</h2>
             <RichList
               rows={lpHolders}
-              loading={loading}
+              loading={lpLoading}
               error={errors.lp}
               valueKey="lp_balance"
               unit="LP"
@@ -204,7 +224,7 @@ export default function App() {
 
         <section className="dashboard-card neon-card">
           <h2 className="card-title">{t.ammPools}</h2>
-          <AmmCard pools={ammData} loading={loading} error={errors.amm} />
+          <AmmCard pools={ammData} loading={ammLoading} error={errors.amm} />
         </section>
       </div>
 
