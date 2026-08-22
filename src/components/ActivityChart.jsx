@@ -94,10 +94,6 @@ function isIntraday(range) {
   return range === "1H" || range === "4H" || range === "12H" || range === "24H";
 }
 
-function isLongRange(range) {
-  return range === "3M" || range === "1Y" || range === "Max";
-}
-
 function metricValue(row, metric) {
   if (metric === "traders") return row.traders ?? row.trades;
   return row[metric];
@@ -213,7 +209,7 @@ export default function ActivityChart() {
         if (!row || row.ts < start) return false;
         return Number.isFinite(Number(metricValue(row, metric)));
       });
-    const visible = (isLongRange(range) ? dailyLastPoints(scoped) : scoped)
+    const visible = dailyLastPoints(scoped)
       .sort((a, b) => b.ts - a.ts)
       .map((row, index, list) => {
         const previous = list[index + 1];
@@ -343,12 +339,12 @@ export default function ActivityChart() {
               </LineChart>
             </ResponsiveContainer>
             )}
-            {chartRows.length ? (
-              <p className="orderbook-asof">
-                {metric === "traders" ? t.tradersFromIssuance : t.historyFromIssuance}
-              </p>
-            ) : null}
           </div>
+          {chartRows.length ? (
+            <p className="orderbook-asof activity-source">
+              {metric === "traders" ? t.tradersFromIssuance : t.historyFromIssuance}
+            </p>
+          ) : null}
 
           <div className="history-block">
             <h3 className="history-title">{t.history}</h3>
@@ -368,11 +364,7 @@ export default function ActivityChart() {
               )}
               renderRow={(row) => (
                 <tr key={`hist-${row.timestamp}-${row.ts}`}>
-                  <td>
-                    {isIntraday(range)
-                      ? formatWhen(row.timestamp, locale)
-                      : formatDay(row.timestamp, locale)}
-                  </td>
+                  <td>{formatDay(row.timestamp, locale)}</td>
                   <td className="col-num">
                     {formatNumber(row.value, locale, { maximumFractionDigits: 0 })}
                   </td>

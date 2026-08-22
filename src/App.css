@@ -453,12 +453,16 @@ body {
   border-color: var(--dpmf-neon-violet);
 }
 
+.activity-source {
+  margin: 4px 0 0;
+}
+
 .history-block {
-  margin-top: 8px;
+  margin-top: 22px;
 }
 
 .history-title {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   font-size: 0.95rem;
   color: var(--dpmf-text-muted);
 }
