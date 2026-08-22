@@ -31,7 +31,6 @@ import {
   composeAmmBook,
   emptyOrderbook,
   normalizeOrderbookPair,
-  orderBookRowStamp,
   pickNativeBookRow,
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
