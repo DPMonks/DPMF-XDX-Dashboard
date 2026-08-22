@@ -62,6 +62,9 @@ export const FIB_LEVELS = [
   { level: 0.786, color: "#2962FF" },
   { level: 1, color: "#787B86" },
   { level: 1.618, color: "#F23645" },
+  { level: 2.618, color: "#9C27B0" },
+  { level: 3.618, color: "#FF9800" },
+  { level: 4.236, color: "#E040FB" },
 ];
 
 export function fibPrice(a, b, level) {

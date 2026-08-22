@@ -28,7 +28,6 @@ function Line({ a, b, scale, color, dashed, marker }) {
 function FibRetracement({ row, scale, pad, width, dashed }) {
   if (!row.a || !row.b) return null;
   const x0 = Math.min(scale.x(row.a.t), scale.x(row.b.t));
-  const xBox = Math.max(scale.x(row.a.t), scale.x(row.b.t));
   const xRight = width - pad.r;
   const bands = fibBands(row.a, row.b);
   return (
@@ -41,14 +40,14 @@ function FibRetracement({ row, scale, pad, width, dashed }) {
         const height = Math.abs(nextY - y);
         return (
           <g key={band.level}>
-            {band.nextPrice != null && height > 0.4 ? (
+            {band.nextPrice != null && height > 0.25 ? (
               <rect
                 className="hybrid-fib-fill"
                 x={x0}
                 y={top}
-                width={Math.max(1, xBox - x0)}
+                width={Math.max(1, xRight - x0)}
                 height={height}
-                fill={band.color}
+                style={{ fill: band.color, fillOpacity: 0.28 }}
               />
             ) : null}
             <line

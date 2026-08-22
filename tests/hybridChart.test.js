@@ -364,6 +364,8 @@ test("fib retracement uses TradingView level colors and click order", () => {
   assert.equal(bands[0].color, "#787B86");
   assert.equal(bands.find((row) => row.level === 0.618).color, "#089981");
   assert.equal(bands.find((row) => row.level === 0.236).color, "#F23645");
+  assert.equal(bands.find((row) => row.level === 4.236)?.color, "#E040FB");
+  assert.ok(Math.abs(fibPrice(a, b, 4.236) - 423.6) < 1e-9);
   const first = nextDrawingState({ tool: "fib", color: "#3d8bff", pending: null, point: a });
   assert.equal(first.drawing, null);
   const ghost = previewDrawing({ tool: "fib", color: "#3d8bff", pending: first.pending, hover: b });
