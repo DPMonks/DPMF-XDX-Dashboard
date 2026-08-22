@@ -492,19 +492,6 @@ export async function getTokenDetails() {
   };
 }
 
-async function firstChartSeries(loaders) {
-  const errors = [];
-  for (const load of loaders) {
-    try {
-      const rows = chartArray(await load());
-      if (rows.length) return { rows, error: null };
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  return { rows: [], error: errors.at(-1) || null };
-}
-
 function mergeChartRow(target, row) {
   const timestamp = rowTimestamp(row);
   if (!timestamp) return;
@@ -565,33 +552,32 @@ export async function getChartHistory() {
   const merged = new Map();
   const errors = [];
 
-  const activity = await firstChartSeries([
-    () => charts.activity,
-    () => api.activityHistory(),
-  ]);
-  if (activity.error) errors.push(activity.error);
-  for (const row of activity.rows) mergeChartRow(merged, row);
+  async function absorb(loaders) {
+    let added = 0;
+    for (const load of loaders) {
+      try {
+        const rows = chartArray(await load());
+        for (const row of rows) mergeChartRow(merged, row);
+        added += rows.length;
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    return added;
+  }
 
-  const holders = await firstChartSeries([
-    () => charts.holders,
-    () => api.holdersHistory(),
+  await Promise.all([
+    absorb([() => charts.holders, () => api.holdersHistory()]),
+    absorb([() => charts.trustlines, () => api.trustlinesHistory()]),
   ]);
-  if (holders.error) errors.push(holders.error);
-  for (const row of holders.rows) mergeChartRow(merged, row);
 
-  const trustlines = await firstChartSeries([
-    () => charts.trustlines,
-    () => api.trustlinesHistory(),
+  await Promise.race([
+    Promise.all([
+      absorb([() => charts.activity, () => api.activityHistory()]),
+      absorb([() => charts.traders, () => api.tradersHistory()]),
+    ]),
+    sleep(4000),
   ]);
-  if (trustlines.error) errors.push(trustlines.error);
-  for (const row of trustlines.rows) mergeChartRow(merged, row);
-
-  const traders = await firstChartSeries([
-    () => charts.traders,
-    () => api.tradersHistory(),
-  ]);
-  if (traders.error) errors.push(traders.error);
-  for (const row of traders.rows) mergeChartRow(merged, row);
 
   if (!merged.size) {
     for (const asset of ["XDX", "XRP", "LP"]) {

@@ -8,6 +8,8 @@ import {
   YAxis,
 } from "recharts";
 import { getChartHistory, getXdxFlows } from "../api/indexer";
+import { dailyLastPoints, downsampleSeries } from "../activityHistory";
+import { XDX_ISSUED_AT } from "../constants/ledger";
 import { formatDay, formatNumber, formatWhen, shortAddress } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
@@ -90,6 +92,10 @@ function yDomain(values) {
 
 function isIntraday(range) {
   return range === "1H" || range === "4H" || range === "12H" || range === "24H";
+}
+
+function isLongRange(range) {
+  return range === "3M" || range === "1Y" || range === "Max";
 }
 
 function metricValue(row, metric) {
@@ -183,14 +189,17 @@ export default function ActivityChart() {
   }, [t.noHistory]);
 
   const chartRows = useMemo(
-    () => windowedSeries(data, range, now, metric),
+    () => downsampleSeries(windowedSeries(data, range, now, metric)),
     [data, range, metric, now]
   );
   const yValues = chartRows.map((row) => Number(row.plot));
   const xRange = useMemo(() => {
     if (range === "Max") {
-      if (!chartRows.length) return ["auto", "auto"];
-      return [chartRows[0].ts, chartRows[chartRows.length - 1].ts];
+      const issued = new Date(XDX_ISSUED_AT).getTime();
+      const first = chartRows[0]?.ts;
+      const last = chartRows[chartRows.length - 1]?.ts || now;
+      if (!first) return [issued, now];
+      return [Math.min(issued, first), last];
     }
     return [now - RANGE_MS[range], now];
   }, [chartRows, range, now]);
@@ -198,12 +207,13 @@ export default function ActivityChart() {
   const historyRows = useMemo(() => {
     const windowMs = RANGE_MS[range];
     const start = range === "Max" ? 0 : now - windowMs;
-    const visible = data
+    const scoped = data
       .map(withTs)
       .filter((row) => {
         if (!row || row.ts < start) return false;
         return Number.isFinite(Number(metricValue(row, metric)));
-      })
+      });
+    const visible = (isLongRange(range) ? dailyLastPoints(scoped) : scoped)
       .sort((a, b) => b.ts - a.ts)
       .map((row, index, list) => {
         const previous = list[index + 1];
@@ -283,6 +293,12 @@ export default function ActivityChart() {
                         minute: "2-digit",
                       });
                     }
+                    if (range === "1Y" || range === "Max") {
+                      return date.toLocaleDateString(locale, {
+                        month: "short",
+                        year: "2-digit",
+                      });
+                    }
                     return date.toLocaleDateString(locale, {
                       day: "2-digit",
                       month: "short",
@@ -327,6 +343,9 @@ export default function ActivityChart() {
               </LineChart>
             </ResponsiveContainer>
             )}
+            {isLongRange(range) && chartRows.length ? (
+              <p className="orderbook-asof">{t.historyFromIssuance}</p>
+            ) : null}
           </div>
 
           <div className="history-block">

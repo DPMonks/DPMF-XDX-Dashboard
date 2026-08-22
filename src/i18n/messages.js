@@ -75,6 +75,7 @@ const en = {
   noXdxFlows: "No XDX wallet balance changes in this range yet.",
   xdxFlows: "XDX wallet flows",
   noRangeData: "No samples in this range yet.",
+  historyFromIssuance: "Recorded from XDX issuance (24 Oct 2021).",
   issuerFee: "Issuer Fee",
   blackholed: "Blackholed",
   created: "Created",
