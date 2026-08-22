@@ -61,7 +61,7 @@ function FibRetracement({ row, scale, dashed }) {
               style={paint(band.color)}
               vectorEffect="non-scaling-stroke"
             />
-            <text className="hybrid-draw-label" x={x1 - 2} y={y - 3} textAnchor="end" style={{ fill: band.color }}>
+            <text className="hybrid-draw-label hybrid-fib-label" x={x0 - 6} y={y + 3} textAnchor="end">
               {band.level} ({formatAxisPrice(band.price)})
             </text>
           </g>

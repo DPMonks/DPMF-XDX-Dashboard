@@ -342,6 +342,10 @@
   pointer-events: none;
 }
 
+.hybrid-fib-label {
+  fill: #ffffff;
+}
+
 .hybrid-pending {
   stroke: none;
 }
