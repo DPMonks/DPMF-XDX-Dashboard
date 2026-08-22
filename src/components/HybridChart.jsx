@@ -44,8 +44,17 @@ function MaTypeMenu({ value, t, onChange }) {
 
   return (
     <div className="hybrid-ma-select" ref={box}>
-      <button type="button" className="hybrid-ma-select-btn" onClick={() => setOpen((on) => !on)}>
-        {current.short}
+      <button
+        type="button"
+        className={open ? "hybrid-ma-select-btn is-open" : "hybrid-ma-select-btn"}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((on) => !on)}
+      >
+        <span>{current.short}</span>
+        <svg className="hybrid-ma-caret" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M3 4.5 L6 8 L9 4.5" />
+        </svg>
       </button>
       {open ? (
         <ul className="hybrid-ma-menu" role="listbox">
@@ -283,10 +292,8 @@ export default function HybridChart() {
           ))}
         </div>
         <div className="hybrid-ma">
-          <label className="hybrid-toggle">
-            {t.chartMa}
-            <MaTypeMenu value={maType} t={t} onChange={setMaType} />
-          </label>
+          <span className="hybrid-ma-label">{t.chartMa}</span>
+          <MaTypeMenu value={maType} t={t} onChange={setMaType} />
           {MA_PERIODS.map((row) => (
             <label key={row.period} className="hybrid-toggle">
               <input
