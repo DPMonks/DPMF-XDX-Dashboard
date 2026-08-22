@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DRAW_COLORS, LINE_STYLES, LINE_WIDTHS, TOOL_GROUPS, groupForTool, toggleTool, toolMeta } from "../chart/drawings";
+import { DRAW_COLORS, LINE_STYLES, LINE_WIDTHS, TOOL_GROUPS, groupForTool, toolMeta } from "../chart/drawings";
 
 const ICONS = {
   cross: (
@@ -245,14 +245,31 @@ export default function ChartTools({
     return () => document.removeEventListener("pointerdown", onDoc);
   }, [panel, tool]);
 
-  function pickTool(id) {
-    const next = toggleTool(tool, id);
-    if (next !== "cursor") {
-      const group = groupForTool(next);
-      setLastTool((current) => ({ ...current, [group.id]: next }));
+  function remember(id) {
+    if (id === "cursor") return;
+    const group = groupForTool(id);
+    setLastTool((current) => ({ ...current, [group.id]: id }));
+  }
+
+  function pickRail(id) {
+    const group = groupForTool(id);
+    if (open && activeGroup === group.id) {
+      setPanel(false);
+      return;
     }
-    onSelectTool(next);
-    setPanel(toolMeta(next).clicks > 0);
+    remember(id);
+    onSelectTool(id);
+    setPanel(toolMeta(id).clicks > 0);
+  }
+
+  function pickFlyout(id) {
+    if (tool === id) {
+      setPanel(false);
+      return;
+    }
+    remember(id);
+    onSelectTool(id);
+    setPanel(toolMeta(id).clicks > 0);
   }
 
   return (
@@ -268,7 +285,7 @@ export default function ChartTools({
             style={active && shown.colors !== false ? { borderColor: color, color } : undefined}
             onPointerDown={(event) => {
               event.preventDefault();
-              pickTool(shown.id);
+              pickRail(shown.id);
             }}
             title={t[group.labelKey] || group.id}
           >
@@ -289,7 +306,7 @@ export default function ChartTools({
                   style={tool === row.id && row.colors !== false ? { borderColor: color, color } : undefined}
                   onPointerDown={(event) => {
                     event.preventDefault();
-                    pickTool(row.id);
+                    pickFlyout(row.id);
                   }}
                   title={t[row.labelKey] || row.id}
                 >
