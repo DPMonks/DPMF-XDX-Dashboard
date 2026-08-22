@@ -685,15 +685,9 @@ body {
   border-radius: 16px;
   padding: 20px 20px 18px;
   min-height: 228px;
-  box-shadow: 0 0 18px rgba(199, 112, 255, 0.12);
-}
-
-.pool-card.is-xdx-lead {
-  box-shadow: 0 0 22px rgba(0, 234, 255, 0.16);
-}
-
-.pool-card.is-quote-lead {
-  box-shadow: 0 0 22px rgba(199, 112, 255, 0.22);
+  box-shadow:
+    0 0 18px rgba(0, 234, 255, 0.16),
+    0 0 22px rgba(199, 112, 255, 0.2);
 }
 
 .pool-card-head {
@@ -792,7 +786,10 @@ body {
   border-radius: 999px;
   overflow: hidden;
   background: #101018;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 12px rgba(0, 234, 255, 0.45),
+    0 0 16px rgba(199, 112, 255, 0.4);
 }
 
 .pool-split-bar-xdx,
@@ -804,10 +801,12 @@ body {
 
 .pool-split-bar-xdx {
   background: linear-gradient(90deg, #005f6d 0%, #00eaff 100%);
+  box-shadow: inset 0 0 12px rgba(0, 234, 255, 0.55);
 }
 
 .pool-split-bar-quote {
   background: linear-gradient(90deg, #c770ff 0%, #ff4ad8 100%);
+  box-shadow: inset 0 0 12px rgba(199, 112, 255, 0.5);
 }
 
 .pool-split-mid {
@@ -822,17 +821,9 @@ body {
   pointer-events: none;
 }
 
-.pool-split-bar.is-xdx-lead .pool-split-bar-xdx {
-  box-shadow: 0 0 18px rgba(0, 234, 255, 0.7);
-}
-
-.pool-split-bar.is-quote-lead .pool-split-bar-quote {
-  box-shadow: 0 0 18px rgba(199, 112, 255, 0.7);
-}
-
 .pool-split.is-pending .pool-split-bar-xdx,
 .pool-split.is-pending .pool-split-bar-quote {
-  opacity: 0.28;
+  opacity: 0.85;
 }
 
 .pool-split.is-pending .pool-split-labels {
