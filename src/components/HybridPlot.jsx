@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../chart/axis";
 import { candleBodyBox, candleBodyWidth } from "../chart/candles";
-import { maCurvePoints, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
+import { maCurvePoints, maPath, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
 import { hitDrawingHandle, previewDrawing, snapPoint } from "../chart/drawings";
 import ChartDrawings from "./ChartDrawings";
@@ -416,12 +416,11 @@ export default function HybridPlot({
           ) : null}
 
           {averages.map((row) => {
-            const d = wavePath(
+            const d = maPath(
               maCurvePoints(candles, row.values).map((point) => ({
                 x: scale.x(point.t),
                 y: scale.y(point.v),
-              })),
-              { tension: 1.45 }
+              }))
             );
             if (!d) return null;
             return (

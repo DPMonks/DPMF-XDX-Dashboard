@@ -26,7 +26,7 @@ import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from ".
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
-import { maCurvePoints, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
+import { maCurvePoints, maPath, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   drawingHandles,
   fibBands,
@@ -158,6 +158,22 @@ test("rsi uses Wilder averages and maps onto the visible window", () => {
   assert.equal(windowed.length, 8);
   assert.ok(windowed.every((value) => Number.isFinite(value)));
   assert.ok(windowed.every((value) => value > 70));
+});
+
+test("maPath stays between sample prices so a slow 200 MA cannot spike vertically", () => {
+  const points = [
+    { x: 0, y: 100 },
+    { x: 40, y: 98 },
+    { x: 80, y: 97 },
+    { x: 200, y: 96 },
+    { x: 400, y: 95 },
+    { x: 400, y: 10 },
+  ];
+  const d = maPath(points);
+  const ys = [...d.matchAll(/[\d.-]+/g)].map((row) => Number(row[0])).filter((_, index) => index % 2 === 1);
+  assert.ok(ys.length > 4);
+  assert.ok(ys.every((value) => value >= 94.9 && value <= 100.1));
+  assert.equal(d.includes("L400 10"), false);
 });
 
 test("maCurvePoints keeps value changes so the line can curve instead of stair-step", () => {

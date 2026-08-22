@@ -247,17 +247,17 @@
 
 .hybrid-sma-glow {
   fill: none;
-  stroke-width: 7;
+  stroke-width: 9;
   stroke-linecap: round;
-  stroke-dasharray: 0.14 1;
-  filter: drop-shadow(0 0 10px currentColor) drop-shadow(0 0 3px #fff);
-  animation: hybrid-ma-sweep 1.55s ease-out forwards;
+  stroke-dasharray: 0.016 1;
+  filter: drop-shadow(0 0 7px currentColor);
+  animation: hybrid-ma-sweep 2.4s linear forwards;
   pointer-events: none;
 }
 
 @keyframes hybrid-ma-sweep {
   from {
-    stroke-dashoffset: 0.14;
+    stroke-dashoffset: 0.016;
   }
   to {
     stroke-dashoffset: -1;

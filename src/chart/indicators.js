@@ -79,12 +79,12 @@ export function maCurvePoints(candles = [], values = []) {
   const rows = [];
   for (let i = 0; i < candles.length; i += 1) {
     const v = Number(values[i]);
-    if (!Number.isFinite(v) || !candles[i]) continue;
+    if (!Number.isFinite(v) || !(v > 0) || !candles[i]) continue;
     rows.push({ t: candles[i].t, v });
   }
   if (rows.length < 3) return rows;
   const span = Math.max(...rows.map((row) => row.v)) - Math.min(...rows.map((row) => row.v));
-  const eps = Math.max(span * 0.0015, 1e-12);
+  const eps = Math.max(span * 0.0008, 1e-12);
   const out = [rows[0]];
   for (let i = 1; i < rows.length - 1; i += 1) {
     const prev = out[out.length - 1];
@@ -97,6 +97,58 @@ export function maCurvePoints(candles = [], values = []) {
   const last = rows[rows.length - 1];
   if (out[out.length - 1].t !== last.t) out.push(last);
   return out;
+}
+
+export function maPath(points = []) {
+  const rows = [];
+  for (const row of Array.isArray(points) ? points : []) {
+    if (!Number.isFinite(row?.x) || !Number.isFinite(row?.y)) continue;
+    const last = rows[rows.length - 1];
+    if (last && row.x <= last.x) continue;
+    rows.push(row);
+  }
+  if (!rows.length) return "";
+  if (rows.length === 1) return `M${rows[0].x} ${rows[0].y}`;
+  if (rows.length === 2) return `M${rows[0].x} ${rows[0].y} L${rows[1].x} ${rows[1].y}`;
+
+  const n = rows.length;
+  const dx = [];
+  const slope = [];
+  for (let i = 0; i < n - 1; i += 1) {
+    const span = rows[i + 1].x - rows[i].x;
+    dx[i] = span;
+    slope[i] = span ? (rows[i + 1].y - rows[i].y) / span : 0;
+  }
+  const tan = new Array(n);
+  tan[0] = slope[0];
+  tan[n - 1] = slope[n - 2];
+  for (let i = 1; i < n - 1; i += 1) {
+    tan[i] = slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2;
+  }
+  for (let i = 0; i < n - 1; i += 1) {
+    if (Math.abs(slope[i]) < 1e-12) {
+      tan[i] = 0;
+      tan[i + 1] = 0;
+      continue;
+    }
+    const a = tan[i] / slope[i];
+    const b = tan[i + 1] / slope[i];
+    const s = a * a + b * b;
+    if (s > 9) {
+      const k = 3 / Math.sqrt(s);
+      tan[i] = k * a * slope[i];
+      tan[i + 1] = k * b * slope[i];
+    }
+  }
+
+  let d = `M${rows[0].x} ${rows[0].y}`;
+  for (let i = 0; i < n - 1; i += 1) {
+    const p0 = rows[i];
+    const p1 = rows[i + 1];
+    const h = dx[i];
+    d += ` C${p0.x + h / 3} ${p0.y + (tan[i] * h) / 3} ${p1.x - h / 3} ${p1.y - (tan[i + 1] * h) / 3} ${p1.x} ${p1.y}`;
+  }
+  return d;
 }
 
 export function wavePath(points = [], { tension = 1 } = {}) {
