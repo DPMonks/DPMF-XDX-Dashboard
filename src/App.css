@@ -602,22 +602,30 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-right: 4px;
+  width: 30px;
+  height: 26px;
+  margin-right: 5px;
   padding: 0;
-  border: 0;
+  border: 1px solid rgba(199, 112, 255, 0.7);
   border-radius: 8px;
-  background: transparent;
-  color: var(--dpmf-neon-cyan);
-  filter: drop-shadow(0 0 6px rgba(0, 234, 255, 0.7));
+  background: linear-gradient(180deg, rgba(0, 234, 255, 0.18), rgba(199, 112, 255, 0.22));
+  box-shadow: 0 0 10px rgba(0, 234, 255, 0.35), 0 0 12px rgba(199, 112, 255, 0.3);
   cursor: pointer;
 }
 
+.pair-select-chevron svg {
+  display: block;
+  filter: drop-shadow(0 0 5px rgba(0, 234, 255, 0.85));
+}
+
 .pair-select.is-open .pair-select-chevron {
+  transform: none;
+  border-color: var(--dpmf-neon-cyan);
+  box-shadow: 0 0 12px rgba(0, 234, 255, 0.5);
+}
+
+.pair-select.is-open .pair-select-chevron svg {
   transform: rotate(180deg);
-  color: var(--dpmf-neon-violet);
-  filter: drop-shadow(0 0 6px rgba(199, 112, 255, 0.8));
 }
 
 .pair-select-list {

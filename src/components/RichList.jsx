@@ -70,11 +70,23 @@ function PairSelect({ pairs, value, onChange, t }) {
           type="button"
           className="pair-select-chevron"
           tabIndex={-1}
-          aria-hidden="true"
+          aria-label={t.pair}
           onClick={() => setOpen((current) => !current)}
         >
-          <svg viewBox="0 0 16 16" width="14" height="14">
-            <path d="M3.2 5.6 8 10.4l4.8-4.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+            <path
+              d="M4.2 7.2h11.6L10 14.2 4.2 7.2z"
+              fill="url(#pair-caret)"
+              stroke="#c770ff"
+              strokeWidth="1.1"
+              strokeLinejoin="round"
+            />
+            <defs>
+              <linearGradient id="pair-caret" x1="4" y1="7" x2="16" y2="15" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#00eaff" />
+                <stop offset="1" stopColor="#c770ff" />
+              </linearGradient>
+            </defs>
           </svg>
         </button>
       </div>
