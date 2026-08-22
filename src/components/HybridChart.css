@@ -245,19 +245,34 @@
   stroke-linecap: round;
 }
 
+.hybrid-sma.is-drawing {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: hybrid-ma-draw 2.6s linear forwards;
+}
+
 .hybrid-sma-glow {
   fill: none;
   stroke-width: 9;
   stroke-linecap: round;
-  stroke-dasharray: 0.016 1;
+  stroke-dasharray: 0.018 1;
   filter: drop-shadow(0 0 7px currentColor);
-  animation: hybrid-ma-sweep 2.4s linear forwards;
+  animation: hybrid-ma-tip 2.6s linear forwards;
   pointer-events: none;
 }
 
-@keyframes hybrid-ma-sweep {
+@keyframes hybrid-ma-draw {
   from {
-    stroke-dashoffset: 0.016;
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes hybrid-ma-tip {
+  from {
+    stroke-dashoffset: 0.018;
   }
   to {
     stroke-dashoffset: -1;

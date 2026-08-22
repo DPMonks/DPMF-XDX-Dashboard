@@ -26,7 +26,7 @@ import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from ".
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
-import { maCurvePoints, maPath, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
+import { extendMaPoints, maCurvePoints, maPath, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   applyPlaceOffset,
   drawingHandles,
@@ -176,6 +176,19 @@ test("maPath stays between sample prices so a slow 200 MA cannot spike verticall
   assert.ok(ys.length > 4);
   assert.ok(ys.every((value) => value >= 94.9 && value <= 100.1));
   assert.equal(d.includes("L400 10"), false);
+});
+
+test("extendMaPoints pins a high 200 MA to the plot top and continues to the right edge", () => {
+  const out = extendMaPoints(
+    [
+      { x: 100, y: -40 },
+      { x: 400, y: 80 },
+    ],
+    { right: 858, top: 16, bottom: 364 }
+  );
+  assert.equal(out[0].y, 16);
+  assert.equal(out[out.length - 1].x, 858);
+  assert.equal(out[out.length - 1].y, 80);
 });
 
 test("maCurvePoints keeps value changes so the line can curve instead of stair-step", () => {

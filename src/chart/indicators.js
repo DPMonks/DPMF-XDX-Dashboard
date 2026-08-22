@@ -99,6 +99,24 @@ export function maCurvePoints(candles = [], values = []) {
   return out;
 }
 
+export function extendMaPoints(points = [], { right, top, bottom } = {}) {
+  const rows = (Array.isArray(points) ? points : []).filter(
+    (row) => Number.isFinite(row?.x) && Number.isFinite(row?.y)
+  );
+  if (!rows.length) return [];
+  const lo = Number.isFinite(top) ? top : -Infinity;
+  const hi = Number.isFinite(bottom) ? bottom : Infinity;
+  const out = rows.map((row) => ({
+    x: row.x,
+    y: Math.min(hi, Math.max(lo, row.y)),
+  }));
+  const last = out[out.length - 1];
+  if (Number.isFinite(right) && last.x < right - 0.5) {
+    out.push({ x: right, y: last.y });
+  }
+  return out;
+}
+
 export function maPath(points = []) {
   const rows = [];
   for (const row of Array.isArray(points) ? points : []) {
