@@ -42,6 +42,7 @@ export default function HybridChart() {
   const [drawColor, setDrawColor] = useState("#3d8bff");
   const [magnet, setMagnet] = useState(false);
   const [hollow, setHollow] = useState(false);
+  const [showArb, setShowArb] = useState(false);
   const [maType, setMaType] = useState("sma");
   const [maPeriods, setMaPeriods] = useState([20, 50]);
   const [books, setBooks] = useState(null);
@@ -199,7 +200,7 @@ export default function HybridChart() {
   }
 
   return (
-    <div className={`hybrid-chart${arb?.highlight ? " is-arb" : ""}`}>
+    <div className={`hybrid-chart${showArb && arb?.highlight ? " is-arb" : ""}`}>
       <div className="hybrid-topbar">
         <div className="hybrid-pairs" role="tablist">
           {CHART_PAIRS.map((name) => (
@@ -245,6 +246,10 @@ export default function HybridChart() {
           <input type="checkbox" checked={hollow} onChange={(event) => setHollow(event.target.checked)} />
           {t.chartHollow}
         </label>
+        <label className="hybrid-toggle">
+          <input type="checkbox" checked={showArb} onChange={(event) => setShowArb(event.target.checked)} />
+          {t.chartArbitrage}
+        </label>
       </div>
 
       <div className="hybrid-body">
@@ -269,7 +274,7 @@ export default function HybridChart() {
                 </span>
               ))}
             </p>
-            {arb ? (
+            {showArb && arb ? (
               <dl className="hybrid-arb">
                 <div>
                   <dt>{t.ammPrice}</dt>
