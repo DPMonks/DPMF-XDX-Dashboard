@@ -34,6 +34,9 @@ import {
   nextDrawingState,
   previewDrawing,
   raySegment,
+  RANGE_DOWN,
+  RANGE_UP,
+  rangeColor,
   rangeStats,
   snapPoint,
   toolMeta,
@@ -466,6 +469,8 @@ test("ray extends past the second point and range stats keep the percent move", 
   const stats = rangeStats({ t: 0, price: 2 }, { t: 5, price: 3 });
   assert.equal(stats.delta, 1);
   assert.equal(stats.pct, 50);
+  assert.equal(rangeColor({ t: 0, price: 2 }, { t: 5, price: 3 }), RANGE_UP);
+  assert.equal(rangeColor({ t: 0, price: 3 }, { t: 5, price: 2 }), RANGE_DOWN);
   assert.equal(toolMeta("channel").clicks, 3);
 });
 

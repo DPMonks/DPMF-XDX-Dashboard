@@ -1,4 +1,4 @@
-import { channelOffset, drawingHandles, extendSegment, fibBands, fibExtent, raySegment, rangeStats } from "../chart/drawings";
+import { channelOffset, drawingHandles, extendSegment, fibBands, fibExtent, rangeColor, raySegment, rangeStats } from "../chart/drawings";
 import { formatAxisPrice } from "../chart/axis";
 
 function stroke(row) {
@@ -175,6 +175,7 @@ export default function ChartDrawings({
           const w = Math.max(1, Math.abs(scale.x(row.b.t) - scale.x(row.a.t)));
           const h = Math.max(1, Math.abs(scale.y(row.b.price) - scale.y(row.a.price)));
           const stats = rangeStats(row.a, row.b);
+          const tone = row.kind === "range" ? rangeColor(row.a, row.b) : color;
           return (
             <g key={key}>
               <rect
@@ -183,10 +184,10 @@ export default function ChartDrawings({
                 y={y}
                 width={w}
                 height={h}
-                style={paint(color)}
+                style={{ ...paint(tone), fill: tone, fillOpacity: row.kind === "range" ? 0.14 : undefined }}
               />
               {row.kind === "range" ? (
-                <text className="hybrid-draw-label" x={x + 6} y={y + 12} style={{ fill: color }}>
+                <text className="hybrid-draw-label" x={x + 6} y={y + 12} style={{ fill: tone }}>
                   {formatAxisPrice(stats.delta)} ({stats.pct.toFixed(2)}%)
                 </text>
               ) : null}

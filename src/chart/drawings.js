@@ -159,11 +159,21 @@ export function channelOffset(a, b, c) {
   return c.price - priceAtTime(a, b, c.t);
 }
 
+export const RANGE_UP = "#26a69a";
+export const RANGE_DOWN = "#ef5350";
+
 export function rangeStats(a, b) {
   if (!a || !b) return { delta: 0, pct: 0, bars: 0 };
   const delta = b.price - a.price;
   const pct = a.price ? (delta / a.price) * 100 : 0;
   return { delta, pct, bars: Math.abs(b.t - a.t) };
+}
+
+export function rangeColor(a, b) {
+  const delta = rangeStats(a, b).delta;
+  if (delta > 0) return RANGE_UP;
+  if (delta < 0) return RANGE_DOWN;
+  return "#787B86";
 }
 
 export function shapeFromPoints(kind, points = [], color) {
