@@ -3,7 +3,7 @@ import { pairFromRow } from "../constants/ledger";
 import { composeTokenDetails } from "../tokenDetails";
 import { quoteUsdFromMap, resolvePoolSplit } from "../utils/poolSplit";
 import {
-  asOrderbookPayload,
+  composeAmmBook,
   emptyOrderbook,
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
@@ -318,7 +318,8 @@ export async function getOrderbooks() {
     ]);
     const books = {};
     for (const pair of names) {
-      books[pair] = asOrderbookPayload(body?.books?.[pair] || body?.[pair], pair);
+      const raw = body?.books?.[pair] || body?.[pair] || emptyOrderbook(pair);
+      books[pair] = composeAmmBook(raw, raw.amm || {}, pair);
     }
     return {
       quotes: names.map((pair) => pair.split("/")[1]).filter(Boolean),

@@ -21,6 +21,21 @@ export const RLUSD_HEX = "524C555344000000000000000000000000000000";
 export const XDX_RLUSD_AMM = "rLbBzF9oxntVf4XxcyakNKJTci4yqSmQUu";
 export const XDX_RLUSD_LP_HEX = "03BCD44104644B711C58CD14CD13CBA65757CFBE";
 
+export const XIO_ISSUER = "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU";
+export const XSQUAD_ISSUER = "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg";
+
+export function asciiCurrencyHex(code) {
+  const text = String(code || "");
+  let hex = "";
+  for (let i = 0; i < text.length; i += 1) {
+    hex += text.charCodeAt(i).toString(16).toUpperCase().padStart(2, "0");
+  }
+  return hex.padEnd(40, "0");
+}
+
+export const XIO_HEX = asciiCurrencyHex("XIO");
+export const XSQUAD_HEX = asciiCurrencyHex("XSQUAD");
+
 export const POOLS = [
   {
     pair: "XDX/XRP",

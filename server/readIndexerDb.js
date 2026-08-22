@@ -38,6 +38,7 @@ import {
 import { issuedActivitySeries } from "../src/activityHistory.js";
 import { inferTradesFromHistory } from "../src/xdxTrades.js";
 import { loadIssuedHolderHistory } from "./issuedHolderHistory.js";
+import { fillNativeBookFromXrpl } from "./xrplBookOffers.js";
 
 let pool = null;
 
@@ -868,39 +869,78 @@ async function loadAllLpSupply(db) {
   return Number(latest.rows[0]?.n || 0);
 }
 
+function rowsForPair(rows, pair) {
+  const name = normalizeOrderbookPair(pair);
+  return (Array.isArray(rows) ? rows : []).filter(
+    (row) => normalizeOrderbookPair(row.pair) === name
+  );
+}
+
 async function loadNativeBookRow(db, pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(pair);
   // Worker 2 writes `timestamp`. Do not SELECT updated_at — that column is
   // missing and tryQuery would swallow the error as an empty book.
-  const latest = await tryQuery(
-    db,
-    `SELECT payload, pair, timestamp
-     FROM order_book_latest
-     WHERE pair = $1
-     LIMIT 1`,
-    [name]
-  );
+  // Pair spellings differ (XDX-XRP, xdx/xrp); match after normalize.
+  const latest = await tryQuery(db, "SELECT payload, pair, timestamp FROM order_book_latest");
   const history = await tryQuery(
     db,
     `SELECT payload, pair, timestamp
      FROM order_book_history
-     WHERE pair = $1
      ORDER BY timestamp DESC
-     LIMIT 40`,
-    [name]
+     LIMIT 200`
   );
-  return pickNativeBookRow(latest.rows[0], history.rows, name);
+  return pickNativeBookRow(rowsForPair(latest.rows, name)[0], rowsForPair(history.rows, name), name);
+}
+
+async function composeStoredBook(stored, pair, reserveIndex, xrpPool, pool) {
+  const name = normalizeOrderbookPair(pair);
+  const reserves = loadPairReserves(name, reserveIndex, xrpPool, pool);
+  return composeAmmBook(stored || emptyOrderbook(name), reserves, name);
+}
+
+async function withLiveTape(composed, pair, pool) {
+  if (composed?.dex_present) return composed;
+  const live = await fillNativeBookFromXrpl(pair, pool);
+  if (!live) return composed;
+  return {
+    ...composeAmmBook(
+      { ...composed, ...live, bids: live.bids, asks: live.asks },
+      {
+        reserve_asset: composed.amm?.reserve_asset,
+        reserve_currency: composed.amm?.reserve_currency,
+        trading_fee: composed.amm?.trading_fee,
+        price: composed.amm?.price,
+      },
+      pair
+    ),
+    as_of: live.as_of || composed.as_of,
+    source: "xrpl",
+  };
 }
 
 async function loadOrderbook(db, pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(pair);
-  const picked = await loadNativeBookRow(db, name);
-  if (!picked) return emptyOrderbook(name);
-  const book = asOrderbookPayload(picked.payload, name);
+  const [picked, reserveIndex, xrpPool, lp] = await Promise.all([
+    loadNativeBookRow(db, name),
+    loadAmmReserveIndex(db),
+    hydrateAmm(db),
+    loadXdxLpPools(db),
+  ]);
+  const pool = (lp.pools || []).find(
+    (row) => normalizeOrderbookPair(row.pool_name || row.pool) === name
+  );
+  const stored = picked
+    ? {
+        ...asOrderbookPayload(picked.payload, name),
+        as_of: asIso(picked.as_of),
+        source: "db",
+      }
+    : emptyOrderbook(name);
+  const composed = await composeStoredBook(stored, name, reserveIndex, xrpPool, pool);
+  const filled = await withLiveTape(composed, name, pool);
   return {
-    ...book,
-    as_of: book.as_of || asIso(picked.as_of),
-    source: "db",
+    ...filled,
+    as_of: filled.as_of || stored.as_of || null,
   };
 }
 
@@ -998,8 +1038,7 @@ async function loadOrderbooks(db) {
     const pool = (lp.pools || []).find(
       (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
     );
-    const reserves = loadPairReserves(pair, reserveIndex, xrpPool, pool);
-    const composed = composeAmmBook(stored, reserves, pair);
+    const composed = await composeStoredBook(stored, pair, reserveIndex, xrpPool, pool);
     books[pair] = {
       ...composed,
       as_of: storedByPair.has(pair.toUpperCase()) ? stored.as_of : null,
@@ -1007,13 +1046,26 @@ async function loadOrderbooks(db) {
     };
   }
 
+  await Promise.all(
+    FEATURED_ORDERBOOK_PAIRS.map(async (pair) => {
+      const pool = (lp.pools || []).find(
+        (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
+      );
+      const filled = await withLiveTape(books[pair], pair, pool);
+      books[pair] = {
+        ...filled,
+        as_of: filled.as_of || books[pair]?.as_of || null,
+      };
+    })
+  );
+
   return {
     quotes: pairs.map((pair) => pair.split("/")[1]).filter(Boolean),
     featured: FEATURED_ORDERBOOK_PAIRS,
     pairs,
     default_pair: "XDX/XRP",
     books,
-    source: "db",
+    source: Object.values(books).some((book) => book.source === "xrpl") ? "xrpl" : "db",
   };
 }
 
@@ -1172,6 +1224,7 @@ async function loadXdxLpPools(db) {
         amm_account: row.amm_account,
         quote: row.quote,
         quote_issuer: row.quote_issuer,
+        quote_hex: row.quote_hex,
         lp_currency: row.lp_currency_hex,
         reserve_xdx: reserveXdx,
         reserve_asset: reserveXdx,

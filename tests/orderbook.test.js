@@ -264,6 +264,64 @@ test("extractDexSides finds nested Worker 2 book.bids without treating AMM rungs
   assert.equal(sides.asks[0].base_size, 900);
 });
 
+test("extractDexSides unwraps book_offers RPC objects and ignores empty bid arrays", () => {
+  const sides = extractDexSides({
+    pair: "XDX/XRP",
+    bids: [],
+    asks: [],
+    bid: {
+      result: {
+        offers: [
+          {
+            TakerGets: "25000000",
+            TakerPays: { currency: "XDX", issuer: "rIssuer", value: "874778.061501" },
+          },
+        ],
+      },
+    },
+    ask: {
+      result: {
+        offers: [
+          {
+            TakerGets: { currency: "XDX", issuer: "rIssuer", value: "29032.3" },
+            TakerPays: "1100000",
+          },
+        ],
+      },
+    },
+  });
+  assert.equal(sides.bids.length, 1);
+  assert.equal(sides.asks.length, 1);
+  assert.equal(sides.bids[0].base_size, 874778.061501);
+  assert.equal(sides.asks[0].base_size, 29032.3);
+  assert.ok(Math.abs(sides.asks[0].price - 1.1 / 29032.3) < 1e-12);
+});
+
+test("extractDexSides keeps native_bids when AMM rows already fill bids", () => {
+  const sides = extractDexSides({
+    bids: [{ price: 0.000029, base_size: 158976, source: "amm" }],
+    asks: [{ price: 0.00003, base_size: 158976, source: "amm" }],
+    native_bids: [{ price: 0.0000285, base_size: 4000 }],
+    native_asks: [{ price: 0.0000378, amount: 29032.3 }],
+  });
+  assert.equal(sides.bids.length, 1);
+  assert.equal(sides.asks.length, 1);
+  assert.equal(sides.bids[0].base_size, 4000);
+  assert.equal(sides.asks[0].base_size, 29032.3);
+});
+
+test("offerToDexRow uses funded XDX size and the full-offer price", () => {
+  const bid = offerToDexRow({
+    TakerGets: "8415900",
+    TakerPays: { currency: "XDX", issuer: "rIssuer", value: "300000" },
+    taker_gets_funded: "7045616",
+    taker_pays_funded: { currency: "XDX", issuer: "rIssuer", value: "251153.7446975369" },
+  });
+  assert.equal(bid.side, "bid");
+  assert.equal(bid.base_size, 251153.7446975369);
+  assert.ok(Math.abs(bid.price - 8.4159 / 300000) < 1e-12);
+});
+
 test("asOrderbookPayload does not treat quote-per-XDX as xdxUsd", () => {
   const book = asOrderbookPayload({
     pair: "XDX/XRP",

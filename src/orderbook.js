@@ -198,63 +198,133 @@ export function offerToDexRow(row) {
 
   const gets = issuedAmount(row.TakerGets ?? row.taker_gets);
   const pays = issuedAmount(row.TakerPays ?? row.taker_pays);
-  if (!gets || !pays) return null;
-  if (isXdxAmount(gets)) {
-    return {
-      price: pays.value / gets.value,
-      base_size: gets.value,
-      source: "dex",
-      side: "ask",
-    };
-  }
-  if (isXdxAmount(pays)) {
-    return {
-      price: gets.value / pays.value,
-      base_size: pays.value,
-      source: "dex",
-      side: "bid",
-    };
+  const fundedGets = issuedAmount(row.taker_gets_funded ?? row.TakerGetsFunded);
+  const fundedPays = issuedAmount(row.taker_pays_funded ?? row.TakerPaysFunded);
+  if (gets && pays) {
+    if (isXdxAmount(gets)) {
+      return {
+        price: pays.value / gets.value,
+        base_size: fundedGets && isXdxAmount(fundedGets) ? fundedGets.value : gets.value,
+        source: "dex",
+        side: "ask",
+      };
+    }
+    if (isXdxAmount(pays)) {
+      return {
+        price: gets.value / pays.value,
+        base_size: fundedPays && isXdxAmount(fundedPays) ? fundedPays.value : pays.value,
+        source: "dex",
+        side: "bid",
+      };
+    }
   }
   return null;
 }
 
-function firstOfferList(...lists) {
-  for (const list of lists) {
-    if (Array.isArray(list) && list.length) return list;
+function unwrapJson(value) {
+  if (typeof value !== "string") return value;
+  const text = value.trim();
+  if (!text.startsWith("{") && !text.startsWith("[")) return value;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return value;
+  }
+}
+
+function asOfferList(value) {
+  const node = unwrapJson(value);
+  if (!node) return [];
+  if (Array.isArray(node)) return node.filter((row) => row && typeof row === "object");
+  if (typeof node !== "object") return [];
+  if (Array.isArray(node.offers)) return node.offers;
+  if (node.result) {
+    const inner = asOfferList(node.result);
+    if (inner.length) return inner;
+  }
+  if (Array.isArray(node.book)) return node.book;
+  if (Array.isArray(node.rows)) return node.rows;
+  const keys = Object.keys(node);
+  if (keys.length && keys.every((key) => /^\d+$/.test(key))) {
+    return keys
+      .sort((a, b) => Number(a) - Number(b))
+      .map((key) => node[key])
+      .filter((row) => row && typeof row === "object");
   }
   return [];
 }
 
+function sideHintFromKey(key, fallback) {
+  const name = String(key || "").toLowerCase();
+  if (/(ask|sell)/.test(name)) return "ask";
+  if (/(bid|buy)/.test(name)) return "bid";
+  return fallback;
+}
+
+function pushDexRow(row, hint, bids, asks, seen) {
+  if (!row || typeof row !== "object" || row.placeholder) return;
+  if (String(row.source || "").toLowerCase() === "amm") return;
+  const next = offerToDexRow({ ...row, side: row.side || hint || undefined });
+  if (!next) return;
+  const key = `${next.side}:${next.price}:${next.base_size}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  if (next.side === "ask") asks.push({ ...next, side: "ask" });
+  else bids.push({ ...next, side: "bid" });
+}
+
+function walkDexOffers(node, bids, asks, seen, hint, depth = 0) {
+  const value = unwrapJson(node);
+  if (!value || depth > 6) return;
+  if (Array.isArray(value)) {
+    for (const item of value) walkDexOffers(item, bids, asks, seen, hint, depth + 1);
+    return;
+  }
+  if (typeof value !== "object") return;
+  if (String(value.source || "").toLowerCase() === "amm") return;
+  if (value.TakerGets != null || value.taker_gets != null) {
+    pushDexRow(value, hint, bids, asks, seen);
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "amm") continue;
+    walkDexOffers(child, bids, asks, seen, sideHintFromKey(key, hint), depth + 1);
+  }
+}
+
 export function extractDexSides(body = {}) {
-  const nested =
-    (body.book && typeof body.book === "object" && body.book) ||
-    (body.dex && typeof body.dex === "object" && body.dex) ||
-    (body.offers && typeof body.offers === "object" && !Array.isArray(body.offers) && body.offers) ||
-    (body.orderbook && typeof body.orderbook === "object" && body.orderbook) ||
-    (body.result && typeof body.result === "object" && body.result) ||
-    (body.data && typeof body.data === "object" && body.data) ||
-    {};
+  const parsed = unwrapJson(body);
+  const root = parsed && typeof parsed === "object" ? parsed : {};
   const bids = [];
   const asks = [];
+  const seen = new Set();
+  const books = [
+    root,
+    root.book,
+    root.dex,
+    root.native,
+    root.clob,
+    root.orderbook,
+    root.order_book,
+    root.book_offers,
+    root.bookOffers,
+    root.payload,
+    root.data,
+    root.result,
+    root.offers && typeof root.offers === "object" && !Array.isArray(root.offers) ? root.offers : null,
+  ].filter((node) => node && typeof node === "object" && !Array.isArray(node));
 
-  for (const row of firstOfferList(body.bids, body.buy, body.buys, nested.bids, nested.buy, nested.buys)) {
-    const next = offerToDexRow({ ...row, side: row.side || "bid" });
-    if (next && next.side !== "ask") bids.push({ ...next, side: "bid" });
+  for (const book of books) {
+    for (const key of ["bids", "buy", "buys", "bid", "native_bids", "dex_bids", "bid_book", "bids_book"]) {
+      for (const row of asOfferList(book[key])) pushDexRow(row, "bid", bids, asks, seen);
+    }
+    for (const key of ["asks", "sell", "sells", "ask", "native_asks", "dex_asks", "ask_book", "asks_book"]) {
+      for (const row of asOfferList(book[key])) pushDexRow(row, "ask", bids, asks, seen);
+    }
+    for (const row of asOfferList(book.offers)) pushDexRow(row, null, bids, asks, seen);
   }
-  for (const row of firstOfferList(body.asks, body.sell, body.sells, nested.asks, nested.sell, nested.sells)) {
-    const next = offerToDexRow({ ...row, side: row.side || "ask" });
-    if (next && next.side !== "bid") asks.push({ ...next, side: "ask" });
-  }
-  const mixed = firstOfferList(
-    Array.isArray(body.offers) ? body.offers : null,
-    Array.isArray(nested.offers) ? nested.offers : null
-  );
-  for (const row of mixed) {
-    const next = offerToDexRow(row);
-    if (!next) continue;
-    if (next.side === "ask") asks.push(next);
-    else bids.push({ ...next, side: "bid" });
-  }
+
+  walkDexOffers(root, bids, asks, seen, null);
   return { bids, asks };
 }
 
