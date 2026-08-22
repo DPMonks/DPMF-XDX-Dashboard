@@ -2,13 +2,18 @@ import { useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../chart/axis";
 import { candleBodyWidth } from "../chart/candles";
+import { volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
 import { previewDrawing, snapPoint } from "../chart/drawings";
 import ChartDrawings from "./ChartDrawings";
 
 const PRICE_H = 348;
-const VOL_H = 82;
+const VOL_H = 72;
+const RSI_H = 72;
+const PANE_GAP = 8;
 const PAD = { l: 84, r: 18, t: 16, b: 36 };
+const UP = "#26a69a";
+const DOWN = "#ef5350";
 
 export default function HybridPlot({
   candles = [],
@@ -28,6 +33,12 @@ export default function HybridPlot({
   magnet = false,
   hollow = false,
   averages = [],
+  rsiValues = [],
+  rsiPeriod = 14,
+  rsiOverbought = 70,
+  rsiOversold = 30,
+  showVolume = true,
+  showRsi = true,
   locale,
   onDraw,
 }) {
@@ -35,9 +46,15 @@ export default function HybridPlot({
   const [hover, setHover] = useState(null);
   const uid = useId().replace(/:/g, "");
   const width = 960;
-  const height = PAD.t + PRICE_H + VOL_H + PAD.b;
+  const volH = showVolume ? VOL_H : 0;
+  const rsiH = showRsi ? RSI_H : 0;
+  const volTop = PAD.t + PRICE_H + (volH ? 4 : 0);
+  const rsiTop = volTop + volH + (volH && rsiH ? PANE_GAP : rsiH ? 4 : 0);
+  const height = rsiTop + rsiH + PAD.b;
   const innerW = width - PAD.l - PAD.r;
   const plotBottom = PAD.t + PRICE_H;
+  const volBottom = volTop + volH;
+  const rsiBottom = rsiTop + rsiH;
 
   const scale = useMemo(() => {
     const start = view?.start || candles[0]?.t || 0;
@@ -62,6 +79,7 @@ export default function HybridPlot({
     () => timeTicks(scale.start, scale.end, { count: 6, intervalId: interval }),
     [scale.start, scale.end, interval]
   );
+  const volumes = useMemo(() => volumeWaveValues(candles), [candles]);
 
   const candleW = candleBodyWidth({
     innerW,
@@ -80,6 +98,8 @@ export default function HybridPlot({
     const t = scale.start + ((x - PAD.l) / innerW) * (scale.end - scale.start);
     const price = scale.max - ((y - PAD.t) / PRICE_H) * (scale.max - scale.min);
     const inPrice = y >= PAD.t - 2 && y <= plotBottom + 2 && x >= PAD.l && x <= width - PAD.r;
+    const inVolume = volH > 0 && y >= volTop && y <= volBottom && x >= PAD.l && x <= width - PAD.r;
+    const inRsi = rsiH > 0 && y >= rsiTop && y <= rsiBottom && x >= PAD.l && x <= width - PAD.r;
     let nearest = candles[0];
     let best = Infinity;
     for (const row of candles) {
@@ -98,6 +118,8 @@ export default function HybridPlot({
       price: snapped.price,
       candle: nearest,
       inPrice,
+      inVolume,
+      inRsi,
     };
   }
 
@@ -118,6 +140,24 @@ export default function HybridPlot({
   const hoverCandle = hover?.candle;
   const preview = hover?.inPrice ? previewDrawing({ tool, color, pending, hover }) : null;
   const clipId = `hybrid-plot-${uid}`;
+  const volClipId = `hybrid-vol-${uid}`;
+  const rsiClipId = `hybrid-rsi-${uid}`;
+  const volGradId = `hybrid-vol-grad-${uid}`;
+  const volMax = Math.max(...volumes, 0) || 1;
+  const volPoints = candles.map((row, index) => ({
+    x: scale.x(row.t),
+    y: volBottom - (volumes[index] / volMax) * Math.max(volH - 10, 1),
+    up: row.c >= row.o,
+  }));
+  const volLine = wavePath(volPoints);
+  const volFill = waveArea(volPoints, volBottom);
+  const rsiY = (value) => rsiTop + (1 - Math.min(100, Math.max(0, Number(value) || 0)) / 100) * rsiH;
+  const rsiPoints = candles
+    .map((row, index) => {
+      const value = rsiValues[index];
+      return Number.isFinite(value) ? { x: scale.x(row.t), y: rsiY(value) } : null;
+    })
+    .filter(Boolean);
   const cursorT = hover && Number.isFinite(hover.t) ? hover.t : hoverCandle?.t;
   const timeLabel = cursorT != null ? formatCursorWhen(cursorT, locale) : "";
   const timeTagW = Math.max(108, timeLabel.length * 6.1);
@@ -126,6 +166,13 @@ export default function HybridPlot({
     ? Math.min(width - PAD.r - timeTagW / 2, Math.max(PAD.l + timeTagW / 2, cursorX))
     : 0;
   const priceY = hover?.inPrice ? Math.min(plotBottom - 1, Math.max(PAD.t + 1, hover.y)) : null;
+  const hoverRsi = hoverCandle
+    ? rsiValues[candles.findIndex((row) => row.t === hoverCandle.t)]
+    : null;
+  const rsiTagY =
+    hover?.inRsi && Number.isFinite(hoverRsi)
+      ? Math.min(rsiBottom - 1, Math.max(rsiTop + 1, rsiY(hoverRsi)))
+      : null;
 
   return (
     <div className={hollow ? "hybrid-plot is-hollow" : "hybrid-plot"} ref={box}>
@@ -142,6 +189,12 @@ export default function HybridPlot({
           <clipPath id={clipId}>
             <rect x={PAD.l} y={PAD.t} width={innerW} height={PRICE_H} />
           </clipPath>
+          <clipPath id={volClipId}>
+            <rect x={PAD.l} y={volTop} width={innerW} height={Math.max(volH, 0)} />
+          </clipPath>
+          <clipPath id={rsiClipId}>
+            <rect x={PAD.l} y={rsiTop} width={innerW} height={Math.max(rsiH, 0)} />
+          </clipPath>
           <linearGradient id={`pressure-down-${uid}`} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="#ff5d73" stopOpacity="0.10" />
             <stop offset="100%" stopColor="#9818f0" stopOpacity="0.02" />
@@ -150,11 +203,35 @@ export default function HybridPlot({
             <stop offset="0%" stopColor="#00eaff" stopOpacity="0.10" />
             <stop offset="100%" stopColor="#98f050" stopOpacity="0.02" />
           </linearGradient>
+          {volH > 0 && volPoints.length ? (
+            <linearGradient
+              id={volGradId}
+              x1={PAD.l}
+              x2={width - PAD.r}
+              y1="0"
+              y2="0"
+              gradientUnits="userSpaceOnUse"
+            >
+              {volPoints.map((row, index) => (
+                <stop
+                  key={`vol-stop-${index}`}
+                  offset={volPoints.length === 1 ? "0%" : `${(index / (volPoints.length - 1)) * 100}%`}
+                  stopColor={row.up ? UP : DOWN}
+                />
+              ))}
+            </linearGradient>
+          ) : null}
         </defs>
 
         <rect className="hybrid-plot-bg" x="0" y="0" width={width} height={height} />
         <rect className="hybrid-axis-gutter" x="0" y={PAD.t} width={PAD.l} height={PRICE_H} />
         <rect className="hybrid-plot-frame" x={PAD.l} y={PAD.t} width={innerW} height={PRICE_H} />
+        {volH > 0 ? (
+          <rect className="hybrid-plot-frame" x={PAD.l} y={volTop} width={innerW} height={volH} />
+        ) : null}
+        {rsiH > 0 ? (
+          <rect className="hybrid-plot-frame" x={PAD.l} y={rsiTop} width={innerW} height={rsiH} />
+        ) : null}
 
         {yTicks.map((price) => (
           <g key={`yt-${price}`}>
@@ -176,6 +253,12 @@ export default function HybridPlot({
           return (
             <g key={`xt-${stamp}`}>
               <line className="hybrid-grid is-time" x1={x} x2={x} y1={PAD.t} y2={plotBottom} />
+              {volH > 0 ? (
+                <line className="hybrid-grid is-time" x1={x} x2={x} y1={volTop} y2={volBottom} />
+              ) : null}
+              {rsiH > 0 ? (
+                <line className="hybrid-grid is-time" x1={x} x2={x} y1={rsiTop} y2={rsiBottom} />
+              ) : null}
               <text className="hybrid-axis is-time" x={x} y={height - 10} textAnchor={anchor}>
                 {formatAxisTime(stamp, { spanMs: scale.spanT, intervalId: interval, locale })}
               </text>
@@ -318,16 +401,56 @@ export default function HybridPlot({
           />
         </g>
 
-        {heatmap.map((row, index) => (
-          <circle
-            key={`heat-${index}`}
-            className={`hybrid-heat is-${row.side}`}
-            cx={scale.x(row.t)}
-            cy={PAD.t + PRICE_H + 8 + (row.side === "sell" ? 28 : 18)}
-            r={Math.max(2, Math.min(9, Math.log10(row.size + 10) * 2))}
-            opacity={row.opacity}
-          />
-        ))}
+        {volH > 0 ? (
+          <g className="hybrid-volume" clipPath={`url(#${volClipId})`}>
+            {volFill ? <path className="hybrid-volume-fill" d={volFill} fill={`url(#${volGradId})`} /> : null}
+            {volLine ? (
+              <path className="hybrid-volume-wave" d={volLine} stroke={`url(#${volGradId})`} />
+            ) : null}
+            {heatmap.map((row, index) => (
+              <circle
+                key={`heat-${index}`}
+                className={`hybrid-heat is-${row.side}`}
+                cx={scale.x(row.t)}
+                cy={volTop + 10 + (row.side === "sell" ? 16 : 8)}
+                r={Math.max(2, Math.min(7, Math.log10(row.size + 10) * 1.6))}
+                opacity={row.opacity}
+              />
+            ))}
+          </g>
+        ) : null}
+        {volH > 0 ? (
+          <text className="hybrid-pane-label" x={PAD.l - 8} y={volTop + 11} textAnchor="end">
+            VOL
+          </text>
+        ) : null}
+
+        {rsiH > 0 ? (
+          <g className="hybrid-rsi">
+            <rect
+              className="hybrid-rsi-band"
+              x={PAD.l}
+              y={rsiY(rsiOverbought)}
+              width={innerW}
+              height={Math.max(1, rsiY(rsiOversold) - rsiY(rsiOverbought))}
+            />
+            <line className="hybrid-rsi-level is-ob" x1={PAD.l} x2={width - PAD.r} y1={rsiY(rsiOverbought)} y2={rsiY(rsiOverbought)} />
+            <line className="hybrid-rsi-level is-mid" x1={PAD.l} x2={width - PAD.r} y1={rsiY(50)} y2={rsiY(50)} />
+            <line className="hybrid-rsi-level is-os" x1={PAD.l} x2={width - PAD.r} y1={rsiY(rsiOversold)} y2={rsiY(rsiOversold)} />
+            <g clipPath={`url(#${rsiClipId})`}>
+              {wavePath(rsiPoints) ? <path className="hybrid-rsi-line" d={wavePath(rsiPoints)} /> : null}
+            </g>
+            <text className="hybrid-pane-label" x={PAD.l - 8} y={rsiTop + 11} textAnchor="end">
+              RSI {rsiPeriod}
+            </text>
+            <text className="hybrid-axis is-price" x={PAD.l - 8} y={rsiY(rsiOverbought) + 3} textAnchor="end">
+              {rsiOverbought}
+            </text>
+            <text className="hybrid-axis is-price" x={PAD.l - 8} y={rsiY(rsiOversold) + 3} textAnchor="end">
+              {rsiOversold}
+            </text>
+          </g>
+        ) : null}
 
         {hover ? (
           <g className="hybrid-crosshair">
@@ -352,6 +475,14 @@ export default function HybridPlot({
                 </text>
               </g>
             ) : null}
+            {rsiTagY != null ? (
+              <g className="hybrid-cursor-tag is-price">
+                <rect x={2} y={rsiTagY - 9} width={PAD.l - 6} height={18} rx="3" />
+                <text x={PAD.l - 8} y={rsiTagY + 4} textAnchor="end">
+                  {Number(hoverRsi).toFixed(1)}
+                </text>
+              </g>
+            ) : null}
           </g>
         ) : null}
       </svg>
@@ -364,6 +495,7 @@ export default function HybridPlot({
           <span>L {formatQuotePerBase(hoverCandle.l, locale, quote)}</span>
           <span>C {formatQuotePerBase(hoverCandle.c, locale, quote)}</span>
           <span>V {formatToken(hoverCandle.v, locale, 2)}</span>
+          {Number.isFinite(hoverRsi) ? <span>RSI {Number(hoverRsi).toFixed(1)}</span> : null}
         </div>
       ) : null}
     </div>

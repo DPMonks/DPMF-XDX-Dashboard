@@ -23,6 +23,7 @@ import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from ".
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../src/chart/axis.js";
+import { rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   fibBands,
   fibPrice,
@@ -130,6 +131,43 @@ test("averagesForWindow uses full history so a 200 SMA covers the visible month"
   });
   assert.equal(sma200.values.length, 30);
   assert.ok(sma200.values.every((value) => Number.isFinite(value)));
+});
+
+test("rsi uses Wilder averages and maps onto the visible window", () => {
+  const values = rsi([10, 12, 11, 13], 2);
+  assert.equal(values[0], null);
+  assert.equal(values[1], null);
+  assert.ok(Math.abs(values[2] - 200 / 3) < 1e-12);
+  const series = Array.from({ length: 40 }, (_, index) => ({
+    t: index * 86_400_000,
+    c: 1 + index / 10,
+  }));
+  const visible = series.slice(-8);
+  const windowed = rsiForWindow({ series, visible, period: 14 });
+  assert.equal(windowed.length, 8);
+  assert.ok(windowed.every((value) => Number.isFinite(value)));
+  assert.ok(windowed.every((value) => value > 70));
+});
+
+test("volume wave spreads a daily print and stays a curve, not a spike", () => {
+  const day = Date.parse("2026-08-21T00:00:00.000Z");
+  const hour = 3_600_000;
+  const candles = [
+    { t: day, o: 1, h: 1.1, l: 0.9, c: 1.05, v: 24 },
+    { t: day + hour, o: 1.05, h: 1.05, l: 1.05, c: 1.05, v: 0 },
+    { t: day + 2 * hour, o: 1.05, h: 1.05, l: 1.05, c: 1.04, v: 0 },
+  ];
+  const wave = volumeWaveValues(candles, { smooth: 3 });
+  assert.equal(wave.length, 3);
+  assert.ok(wave.every((value) => value > 0));
+  assert.ok(Math.max(...wave) / Math.min(...wave) < 3);
+  const path = wavePath([
+    { x: 0, y: 10 },
+    { x: 10, y: 4 },
+    { x: 20, y: 8 },
+  ]);
+  assert.match(path, /^M0 10/);
+  assert.match(path, /C/);
 });
 
 test("candle bodies are a quarter of the previous slot so more bars fit", () => {

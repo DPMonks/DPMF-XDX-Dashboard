@@ -220,12 +220,68 @@
   gap: 8px;
 }
 
-.hybrid-ma select {
+.hybrid-ma select,
+.hybrid-ind select {
   background: #000;
   color: #d1d4dc;
   border: 1px solid #333;
   border-radius: 8px;
   padding: 4px 8px;
+}
+
+.hybrid-ind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hybrid-volume-wave {
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.hybrid-volume-fill {
+  fill-opacity: 0.34;
+  stroke: none;
+}
+
+.hybrid-rsi-line {
+  fill: none;
+  stroke: #c770ff;
+  stroke-width: 1.55;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.hybrid-rsi-band {
+  fill: rgba(199, 112, 255, 0.08);
+}
+
+.hybrid-rsi-level {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 1;
+}
+
+.hybrid-rsi-level.is-ob {
+  stroke: rgba(239, 83, 80, 0.5);
+}
+
+.hybrid-rsi-level.is-os {
+  stroke: rgba(38, 166, 154, 0.5);
+}
+
+.hybrid-rsi-level.is-mid {
+  stroke-dasharray: 3 3;
+}
+
+.hybrid-pane-label {
+  fill: #7b76a0;
+  font-size: 9px;
+  letter-spacing: 0.04em;
 }
 
 .hybrid-wallet-order.is-bid,

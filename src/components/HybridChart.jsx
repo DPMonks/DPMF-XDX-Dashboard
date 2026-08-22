@@ -3,6 +3,7 @@ import { getAmm, getOrderbooks, getPrices, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
 import { CHART_PAIRS, CHART_VISIBLE_BARS, INTERVALS } from "../chart/intervals";
 import { averagesForWindow, MA_PERIODS, MA_TYPES, windowLastBars } from "../chart/candles";
+import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../chart/indicators";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { quotePerXdx } from "../chart/pairQuote";
 import {
@@ -45,6 +46,11 @@ export default function HybridChart() {
   const [showArb, setShowArb] = useState(false);
   const [maType, setMaType] = useState("sma");
   const [maPeriods, setMaPeriods] = useState([50]);
+  const [showVolume, setShowVolume] = useState(true);
+  const [showRsi, setShowRsi] = useState(true);
+  const [rsiPeriod, setRsiPeriod] = useState(14);
+  const [rsiOverbought, setRsiOverbought] = useState(70);
+  const [rsiOversold, setRsiOversold] = useState(30);
   const [books, setBooks] = useState(null);
   const [pools, setPools] = useState([]);
   const [prices, setPrices] = useState({});
@@ -123,6 +129,10 @@ export default function HybridChart() {
         periods: maPeriods,
       }),
     [series, candles, maType, maPeriods]
+  );
+  const rsiValues = useMemo(
+    () => rsiForWindow({ series, visible: candles, period: rsiPeriod }),
+    [series, candles, rsiPeriod]
   );
   const bands = { ...bookBands(book), bias: liquidityPressure({
     xdxPct: pool?.xdx_pct,
@@ -250,6 +260,50 @@ export default function HybridChart() {
           <input type="checkbox" checked={showArb} onChange={(event) => setShowArb(event.target.checked)} />
           {t.chartArbitrage}
         </label>
+        <div className="hybrid-ind">
+          <label className="hybrid-toggle">
+            <input type="checkbox" checked={showVolume} onChange={(event) => setShowVolume(event.target.checked)} />
+            {t.chartVolumeWave}
+          </label>
+          <label className="hybrid-toggle">
+            <input type="checkbox" checked={showRsi} onChange={(event) => setShowRsi(event.target.checked)} />
+            {t.chartRsi}
+          </label>
+          {showRsi ? (
+            <>
+              <label className="hybrid-toggle">
+                {t.chartRsiPeriod}
+                <select value={rsiPeriod} onChange={(event) => setRsiPeriod(Number(event.target.value))}>
+                  {RSI_PERIODS.map((period) => (
+                    <option key={period} value={period}>
+                      {period}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="hybrid-toggle">
+                {t.chartRsiOverbought}
+                <select value={rsiOverbought} onChange={(event) => setRsiOverbought(Number(event.target.value))}>
+                  {RSI_OVERBOUGHT.map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="hybrid-toggle">
+                {t.chartRsiOversold}
+                <select value={rsiOversold} onChange={(event) => setRsiOversold(Number(event.target.value))}>
+                  {RSI_OVERSOLD.map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
+        </div>
       </div>
 
       <div className="hybrid-body">
@@ -310,6 +364,12 @@ export default function HybridChart() {
             magnet={magnet}
             hollow={hollow}
             averages={averages}
+            rsiValues={rsiValues}
+            rsiPeriod={rsiPeriod}
+            rsiOverbought={rsiOverbought}
+            rsiOversold={rsiOversold}
+            showVolume={showVolume}
+            showRsi={showRsi}
             locale={locale}
             onDraw={addDrawing}
           />
