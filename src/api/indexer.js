@@ -690,6 +690,11 @@ export async function getWalletLp(address) {
   return asArray(body?.positions || body);
 }
 
+export async function getWalletRank(address) {
+  const body = await api.walletRank(address);
+  return numberOrNull(body?.rank);
+}
+
 export async function getPrices() {
   return api.prices();
 }
@@ -698,12 +703,13 @@ export async function getConnectedWallet(address) {
   const name = String(address || "").trim();
   if (!name) return emptyWalletSnapshot(null);
 
-  const [balances, networth, account, lpRows, prices, token, pools, books, flows] =
+  const [balances, networth, account, lpRows, rank, prices, token, pools, books, flows] =
     await Promise.all([
       getWalletBalances(name).catch(() => ({})),
       getWalletNetworth(name).catch(() => ({})),
       getWalletAccount(name).catch(() => ({})),
       getWalletLp(name).catch(() => []),
+      getWalletRank(name).catch(() => null),
       getPrices().catch(() => ({})),
       getTokenDetails().catch(() => ({})),
       getAmm().catch(() => []),
@@ -720,6 +726,7 @@ export async function getConnectedWallet(address) {
     token,
     pools,
     lpRows,
+    rank,
     books,
     flows,
   });

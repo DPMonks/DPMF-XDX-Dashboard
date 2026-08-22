@@ -20,14 +20,15 @@ export function xrpReserveBreakdown({
   reserveBaseDrops = DEFAULT_RESERVE_BASE_DROPS,
   reserveIncDrops = DEFAULT_RESERVE_INC_DROPS,
 } = {}) {
-  const total =
-    num(balance) ??
-    (Number.isFinite(Number(balanceDrops)) ? Number(balanceDrops) / DROPS : null);
+  const fromAccount = Number.isFinite(Number(balanceDrops)) ? Number(balanceDrops) / DROPS : null;
+  const fromBalances = num(balance);
+  const total = fromAccount != null ? fromAccount : fromBalances;
   if (total == null) {
     return {
       balance: null,
       spendable: null,
       reserved: null,
+      required: null,
       baseReserve: null,
       ownerReserve: null,
       ownerCount: null,
@@ -37,14 +38,27 @@ export function xrpReserveBreakdown({
   const increment = (num(reserveIncDrops) ?? DEFAULT_RESERVE_INC_DROPS) / DROPS;
   const owners = Math.max(0, Number(ownerCount) || 0);
   const ownerReserve = owners * increment;
-  const reserved = base + ownerReserve;
+  const required = base + ownerReserve;
+  const reserved = Math.min(total, required);
   return {
     balance: total,
     spendable: Math.max(0, total - reserved),
     reserved,
+    required,
     baseReserve: base,
     ownerReserve,
     ownerCount: owners,
+  };
+}
+
+export function xrpBarPercents({ reserved, spendable, total } = {}, filled = true) {
+  if (!filled) return { reservePct: 0, spendPct: 0, totalPct: 0 };
+  const hold = Math.max(0, Number(total) || 0);
+  if (!(hold > 0)) return { reservePct: 0, spendPct: 0, totalPct: 100 };
+  return {
+    reservePct: (Math.max(0, Number(reserved) || 0) / hold) * 100,
+    spendPct: (Math.max(0, Number(spendable) || 0) / hold) * 100,
+    totalPct: 100,
   };
 }
 
@@ -53,6 +67,18 @@ export function compareBarPercents(...values) {
   const max = Math.max(...nums, 0);
   if (!(max > 0)) return nums.map(() => 0);
   return nums.map((value) => (value / max) * 100);
+}
+
+export function normalizeWalletPair(value) {
+  const raw = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "/");
+  if (!raw) return "";
+  if (raw === "XRP" || raw === "XRP/XDX") return "XDX/XRP";
+  if (raw.startsWith("XDX/")) return raw;
+  return `XDX/${raw}`;
 }
 
 export function supplyShares(xdx, circulating, ammXdx) {
@@ -83,23 +109,25 @@ export function xdxFiatValues(xdx, prices = {}) {
   };
 }
 
-export function lpPositionFromPool(lpBalance, pool = {}) {
+export function lpPositionFromPool(lpBalance, pool = {}, pairHint = "") {
   const tokens = num(lpBalance);
   if (tokens == null || tokens <= 0) return null;
+  const pair =
+    normalizeWalletPair(pairHint || pool.pool_name || pool.pool) || "XDX/XRP";
   const supply = num(pool.lp_supply);
   const share = supply > 0 ? tokens / supply : 0;
   const reserveXdx = num(pool.reserve_asset ?? pool.reserve_xdx) || 0;
   const reserveQuote = num(pool.reserve_currency ?? pool.reserve_quote) || 0;
   return {
-    pool: pool.pool_name || pool.pool || "XDX/XRP",
-    quote: pool.quote || String(pool.pool_name || "XDX/XRP").split("/")[1] || "XRP",
+    pool: pair,
+    quote: pool.quote || pair.split("/")[1] || "XRP",
     lp_balance: tokens,
     lp_share_percent: share * 100,
     withdraw_estimate_xdx: share * reserveXdx,
     withdraw_estimate_quote: share * reserveQuote,
     fees_earned: num(pool.fees_earned),
-    composition_xdx_percent: num(pool.xdx_pct),
-    composition_quote_percent: num(pool.quote_pct),
+    composition_xdx_percent: num(pool.xdx_pct ?? pool.composition_xdx_percent),
+    composition_quote_percent: num(pool.quote_pct ?? pool.composition_quote_percent),
   };
 }
 
@@ -140,6 +168,7 @@ export function emptyWalletSnapshot(address = null) {
     xdx: xdxFiatValues(null),
     supply: { circulatingPct: null, ammPct: null, circulating: null, ammXdx: null },
     lp: [],
+    rank: null,
     book: null,
     orders: [],
     activity: [],
@@ -155,6 +184,7 @@ export function composeWalletSnapshot({
   token = {},
   pools = [],
   lpRows = [],
+  rank = null,
   books = null,
   flows = [],
 } = {}) {
@@ -186,18 +216,26 @@ export function composeWalletSnapshot({
   const circulating = num(token.circulating);
   const shares = supplyShares(xdxBal, circulating, ammXdx);
 
-  const poolByName = new Map(
-    (Array.isArray(pools) ? pools : []).map((pool) => [
-      String(pool.pool_name || pool.pool || "").toUpperCase(),
-      pool,
-    ])
-  );
-  const lp = (Array.isArray(lpRows) ? lpRows : [])
-    .map((row) => {
-      const name = row.pool_name || row.pool;
-      return lpPositionFromPool(row.lp_balance ?? row.lp, poolByName.get(String(name || "").toUpperCase()) || row);
-    })
-    .filter(Boolean);
+  const poolByName = new Map();
+  for (const pool of Array.isArray(pools) ? pools : []) {
+    const key = normalizeWalletPair(pool.pool_name || pool.pool);
+    if (key) poolByName.set(key, pool);
+  }
+  const lpByPair = new Map();
+  for (const row of Array.isArray(lpRows) ? lpRows : []) {
+    const name = normalizeWalletPair(row.pool_name || row.pool || row.pair);
+    const position = lpPositionFromPool(
+      row.lp_balance ?? row.lp,
+      poolByName.get(name) || row,
+      name
+    );
+    if (!position) continue;
+    const previous = lpByPair.get(position.pool);
+    if (!previous || position.lp_balance > previous.lp_balance) {
+      lpByPair.set(position.pool, position);
+    }
+  }
+  const lp = [...lpByPair.values()];
 
   const xrpBook = books?.books?.["XDX/XRP"] || null;
   return {
@@ -212,6 +250,7 @@ export function composeWalletSnapshot({
       ammXdx,
     },
     lp,
+    rank: num(rank ?? token.rank ?? balances.rank),
     book: xrpBook
       ? {
           bestBid: xrpBook.best_bid,

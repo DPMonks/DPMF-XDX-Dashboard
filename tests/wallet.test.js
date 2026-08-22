@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  compareBarPercents,
   composeWalletSnapshot,
   emptyWalletSnapshot,
   lpPositionFromPool,
+  normalizeWalletPair,
   supplyShares,
   walletActivity,
+  xrpBarPercents,
   xrpReserveBreakdown,
   xdxFiatValues,
 } from "../src/wallet/composeWallet.js";
@@ -24,12 +25,42 @@ test("xrpReserveBreakdown stacks spendable on top of base and owner reserve", ()
   assert.equal(row.spendable, 22);
 });
 
-test("compareBarPercents sizes three XRP bars against the largest value", () => {
-  const [reserve, spendable, total] = compareBarPercents(3, 22, 25);
-  assert.equal(reserve, 12);
-  assert.equal(spendable, 88);
-  assert.equal(total, 100);
-  assert.deepEqual(compareBarPercents(0, 0, 0), [0, 0, 0]);
+test("xrpReserveBreakdown prefers ledger drops and does not reserve more than the total", () => {
+  const row = xrpReserveBreakdown({
+    balance: 0,
+    balanceDrops: 25_000_000,
+    ownerCount: 10,
+    reserveBaseDrops: 1_000_000,
+    reserveIncDrops: 200_000,
+  });
+  assert.equal(row.balance, 25);
+  assert.equal(row.reserved, 3);
+  assert.equal(row.spendable, 22);
+
+  const emptyHold = xrpReserveBreakdown({
+    balance: 0,
+    balanceDrops: 0,
+    ownerCount: 25,
+  });
+  assert.equal(emptyHold.balance, 0);
+  assert.equal(emptyHold.reserved, 0);
+  assert.equal(emptyHold.spendable, 0);
+  assert.equal(emptyHold.required, 6);
+});
+
+test("xrpBarPercents keeps total XRP as a full reference bar", () => {
+  const bars = xrpBarPercents({ reserved: 3, spendable: 22, total: 25 });
+  assert.equal(bars.reservePct, 12);
+  assert.equal(bars.spendPct, 88);
+  assert.equal(bars.totalPct, 100);
+
+  const zero = xrpBarPercents({ reserved: 0, spendable: 0, total: 0 });
+  assert.equal(zero.reservePct, 0);
+  assert.equal(zero.spendPct, 0);
+  assert.equal(zero.totalPct, 100);
+
+  const blank = xrpBarPercents({ reserved: 3, spendable: 22, total: 25 }, false);
+  assert.equal(blank.totalPct, 0);
 });
 
 test("supplyShares uses circulating and AMM XDX, not arcs", () => {
@@ -57,6 +88,34 @@ test("lpPositionFromPool estimates withdraw from pool share", () => {
   assert.equal(row.lp_share_percent, 10);
   assert.equal(row.withdraw_estimate_xdx, 5000);
   assert.equal(row.withdraw_estimate_quote, 0.2);
+});
+
+test("composeWalletSnapshot keeps every LP pair and the rich-list rank", () => {
+  assert.equal(normalizeWalletPair("rlusd"), "XDX/RLUSD");
+  const filled = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 0, xdx: 5000 },
+    account: { balance_drops: 12_000_000, owner_count: 5 },
+    prices: { xdxUsd: 0.00004, xdxGbp: 0.00003 },
+    token: { circulating: 10_000_000_000, xdxPerXrp: 0.00003 },
+    rank: 4,
+    pools: [
+      { pool_name: "XDX/XRP", lp_supply: 1000, reserve_asset: 50_000, reserve_currency: 2, xdx_pct: 50, quote_pct: 50 },
+      { pool_name: "XDX/RLUSD", lp_supply: 200, reserve_asset: 8000, reserve_currency: 10, xdx_pct: 40, quote_pct: 60 },
+    ],
+    lpRows: [
+      { pool_name: "XDX/XRP", lp_balance: 100 },
+      { pool: "XDX/RLUSD", lp_balance: 20 },
+    ],
+  });
+  assert.equal(filled.rank, 4);
+  assert.equal(filled.xrp.balance, 12);
+  assert.deepEqual(
+    filled.lp.map((row) => row.pool).sort(),
+    ["XDX/RLUSD", "XDX/XRP"]
+  );
+  const rlusd = filled.lp.find((row) => row.pool === "XDX/RLUSD");
+  assert.equal(rlusd.withdraw_estimate_xdx, 800);
 });
 
 test("composeWalletSnapshot stays blank until an address is signed in", () => {

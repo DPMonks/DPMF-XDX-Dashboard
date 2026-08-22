@@ -459,6 +459,10 @@ export const api = {
     getJson(endpoint("walletLp", { address }) || `/wallet/lp/${encodeURIComponent(address)}`, {
       retries: 1,
     }),
+  walletRank: (address) =>
+    getJson(endpoint("walletRank", { address }) || `/wallet/rank/${encodeURIComponent(address)}`, {
+      retries: 1,
+    }),
   prices: () => getJson(endpoint("prices"), { queue: false }),
   change24h: () => getJson(endpoint("change24h"), { queue: false }),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),

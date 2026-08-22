@@ -83,6 +83,7 @@ const CATALOG = {
     walletBalances: "/api/wallet/balances/:address",
     walletAccount: "/api/wallet/account/:address",
     walletLp: "/api/wallet/lp/:address",
+    walletRank: "/api/wallet/rank/:address",
     prices: "/api/prices",
     priceChange: "/api/prices/change24h",
     networth: "/api/wallet/networth/:address",
@@ -1252,32 +1253,44 @@ async function loadWalletAccount(address) {
   }
 }
 
-async function loadWalletLp(db, address) {
-  const rows = await tryQuery(
-    db,
-    `SELECT COALESCE(pool_name, 'XDX/XRP') AS pool_name,
-            lp_balance::numeric AS lp_balance
-     FROM lp_holders_latest
-     WHERE account = $1 AND ABS(lp_balance::numeric) > 0
-     ORDER BY lp_balance::numeric DESC`,
-    [address]
-  );
-  const lp = await loadXdxLpPools(db);
-  const byName = new Map(
-    (lp.pools || []).map((pool) => [
-      String(pool.pool_name || pool.pool || "").toUpperCase(),
-      pool,
-    ])
-  );
-  const positions = (rows.rows || []).map((row) => {
-    const pool = byName.get(String(row.pool_name).toUpperCase()) || {};
+function normalizeWalletPairName(value) {
+  const raw = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "/");
+  if (!raw) return "";
+  if (raw === "XRP" || raw === "XRP/XDX") return "XDX/XRP";
+  if (raw.startsWith("XDX/")) return raw;
+  return `XDX/${raw}`;
+}
+
+function mergeWalletLpRows(rows, catalog) {
+  const byName = new Map();
+  const byCurrency = new Map();
+  for (const pool of catalog.pools || []) {
+    const name = normalizeWalletPairName(pool.pool_name || pool.pool);
+    if (name) byName.set(name, pool);
+    const hex = String(pool.lp_currency || pool.lp_currency_hex || "").toUpperCase();
+    if (hex) byCurrency.set(hex, pool);
+  }
+
+  const positions = new Map();
+  for (const row of rows) {
     const tokens = Number(row.lp_balance || 0);
+    if (!(tokens > 0)) continue;
+    const hex = String(row.lp_currency || row.lp_currency_hex || "").toUpperCase();
+    const fromHex = hex ? byCurrency.get(hex) : null;
+    const name =
+      normalizeWalletPairName(row.pool_name || row.pool || fromHex?.pool_name || fromHex?.pool) ||
+      "XDX/XRP";
+    const pool = byName.get(name) || fromHex || {};
     const supply = Number(pool.lp_supply || 0);
     const share = supply > 0 ? tokens / supply : 0;
-    return {
-      pool: row.pool_name,
-      pool_name: row.pool_name,
-      quote: pool.quote || String(row.pool_name).split("/")[1] || "XRP",
+    const current = {
+      pool: name,
+      pool_name: name,
+      quote: pool.quote || name.split("/")[1] || "XRP",
       lp_balance: tokens,
       lp_supply: supply || null,
       reserve_asset: Number(pool.reserve_xdx || pool.reserve_asset || 0),
@@ -1288,8 +1301,73 @@ async function loadWalletLp(db, address) {
       xdx_pct: Number(pool.xdx_pct || 0) || null,
       quote_pct: Number(pool.quote_pct || 0) || null,
     };
-  });
+    positions.set(name, current);
+  }
+  return [...positions.values()];
+}
+
+async function loadWalletLp(db, address) {
+  const latest = await tryQuery(
+    db,
+    `SELECT pool_name, lp_balance::numeric AS lp_balance
+     FROM lp_holders_latest
+     WHERE account = $1 AND ABS(lp_balance::numeric) > 0`,
+    [address]
+  );
+  const history = await tryQuery(
+    db,
+    `SELECT DISTINCT ON (COALESCE(NULLIF(TRIM(pool_name), ''), '?'))
+            COALESCE(NULLIF(TRIM(pool_name), ''), 'XDX/XRP') AS pool_name,
+            lp_balance::numeric AS lp_balance
+     FROM lp_holders_history
+     WHERE account = $1 AND ABS(lp_balance::numeric) > 0
+     ORDER BY COALESCE(NULLIF(TRIM(pool_name), ''), '?'), timestamp DESC`,
+    [address]
+  );
+  const catalog = await loadXdxLpPools(db);
+  const positions = mergeWalletLpRows(
+    [...(history.rows || []), ...(latest.rows || [])],
+    catalog
+  );
   return { account: address, positions, source: "db" };
+}
+
+async function loadWalletRank(db, address) {
+  const latest = await lastSameTimeScan(db, "token_holders_latest");
+  const history = await lastSameTimeScan(db, "token_holders_history");
+  const today = pickTodayOwnerSource({
+    latestTs: latest.ts,
+    latestCount: latest.count,
+    historyTs: history.ts,
+    historyCount: history.count,
+  });
+  const last = pickLastOwnerScan({
+    latestTs: latest.ts,
+    latestCount: latest.count,
+    historyTs: history.ts,
+    historyCount: history.count,
+  });
+  const source = today.present ? today : last;
+  if (!source.ts || source.kind === "none") return { account: address, rank: null, source: "empty" };
+  const ranked = await tryQuery(
+    db,
+    `SELECT rank FROM (
+        SELECT account,
+               ROW_NUMBER() OVER (ORDER BY ABS(balance::numeric) DESC) AS rank
+        FROM ${source.kind}
+        WHERE timestamp = $1 AND ABS(balance::numeric) > 0
+      ) ranked
+      WHERE LOWER(account) = LOWER($2)
+      LIMIT 1`,
+    [source.ts, address]
+  );
+  const rank = Number(ranked.rows[0]?.rank);
+  return {
+    account: address,
+    rank: Number.isFinite(rank) ? rank : null,
+    source: source.kind,
+    as_of: source.ts,
+  };
 }
 
 async function loadXdxLpPools(db) {
@@ -2176,6 +2254,12 @@ export async function readIndexerDb(suffix, search = "") {
     if (walletLp) {
       const address = decodeURIComponent(walletLp[1]);
       return ok(await loadWalletLp(db, address));
+    }
+
+    const walletRank = suffix.match(/^wallet\/rank\/([^/]+)$/);
+    if (walletRank) {
+      const address = decodeURIComponent(walletRank[1]);
+      return ok(await loadWalletRank(db, address));
     }
 
     const networth = suffix.match(/^wallet\/networth\/([^/]+)$/);

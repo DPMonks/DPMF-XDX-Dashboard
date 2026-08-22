@@ -13,7 +13,7 @@ import {
   shortAddress,
 } from "../utils/format";
 import { copyToClipboard } from "../utils/copy";
-import { compareBarPercents, emptyWalletSnapshot } from "../wallet/composeWallet";
+import { emptyWalletSnapshot, normalizeWalletPair, xrpBarPercents } from "../wallet/composeWallet";
 import { useMorph } from "../wallet/useMorph";
 
 function XrpColumn({ label, tone, percent, value, locale, empty }) {
@@ -32,16 +32,19 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
   const spendable = useMorph(empty ? 0 : xrp.spendable);
   const reserved = useMorph(empty ? 0 : xrp.reserved);
   const total = useMorph(empty ? 0 : xrp.balance);
-  const [reservePct, spendPct, totalPct] = compareBarPercents(reserved, spendable, total);
+  const bars = xrpBarPercents(
+    { reserved, spendable, total },
+    !empty
+  );
 
   return (
     <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
-      <p className="wallet-panel-title">{t.xrpBalance}</p>
+      <p className="wallet-panel-title is-center">{t.xrpBalance}</p>
       <div className="wallet-xrp-bars">
         <XrpColumn
           label={t.reservedXrp}
           tone="is-reserve"
-          percent={reservePct}
+          percent={bars.reservePct}
           value={reserved}
           locale={locale}
           empty={empty}
@@ -49,15 +52,15 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
         <XrpColumn
           label={t.spendableXrp}
           tone="is-spend"
-          percent={spendPct}
+          percent={bars.spendPct}
           value={spendable}
           locale={locale}
           empty={empty}
         />
         <XrpColumn
-          label={t.xrp}
+          label={t.totalXrp}
           tone="is-total"
-          percent={totalPct}
+          percent={bars.totalPct}
           value={total}
           locale={locale}
           empty={empty}
@@ -181,7 +184,12 @@ export default function ConnectedWallet() {
       );
       if (cancelled) return;
       setSnap(next);
-      setPair((current) => current || next.lp[0]?.pool || "");
+      setPair((current) => {
+        const names = next.lp.map((row) => normalizeWalletPair(row.pool));
+        const wanted = normalizeWalletPair(current);
+        if (wanted && names.includes(wanted)) return wanted;
+        return names[0] || "";
+      });
     }
 
     load();
@@ -194,10 +202,11 @@ export default function ConnectedWallet() {
 
   const view = walletAddress ? snap : emptyWalletSnapshot(null);
   const empty = !view.signedIn || !view.filled;
-  const pools = view.lp.map((row) => row.pool);
+  const pools = [...new Set(view.lp.map((row) => normalizeWalletPair(row.pool)).filter(Boolean))];
+  const selected = normalizeWalletPair(pair);
   const position = useMemo(
-    () => view.lp.find((row) => row.pool === pair) || view.lp[0] || null,
-    [view.lp, pair]
+    () => view.lp.find((row) => normalizeWalletPair(row.pool) === selected) || null,
+    [view.lp, selected]
   );
   const mid = Number(view.book?.mid);
   const own = snap.orders[0];
@@ -220,13 +229,21 @@ export default function ConnectedWallet() {
           </div>
         </div>
         {walletAddress ? (
-          <button
-            type="button"
-            className="account-link"
-            onClick={() => copyToClipboard(walletAddress)}
-          >
-            {shortAddress(walletAddress)}
-          </button>
+          <div className="wallet-hero-account">
+            <button
+              type="button"
+              className="account-link"
+              onClick={() => copyToClipboard(walletAddress)}
+            >
+              {shortAddress(walletAddress)}
+            </button>
+            <p className={`wallet-hero-rank${empty || view.rank == null ? " is-empty" : " is-filled"}`}>
+              {t.richListPosition}{" "}
+              {empty || view.rank == null
+                ? "—"
+                : `#${formatNumber(view.rank, locale, { maximumFractionDigits: 0 })}`}
+            </p>
+          </div>
         ) : (
           <p className="wallet-hero-hint">{t.connectWalletHint}</p>
         )}

@@ -28,6 +28,8 @@ const en = {
   xrpReserve: "XRP reserve",
   spendableXrp: "Spendable",
   reservedXrp: "Reserved",
+  totalXrp: "Total XRP",
+  richListPosition: "XDX rich list",
   supplyShare: "Supply share",
   borrowed: "Borrowed",
   lending: "Lending",
