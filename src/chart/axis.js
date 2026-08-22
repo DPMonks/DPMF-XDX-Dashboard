@@ -76,6 +76,17 @@ export function equalGrid(count, start, length) {
   return Array.from({ length: n + 1 }, (_, index) => origin + (span * index) / n);
 }
 
+export function plotViewKey(candles = [], { left = 0, width = 0 } = {}) {
+  const rows = Array.isArray(candles) ? candles : [];
+  return [
+    rows[0]?.t ?? 0,
+    rows[rows.length - 1]?.t ?? 0,
+    rows.length,
+    Math.round(Number(left) || 0),
+    Math.round(Number(width) || 0),
+  ].join(":");
+}
+
 export function barSlots(candles = [], { left = 0, width = 0 } = {}) {
   const rows = Array.isArray(candles) ? candles : [];
   const n = Math.max(1, rows.length);

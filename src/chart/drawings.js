@@ -273,11 +273,15 @@ export function rangeColor(a, b) {
 
 function seedPoint(point) {
   if (!point) return point;
-  return { t: Number(point.t), price: Number(point.price) };
+  const next = { t: Number(point.t), price: Number(point.price) };
+  if (Number.isFinite(Number(point.x))) next.x = Number(point.x);
+  if (Number.isFinite(Number(point.y))) next.y = Number(point.y);
+  if (point.viewKey) next.viewKey = String(point.viewKey);
+  return next;
 }
 
-export function shapeFromPoints(kind, points = [], color, { keepPlot = false } = {}) {
-  const [a, b, c] = keepPlot ? points : points.map(seedPoint);
+export function shapeFromPoints(kind, points = [], color) {
+  const [a, b, c] = points.map(seedPoint);
   if (kind === "hline" || kind === "hray" || kind === "crossline") {
     return { kind, color, t: (b || a)?.t, price: (b || a)?.price };
   }
@@ -303,10 +307,7 @@ export function nextDrawingState({ tool, color, pending, point, strokeWidth, lin
   if (!meta || meta.clicks < 1 || !isUsablePoint(point)) {
     return { pending: pending || null, drawing: null };
   }
-  const nextPoint = { t: Number(point.t), price: Number(point.price) };
-  if (Number.isFinite(Number(point.x))) nextPoint.x = Number(point.x);
-  if (Number.isFinite(Number(point.y))) nextPoint.y = Number(point.y);
-  const points = [...(pending?.points || []), nextPoint];
+  const points = [...(pending?.points || []), seedPoint(point)];
   if (points.length < meta.clicks) {
     return { pending: { tool, color, points, ...style }, drawing: null };
   }
@@ -338,14 +339,14 @@ export function drawingHandles(row, fallbackPrice) {
   }
   return ["a", "b", "c"]
     .filter((key) => row[key] && Number.isFinite(Number(row[key].t)) && Number.isFinite(Number(row[key].price)))
-    .map((key) => ({ key, t: Number(row[key].t), price: Number(row[key].price) }));
+    .map((key) => ({ key, ...seedPoint(row[key]) }));
 }
 
 export function moveDrawingHandle(row, key, point) {
   if (!row || !isUsablePoint(point)) return row;
-  const next = { t: Number(point.t), price: Number(point.price) };
+  const next = seedPoint(point);
   if (key === "point") {
-    return { ...row, t: next.t, price: next.price };
+    return { ...row, t: next.t, price: next.price, x: next.x, y: next.y, viewKey: next.viewKey };
   }
   if (key === "a" || key === "b" || key === "c") {
     return { ...row, [key]: next };
@@ -359,8 +360,8 @@ export function hitDrawingHandle(drawings = [], scale, x, y, radius = HANDLE_HIT
   for (let index = drawings.length - 1; index >= 0; index -= 1) {
     const handles = drawingHandles(drawings[index], fallback);
     for (const handle of handles) {
-      const dx = scale.x(handle.t) - x;
-      const dy = scale.y(handle.price) - y;
+      const dx = plotX(handle, scale) - x;
+      const dy = plotY(handle, scale) - y;
       if (dx * dx + dy * dy <= r2) return { index, key: handle.key };
     }
   }
@@ -368,12 +369,16 @@ export function hitDrawingHandle(drawings = [], scale, x, y, radius = HANDLE_HIT
 }
 
 export function plotX(point, scale) {
-  if (Number.isFinite(Number(point?.x))) return Number(point.x);
+  if (Number.isFinite(Number(point?.x)) && (!point.viewKey || !scale?.viewKey || String(point.viewKey) === String(scale.viewKey))) {
+    return Number(point.x);
+  }
   return scale?.x?.(point?.t);
 }
 
 export function plotY(point, scale) {
-  if (Number.isFinite(Number(point?.y))) return Number(point.y);
+  if (Number.isFinite(Number(point?.y)) && (!point.viewKey || !scale?.viewKey || String(point.viewKey) === String(scale.viewKey))) {
+    return Number(point.y);
+  }
   return scale?.y?.(point?.price);
 }
 
@@ -386,7 +391,7 @@ export function previewDrawing({ tool, color, pending, hover, strokeWidth, lineS
   if (Number.isFinite(Number(hover.y))) live.y = Number(hover.y);
   const points = [...(pending?.points || []), live];
   return {
-    ...shapeFromPoints(tool, points, color, { keepPlot: true }),
+    ...shapeFromPoints(tool, points, color),
     ...drawingStyle({
       strokeWidth: strokeWidth ?? pending?.strokeWidth,
       lineStyle: lineStyle ?? pending?.lineStyle,

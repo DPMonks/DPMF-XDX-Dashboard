@@ -111,8 +111,8 @@ function Handles({ row, scale, fallbackPrice, activeKey }) {
     <circle
       key={`handle-${handle.key}`}
       className={activeKey === handle.key ? "hybrid-handle is-active" : "hybrid-handle"}
-      cx={scale.x(handle.t)}
-      cy={scale.y(handle.price)}
+      cx={plotX(handle, scale)}
+      cy={plotY(handle, scale)}
       r="4"
     />
   ));

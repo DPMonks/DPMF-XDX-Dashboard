@@ -350,9 +350,25 @@ test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail"
   for (const x of [30, 150, 300, 570]) {
     assert.ok(Math.abs(slots.x(slots.tAt(x)) - x) < 1e-6);
   }
-  const scale = { x: () => 40, y: () => 80 };
-  assert.equal(plotX({ t: 1, x: 220 }, scale), 220);
-  assert.equal(plotY({ price: 2, y: 90 }, scale), 90);
+  const scale = { x: () => 40, y: () => 80, viewKey: "v1" };
+  assert.equal(plotX({ t: 1, x: 220, viewKey: "v1" }, scale), 220);
+  assert.equal(plotY({ price: 2, y: 90, viewKey: "v1" }, scale), 90);
+  assert.equal(plotX({ t: 1, x: 220, viewKey: "v2" }, scale), 40);
+  const start = nextDrawingState({
+    tool: "rect",
+    color: "#3d8bff",
+    pending: null,
+    point: { t: 1, price: 2, x: 120, y: 40, viewKey: "v1" },
+  });
+  const done = nextDrawingState({
+    tool: "rect",
+    color: "#3d8bff",
+    pending: start.pending,
+    point: { t: 5, price: 8, x: 260, y: 90, viewKey: "v1" },
+  });
+  assert.equal(done.drawing.a.x, 120);
+  assert.equal(done.drawing.b.x, 260);
+  assert.equal(plotX(done.drawing.a, scale), 120);
 });
 
 test("XDX/RLUSD backdate is XDX/XRP times that day's XRP/USD", () => {

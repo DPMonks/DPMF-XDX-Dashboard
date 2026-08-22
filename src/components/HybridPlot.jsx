@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
-import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks } from "../chart/axis";
+import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, plotViewKey, priceTicks } from "../chart/axis";
 import { candleBodyBox, candleBodyWidth, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
@@ -104,6 +104,7 @@ export default function HybridPlot({
       spanT,
       slot: slots.slot,
       ticks: slots.ticks,
+      viewKey: plotViewKey(candles, { left: PAD.l, width: innerW }),
     };
   }, [view, candles, innerW]);
 
@@ -200,10 +201,11 @@ export default function HybridPlot({
     const raw = { t, price };
     const snapped = magnet ? snapPoint(raw, candles) : raw;
     return {
-      x,
-      y,
+      x: magnet ? scale.x(snapped.t) : x,
+      y: magnet ? scale.y(snapped.price) : y,
       t: snapped.t,
       price: snapped.price,
+      viewKey: scale.viewKey,
       candle: nearest,
       inPrice,
       inVolume,
