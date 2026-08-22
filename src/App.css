@@ -1023,6 +1023,11 @@ body {
   background: rgba(199, 112, 255, 0.28);
 }
 
+.orderbook-row.is-amm {
+  outline: 1px dashed rgba(199, 112, 255, 0.35);
+  outline-offset: -1px;
+}
+
 .orderbook-empty,
 .orderbook-asof {
   margin: 8px 0 0;

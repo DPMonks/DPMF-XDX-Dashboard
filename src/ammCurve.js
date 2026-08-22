@@ -65,6 +65,71 @@ export function ammSizeToPrice({
   };
 }
 
+export function ammImpliedLevels({
+  reserveBase,
+  reserveQuote,
+  tradingFee = 1000,
+  steps = AMM_CURVE_LEVELS,
+  stepBps = 12.5,
+} = {}) {
+  const spot = ammSpot(reserveBase, reserveQuote);
+  if (!(spot > 0) || !(steps > 0)) {
+    return { bids: [], asks: [], price: null };
+  }
+
+  const bids = [];
+  const asks = [];
+  let prevBid = 0;
+  let prevAsk = 0;
+
+  for (let i = 1; i <= steps; i += 1) {
+    const bidPrice = spot * (1 - (stepBps * i) / 10_000);
+    const askPrice = spot * (1 + (stepBps * i) / 10_000);
+    const bidFill = ammSizeToPrice({
+      reserveBase,
+      reserveQuote,
+      targetPrice: bidPrice,
+      tradingFee,
+    });
+    const askFill = ammSizeToPrice({
+      reserveBase,
+      reserveQuote,
+      targetPrice: askPrice,
+      tradingFee,
+    });
+    const bidInc = bidFill.base_size - prevBid;
+    const askInc = askFill.base_size - prevAsk;
+    prevBid = bidFill.base_size;
+    prevAsk = askFill.base_size;
+    if (bidInc > 0 && bidPrice > 0) {
+      bids.push({
+        level: i,
+        side: "bid",
+        price: bidPrice,
+        source: "amm",
+        base_size: bidInc,
+        quote_size: bidInc * bidPrice,
+        amm_through: bidFill.base_size,
+        amm_opposing: 0,
+      });
+    }
+    if (askInc > 0 && askPrice > 0) {
+      asks.push({
+        level: i,
+        side: "ask",
+        price: askPrice,
+        source: "amm",
+        base_size: askInc,
+        quote_size: askInc * askPrice,
+        amm_through: askFill.base_size,
+        amm_opposing: 0,
+      });
+    }
+  }
+
+  return { bids, asks, price: spot };
+}
+
 export function measureAmmAgainstDex(rows, reserves = {}, tapeSide = "bid") {
   const reserveBase = Number(
     reserves.reserveBase ?? reserves.reserve_asset ?? reserves.reserve_xdx ?? 0
@@ -86,7 +151,7 @@ export function measureAmmAgainstDex(rows, reserves = {}, tapeSide = "bid") {
     const through = side === "bid" ? fill.side === "bid" : fill.side === "ask";
     return {
       ...row,
-      source: row?.source && row.source !== "amm" ? row.source : "dex",
+      source: row?.source === "amm" ? "amm" : row?.source || "dex",
       amm_opposing: opposing ? fill.base_size : 0,
       amm_through: through ? fill.base_size : 0,
     };

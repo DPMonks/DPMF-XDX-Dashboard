@@ -54,7 +54,9 @@ function BookSide({ title, rows, side, locale, t }) {
         {rows.map((row, index) => (
           <div
             key={`${side}-${row.level ?? index}-${row.price ?? "empty"}`}
-            className={`orderbook-row is-${side}${row.placeholder ? " is-empty" : ""}`}
+            className={`orderbook-row is-${side}${row.source === "amm" ? " is-amm" : ""}${
+              row.placeholder ? " is-empty" : ""
+            }`}
             role="listitem"
           >
             {!row.placeholder ? (
@@ -232,6 +234,8 @@ export default function OrderBook() {
 
       {book.catching_up && !book.present ? (
         <p className="orderbook-asof">{t.emptyOrderbook}</p>
+      ) : book.amm_implied ? (
+        <p className="orderbook-asof">{t.ammImplied}</p>
       ) : book.present ? (
         <p className="orderbook-asof">{t.ammDepth}</p>
       ) : null}

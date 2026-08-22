@@ -1,4 +1,4 @@
-import { ammSpot, measureAmmAgainstDex } from "./ammCurve.js";
+import { AMM_CURVE_LEVELS, ammImpliedLevels, ammSpot, measureAmmAgainstDex } from "./ammCurve.js";
 
 export const ORDERBOOK_PAIRS = ["XDX/XRP", "XDX/RLUSD"];
 export const FEATURED_ORDERBOOK_PAIRS = [
@@ -136,20 +136,127 @@ export function orderBookRowStamp(row = {}) {
   return row.as_of || payload.as_of || row.timestamp || row.updated_at || null;
 }
 
+function issuedAmount(value) {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" || typeof value === "string") {
+    const raw = String(value);
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return null;
+    const drops = /^\d+$/.test(raw);
+    return {
+      currency: "XRP",
+      value: drops ? num / 1_000_000 : num,
+    };
+  }
+  if (typeof value === "object") {
+    const num = Number(value.value ?? value.amount);
+    if (!Number.isFinite(num) || num <= 0) return null;
+    return {
+      currency: String(value.currency || value.currencyCode || "").toUpperCase(),
+      issuer: value.issuer || null,
+      value: num,
+    };
+  }
+  return null;
+}
+
+function isXdxAmount(amount) {
+  const currency = String(amount?.currency || "").toUpperCase();
+  return currency === "XDX" || currency.startsWith("584458");
+}
+
+export function offerToDexRow(row) {
+  if (!row || typeof row !== "object" || row.placeholder) return null;
+  if (String(row.source || "").toLowerCase() === "amm") return null;
+
+  const directPrice = Number(row.price ?? row.quality_price);
+  const directSize = Number(row.base_size ?? row.amount ?? row.size);
+  if (directPrice > 0 && directSize > 0 && row.TakerGets == null && row.taker_gets == null) {
+    return {
+      price: directPrice,
+      base_size: directSize,
+      source: "dex",
+      side: String(row.side || "").toLowerCase() === "ask" ? "ask" : "bid",
+    };
+  }
+
+  const gets = issuedAmount(row.TakerGets ?? row.taker_gets);
+  const pays = issuedAmount(row.TakerPays ?? row.taker_pays);
+  if (!gets || !pays) return null;
+  if (isXdxAmount(gets)) {
+    return {
+      price: pays.value / gets.value,
+      base_size: gets.value,
+      source: "dex",
+      side: "ask",
+    };
+  }
+  if (isXdxAmount(pays)) {
+    return {
+      price: gets.value / pays.value,
+      base_size: pays.value,
+      source: "dex",
+      side: "bid",
+    };
+  }
+  return null;
+}
+
+function firstOfferList(...lists) {
+  for (const list of lists) {
+    if (Array.isArray(list) && list.length) return list;
+  }
+  return [];
+}
+
+export function extractDexSides(body = {}) {
+  const nested =
+    body.book && typeof body.book === "object"
+      ? body.book
+      : body.dex && typeof body.dex === "object"
+        ? body.dex
+        : body.offers && typeof body.offers === "object" && !Array.isArray(body.offers)
+          ? body.offers
+          : body.orderbook && typeof body.orderbook === "object"
+            ? body.orderbook
+            : {};
+  const bids = [];
+  const asks = [];
+
+  for (const row of firstOfferList(body.bids, body.buy, body.buys, nested.bids, nested.buy, nested.buys)) {
+    const next = offerToDexRow({ ...row, side: row.side || "bid" });
+    if (next && next.side !== "ask") bids.push({ ...next, side: "bid" });
+  }
+  for (const row of firstOfferList(body.asks, body.sell, body.sells, nested.asks, nested.sell, nested.sells)) {
+    const next = offerToDexRow({ ...row, side: row.side || "ask" });
+    if (next && next.side !== "bid") asks.push({ ...next, side: "ask" });
+  }
+  const mixed = firstOfferList(
+    Array.isArray(body.offers) ? body.offers : null,
+    Array.isArray(nested.offers) ? nested.offers : null
+  );
+  for (const row of mixed) {
+    const next = offerToDexRow(row);
+    if (!next) continue;
+    if (next.side === "ask") asks.push(next);
+    else bids.push({ ...next, side: "bid" });
+  }
+  return { bids, asks };
+}
+
 export function nativeDexRows(rows) {
   return (Array.isArray(rows) ? rows : [])
-    .filter((row) => {
-      if (!row || row.placeholder) return false;
-      if (String(row.source || "dex").toLowerCase() === "amm") return false;
-      const price = Number(row.price);
-      const size = Number(row.base_size ?? row.amount ?? row.size);
-      return price > 0 && size > 0;
-    })
+    .map((row) => offerToDexRow(row) || (
+      row && Number(row.price) > 0 && Number(row.base_size) > 0 && String(row.source || "") !== "amm"
+        ? { ...row, source: "dex" }
+        : null
+    ))
+    .filter(Boolean)
     .map((row, index) => ({
       ...row,
       level: row.level ?? index + 1,
       price: Number(row.price),
-      base_size: Number(row.base_size ?? row.amount ?? row.size),
+      base_size: Number(row.base_size),
       source: "dex",
     }));
 }
@@ -183,17 +290,31 @@ export function composeAmmBook(stored, reserves = {}, pair = "XDX/XRP") {
       : ammSpot(reserveBase, reserveQuote) || Number(base.amm?.price) || null;
 
   const reserveMeta = { reserveBase, reserveQuote, tradingFee };
+  const extracted = extractDexSides(base);
+  const dexBids = nativeDexRows(extracted.bids.length ? extracted.bids : base.bids);
+  const dexAsks = nativeDexRows(extracted.asks.length ? extracted.asks : base.asks);
+  const implied = ammImpliedLevels({
+    reserveBase,
+    reserveQuote,
+    tradingFee,
+    steps: ORDERBOOK_VISIBLE_LEVELS || AMM_CURVE_LEVELS,
+  });
+  const dexPresent = dexBids.length > 0 || dexAsks.length > 0;
   const bids = withCumulative(
-    measureAmmAgainstDex(nativeDexRows(base.bids), reserveMeta, "bid"),
+    dexBids.length
+      ? measureAmmAgainstDex(dexBids, reserveMeta, "bid")
+      : implied.bids,
     "bid"
   );
   const asks = withCumulative(
-    measureAmmAgainstDex(nativeDexRows(base.asks), reserveMeta, "ask"),
+    dexAsks.length
+      ? measureAmmAgainstDex(dexAsks, reserveMeta, "ask")
+      : implied.asks,
     "ask"
   );
   const present = bids.length > 0 || asks.length > 0;
-  const best_bid = nativeBest(bids, "bid");
-  const best_ask = nativeBest(asks, "ask");
+  const best_bid = nativeBest(bids, "bid") || (bids[0] && Number(bids[0].price)) || null;
+  const best_ask = nativeBest(asks, "ask") || (asks[0] && Number(asks[0].price)) || null;
   const mid =
     best_bid > 0 && best_ask > 0
       ? (best_bid + best_ask) / 2
@@ -207,6 +328,8 @@ export function composeAmmBook(stored, reserves = {}, pair = "XDX/XRP") {
     asks,
     present,
     catching_up: !present,
+    dex_present: dexPresent,
+    amm_implied: present && !dexPresent,
     best_bid,
     best_ask,
     mid,
@@ -239,8 +362,9 @@ export function asOrderbookPayload(raw, pair = "XDX/XRP") {
   }
   if (!body || typeof body !== "object") return emptyOrderbook(pair);
   const name = normalizeOrderbookPair(body.pair || pair);
-  const bids = Array.isArray(body.bids) ? body.bids : [];
-  const asks = Array.isArray(body.asks) ? body.asks : [];
+  const extracted = extractDexSides(body);
+  const bids = extracted.bids.length ? extracted.bids : Array.isArray(body.bids) ? body.bids : [];
+  const asks = extracted.asks.length ? extracted.asks : Array.isArray(body.asks) ? body.asks : [];
   const present = body.present !== false && (bids.length > 0 || asks.length > 0);
   return {
     ...emptyOrderbook(name),

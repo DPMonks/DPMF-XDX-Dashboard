@@ -6,8 +6,10 @@ import {
   combineOrderbookSide,
   composeAmmBook,
   emptyOrderbook,
+  extractDexSides,
   filterOrderbookPairs,
   normalizeOrderbookPair,
+  offerToDexRow,
   ORDERBOOK_VISIBLE_LEVELS,
   orderBookRowStamp,
   padOrderbookLevels,
@@ -69,19 +71,22 @@ test("ammSizeToPrice grows as price walks further from spot", () => {
   assert.notEqual(near.base_size, far.base_size);
 });
 
-test("composeAmmBook does not invent a perfect AMM tape when DEX is empty", () => {
+test("composeAmmBook uses AMM opposing depth when native DEX is empty", () => {
   const book = composeAmmBook(emptyOrderbook("XDX/XIO"), {
     reserve_asset: 51_000_000,
     reserve_currency: 120_000,
     trading_fee: 1000,
   }, "XDX/XIO");
   assert.equal(book.pair, "XDX/XIO");
-  assert.equal(book.present, false);
-  assert.equal(book.catching_up, true);
-  assert.deepEqual(book.bids, []);
-  assert.deepEqual(book.asks, []);
+  assert.equal(book.present, true);
+  assert.equal(book.dex_present, false);
+  assert.equal(book.amm_implied, true);
+  assert.equal(book.bids.length, 20);
+  assert.equal(book.asks.length, 20);
+  assert.equal(book.bids[0].source, "amm");
+  assert.notEqual(book.bids[0].base_size, book.bids[4].base_size);
+  assert.ok(book.bids[4].base_size > book.bids[0].base_size);
   assert.deepEqual(book.amm.levels, []);
-  assert.ok(book.amm.price > 0);
 });
 
 test("composeAmmBook keeps native sizes and measures AMM opposing at those prices", () => {
@@ -102,6 +107,8 @@ test("composeAmmBook keeps native sizes and measures AMM opposing at those price
     "XDX/XRP"
   );
   assert.equal(book.present, true);
+  assert.equal(book.dex_present, true);
+  assert.equal(book.amm_implied, false);
   assert.equal(book.bids[0].source, "dex");
   assert.equal(book.bids[0].base_size, 5_000);
   assert.equal(book.bids[1].base_size, 12_400);
@@ -187,6 +194,39 @@ test("order book stamp prefers Worker 2 timestamp, not updated_at", () => {
     orderBookRowStamp({ payload: { as_of: "2026-08-21T23:41:00.000Z" } }),
     "2026-08-21T23:41:00.000Z"
   );
+});
+
+test("offerToDexRow reads XRPL TakerGets / TakerPays as native bids and asks", () => {
+  const bid = offerToDexRow({
+    TakerGets: "1500000",
+    TakerPays: { currency: "XDX", issuer: "rIssuer", value: "50000" },
+  });
+  const ask = offerToDexRow({
+    TakerGets: { currency: "XDX", issuer: "rIssuer", value: "8000" },
+    TakerPays: "400",
+  });
+  assert.equal(bid.side, "bid");
+  assert.equal(bid.source, "dex");
+  assert.equal(bid.base_size, 50000);
+  assert.ok(Math.abs(bid.price - 1.5 / 50000) < 1e-12);
+  assert.equal(ask.side, "ask");
+  assert.equal(ask.base_size, 8000);
+  assert.ok(Math.abs(ask.price - 0.0004 / 8000) < 1e-12);
+});
+
+test("extractDexSides finds nested Worker 2 book.bids without treating AMM rungs as DEX", () => {
+  const sides = extractDexSides({
+    book: {
+      bids: [{ price: 0.00003, base_size: 1200 }],
+      asks: [{ price: 0.000032, amount: 900 }],
+    },
+    amm: {
+      levels: [{ side: "bid", price: 0.000029, base_size: 158976, source: "amm" }],
+    },
+  });
+  assert.equal(sides.bids.length, 1);
+  assert.equal(sides.bids[0].base_size, 1200);
+  assert.equal(sides.asks[0].base_size, 900);
 });
 
 test("asOrderbookPayload does not treat quote-per-XDX as xdxUsd", () => {
