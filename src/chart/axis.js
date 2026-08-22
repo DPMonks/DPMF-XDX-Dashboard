@@ -89,6 +89,24 @@ export function timeTicks(start, end, { count = 6, intervalId = "1D" } = {}) {
   return steppedTicks(from, to, step);
 }
 
+export function clientToSvg(svg, clientX, clientY, viewW, viewH) {
+  if (svg && typeof svg.getScreenCTM === "function") {
+    const ctm = svg.getScreenCTM();
+    if (ctm) {
+      const point = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+      if (Number.isFinite(point.x) && Number.isFinite(point.y)) {
+        return { x: point.x, y: point.y };
+      }
+    }
+  }
+  const rect = svg?.getBoundingClientRect?.();
+  if (!rect || !(rect.width > 0) || !(rect.height > 0)) return null;
+  return {
+    x: ((clientX - rect.left) / rect.width) * Number(viewW),
+    y: ((clientY - rect.top) / rect.height) * Number(viewH),
+  };
+}
+
 export function formatPriceLabel(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";

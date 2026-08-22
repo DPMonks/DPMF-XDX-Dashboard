@@ -133,6 +133,7 @@
   display: block;
   cursor: crosshair;
   background: #000000;
+  touch-action: none;
 }
 
 .hybrid-svg.is-grab {
@@ -339,6 +340,8 @@
   stroke: #d1d4dc;
   stroke-width: 1;
   fill: none;
+  shape-rendering: geometricPrecision;
+  pointer-events: none;
 }
 
 .hybrid-draw.is-preview,

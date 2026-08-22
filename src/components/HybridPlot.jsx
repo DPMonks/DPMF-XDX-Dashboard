@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
-import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../chart/axis";
+import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../chart/axis";
 import { candleBodyWidth } from "../chart/candles";
 import { volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
@@ -45,6 +45,15 @@ export default function HybridPlot({
   onMoveHandle,
 }) {
   const box = useRef(null);
+  const svgRef = useRef(null);
+  const hairVRef = useRef(null);
+  const hairHRef = useRef(null);
+  const timeTagRef = useRef(null);
+  const timeTextRef = useRef(null);
+  const priceTagRef = useRef(null);
+  const priceTextRef = useRef(null);
+  const hoverRef = useRef(null);
+  const rafRef = useRef(0);
   const [hover, setHover] = useState(null);
   const [drag, setDrag] = useState(null);
   const uid = useId().replace(/:/g, "");
@@ -93,11 +102,10 @@ export default function HybridPlot({
   });
 
   function locate(event) {
-    const node = box.current;
-    if (!node) return null;
-    const rect = node.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * width;
-    const y = ((event.clientY - rect.top) / rect.height) * height;
+    const mapped = clientToSvg(svgRef.current || event.currentTarget, event.clientX, event.clientY, width, height);
+    if (!mapped) return null;
+    const x = mapped.x;
+    const y = mapped.y;
     const t = scale.start + ((x - PAD.l) / innerW) * (scale.end - scale.start);
     const price = scale.max - ((y - PAD.t) / PRICE_H) * (scale.max - scale.min);
     const inPrice = y >= PAD.t - 2 && y <= plotBottom + 2 && x >= PAD.l && x <= width - PAD.r;
@@ -126,9 +134,68 @@ export default function HybridPlot({
     };
   }
 
+  function paintCursor(next) {
+    const hairV = hairVRef.current;
+    const hairH = hairHRef.current;
+    const timeTag = timeTagRef.current;
+    const timeText = timeTextRef.current;
+    const priceTag = priceTagRef.current;
+    const priceText = priceTextRef.current;
+    if (!next) {
+      if (hairV) hairV.setAttribute("visibility", "hidden");
+      if (hairH) hairH.setAttribute("visibility", "hidden");
+      if (timeTag) timeTag.setAttribute("visibility", "hidden");
+      if (priceTag) priceTag.setAttribute("visibility", "hidden");
+      return;
+    }
+    const x = Math.min(width - PAD.r, Math.max(PAD.l, next.x));
+    if (hairV) {
+      hairV.setAttribute("visibility", "visible");
+      hairV.setAttribute("x1", String(x));
+      hairV.setAttribute("x2", String(x));
+    }
+    if (next.inPrice) {
+      const y = Math.min(plotBottom - 1, Math.max(PAD.t + 1, next.y));
+      if (hairH) {
+        hairH.setAttribute("visibility", "visible");
+        hairH.setAttribute("y1", String(y));
+        hairH.setAttribute("y2", String(y));
+      }
+      if (priceTag && priceText) {
+        priceTag.setAttribute("visibility", "visible");
+        priceTag.setAttribute("transform", `translate(0 ${y - 9})`);
+        priceText.textContent = formatAxisPrice(next.price);
+      }
+    } else {
+      if (hairH) hairH.setAttribute("visibility", "hidden");
+      if (priceTag) priceTag.setAttribute("visibility", "hidden");
+    }
+    if (timeTag && timeText && Number.isFinite(next.t)) {
+      const label = formatCursorWhen(next.t, locale);
+      const tagW = Math.max(108, label.length * 6.1);
+      const tagX = Math.min(width - PAD.r - tagW / 2, Math.max(PAD.l + tagW / 2, x));
+      timeTag.setAttribute("visibility", "visible");
+      timeTag.setAttribute("transform", `translate(${tagX - tagW / 2} ${height - PAD.b + 4})`);
+      const rect = timeTag.querySelector("rect");
+      if (rect) rect.setAttribute("width", String(tagW));
+      timeText.setAttribute("x", String(tagW / 2));
+      timeText.textContent = label;
+    }
+  }
+
+  function queueHover(next) {
+    hoverRef.current = next;
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      setHover(hoverRef.current);
+    });
+  }
+
   function onMove(event) {
     const next = locate(event);
-    setHover(next);
+    paintCursor(next);
+    queueHover(next);
     if (drag && next && Number.isFinite(next.t) && Number.isFinite(next.price) && onMoveHandle) {
       onMoveHandle(drag.index, drag.key, next);
     }
@@ -176,14 +243,6 @@ export default function HybridPlot({
       return Number.isFinite(value) ? { x: scale.x(row.t), y: rsiY(value) } : null;
     })
     .filter(Boolean);
-  const cursorT = hover && Number.isFinite(hover.t) ? hover.t : hoverCandle?.t;
-  const timeLabel = cursorT != null ? formatCursorWhen(cursorT, locale) : "";
-  const timeTagW = Math.max(108, timeLabel.length * 6.1);
-  const cursorX = hover ? Math.min(width - PAD.r, Math.max(PAD.l, hover.x)) : 0;
-  const timeTagX = hover
-    ? Math.min(width - PAD.r - timeTagW / 2, Math.max(PAD.l + timeTagW / 2, cursorX))
-    : 0;
-  const priceY = hover?.inPrice ? Math.min(plotBottom - 1, Math.max(PAD.t + 1, hover.y)) : null;
   const hoverRsi = hoverCandle
     ? rsiValues[candles.findIndex((row) => row.t === hoverCandle.t)]
     : null;
@@ -195,11 +254,15 @@ export default function HybridPlot({
   return (
     <div className={hollow ? "hybrid-plot is-hollow" : "hybrid-plot"} ref={box}>
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
         className={`hybrid-svg${drag ? " is-grabbing" : hover && hitDrawingHandle(drawings, scale, hover.x, hover.y) ? " is-grab" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => {
-          if (!drag) setHover(null);
+          if (drag) return;
+          paintCursor(null);
+          hoverRef.current = null;
+          setHover(null);
         }}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
@@ -475,39 +538,26 @@ export default function HybridPlot({
           </g>
         ) : null}
 
-        {hover ? (
-          <g className="hybrid-crosshair">
-            <line
-              x1={cursorX}
-              x2={cursorX}
-              y1={PAD.t}
-              y2={height - PAD.b}
-            />
-            {priceY != null ? <line x1={PAD.l} x2={width - PAD.r} y1={priceY} y2={priceY} /> : null}
-            <g className="hybrid-cursor-tag is-time">
-              <rect x={timeTagX - timeTagW / 2} y={height - PAD.b + 4} width={timeTagW} height={18} rx="3" />
-              <text x={timeTagX} y={height - PAD.b + 17} textAnchor="middle">
-                {timeLabel}
+        <g className="hybrid-crosshair" pointerEvents="none">
+          <line ref={hairVRef} visibility="hidden" x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={height - PAD.b} />
+          <line ref={hairHRef} visibility="hidden" x1={PAD.l} x2={width - PAD.r} y1={PAD.t} y2={PAD.t} />
+          <g ref={timeTagRef} className="hybrid-cursor-tag is-time" visibility="hidden">
+            <rect x="0" y="0" width="108" height="18" rx="3" />
+            <text ref={timeTextRef} x="54" y="13" textAnchor="middle" />
+          </g>
+          <g ref={priceTagRef} className="hybrid-cursor-tag is-price" visibility="hidden">
+            <rect x="2" y="0" width={PAD.l - 6} height="18" rx="3" />
+            <text ref={priceTextRef} x={PAD.l - 8} y="13" textAnchor="end" />
+          </g>
+          {rsiTagY != null ? (
+            <g className="hybrid-cursor-tag is-price">
+              <rect x={2} y={rsiTagY - 9} width={PAD.l - 6} height={18} rx="3" />
+              <text x={PAD.l - 8} y={rsiTagY + 4} textAnchor="end">
+                {Number(hoverRsi).toFixed(1)}
               </text>
             </g>
-            {priceY != null ? (
-              <g className="hybrid-cursor-tag is-price">
-                <rect x={2} y={priceY - 9} width={PAD.l - 6} height={18} rx="3" />
-                <text x={PAD.l - 8} y={priceY + 4} textAnchor="end">
-                  {formatAxisPrice(hover.price)}
-                </text>
-              </g>
-            ) : null}
-            {rsiTagY != null ? (
-              <g className="hybrid-cursor-tag is-price">
-                <rect x={2} y={rsiTagY - 9} width={PAD.l - 6} height={18} rx="3" />
-                <text x={PAD.l - 8} y={rsiTagY + 4} textAnchor="end">
-                  {Number(hoverRsi).toFixed(1)}
-                </text>
-              </g>
-            ) : null}
-          </g>
-        ) : null}
+          ) : null}
+        </g>
       </svg>
 
       {hoverCandle ? (

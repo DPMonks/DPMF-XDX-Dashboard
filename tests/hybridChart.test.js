@@ -22,7 +22,7 @@ import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/cha
 import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
-import { formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
+import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
 import { rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   drawingHandles,
@@ -336,6 +336,15 @@ test("priceTicks and timeTicks fill left and bottom chart scales", () => {
   assert.ok(prices[0] >= 0.00001214);
   assert.ok(prices[prices.length - 1] <= 0.00025542);
   assert.match(formatAxisPrice(0.00004538), /^0\.000045/);
+  const mapped = clientToSvg(
+    { getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 50 }) },
+    60,
+    45,
+    960,
+    480
+  );
+  assert.equal(mapped.x, 480);
+  assert.equal(mapped.y, 240);
   assert.equal(formatPriceLabel(0.000034), "0.000034");
   assert.equal(formatPriceLabel(0.00003462), "0.000035");
 
