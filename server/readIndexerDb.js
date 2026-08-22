@@ -11,7 +11,7 @@ import {
   recordedXdxUsdFromPrices,
   xrpPerXdx,
 } from "../src/utils/recordedPrice.js";
-import { inferQuoteReserve, poolAssetSplit, quoteUsdFromMap } from "../src/utils/poolSplit.js";
+import { inferQuoteReserve, quoteUsdFromMap, resolvePoolSplit } from "../src/utils/poolSplit.js";
 import {
   asIso,
   buildTodayOwnersPayload,
@@ -1090,17 +1090,22 @@ async function loadXdxLpPools(db) {
         reserves.byName.get(String(row.pool_name || "").toUpperCase()) ||
         {};
       const reserveXdx = Number(row.reserve_xdx || extra.reserve_asset || 0);
-      const reserveQuote =
+      const measuredQuote =
         Number(optionalByAmm.get(row.amm_account) || 0) ||
         Number(extra.reserve_currency || 0) ||
-        null;
+        0;
       const quoteUsd = quoteUsdFromMap(row.quote, quotePrices);
-      const split = poolAssetSplit({
+      const split = resolvePoolSplit({
         reserveXdx,
-        reserveQuote,
+        reserveQuote: measuredQuote,
         xdxUsd,
         quoteUsd,
       });
+      const reserveQuote =
+        measuredQuote ||
+        split?.reserveQuote ||
+        inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) ||
+        null;
       return {
         pool_name: row.pool_name,
         pool: row.pool_name,

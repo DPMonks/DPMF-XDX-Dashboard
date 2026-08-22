@@ -47,6 +47,47 @@ export function inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) {
   return (xdx * xdxPrice) / quotePrice;
 }
 
+// One XDX reserve is enough. The opposing quote is the other AMM side:
+// measured quote if Node 3 stored it, otherwise equal USD value from price.
+export function resolvePoolSplit({
+  reserveXdx,
+  reserveQuote,
+  xdxUsd,
+  quoteUsd,
+} = {}) {
+  const xdx = Number(reserveXdx);
+  if (!(xdx > 0)) return null;
+
+  const xdxPrice = Number(xdxUsd);
+  const quotePrice = Number(quoteUsd);
+  let quote = Number(reserveQuote);
+  let inferred = !(quote > 0);
+
+  if (!(quote > 0) && xdxPrice > 0 && quotePrice > 0) {
+    quote = inferQuoteReserve(xdx, xdxPrice, quotePrice);
+  }
+
+  if (quote > 0 && xdxPrice > 0 && quotePrice > 0) {
+    const split = poolAssetSplit({
+      reserveXdx: xdx,
+      reserveQuote: quote,
+      xdxUsd: xdxPrice,
+      quoteUsd: quotePrice,
+    });
+    if (split) {
+      return { ...split, reserveQuote: quote, inferred };
+    }
+  }
+
+  return {
+    xdxPct: 50,
+    quotePct: 50,
+    lead: "xdx",
+    reserveQuote: quote > 0 ? quote : null,
+    inferred: true,
+  };
+}
+
 export function quoteUsdFromMap(quote, prices = {}) {
   const key = String(quote || "").toUpperCase();
   if (!key) return 0;

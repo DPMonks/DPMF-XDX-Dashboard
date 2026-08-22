@@ -1,7 +1,7 @@
 import { api, INDEXER_ORIGIN } from "../api";
 import { pairFromRow } from "../constants/ledger";
 import { composeTokenDetails } from "../tokenDetails";
-import { poolAssetSplit, quoteUsdFromMap } from "../utils/poolSplit";
+import { quoteUsdFromMap, resolvePoolSplit } from "../utils/poolSplit";
 import {
   asOrderbookPayload,
   emptyOrderbook,
@@ -208,7 +208,7 @@ function withPoolSplit(row, fallbackXdxUsd, fallbackXrpUsd) {
   const quoteUsd =
     row.quote_usd ||
     quoteUsdFromMap(row.quote, { XRP: fallbackXrpUsd });
-  const split = poolAssetSplit({
+  const split = resolvePoolSplit({
     reserveXdx: row.reserve_asset,
     reserveQuote: row.reserve_currency,
     xdxUsd: row.xdxUsd || fallbackXdxUsd,
@@ -216,6 +216,9 @@ function withPoolSplit(row, fallbackXdxUsd, fallbackXrpUsd) {
   });
   return {
     ...row,
+    reserve_currency: row.reserve_currency || split?.reserveQuote || null,
+    xdxUsd: row.xdxUsd || fallbackXdxUsd || null,
+    quote_usd: quoteUsd || row.quote_usd || null,
     xdx_pct: row.xdx_pct ?? split?.xdxPct ?? null,
     quote_pct: row.quote_pct ?? split?.quotePct ?? null,
     lead: row.lead || split?.lead || null,
@@ -282,7 +285,10 @@ export async function getOverview() {
 }
 
 export async function getAmm() {
-  const body = await api.lpPools();
+  const [body, prices] = await Promise.all([
+    api.lpPools(),
+    api.prices().catch(() => ({})),
+  ]);
   const catchingUp = Boolean(
     body &&
       typeof body === "object" &&
@@ -290,11 +296,13 @@ export async function getAmm() {
       (body.catching_up || !asArray(body.pools || body).length)
   );
   if (catchingUp) return [];
+  const xdxUsd = numberOrNull(prices?.xdxUsd ?? prices?.recorded_price);
+  const xrpUsd = numberOrNull(prices?.xrpUsd);
   return uniquePools(
     asArray(body)
       .map(mapPool)
       .filter(Boolean)
-      .map((row) => withPoolSplit(row, row.xdxUsd, row.quote === "XRP" ? row.quote_usd : 0))
+      .map((row) => withPoolSplit(row, row.xdxUsd || xdxUsd, xrpUsd))
   );
 }
 
