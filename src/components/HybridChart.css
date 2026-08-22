@@ -394,10 +394,16 @@
   stroke-width: 1;
 }
 
-.hybrid-cursor-tag text {
+.hybrid-cursor-tag text,
+.hybrid-price-tag text {
   fill: #ffffff;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
+}
+
+.hybrid-price-tag rect {
+  fill: #1a0530;
+  stroke-width: 1;
 }
 
 .hybrid-ohlc,

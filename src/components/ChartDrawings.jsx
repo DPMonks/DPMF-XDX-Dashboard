@@ -1,5 +1,5 @@
 import { channelOffset, drawingHandles, extendSegment, fibBands, fibExtent, rangeColor, raySegment, rangeStats } from "../chart/drawings";
-import { formatAxisPrice } from "../chart/axis";
+import { formatAxisPrice, formatPriceLabel } from "../chart/axis";
 
 function stroke(row) {
   return row?.color || "#d1d4dc";
@@ -227,19 +227,31 @@ export default function ChartDrawings({
           );
         }
         if (row.kind === "pricelabel" && Number.isFinite(Number(row.price))) {
+          const cx = Number(row.t) > 0 ? scale.x(row.t) : pad.l + 80;
+          const cy = scale.y(row.price);
+          const label = formatPriceLabel(row.price);
+          const boxW = Math.max(72, 8 + label.length * 6.2);
+          const boxH = 18;
+          const gap = 8;
+          let boxX = cx - gap - boxW;
+          if (boxX < pad.l + 2) boxX = cx + gap;
+          const boxY = cy - boxH / 2;
+          const tickX1 = cx;
+          const tickX2 = boxX < cx ? boxX + boxW : boxX;
           return (
-            <g key={key}>
+            <g key={key} className={dashed ? "hybrid-price-tag is-preview" : "hybrid-price-tag"}>
               <line
                 className={dashed ? "hybrid-draw is-preview" : "hybrid-draw"}
-                x1={pad.l}
-                x2={width - pad.r}
-                y1={scale.y(row.price)}
-                y2={scale.y(row.price)}
+                x1={tickX1}
+                x2={tickX2}
+                y1={cy}
+                y2={cy}
                 style={paint(color)}
                 vectorEffect="non-scaling-stroke"
               />
-              <text className="hybrid-draw-label" x={width - pad.r - 4} y={scale.y(row.price) - 4} textAnchor="end" style={{ fill: color }}>
-                {formatAxisPrice(row.price)}
+              <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="3" style={{ stroke: color }} />
+              <text x={boxX + boxW / 2} y={boxY + 13} textAnchor="middle">
+                {label}
               </text>
             </g>
           );

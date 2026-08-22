@@ -22,7 +22,7 @@ import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/cha
 import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
-import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../src/chart/axis.js";
+import { formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
 import { rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   drawingHandles,
@@ -336,6 +336,8 @@ test("priceTicks and timeTicks fill left and bottom chart scales", () => {
   assert.ok(prices[0] >= 0.00001214);
   assert.ok(prices[prices.length - 1] <= 0.00025542);
   assert.match(formatAxisPrice(0.00004538), /^0\.000045/);
+  assert.equal(formatPriceLabel(0.000034), "0.000034");
+  assert.equal(formatPriceLabel(0.00003462), "0.000035");
 
   const start = Date.parse("2026-07-24T00:00:00.000Z");
   const end = Date.parse("2026-08-22T00:00:00.000Z");

@@ -89,6 +89,12 @@ export function timeTicks(start, end, { count = 6, intervalId = "1D" } = {}) {
   return steppedTicks(from, to, step);
 }
 
+export function formatPriceLabel(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  return num.toFixed(6);
+}
+
 export function formatAxisPrice(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
