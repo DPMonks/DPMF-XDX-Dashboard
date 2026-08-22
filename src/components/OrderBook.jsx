@@ -232,13 +232,11 @@ export default function OrderBook() {
         <BookSide title={t.asks} rows={askRows} side="ask" locale={locale} t={t} />
       </div>
 
-      {book.catching_up && !book.present ? (
-        <p className="orderbook-asof">{t.emptyOrderbook}</p>
-      ) : book.amm_implied ? (
-        <p className="orderbook-asof">{t.ammImplied}</p>
-      ) : book.present ? (
+      {book.dex_present ? (
         <p className="orderbook-asof">{t.ammDepth}</p>
-      ) : null}
+      ) : (
+        <p className="orderbook-asof">{t.emptyOrderbook}</p>
+      )}
 
       {book.as_of ? (
         <p className="orderbook-asof">

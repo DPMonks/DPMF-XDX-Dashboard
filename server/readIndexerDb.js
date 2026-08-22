@@ -32,6 +32,7 @@ import {
   emptyOrderbook,
   normalizeOrderbookPair,
   orderBookRowStamp,
+  pickNativeBookRow,
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
 } from "../src/orderbook.js";
@@ -868,11 +869,11 @@ async function loadAllLpSupply(db) {
   return Number(latest.rows[0]?.n || 0);
 }
 
-async function loadOrderbook(db, pair = "XDX/XRP") {
+async function loadNativeBookRow(db, pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(pair);
   // Worker 2 writes `timestamp`. Do not SELECT updated_at — that column is
   // missing and tryQuery would swallow the error as an empty book.
-  const stored = await tryQuery(
+  const latest = await tryQuery(
     db,
     `SELECT payload, pair, timestamp
      FROM order_book_latest
@@ -880,11 +881,26 @@ async function loadOrderbook(db, pair = "XDX/XRP") {
      LIMIT 1`,
     [name]
   );
-  if (!stored.rows.length) return emptyOrderbook(name);
-  const book = asOrderbookPayload(stored.rows[0].payload, name);
+  const history = await tryQuery(
+    db,
+    `SELECT payload, pair, timestamp
+     FROM order_book_history
+     WHERE pair = $1
+     ORDER BY timestamp DESC
+     LIMIT 40`,
+    [name]
+  );
+  return pickNativeBookRow(latest.rows[0], history.rows, name);
+}
+
+async function loadOrderbook(db, pair = "XDX/XRP") {
+  const name = normalizeOrderbookPair(pair);
+  const picked = await loadNativeBookRow(db, name);
+  if (!picked) return emptyOrderbook(name);
+  const book = asOrderbookPayload(picked.payload, name);
   return {
     ...book,
-    as_of: book.as_of || asIso(orderBookRowStamp(stored.rows[0])),
+    as_of: book.as_of || asIso(picked.as_of),
     source: "db",
   };
 }
@@ -925,19 +941,52 @@ function loadPairReserves(pair, reserveIndex, xrpPool, pool) {
 }
 
 async function loadOrderbooks(db) {
-  const [lp, reserveIndex, xrpPool, storedRows] = await Promise.all([
+  const [lp, reserveIndex, xrpPool, storedRows, historyRows] = await Promise.all([
     loadXdxLpPools(db),
     loadAmmReserveIndex(db),
     hydrateAmm(db),
     tryQuery(db, "SELECT payload, pair, timestamp FROM order_book_latest"),
+    tryQuery(
+      db,
+      `SELECT payload, pair, timestamp
+       FROM order_book_history
+       ORDER BY timestamp DESC
+       LIMIT 200`
+    ),
   ]);
 
+  const historyByPair = new Map();
+  for (const row of historyRows.rows) {
+    const name = normalizeOrderbookPair(row.pair);
+    const key = name.toUpperCase();
+    const list = historyByPair.get(key) || [];
+    list.push(row);
+    historyByPair.set(key, list);
+  }
+
   const storedByPair = new Map();
+  const latestByPair = new Map();
   for (const row of storedRows.rows) {
     const name = normalizeOrderbookPair(row.pair);
+    latestByPair.set(name.toUpperCase(), row);
+  }
+  for (const [key, latest] of latestByPair) {
+    const name = normalizeOrderbookPair(latest.pair || key);
+    const picked = pickNativeBookRow(latest, historyByPair.get(key) || [], name);
+    if (!picked) continue;
     storedByPair.set(name.toUpperCase(), {
-      ...asOrderbookPayload(row.payload, name),
-      as_of: asIso(orderBookRowStamp(row)),
+      ...asOrderbookPayload(picked.payload, name),
+      as_of: asIso(picked.as_of),
+      source: "db",
+    });
+  }
+  for (const [key, rows] of historyByPair) {
+    if (storedByPair.has(key)) continue;
+    const picked = pickNativeBookRow(null, rows, key);
+    if (!picked) continue;
+    storedByPair.set(key, {
+      ...asOrderbookPayload(picked.payload, key),
+      as_of: asIso(picked.as_of),
       source: "db",
     });
   }

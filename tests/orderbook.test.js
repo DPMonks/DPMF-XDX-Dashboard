@@ -13,7 +13,9 @@ import {
   ORDERBOOK_VISIBLE_LEVELS,
   orderBookRowStamp,
   padOrderbookLevels,
+  pickNativeBookRow,
   sortOrderbookPairs,
+  topDexLevels,
 } from "../src/orderbook.js";
 import { ammSizeToPrice, ammSpot } from "../src/ammCurve.js";
 
@@ -71,22 +73,55 @@ test("ammSizeToPrice grows as price walks further from spot", () => {
   assert.notEqual(near.base_size, far.base_size);
 });
 
-test("composeAmmBook uses AMM opposing depth when native DEX is empty", () => {
+test("composeAmmBook does not invent AMM rungs when native DEX is empty", () => {
   const book = composeAmmBook(emptyOrderbook("XDX/XIO"), {
     reserve_asset: 51_000_000,
     reserve_currency: 120_000,
     trading_fee: 1000,
   }, "XDX/XIO");
   assert.equal(book.pair, "XDX/XIO");
-  assert.equal(book.present, true);
+  assert.equal(book.present, false);
   assert.equal(book.dex_present, false);
-  assert.equal(book.amm_implied, true);
-  assert.equal(book.bids.length, 20);
-  assert.equal(book.asks.length, 20);
-  assert.equal(book.bids[0].source, "amm");
-  assert.notEqual(book.bids[0].base_size, book.bids[4].base_size);
-  assert.ok(book.bids[4].base_size > book.bids[0].base_size);
+  assert.equal(book.amm_implied, false);
+  assert.deepEqual(book.bids, []);
+  assert.deepEqual(book.asks, []);
   assert.deepEqual(book.amm.levels, []);
+});
+
+test("topDexLevels keeps the 20 native offers closest to price", () => {
+  const bids = topDexLevels(
+    Array.from({ length: 30 }, (_, i) => ({
+      price: 0.00002 + i * 0.0000001,
+      base_size: 100 + i,
+      source: i === 3 ? "amm" : "dex",
+    })),
+    "bid",
+    20
+  );
+  assert.equal(bids.length, 20);
+  assert.ok(bids.every((row) => row.source !== "amm"));
+  assert.equal(bids[0].price, 0.00002 + 29 * 0.0000001);
+  assert.ok(bids[0].price > bids[19].price);
+});
+
+test("pickNativeBookRow skips empty latest and uses a history snapshot with DEX offers", () => {
+  const picked = pickNativeBookRow(
+    { payload: { pair: "XDX/XRP", bids: [], asks: [] }, timestamp: "2026-08-22T10:00:00.000Z" },
+    [
+      { payload: { pair: "XDX/XRP", bids: [] }, timestamp: "2026-08-22T09:00:00.000Z" },
+      {
+        payload: {
+          pair: "XDX/XRP",
+          bids: [{ price: 0.000029, base_size: 4000 }],
+          asks: [{ price: 0.00003, base_size: 2500 }],
+        },
+        timestamp: "2026-08-22T08:55:00.000Z",
+      },
+    ],
+    "XDX/XRP"
+  );
+  assert.equal(picked.as_of, "2026-08-22T08:55:00.000Z");
+  assert.equal(asOrderbookPayload(picked.payload).bids[0].base_size, 4000);
 });
 
 test("composeAmmBook keeps native sizes and measures AMM opposing at those prices", () => {
@@ -141,7 +176,7 @@ test("padOrderbookLevels keeps 20 slots and does not invent prices", () => {
     Array.from({ length: 25 }, (_, i) => ({ price: 0.00003 + i, base_size: 10 })),
     20
   );
-  assert.equal(long.length, 25);
+  assert.equal(long.length, 20);
   assert.ok(long.every((row) => row.placeholder !== true));
 });
 

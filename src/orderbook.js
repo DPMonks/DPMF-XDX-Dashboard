@@ -1,4 +1,4 @@
-import { AMM_CURVE_LEVELS, ammImpliedLevels, ammSpot, measureAmmAgainstDex } from "./ammCurve.js";
+import { ammSpot, measureAmmAgainstDex } from "./ammCurve.js";
 
 export const ORDERBOOK_PAIRS = ["XDX/XRP", "XDX/RLUSD"];
 export const FEATURED_ORDERBOOK_PAIRS = [
@@ -25,7 +25,7 @@ export function combineOrderbookSide(dexRows, ammRows, side = "bid") {
 }
 
 export function padOrderbookLevels(rows, count = ORDERBOOK_VISIBLE_LEVELS) {
-  const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
+  const list = (Array.isArray(rows) ? rows.filter(Boolean) : []).slice(0, count);
   if (list.length >= count) return list;
   const blanks = Array.from({ length: count - list.length }, () => ({
     price: null,
@@ -34,6 +34,22 @@ export function padOrderbookLevels(rows, count = ORDERBOOK_VISIBLE_LEVELS) {
     placeholder: true,
   }));
   return list.concat(blanks);
+}
+
+export function topDexLevels(rows, side = "bid", limit = ORDERBOOK_VISIBLE_LEVELS) {
+  const ask = String(side).toLowerCase() === "ask";
+  return [...(Array.isArray(rows) ? rows : [])]
+    .filter(
+      (row) =>
+        Number(row?.price) > 0 &&
+        Number(row?.base_size) > 0 &&
+        String(row.source || "dex").toLowerCase() !== "amm"
+    )
+    .sort((a, b) => {
+      const delta = Number(a.price) - Number(b.price);
+      return ask ? delta : -delta;
+    })
+    .slice(0, limit);
 }
 
 export function normalizeOrderbookPair(value) {
@@ -211,15 +227,13 @@ function firstOfferList(...lists) {
 
 export function extractDexSides(body = {}) {
   const nested =
-    body.book && typeof body.book === "object"
-      ? body.book
-      : body.dex && typeof body.dex === "object"
-        ? body.dex
-        : body.offers && typeof body.offers === "object" && !Array.isArray(body.offers)
-          ? body.offers
-          : body.orderbook && typeof body.orderbook === "object"
-            ? body.orderbook
-            : {};
+    (body.book && typeof body.book === "object" && body.book) ||
+    (body.dex && typeof body.dex === "object" && body.dex) ||
+    (body.offers && typeof body.offers === "object" && !Array.isArray(body.offers) && body.offers) ||
+    (body.orderbook && typeof body.orderbook === "object" && body.orderbook) ||
+    (body.result && typeof body.result === "object" && body.result) ||
+    (body.data && typeof body.data === "object" && body.data) ||
+    {};
   const bids = [];
   const asks = [];
 
@@ -242,6 +256,35 @@ export function extractDexSides(body = {}) {
     else bids.push({ ...next, side: "bid" });
   }
   return { bids, asks };
+}
+
+export function payloadHasNativeDex(raw, pair = "XDX/XRP") {
+  const body = asOrderbookPayload(raw, pair);
+  const extracted = extractDexSides(body);
+  const bids = nativeDexRows(extracted.bids.length ? extracted.bids : body.bids);
+  const asks = nativeDexRows(extracted.asks.length ? extracted.asks : body.asks);
+  return bids.length > 0 || asks.length > 0;
+}
+
+export function pickNativeBookRow(latest, historyRows = [], pair = "XDX/XRP") {
+  const name = normalizeOrderbookPair(pair);
+  const candidates = [latest, ...(Array.isArray(historyRows) ? historyRows : [])].filter(Boolean);
+  for (const row of candidates) {
+    const payload = row.payload != null ? row.payload : row;
+    if (payloadHasNativeDex(payload, name)) {
+      return {
+        payload,
+        pair: name,
+        as_of: orderBookRowStamp(row),
+      };
+    }
+  }
+  if (!latest) return null;
+  return {
+    payload: latest.payload != null ? latest.payload : latest,
+    pair: name,
+    as_of: orderBookRowStamp(latest),
+  };
 }
 
 export function nativeDexRows(rows) {
@@ -291,25 +334,21 @@ export function composeAmmBook(stored, reserves = {}, pair = "XDX/XRP") {
 
   const reserveMeta = { reserveBase, reserveQuote, tradingFee };
   const extracted = extractDexSides(base);
-  const dexBids = nativeDexRows(extracted.bids.length ? extracted.bids : base.bids);
-  const dexAsks = nativeDexRows(extracted.asks.length ? extracted.asks : base.asks);
-  const implied = ammImpliedLevels({
-    reserveBase,
-    reserveQuote,
-    tradingFee,
-    steps: ORDERBOOK_VISIBLE_LEVELS || AMM_CURVE_LEVELS,
-  });
+  const dexBids = topDexLevels(
+    nativeDexRows(extracted.bids.length ? extracted.bids : base.bids),
+    "bid"
+  );
+  const dexAsks = topDexLevels(
+    nativeDexRows(extracted.asks.length ? extracted.asks : base.asks),
+    "ask"
+  );
   const dexPresent = dexBids.length > 0 || dexAsks.length > 0;
   const bids = withCumulative(
-    dexBids.length
-      ? measureAmmAgainstDex(dexBids, reserveMeta, "bid")
-      : implied.bids,
+    dexBids.length ? measureAmmAgainstDex(dexBids, reserveMeta, "bid") : [],
     "bid"
   );
   const asks = withCumulative(
-    dexAsks.length
-      ? measureAmmAgainstDex(dexAsks, reserveMeta, "ask")
-      : implied.asks,
+    dexAsks.length ? measureAmmAgainstDex(dexAsks, reserveMeta, "ask") : [],
     "ask"
   );
   const present = bids.length > 0 || asks.length > 0;
@@ -329,7 +368,7 @@ export function composeAmmBook(stored, reserves = {}, pair = "XDX/XRP") {
     present,
     catching_up: !present,
     dex_present: dexPresent,
-    amm_implied: present && !dexPresent,
+    amm_implied: false,
     best_bid,
     best_ask,
     mid,
