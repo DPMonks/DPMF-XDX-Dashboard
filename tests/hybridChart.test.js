@@ -26,6 +26,7 @@ import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTick
 import { rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   fibBands,
+  fibExtent,
   fibPrice,
   nextDrawingState,
   previewDrawing,
@@ -411,6 +412,10 @@ test("fib retracement uses TradingView level colors and click order", () => {
   assert.equal(ghost.kind, "fib");
   assert.equal(ghost.a.price, 100);
   assert.equal(ghost.b.price, 0);
+  const span = fibExtent(a, b);
+  assert.equal(span.t0, 1);
+  assert.equal(span.t1, 5);
+  assert.ok(span.t1 - span.t0 < 10);
 });
 
 test("snapPoint locks to the nearest candle open high low or close", () => {

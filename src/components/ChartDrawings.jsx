@@ -1,4 +1,4 @@
-import { channelOffset, extendSegment, fibBands, raySegment, rangeStats } from "../chart/drawings";
+import { channelOffset, extendSegment, fibBands, fibExtent, raySegment, rangeStats } from "../chart/drawings";
 import { formatAxisPrice } from "../chart/axis";
 
 function stroke(row) {
@@ -25,10 +25,12 @@ function Line({ a, b, scale, color, dashed, marker }) {
   );
 }
 
-function FibRetracement({ row, scale, pad, width, dashed }) {
-  if (!row.a || !row.b) return null;
-  const x0 = Math.min(scale.x(row.a.t), scale.x(row.b.t));
-  const xRight = width - pad.r;
+function FibRetracement({ row, scale, dashed }) {
+  const span = fibExtent(row.a, row.b);
+  if (!span) return null;
+  const x0 = scale.x(span.t0);
+  const x1 = scale.x(span.t1);
+  const width = Math.max(1, x1 - x0);
   const bands = fibBands(row.a, row.b);
   return (
     <g className={dashed ? "hybrid-fib is-preview" : "hybrid-fib"}>
@@ -45,7 +47,7 @@ function FibRetracement({ row, scale, pad, width, dashed }) {
                 className="hybrid-fib-fill"
                 x={x0}
                 y={top}
-                width={Math.max(1, xRight - x0)}
+                width={width}
                 height={height}
                 style={{ fill: band.color, fillOpacity: 0.28 }}
               />
@@ -53,13 +55,13 @@ function FibRetracement({ row, scale, pad, width, dashed }) {
             <line
               className="hybrid-fib-line"
               x1={x0}
-              x2={xRight}
+              x2={x1}
               y1={y}
               y2={y}
               style={paint(band.color)}
               vectorEffect="non-scaling-stroke"
             />
-            <text className="hybrid-draw-label" x={xRight - 2} y={y - 3} textAnchor="end" style={{ fill: band.color }}>
+            <text className="hybrid-draw-label" x={x1 - 2} y={y - 3} textAnchor="end" style={{ fill: band.color }}>
               {band.level} ({formatAxisPrice(band.price)})
             </text>
           </g>
@@ -183,7 +185,7 @@ export default function ChartDrawings({
           );
         }
         if (row.kind === "fib" && row.a && row.b) {
-          return <FibRetracement key={key} row={row} scale={scale} pad={pad} width={width} dashed={dashed} />;
+          return <FibRetracement key={key} row={row} scale={scale} dashed={dashed} />;
         }
         if (row.kind === "text" && row.t && Number.isFinite(Number(row.price))) {
           return (

@@ -84,6 +84,14 @@ export function fibBands(a, b) {
   }).filter((row) => Number.isFinite(row.price));
 }
 
+export function fibExtent(a, b) {
+  if (!a || !b) return null;
+  const t0 = Number(a.t);
+  const t1 = Number(b.t);
+  if (!Number.isFinite(t0) || !Number.isFinite(t1)) return null;
+  return { t0: Math.min(t0, t1), t1: Math.max(t0, t1) };
+}
+
 export function allTools() {
   return TOOL_GROUPS.flatMap((group) => group.tools);
 }
