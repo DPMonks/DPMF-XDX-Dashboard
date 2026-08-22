@@ -17,7 +17,7 @@
     { "source": "/api/", "destination": "/api/index" },
     { "source": "/api/((?!xaman/).+)", "destination": "/api/index?path=$1" },
     {
-      "source": "/((?!api/|favicon\\.png|apple-touch-icon\\.png|og-image\\.png|icons\\.svg|robots\\.txt).*)",
+      "source": "/((?!api/|favicon\\.png|apple-touch-icon\\.png|og-image\\.png|og-image\\.jpg|icons\\.svg|robots\\.txt).*)",
       "destination": "/index.html"
     }
   ]
