@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAmm, getOrderbooks, getPrices, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
-import { CHART_PAIRS, CHART_VISIBLE_BARS, DEFAULT_INTERVAL, INTERVALS } from "../chart/intervals";
+import { CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, visibleBarsForInterval } from "../chart/intervals";
 import { averagesForWindow, MA_PERIODS, MA_TYPES, windowLastBars } from "../chart/candles";
 import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../chart/indicators";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
@@ -162,7 +162,7 @@ export default function HybridChart() {
       }),
     [pair, timeframe, sparkline, trades, prices, livePrice, now]
   );
-  const candles = useMemo(() => windowLastBars(series, CHART_VISIBLE_BARS), [series]);
+  const candles = useMemo(() => windowLastBars(series, visibleBarsForInterval(timeframe)), [series, timeframe]);
   const averages = useMemo(
     () =>
       averagesForWindow({

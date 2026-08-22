@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
-import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../chart/axis";
+import { barSlots, clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks } from "../chart/axis";
 import { candleBodyBox, candleBodyWidth } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
@@ -74,28 +74,29 @@ export default function HybridPlot({
   const rsiBottom = rsiTop + rsiH;
 
   const scale = useMemo(() => {
-    const start = view?.start || candles[0]?.t || 0;
-    const end = view?.end || candles[candles.length - 1]?.t || 1;
+    const start = candles[0]?.t || view?.start || 0;
+    const end = candles[candles.length - 1]?.t || view?.end || 1;
     const min = view?.min || 0;
     const max = view?.max || 1;
     const spanT = Math.max(end - start, 1);
     const spanP = Math.max(max - min, 1e-12);
+    const slots = barSlots(candles, { left: PAD.l, width: innerW });
     return {
-      x: (t) => PAD.l + ((t - start) / spanT) * innerW,
+      x: slots.x,
+      tAt: slots.tAt,
       y: (p) => PAD.t + (1 - (p - min) / spanP) * PRICE_H,
       start,
       end,
       min,
       max,
       spanT,
+      slot: slots.slot,
+      ticks: slots.ticks,
     };
   }, [view, candles, innerW]);
 
   const yTicks = useMemo(() => priceTicks(scale.min, scale.max, 6), [scale.min, scale.max]);
-  const xTicks = useMemo(
-    () => timeTicks(scale.start, scale.end, { count: 6, intervalId: interval }),
-    [scale.start, scale.end, interval]
-  );
+  const xTicks = useMemo(() => scale.ticks(6), [scale]);
   const volumes = useMemo(() => volumeWaveValues(candles), [candles]);
   useEffect(() => {
     const ids = averages.map((row) => row.id);
@@ -124,7 +125,7 @@ export default function HybridPlot({
         : mapped;
     const x = shifted.x;
     const y = shifted.y;
-    const t = scale.start + ((x - PAD.l) / innerW) * (scale.end - scale.start);
+    const t = scale.tAt ? scale.tAt(x) : scale.start + ((x - PAD.l) / innerW) * (scale.end - scale.start);
     const price = scale.max - ((y - PAD.t) / PRICE_H) * (scale.max - scale.min);
     const inPrice = y >= PAD.t - 2 && y <= plotBottom + 2 && x >= PAD.l && x <= width - PAD.r;
     const inVolume = volH > 0 && y >= volTop && y <= volBottom && x >= PAD.l && x <= width - PAD.r;

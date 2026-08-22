@@ -8,7 +8,7 @@ import {
   ticksToCandles,
   windowCandles,
 } from "./candles.js";
-import { CHART_MA_PAD, CHART_VISIBLE_BARS, intervalMs, isDailyOrLonger } from "./intervals.js";
+import { CHART_MA_PAD, intervalMs, isDailyOrLonger, visibleBarsForInterval } from "./intervals.js";
 import { quotePerXdx, stitchRlusdCandles } from "./pairQuote.js";
 
 export function lockedSnapshot() {
@@ -106,7 +106,7 @@ export function composePairCandles({
   }
   if (!isDailyOrLonger(interval)) {
     const step = intervalMs(interval);
-    const from = now - (CHART_VISIBLE_BARS + CHART_MA_PAD) * step;
+    const from = now - (visibleBarsForInterval(interval) + CHART_MA_PAD) * step;
     candles = expandDailyToInterval(candles, interval, from, now);
     const intra = ticksToCandles(liveTicks, interval, { continuous: false });
     const intraMap = new Map(candles.map((row) => [row.t, row]));

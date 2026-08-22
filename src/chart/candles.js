@@ -334,13 +334,16 @@ export function averagesForWindow({
 
 export function candleBodyWidth({ innerW, candles = [], start, end, stepMs = 86_400_000 } = {}) {
   const width = Number(innerW) || 0;
-  const span = Math.max(Number(end) - Number(start), 1);
-  let slot = (Number(stepMs) || 86_400_000) / span * width;
-  if (candles.length >= 2) {
-    const dt = (candles[candles.length - 1].t - candles[0].t) / (candles.length - 1);
-    slot = (dt / span) * width;
+  const count = Math.max(1, (Array.isArray(candles) ? candles : []).length);
+  const slot = width / count;
+  if (count >= 2 && Number(end) > Number(start) && Number(stepMs) > 0) {
+    const dt = (Number(candles[count - 1].t) - Number(candles[0].t)) / (count - 1);
+    const timeSlot = (dt / Math.max(Number(end) - Number(start), 1)) * width;
+    if (timeSlot > 0 && timeSlot < slot * 1.35) {
+      return Math.max(1.3, Math.min(Math.min(slot, timeSlot) * 0.42, width * 0.08));
+    }
   }
-  return Math.max(1.2, Math.min(slot * 0.23, width * 0.055));
+  return Math.max(1.3, Math.min(slot * 0.42, width * 0.08));
 }
 
 export function candleBodyBox({ width, height, hollow = false } = {}) {
@@ -349,8 +352,8 @@ export function candleBodyBox({ width, height, hollow = false } = {}) {
   if (!hollow) {
     return { width: w, height: h, strokeWidth: 1, offsetY: 0 };
   }
-  const nextW = Math.max(w, 4.8);
-  const nextH = Math.max(h, 4);
+  const nextW = w;
+  const nextH = Math.max(h, 2.2);
   return {
     width: nextW,
     height: nextH,
@@ -396,7 +399,43 @@ export function expandDailyToInterval(daily = [], intervalId, fromMs, toMs) {
       });
     }
   }
-  return out;
+  return spreadCarryFromDaily(out);
+}
+
+export function spreadCarryFromDaily(candles = []) {
+  const list = (Array.isArray(candles) ? candles : []).map((row) => ({ ...row }));
+  const groups = new Map();
+  list.forEach((row, index) => {
+    const day = bucketTime(row.t, "1D");
+    if (day == null) return;
+    if (!groups.has(day)) groups.set(day, []);
+    groups.get(day).push(index);
+  });
+  for (const indexes of groups.values()) {
+    if (indexes.length < 2) continue;
+    const seed = list[indexes.find((index) => list[index].source !== "carry") ?? indexes[0]];
+    if (!seed) continue;
+    const open = Number(seed.o) || Number(seed.c);
+    const close = Number(seed.c) || open;
+    const high = Number(seed.h) || Math.max(open, close);
+    const low = Number(seed.l) || Math.min(open, close);
+    if (!(open > 0) || !(close > 0)) continue;
+    const n = indexes.length;
+    const highI = Math.min(n - 1, Math.max(0, Math.round((n - 1) * 0.3)));
+    const lowI = Math.min(n - 1, Math.max(0, Math.round((n - 1) * 0.7)));
+    for (let i = 0; i < n; i += 1) {
+      const row = list[indexes[i]];
+      if (row.source === "live" || row.source === "sparkline" || row.source === "trade") continue;
+      const o = open + (close - open) * (i / n);
+      const c = open + (close - open) * ((i + 1) / n);
+      row.o = o;
+      row.c = c;
+      row.h = i === highI ? Math.max(high, o, c) : Math.max(o, c);
+      row.l = i === lowI ? Math.min(low, o, c) : Math.min(o, c);
+      if (row.source === "carry") row.source = "session";
+    }
+  }
+  return list;
 }
 
 export function trueRange(candles = []) {

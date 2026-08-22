@@ -20,12 +20,12 @@ import {
   expandDailyToInterval,
   windowLastBars,
 } from "../src/chart/candles.js";
-import { bucketTime, DEFAULT_INTERVAL } from "../src/chart/intervals.js";
+import { bucketTime, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
 import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
-import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
+import { barSlots, clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
 import { extendMaPoints, maCurvePoints, maPath, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   applyPlaceOffset,
@@ -255,7 +255,7 @@ test("volume wave spreads a daily print and stays a curve, not a spike", () => {
   assert.match(path, /C/);
 });
 
-test("candle bodies are a quarter of the previous slot so more bars fit", () => {
+test("candle bodies sit in equal slots so short timeframes stay side by side", () => {
   const hour = 3_600_000;
   const bars = Array.from({ length: 40 }, (_, index) => ({ t: index * hour }));
   const innerW = 858;
@@ -266,18 +266,18 @@ test("candle bodies are a quarter of the previous slot so more bars fit", () => 
     end: bars[39].t,
     stepMs: hour,
   });
-  const slot = innerW / 39;
-  const previous = Math.max(2, Math.min(slot * 0.92, innerW * 0.22));
-  assert.ok(Math.abs(width / previous - 0.25) < 0.05, `expected ~25% of ${previous}, got ${width}`);
+  const slot = innerW / 40;
+  assert.ok(width > 1.3);
+  assert.ok(width < slot * 0.6);
+  assert.equal(visibleBarsForInterval("15m"), 96);
 });
 
-test("hollow candle boxes stay wide enough to show an empty body", () => {
-  const solid = candleBodyBox({ width: 1.2, height: 1.2, hollow: false });
-  const hollow = candleBodyBox({ width: 1.2, height: 1.2, hollow: true });
-  assert.equal(solid.width, 1.2);
-  assert.ok(hollow.width >= 4);
-  assert.ok(hollow.height >= 4);
-  assert.ok(hollow.width - hollow.strokeWidth * 2 > 1.5);
+test("hollow candle boxes keep the slot width so packed 15m bars do not merge", () => {
+  const solid = candleBodyBox({ width: 3.2, height: 1.2, hollow: false });
+  const hollow = candleBodyBox({ width: 3.2, height: 1.2, hollow: true });
+  assert.equal(solid.width, 3.2);
+  assert.equal(hollow.width, 3.2);
+  assert.ok(hollow.height >= 2.2);
 });
 
 test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail", () => {
@@ -289,11 +289,12 @@ test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail"
     day + 5 * 3_600_000
   );
   assert.equal(expanded.length, 6);
-  assert.equal(expanded[0].h, 2);
-  assert.equal(expanded[1].c, 1.5);
-  assert.equal(expanded[1].source, "carry");
+  assert.ok(expanded[1].c !== expanded[1].o);
+  assert.equal(expanded[1].source, "session");
   assert.equal(windowLastBars(expanded, 2).length, 2);
   assert.equal(windowLastBars(expanded, 2)[0].t, expanded[4].t);
+  const slots = barSlots(expanded, { left: 0, width: 600 });
+  assert.ok(Math.abs(slots.x(expanded[1].t) - slots.x(expanded[0].t) - slots.slot) < 1e-6);
 });
 
 test("XDX/RLUSD backdate is XDX/XRP times that day's XRP/USD", () => {

@@ -33,6 +33,20 @@ export const DEFAULT_INTERVAL = "12h";
 export const CHART_VISIBLE_BARS = 280;
 export const CHART_MA_PAD = 200;
 
+export function visibleBarsForInterval(id) {
+  const ms = intervalMs(id);
+  if (ms <= 60_000) return 90;
+  if (ms <= 180_000) return 100;
+  if (ms <= 300_000) return 108;
+  if (ms <= 900_000) return 96;
+  if (ms <= 1_800_000) return 96;
+  if (ms <= 3_600_000) return 120;
+  if (ms <= 7_200_000) return 120;
+  if (ms <= 14_400_000) return 168;
+  if (ms <= 21_600_000) return 180;
+  return CHART_VISIBLE_BARS;
+}
+
 export function intervalMs(id) {
   return INTERVALS.find((row) => row.id === id)?.ms || 86_400_000;
 }

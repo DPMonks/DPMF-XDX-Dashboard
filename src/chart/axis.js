@@ -69,6 +69,43 @@ function steppedTicks(start, end, step, align = (t) => Math.ceil(t / step) * ste
   return ticks;
 }
 
+export function barSlots(candles = [], { left = 0, width = 0 } = {}) {
+  const rows = Array.isArray(candles) ? candles : [];
+  const n = Math.max(1, rows.length);
+  const slot = (Number(width) || 0) / n;
+  const times = rows.map((row) => Number(row.t));
+  return {
+    n,
+    slot,
+    x(t) {
+      if (!times.length) return left;
+      const time = Number(t);
+      if (time <= times[0]) return left + slot * 0.5;
+      if (time >= times[n - 1]) return left + (n - 0.5) * slot;
+      let i = 0;
+      while (i < n - 1 && times[i + 1] < time) i += 1;
+      const span = times[i + 1] - times[i] || 1;
+      return left + (i + (time - times[i]) / span + 0.5) * slot;
+    },
+    tAt(x) {
+      if (!times.length) return 0;
+      const raw = (Number(x) - left) / Math.max(slot, 1e-9) - 0.5;
+      const i = Math.max(0, Math.min(n - 2, Math.floor(raw)));
+      const f = Math.max(0, Math.min(1, raw - i));
+      const a = times[i];
+      const b = times[Math.min(n - 1, i + 1)];
+      return a + f * ((b ?? a) - a);
+    },
+    ticks(count = 6) {
+      if (!times.length) return [];
+      const want = Math.min(Math.max(2, Number(count) || 6), times.length);
+      if (times.length <= want) return times.slice();
+      const step = (times.length - 1) / (want - 1);
+      return Array.from({ length: want }, (_, index) => times[Math.round(index * step)]);
+    },
+  };
+}
+
 export function timeTicks(start, end, { count = 6, intervalId = "1D" } = {}) {
   const from = Number(start);
   const to = Number(end);
