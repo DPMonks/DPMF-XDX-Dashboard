@@ -1529,7 +1529,8 @@ body {
 .wallet-book.is-filled,
 .wallet-activity.is-filled,
 .wallet-hero-usd.is-filled,
-.wallet-hero-gbp.is-filled {
+.wallet-hero-gbp.is-filled,
+.wallet-fees.is-filled {
   animation: walletFill 0.42s ease;
 }
 
