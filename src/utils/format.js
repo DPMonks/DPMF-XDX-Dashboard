@@ -106,6 +106,15 @@ export function formatSharePercent(value, locale) {
   })}%`;
 }
 
+export function formatSupplySharePercent(value, locale) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  return `${Math.min(100, num).toLocaleString(localeOf(locale), {
+    minimumFractionDigits: 6,
+    maximumFractionDigits: 6,
+  })}%`;
+}
+
 export function formatWhen(value, locale) {
   if (!value) return "—";
   const date = new Date(value);

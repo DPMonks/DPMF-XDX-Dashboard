@@ -1581,7 +1581,7 @@ body {
 
 .wallet-micro {
   display: grid;
-  grid-template-columns: 72px 1fr 56px;
+  grid-template-columns: minmax(92px, auto) 1fr minmax(88px, auto);
   gap: 6px;
   align-items: center;
   font-size: 11px;
@@ -1590,6 +1590,13 @@ body {
 
 .wallet-micro span:first-child {
   color: var(--dpmf-text-muted);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.wallet-micro b {
+  text-align: end;
+  white-space: nowrap;
 }
 
 .wallet-micro-track {

@@ -31,6 +31,7 @@ const en = {
   totalXrp: "Total XRP",
   richListPosition: "XDX rich list",
   supplyShare: "Supply share",
+  xdxSupplyShare: "XDX supply share",
   borrowed: "Borrowed",
   lending: "Lending",
   lpPositions: "LP positions",

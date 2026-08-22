@@ -1,3 +1,5 @@
+import { XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
+
 export const DROPS = 1_000_000;
 export const DEFAULT_RESERVE_BASE_DROPS = 1_000_000;
 export const DEFAULT_RESERVE_INC_DROPS = 200_000;
@@ -81,13 +83,17 @@ export function normalizeWalletPair(value) {
   return `XDX/${raw}`;
 }
 
-export function supplyShares(xdx, circulating, ammXdx) {
-  const bal = num(xdx);
-  const circ = num(circulating);
-  const amm = num(ammXdx);
+function cappedShare(part, total) {
+  const bal = num(part);
+  const den = num(total);
+  if (bal == null || !(den > 0)) return null;
+  return Math.min(100, (bal / den) * 100);
+}
+
+export function supplyShares(xdx, circulating, totalSupply) {
   return {
-    circulatingPct: bal != null && circ > 0 ? (bal / circ) * 100 : null,
-    ammPct: bal != null && amm > 0 ? (bal / amm) * 100 : null,
+    circulatingPct: cappedShare(xdx, circulating),
+    supplyPct: cappedShare(xdx, totalSupply),
   };
 }
 
@@ -227,7 +233,7 @@ export function emptyWalletSnapshot(address = null) {
     filled: false,
     xrp: xrpReserveBreakdown({}),
     xdx: xdxFiatValues(null),
-    supply: { circulatingPct: null, ammPct: null, circulating: null, ammXdx: null },
+    supply: { circulatingPct: null, supplyPct: null, circulating: null, totalSupply: null },
     lp: [],
     rank: null,
     book: null,
@@ -270,12 +276,9 @@ export function composeWalletSnapshot({
   if (fiat.usd == null && num(networth.totalUsd)) fiat.usd = Number(networth.totalUsd);
   if (fiat.gbp == null && num(networth.totalGbp)) fiat.gbp = Number(networth.totalGbp);
 
-  const ammXdx = (Array.isArray(pools) ? pools : []).reduce(
-    (sum, pool) => sum + (num(pool.reserve_asset) || 0),
-    0
-  );
   const circulating = num(token.circulating);
-  const shares = supplyShares(xdxBal, circulating, ammXdx);
+  const totalSupply = num(token.totalSupply ?? token.total_supply) || XDX_TOTAL_SUPPLY;
+  const shares = supplyShares(xdxBal, circulating, totalSupply);
 
   const poolByName = indexPoolsByPair(pools);
   const lpByPair = new Map();
@@ -304,7 +307,7 @@ export function composeWalletSnapshot({
     supply: {
       ...shares,
       circulating,
-      ammXdx,
+      totalSupply,
     },
     lp,
     rank: num(rank ?? token.rank ?? balances.rank),

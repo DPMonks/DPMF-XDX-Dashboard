@@ -7,6 +7,7 @@ import {
   formatNumber,
   formatQuotePerBase,
   formatSharePercent,
+  formatSupplySharePercent,
   formatToken,
   formatUsd,
   formatXrpPrice,
@@ -90,9 +91,11 @@ function XdxBalancePanel({ xdx, locale, t, empty }) {
 
 function SupplyShareBars({ supply, locale, t, empty }) {
   const circ = useMorph(empty ? 0 : supply.circulatingPct);
-  const amm = useMorph(empty ? 0 : supply.ammPct);
-  const circWidth = empty ? 0 : Math.min(100, Math.max(Number(circ) > 0 ? 4 : 0, Number(circ) * 12));
-  const ammWidth = empty ? 0 : Math.min(100, Math.max(Number(amm) > 0 ? 4 : 0, Number(amm) * 12));
+  const supplyPct = useMorph(empty ? 0 : supply.supplyPct);
+  const circWidth = empty ? 0 : Math.min(100, Math.max(Number(circ) > 0 ? 4 : 0, Number(circ)));
+  const supplyWidth = empty
+    ? 0
+    : Math.min(100, Math.max(Number(supplyPct) > 0 ? 4 : 0, Number(supplyPct)));
   return (
     <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
       <p className="wallet-panel-title">{t.supplyShare}</p>
@@ -104,11 +107,11 @@ function SupplyShareBars({ supply, locale, t, empty }) {
         <b>{empty ? "—" : formatSharePercent(circ, locale)}</b>
       </div>
       <div className="wallet-micro">
-        <span>{t.amm}</span>
+        <span>{t.xdxSupplyShare}</span>
         <span className="wallet-micro-track">
-          <i className="is-amm" style={{ width: `${ammWidth}%` }} />
+          <i className="is-amm" style={{ width: `${supplyWidth}%` }} />
         </span>
-        <b>{empty ? "—" : formatSharePercent(amm, locale)}</b>
+        <b>{empty ? "—" : formatSupplySharePercent(supplyPct, locale)}</b>
       </div>
       <div className="wallet-micro is-pending">
         <span>{t.borrowed}</span>

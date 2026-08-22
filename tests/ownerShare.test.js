@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { XDX_TOTAL_SUPPLY } from "../src/constants/ledger.js";
-import { formatNumber, shareOf } from "../src/utils/format.js";
+import { formatNumber, formatSupplySharePercent, shareOf } from "../src/utils/format.js";
 
 test("XDX owner share is wallet balance / 10B total supply", () => {
   const top = 3_016_093_753.766;
@@ -14,6 +14,12 @@ test("XDX owner share is wallet balance / 10B total supply", () => {
   const againstDetected = shareOf(top, detectedWallets);
   assert.ok(againstDetected > 32);
   assert.ok(share < againstDetected);
+});
+
+test("formatSupplySharePercent keeps six decimal places and stays at or under 100%", () => {
+  assert.equal(formatSupplySharePercent(0.000001, "en-US"), "0.000001%");
+  assert.equal(formatSupplySharePercent(30.16093753766, "en-US"), "30.160938%");
+  assert.equal(formatSupplySharePercent(2104.87, "en-US"), "100.000000%");
 });
 
 test("formatNumber keeps a missing metric blank instead of zero", () => {

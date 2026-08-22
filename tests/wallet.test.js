@@ -63,10 +63,14 @@ test("xrpBarPercents keeps total XRP as a full reference bar", () => {
   assert.equal(blank.totalPct, 0);
 });
 
-test("supplyShares uses circulating and AMM XDX, not arcs", () => {
-  const shares = supplyShares(1_200_000, 10_000_000_000, 80_000_000);
+test("supplyShares compares the wallet to circulating and total XDX, never above 100%", () => {
+  const shares = supplyShares(1_200_000, 10_000_000_000, 10_000_000_000);
   assert.ok(Math.abs(shares.circulatingPct - 0.012) < 1e-9);
-  assert.ok(Math.abs(shares.ammPct - 1.5) < 1e-9);
+  assert.ok(Math.abs(shares.supplyPct - 0.012) < 1e-9);
+
+  const capped = supplyShares(20_000_000_000, 5_000_000_000, 10_000_000_000);
+  assert.equal(capped.circulatingPct, 100);
+  assert.equal(capped.supplyPct, 100);
 });
 
 test("xdxFiatValues keeps USD and GBP from recorded prices", () => {
