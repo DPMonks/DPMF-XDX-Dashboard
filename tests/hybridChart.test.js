@@ -25,7 +25,7 @@ import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/cha
 import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
-import { barSlots, clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
+import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
 import { extendMaPoints, maCurvePoints, maPath, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   applyPlaceOffset,
@@ -443,6 +443,18 @@ test("priceTicks and timeTicks fill left and bottom chart scales", () => {
   assert.equal(formatAxisTime(start, { spanMs: end - start, intervalId: "1D", locale: "en-GB" }), "24 Jul");
   assert.match(formatCursorWhen(start, "en-GB"), /24 Jul 2026/);
   assert.match(formatCursorWhen(start, "en-GB"), /00:00/);
+});
+
+test("equalGrid spaces time and price lines the same on every timeframe", () => {
+  assert.deepEqual(equalGrid(4, 0, 100), [0, 25, 50, 75, 100]);
+  const cols = equalGrid(8, 84, 800);
+  assert.equal(cols.length, 9);
+  assert.equal(cols[0], 84);
+  assert.equal(cols[8], 884);
+  const gap = cols[1] - cols[0];
+  for (let i = 1; i < cols.length; i += 1) {
+    assert.equal(cols[i] - cols[i - 1], gap);
+  }
 });
 
 test("tool place mark sits up and right of the mouse so the pointer is not on the drop", () => {

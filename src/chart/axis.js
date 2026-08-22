@@ -69,6 +69,13 @@ function steppedTicks(start, end, step, align = (t) => Math.ceil(t / step) * ste
   return ticks;
 }
 
+export function equalGrid(count, start, length) {
+  const n = Math.max(1, Math.trunc(Number(count) || 1));
+  const origin = Number(start) || 0;
+  const span = Number(length) || 0;
+  return Array.from({ length: n + 1 }, (_, index) => origin + (span * index) / n);
+}
+
 export function barSlots(candles = [], { left = 0, width = 0 } = {}) {
   const rows = Array.isArray(candles) ? candles : [];
   const n = Math.max(1, rows.length);

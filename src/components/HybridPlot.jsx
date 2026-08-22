@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
-import { barSlots, clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks } from "../chart/axis";
+import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks } from "../chart/axis";
 import { candleBodyBox, candleBodyWidth } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
@@ -12,6 +12,8 @@ const PRICE_H = 348;
 const VOL_H = 72;
 const RSI_H = 72;
 const PANE_GAP = 8;
+const GRID_COLS = 8;
+const GRID_ROWS = 6;
 const PAD = { l: 84, r: 18, t: 16, b: 36 };
 const UP = "#26a69a";
 const DOWN = "#ef5350";
@@ -366,36 +368,38 @@ export default function HybridPlot({
           <rect className="hybrid-plot-frame" x={PAD.l} y={rsiTop} width={innerW} height={rsiH} />
         ) : null}
 
-        {yTicks.map((price) => (
-          <g key={`yt-${price}`}>
-            <line
-              className="hybrid-grid"
-              x1={PAD.l}
-              x2={width - PAD.r}
-              y1={scale.y(price)}
-              y2={scale.y(price)}
-            />
-            <text className="hybrid-axis is-price" x={PAD.l - 8} y={scale.y(price) + 3} textAnchor="end">
-              {formatAxisPrice(price)}
-            </text>
+        {equalGrid(GRID_ROWS, PAD.t, PRICE_H).map((y) => (
+          <line key={`gy-${y}`} className="hybrid-grid" x1={PAD.l} x2={width - PAD.r} y1={y} y2={y} />
+        ))}
+        {volH > 0
+          ? equalGrid(2, volTop, volH).map((y) => (
+              <line key={`gvy-${y}`} className="hybrid-grid" x1={PAD.l} x2={width - PAD.r} y1={y} y2={y} />
+            ))
+          : null}
+        {rsiH > 0
+          ? equalGrid(2, rsiTop, rsiH).map((y) => (
+              <line key={`gry-${y}`} className="hybrid-grid" x1={PAD.l} x2={width - PAD.r} y1={y} y2={y} />
+            ))
+          : null}
+        {equalGrid(GRID_COLS, PAD.l, innerW).map((x) => (
+          <g key={`gx-${x}`}>
+            <line className="hybrid-grid is-time" x1={x} x2={x} y1={PAD.t} y2={plotBottom} />
+            {volH > 0 ? <line className="hybrid-grid is-time" x1={x} x2={x} y1={volTop} y2={volBottom} /> : null}
+            {rsiH > 0 ? <line className="hybrid-grid is-time" x1={x} x2={x} y1={rsiTop} y2={rsiBottom} /> : null}
           </g>
+        ))}
+        {yTicks.map((price) => (
+          <text key={`yt-${price}`} className="hybrid-axis is-price" x={PAD.l - 8} y={scale.y(price) + 3} textAnchor="end">
+            {formatAxisPrice(price)}
+          </text>
         ))}
         {xTicks.map((stamp) => {
           const x = scale.x(stamp);
           const anchor = x < PAD.l + 28 ? "start" : x > width - PAD.r - 28 ? "end" : "middle";
           return (
-            <g key={`xt-${stamp}`}>
-              <line className="hybrid-grid is-time" x1={x} x2={x} y1={PAD.t} y2={plotBottom} />
-              {volH > 0 ? (
-                <line className="hybrid-grid is-time" x1={x} x2={x} y1={volTop} y2={volBottom} />
-              ) : null}
-              {rsiH > 0 ? (
-                <line className="hybrid-grid is-time" x1={x} x2={x} y1={rsiTop} y2={rsiBottom} />
-              ) : null}
-              <text className="hybrid-axis is-time" x={x} y={height - 10} textAnchor={anchor}>
-                {formatAxisTime(stamp, { spanMs: scale.spanT, intervalId: interval, locale })}
-              </text>
-            </g>
+            <text key={`xt-${stamp}`} className="hybrid-axis is-time" x={x} y={height - 10} textAnchor={anchor}>
+              {formatAxisTime(stamp, { spanMs: scale.spanT, intervalId: interval, locale })}
+            </text>
           );
         })}
 
@@ -486,7 +490,7 @@ export default function HybridPlot({
           ) : null}
 
           {averages.map((row) => {
-            const drawing = glowIds.includes(row.id);
+            const drawing = glowIds.includes(row.id) || !seenMa.current.has(row.id);
             const d = maPath(
               extendMaPoints(
                 maCurvePoints(candles, row.values).map((point) => ({
@@ -503,7 +507,10 @@ export default function HybridPlot({
                   className={drawing ? "hybrid-sma is-drawing" : "hybrid-sma"}
                   d={d}
                   pathLength="1"
-                  style={{ stroke: row.color }}
+                  style={{
+                    stroke: row.color,
+                    ...(drawing ? { strokeDasharray: 1, strokeDashoffset: 1 } : {}),
+                  }}
                 />
                 {drawing ? (
                   <path

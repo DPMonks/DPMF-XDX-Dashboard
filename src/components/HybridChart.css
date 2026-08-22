@@ -248,7 +248,7 @@
 .hybrid-sma.is-drawing {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: hybrid-ma-draw 2.6s linear forwards;
+  animation: hybrid-ma-draw 2.6s linear both;
 }
 
 .hybrid-sma-glow {
@@ -257,7 +257,7 @@
   stroke-linecap: round;
   stroke-dasharray: 0.018 1;
   filter: drop-shadow(0 0 7px currentColor);
-  animation: hybrid-ma-tip 2.6s linear forwards;
+  animation: hybrid-ma-tip 2.6s linear both;
   pointer-events: none;
 }
 
@@ -488,13 +488,10 @@
   stroke-width: 1.15;
 }
 
-.hybrid-grid {
-  stroke: #1e222d;
-  stroke-width: 1;
-}
-
+.hybrid-grid,
 .hybrid-grid.is-time {
-  stroke: rgba(0, 234, 255, 0.1);
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 1;
 }
 
 .hybrid-axis {
