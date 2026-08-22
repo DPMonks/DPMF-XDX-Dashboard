@@ -13,6 +13,26 @@ export function xummCredential(...names) {
   return "";
 }
 
+export function xummKey() {
+  return xummCredential("XUMM_API_KEY", "XUMM_APIKEY", "VITE_XUMM_API_KEY", "VITE_XUMM_APIKEY");
+}
+
+export function xummSecret() {
+  return xummCredential(
+    "XUMM_API_SECRET",
+    "XUMM_APISECRET",
+    "VITE_XUMM_API_SECRET",
+    "VITE_XUMM_APISECRET"
+  );
+}
+
+export function xummConfigured() {
+  return {
+    key: Boolean(xummKey()),
+    secret: Boolean(xummSecret()),
+  };
+}
+
 export function requestOrigin(req) {
   const headers = req?.headers || {};
   const proto = String(headers["x-forwarded-proto"] || "https")
@@ -50,21 +70,26 @@ export function xamanErrorMessage(raw, fallback = "Failed to start Xaman sign-in
   if (typeof raw?.message === "string" && raw.message) return raw.message;
   const code = Number(raw?.error?.code ?? raw?.code);
   if (AUTH_CODES.has(code)) {
-    return "Xaman rejected the app keys. Check XUMM_API_KEY and XUMM_API_SECRET on Vercel Production, and add this site as a Xaman return URL.";
+    const configured = xummConfigured();
+    if (!configured.key || !configured.secret) {
+      return "Xaman API keys are missing on this host. Set XUMM_API_KEY and XUMM_API_SECRET on Vercel Production (no VITE_ prefix on the secret).";
+    }
+    return "Xaman rejected the app keys. Check XUMM_API_KEY and XUMM_API_SECRET on Vercel Production, and add https://xdx-exchange.dpmf.technology plus the Vercel host as Xaman return URLs.";
   }
   if (Number.isFinite(code)) return `Xaman sign-in failed (${code})`;
   return fallback;
 }
 
 export function xummHeaders(origin) {
-  const key = xummCredential("XUMM_API_KEY", "VITE_XUMM_API_KEY");
-  const secret = xummCredential("XUMM_API_SECRET", "VITE_XUMM_API_SECRET");
+  const key = xummKey();
+  const secret = xummSecret();
   if (!key || !secret) {
     throw new Error("XUMM_API_KEY and XUMM_API_SECRET are not configured on the dashboard");
   }
   const headers = {
     "Content-Type": "application/json",
     Accept: "application/json",
+    "User-Agent": "DPMF-XDX-Dashboard/1.0",
     "x-api-key": key,
     "x-api-secret": secret,
   };

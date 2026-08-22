@@ -18,6 +18,8 @@ import {
   orderBookRowStamp,
   padOrderbookLevels,
   pickNativeBookRow,
+  projectDexThroughXrp,
+  quotePerXrpFromSpots,
   sameOrderbookPair,
   sortOrderbookPairs,
   topDexLevels,
@@ -95,19 +97,75 @@ test("ammSizeToPrice grows as price walks further from spot", () => {
   assert.notEqual(near.base_size, far.base_size);
 });
 
-test("composeAmmBook does not invent AMM rungs when native DEX is empty", () => {
+test("composeAmmBook fills empty native DEX from the pair AMM curve", () => {
   const book = composeAmmBook(emptyOrderbook("XDX/XIO"), {
     reserve_asset: 51_000_000,
     reserve_currency: 120_000,
     trading_fee: 1000,
   }, "XDX/XIO");
   assert.equal(book.pair, "XDX/XIO");
-  assert.equal(book.present, false);
+  assert.equal(book.present, true);
   assert.equal(book.dex_present, false);
-  assert.equal(book.amm_implied, false);
-  assert.deepEqual(book.bids, []);
-  assert.deepEqual(book.asks, []);
+  assert.equal(book.amm_implied, true);
+  assert.equal(book.bids.length, 20);
+  assert.equal(book.asks.length, 20);
+  assert.ok(book.bids.every((row) => row.source === "amm"));
+  assert.ok(book.asks.every((row) => row.source === "amm"));
+  assert.ok(book.bids[0].price > book.bids[19].price);
+  assert.ok(book.asks[0].price < book.asks[19].price);
   assert.deepEqual(book.amm.levels, []);
+});
+
+test("quotePerXrpFromSpots and projectDexThroughXrp convert XDX/XRP DEX into the quote asset", () => {
+  assert.equal(quotePerXrpFromSpots(0.00005, 0.000025), 2);
+  const bridged = projectDexThroughXrp(
+    {
+      bids: [{ price: 0.00003, base_size: 1000, source: "dex" }],
+      asks: [{ price: 0.00004, base_size: 2000, source: "dex" }],
+    },
+    2
+  );
+  assert.equal(bridged.bids[0].source, "bridge");
+  assert.equal(bridged.asks[0].source, "bridge");
+  assert.ok(Math.abs(bridged.bids[0].price - 0.00006) < 1e-12);
+  assert.equal(bridged.bids[0].base_size, 1000);
+});
+
+test("composeAmmBook bridges the XDX/XRP tape into a thin quote pair", () => {
+  const xrp = composeAmmBook(
+    {
+      pair: "XDX/XRP",
+      bids: [{ price: 0.00003, base_size: 4000 }],
+      asks: [{ price: 0.00004, base_size: 2500 }],
+    },
+    {
+      reserve_asset: 63_000_000,
+      reserve_currency: 1875,
+      trading_fee: 1000,
+    },
+    "XDX/XRP"
+  );
+  const book = composeAmmBook(
+    {
+      pair: "XDX/RLUSD",
+      bids: [],
+      asks: [{ price: 0.03, base_size: 1_000_000 }],
+    },
+    {
+      reserve_asset: 50_000_000,
+      reserve_currency: 2500,
+      trading_fee: 1000,
+    },
+    "XDX/RLUSD",
+    { xrpBook: xrp }
+  );
+  assert.equal(book.dex_present, true);
+  assert.equal(book.amm_implied, true);
+  assert.ok(book.asks.some((row) => row.source === "dex" && row.base_size === 1_000_000));
+  assert.ok(book.bids.some((row) => row.source === "bridge"));
+  assert.ok(book.asks.some((row) => row.source === "bridge" || row.source === "amm"));
+  assert.ok(book.bids.length >= 20);
+  assert.ok(book.asks.length >= 20);
 });
 
 test("topDexLevels keeps the 20 native offers closest to price", () => {
@@ -115,13 +173,13 @@ test("topDexLevels keeps the 20 native offers closest to price", () => {
     Array.from({ length: 30 }, (_, i) => ({
       price: 0.00002 + i * 0.0000001,
       base_size: 100 + i,
-      source: i === 3 ? "amm" : "dex",
+      source: i === 3 ? "amm" : i === 5 ? "bridge" : "dex",
     })),
     "bid",
     20
   );
   assert.equal(bids.length, 20);
-  assert.ok(bids.every((row) => row.source !== "amm"));
+  assert.ok(bids.every((row) => row.source !== "amm" && row.source !== "bridge"));
   assert.equal(bids[0].price, 0.00002 + 29 * 0.0000001);
   assert.ok(bids[0].price > bids[19].price);
 });
@@ -196,16 +254,17 @@ test("composeAmmBook keeps native sizes and measures AMM opposing at those price
     },
     "XDX/XRP"
   );
+  const nativeBids = book.bids.filter((row) => row.source === "dex");
+  const nativeAsks = book.asks.filter((row) => row.source === "dex");
   assert.equal(book.present, true);
   assert.equal(book.dex_present, true);
-  assert.equal(book.amm_implied, false);
-  assert.equal(book.bids[0].source, "dex");
-  assert.equal(book.bids[0].base_size, 5_000);
-  assert.equal(book.bids[1].base_size, 12_400);
-  assert.notEqual(book.bids[0].base_size, book.bids[1].base_size);
-  assert.ok(book.bids[1].amm_through > book.bids[0].amm_through);
-  assert.equal(book.asks[0].amm_opposing, 0);
-  assert.ok(book.asks[0].amm_through > 0);
+  assert.equal(book.amm_implied, true);
+  assert.equal(nativeBids.length, 2);
+  assert.equal(nativeBids[0].base_size, 5_000);
+  assert.equal(nativeBids[1].base_size, 12_400);
+  assert.ok(nativeBids[1].amm_through > nativeBids[0].amm_through);
+  assert.equal(nativeAsks[0].amm_opposing, 0);
+  assert.ok(nativeAsks[0].amm_through > 0);
   assert.deepEqual(book.amm.levels, []);
 });
 

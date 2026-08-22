@@ -5,6 +5,7 @@ import {
   cleanCredential,
   requestOrigin,
   xamanErrorMessage,
+  xummConfigured,
 } from "../api/xaman/_xumm.js";
 import { normalizePayload } from "../src/xaman/xamanClient.js";
 
@@ -39,6 +40,12 @@ test("xamanErrorMessage does not stringify Xaman error objects", () => {
   });
   assert.equal(message.includes("[object Object]"), false);
   assert.match(message, /XUMM_API_KEY|return URL|811/);
+});
+
+test("xummConfigured reports key and secret presence without exposing them", () => {
+  const configured = xummConfigured();
+  assert.equal(typeof configured.key, "boolean");
+  assert.equal(typeof configured.secret, "boolean");
 });
 
 test("normalizePayload reads the Xaman QR refs", () => {

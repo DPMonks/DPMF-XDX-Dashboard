@@ -56,8 +56,8 @@ function BookSide({ title, rows, side, locale, t }) {
           <div
             key={`${side}-${row.level ?? index}-${row.price ?? "empty"}`}
             className={`orderbook-row is-${side}${row.source === "amm" ? " is-amm" : ""}${
-              row.placeholder ? " is-empty" : ""
-            }`}
+              row.source === "bridge" ? " is-bridge" : ""
+            }${row.placeholder ? " is-empty" : ""}`}
             role="listitem"
           >
             {!row.placeholder ? (
@@ -241,7 +241,9 @@ export default function OrderBook() {
         <BookSide title={t.asks} rows={askRows} side="ask" locale={locale} t={t} />
       </div>
 
-      {book.dex_present ? (
+      {book.amm_implied ? (
+        <p className="orderbook-asof">{t.ammImplied || t.ammDepth}</p>
+      ) : book.dex_present ? (
         <p className="orderbook-asof">{t.ammDepth}</p>
       ) : (
         <p className="orderbook-asof">{t.emptyOrderbook}</p>

@@ -36,6 +36,7 @@ import {
   keepLastGoodBook,
   normalizeOrderbookPair,
   pickNativeBookRow,
+  quotePerXrpFromSpots,
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
 } from "../src/orderbook.js";
@@ -910,10 +911,10 @@ async function loadNativeBookRow(db, pair = "XDX/XRP") {
   return pickNativeBookRow(rowsForPair(latest.rows, name)[0], rowsForPair(history.rows, name), name);
 }
 
-async function composeStoredBook(stored, pair, reserveIndex, xrpPool, pool) {
+async function composeStoredBook(stored, pair, reserveIndex, xrpPool, pool, extras = {}) {
   const name = normalizeOrderbookPair(pair);
   const reserves = loadPairReserves(name, reserveIndex, xrpPool, pool);
-  return composeAmmBook(stored || emptyOrderbook(name), reserves, name);
+  return composeAmmBook(stored || emptyOrderbook(name), reserves, name, extras);
 }
 
 const lastGoodBooks = new Map();
@@ -923,7 +924,7 @@ function rememberGoodBook(pair, book) {
   lastGoodBooks.set(normalizeOrderbookPair(pair), book);
 }
 
-async function withLiveTape(composed, pair, pool) {
+async function withLiveTape(composed, pair, pool, extras = {}) {
   const name = normalizeOrderbookPair(pair);
   if (composed?.dex_present) {
     rememberGoodBook(name, composed);
@@ -940,7 +941,8 @@ async function withLiveTape(composed, pair, pool) {
           trading_fee: composed.amm?.trading_fee,
           price: composed.amm?.price,
         },
-        name
+        name,
+        extras
       ),
       as_of: live.as_of || composed.as_of,
       source: "xrpl",
@@ -969,8 +971,17 @@ async function loadOrderbook(db, pair = "XDX/XRP") {
         source: "db",
       }
     : emptyOrderbook(name);
-  const composed = await composeStoredBook(stored, name, reserveIndex, xrpPool, pool);
-  const filled = await withLiveTape(composed, name, pool);
+  let extras = {};
+  if (name !== "XDX/XRP") {
+    const xrpBook = await loadOrderbook(db, "XDX/XRP");
+    const reserves = loadPairReserves(name, reserveIndex, xrpPool, pool);
+    extras = {
+      xrpBook,
+      quotePerXrp: quotePerXrpFromSpots(reserves.price, xrpBook?.amm?.price),
+    };
+  }
+  const composed = await composeStoredBook(stored, name, reserveIndex, xrpPool, pool, extras);
+  const filled = await withLiveTape(composed, name, pool, extras);
   return {
     ...filled,
     as_of: filled.as_of || stored.as_of || null,
@@ -1091,6 +1102,25 @@ async function loadOrderbooks(db) {
       };
     })
   );
+
+  const xrpBook = books["XDX/XRP"];
+  const xrpSpot = xrpBook?.amm?.price;
+  for (const pair of pairs) {
+    if (pair === "XDX/XRP") continue;
+    const pool = (lp.pools || []).find(
+      (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
+    );
+    const reserves = loadPairReserves(pair, reserveIndex, xrpPool, pool);
+    const extras = {
+      xrpBook,
+      quotePerXrp: quotePerXrpFromSpots(reserves.price || books[pair]?.amm?.price, xrpSpot),
+    };
+    books[pair] = {
+      ...composeAmmBook(books[pair], reserves, pair, extras),
+      as_of: books[pair]?.as_of || null,
+      source: books[pair]?.source || "db",
+    };
+  }
 
   return {
     quotes: pairs.map((pair) => pair.split("/")[1]).filter(Boolean),

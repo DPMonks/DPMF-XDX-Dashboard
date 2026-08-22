@@ -331,6 +331,17 @@ function emptyCatalog() {
   };
 }
 
+function composeCatalogBook(raw, pair, xrpBook) {
+  const name = normalizeOrderbookPair(pair);
+  const reserves = raw?.amm || {};
+  if (name === "XDX/XRP") {
+    return composeAmmBook(raw, reserves, name);
+  }
+  return composeAmmBook(raw, reserves, name, {
+    xrpBook: xrpBook || lastOrderbooks?.books?.["XDX/XRP"] || null,
+  });
+}
+
 function ingestOrderbooks(body, pairHint = "XDX/XRP") {
   if (!body || typeof body !== "object") return lastOrderbooks;
   if (body.books && typeof body.books === "object") {
@@ -339,10 +350,16 @@ function ingestOrderbooks(body, pairHint = "XDX/XRP") {
       ...(Array.isArray(body.pairs) ? body.pairs : []),
       ...Object.keys(body.books),
     ]);
+    const xrpRaw = body.books["XDX/XRP"] || emptyOrderbook("XDX/XRP");
+    const xrpBook = composeAmmBook(xrpRaw, xrpRaw.amm || {}, "XDX/XRP");
     const books = {};
     for (const pair of names) {
+      if (pair === "XDX/XRP") {
+        books[pair] = xrpBook;
+        continue;
+      }
       const raw = body.books[pair] || body[pair] || emptyOrderbook(pair);
-      books[pair] = composeAmmBook(raw, raw.amm || {}, pair);
+      books[pair] = composeCatalogBook(raw, pair, xrpBook);
     }
     lastOrderbooks = mergeOrderbookPayloads(lastOrderbooks, {
       quotes: names.map((pair) => pair.split("/")[1]).filter(Boolean),
@@ -356,7 +373,7 @@ function ingestOrderbooks(body, pairHint = "XDX/XRP") {
 
   const name = normalizeOrderbookPair(pairHint || body.pair || "XDX/XRP");
   const raw = body.book || body;
-  const book = composeAmmBook(raw, raw.amm || {}, name);
+  const book = composeCatalogBook(raw, name, lastOrderbooks?.books?.["XDX/XRP"]);
   lastOrderbooks = mergeOrderbookPayloads(lastOrderbooks || emptyCatalog(), {
     books: { [name]: book },
   });

@@ -151,7 +151,10 @@ export function measureAmmAgainstDex(rows, reserves = {}, tapeSide = "bid") {
     const through = side === "bid" ? fill.side === "bid" : fill.side === "ask";
     return {
       ...row,
-      source: row?.source === "amm" ? "amm" : row?.source || "dex",
+      source:
+        row?.source === "amm" || row?.source === "bridge"
+          ? row.source
+          : row?.source || "dex",
       amm_opposing: opposing ? fill.base_size : 0,
       amm_through: through ? fill.base_size : 0,
     };

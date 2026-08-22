@@ -1253,6 +1253,11 @@ body {
   outline-offset: -1px;
 }
 
+.orderbook-row.is-bridge {
+  outline: 1px dashed rgba(112, 199, 255, 0.4);
+  outline-offset: -1px;
+}
+
 .orderbook-empty,
 .orderbook-asof {
   margin: 8px 0 0;

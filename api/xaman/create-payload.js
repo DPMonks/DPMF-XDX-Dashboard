@@ -3,6 +3,7 @@ import {
   readJson,
   requestOrigin,
   xamanErrorMessage,
+  xummConfigured,
   xummHeaders,
 } from "./_xumm.js";
 
@@ -25,6 +26,7 @@ export default async function handler(req, res) {
       res.status(response.status).json({
         error: xamanErrorMessage(data),
         code: data?.error?.code ?? data?.code ?? response.status,
+        configured: xummConfigured(),
       });
       return;
     }
