@@ -44,7 +44,7 @@ export default function HybridChart() {
   const [hollow, setHollow] = useState(false);
   const [showArb, setShowArb] = useState(false);
   const [maType, setMaType] = useState("sma");
-  const [maPeriods, setMaPeriods] = useState([20, 50]);
+  const [maPeriods, setMaPeriods] = useState([50]);
   const [books, setBooks] = useState(null);
   const [pools, setPools] = useState([]);
   const [prices, setPrices] = useState({});
