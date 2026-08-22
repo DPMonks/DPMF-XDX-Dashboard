@@ -4,6 +4,8 @@ import {
   bookHeader,
   combineOrderbookSide,
   emptyOrderbook,
+  FEATURED_ORDERBOOK_PAIRS,
+  filterOrderbookPairs,
   normalizeOrderbookPair,
   padOrderbookLevels,
 } from "../orderbook";
@@ -81,6 +83,7 @@ function BookSide({ title, rows, side, locale, t }) {
 export default function OrderBook() {
   const { t, locale } = useI18n();
   const [pair, setPair] = useState("XDX/XRP");
+  const [query, setQuery] = useState("");
   const [books, setBooks] = useState(null);
   const [error, setError] = useState(null);
 
@@ -107,9 +110,15 @@ export default function OrderBook() {
     };
   }, []);
 
+  const pairs = books?.pairs || FEATURED_ORDERBOOK_PAIRS;
+  const matches = useMemo(
+    () => filterOrderbookPairs(pairs, query).slice(0, 8),
+    [pairs, query]
+  );
+
   const book = useMemo(() => {
     const name = normalizeOrderbookPair(pair);
-    return books?.books?.[name] || emptyOrderbook(name);
+    return books?.books?.[name] || books?.books?.[pair] || emptyOrderbook(name);
   }, [books, pair]);
 
   const bidRows = useMemo(() => {
@@ -138,21 +147,53 @@ export default function OrderBook() {
 
   const quote = book.quote || pair.split("/")[1] || "XRP";
   const header = bookHeader(book);
+  const chips = FEATURED_ORDERBOOK_PAIRS.includes(normalizeOrderbookPair(pair))
+    ? FEATURED_ORDERBOOK_PAIRS
+    : [...FEATURED_ORDERBOOK_PAIRS, normalizeOrderbookPair(pair)];
+
+  function selectPair(name) {
+    setPair(normalizeOrderbookPair(name));
+    setQuery("");
+  }
 
   return (
     <div className="orderbook">
       <div className="orderbook-toolbar">
-        <div className="pair-filters" role="tablist" aria-label={t.orderbook}>
-          {["XDX/XRP", "XDX/RLUSD"].map((name) => (
+        <div className="orderbook-pairs" role="tablist" aria-label={t.orderbook}>
+          {chips.map((name) => (
             <button
               key={name}
               type="button"
-              className={pair === name ? "pair-chip active" : "pair-chip"}
-              onClick={() => setPair(name)}
+              className={normalizeOrderbookPair(pair) === name ? "pair-chip active" : "pair-chip"}
+              onClick={() => selectPair(name)}
             >
               {name}
             </button>
           ))}
+        </div>
+        <div className="orderbook-search-wrap">
+          <input
+            type="search"
+            className="orderbook-search"
+            value={query}
+            placeholder={t.searchPair}
+            aria-label={t.searchPair}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && matches[0]) selectPair(matches[0]);
+            }}
+          />
+          {query.trim() && matches.length ? (
+            <ul className="orderbook-search-list">
+              {matches.map((name) => (
+                <li key={name}>
+                  <button type="button" onClick={() => selectPair(name)}>
+                    {name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
         <p className="orderbook-unit">{t.orderbookUnit} {quote}</p>
       </div>

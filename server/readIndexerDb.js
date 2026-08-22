@@ -29,10 +29,12 @@ import {
 } from "../src/todayLpOwners.js";
 import {
   asOrderbookPayload,
+  composeAmmBook,
   emptyOrderbook,
   normalizeOrderbookPair,
   orderBookRowStamp,
-  ORDERBOOK_PAIRS,
+  sortOrderbookPairs,
+  FEATURED_ORDERBOOK_PAIRS,
 } from "../src/orderbook.js";
 
 let pool = null;
@@ -885,13 +887,66 @@ async function loadOrderbook(db, pair = "XDX/XRP") {
   };
 }
 
-async function loadOrderbooks(db) {
-  const books = {};
-  for (const pair of ORDERBOOK_PAIRS) {
-    books[pair] = await loadOrderbook(db, pair);
+async function loadPairReserves(pair, reserveIndex, xrpPool) {
+  const name = normalizeOrderbookPair(pair);
+  const extra = reserveIndex?.byName?.get(name.toUpperCase()) || {};
+  let reserveBase = Number(extra.reserve_asset || 0);
+  let reserveQuote = Number(extra.reserve_currency || 0);
+  const price = Number(extra.price || 0);
+  const tradingFee = Number(extra.trading_fee || 1000);
+
+  if (name === "XDX/XRP") {
+    if (!(reserveBase > 0)) reserveBase = Number(xrpPool?.reserve_asset || 0);
+    if (!(reserveQuote > 0)) reserveQuote = Number(xrpPool?.reserve_currency || 0);
   }
+
+  if (reserveBase > 0 && !(reserveQuote > 0) && price > 0 && price < 10) {
+    reserveQuote = reserveBase * price;
+  }
+
   return {
-    quotes: ["XRP", "RLUSD"],
+    reserve_asset: reserveBase,
+    reserve_currency: reserveQuote,
+    trading_fee: tradingFee || Number(xrpPool?.trading_fee || 1000),
+    price: price || (reserveBase > 0 && reserveQuote > 0 ? reserveQuote / reserveBase : null),
+  };
+}
+
+async function loadOrderbooks(db) {
+  const [lp, reserveIndex, xrpPool, storedRows] = await Promise.all([
+    loadXdxLpPools(db),
+    loadAmmReserveIndex(db),
+    hydrateAmm(db),
+    tryQuery(db, "SELECT payload, pair, timestamp FROM order_book_latest"),
+  ]);
+
+  const storedByPair = new Map();
+  for (const row of storedRows.rows) {
+    const name = normalizeOrderbookPair(row.pair);
+    storedByPair.set(name.toUpperCase(), {
+      ...asOrderbookPayload(row.payload, name),
+      as_of: asIso(orderBookRowStamp(row)),
+      source: "db",
+    });
+  }
+
+  const poolNames = (lp.pools || []).map((row) => row.pool_name || row.pool);
+  const pairs = sortOrderbookPairs([...FEATURED_ORDERBOOK_PAIRS, ...poolNames]);
+  const books = {};
+  for (const pair of pairs) {
+    const stored = storedByPair.get(pair.toUpperCase()) || emptyOrderbook(pair);
+    const reserves = loadPairReserves(pair, reserveIndex, xrpPool);
+    books[pair] = {
+      ...composeAmmBook(stored, reserves, pair),
+      as_of: stored.as_of || asIso(reserves.timestamp) || stored.as_of,
+      source: "db",
+    };
+  }
+
+  return {
+    quotes: pairs.map((pair) => pair.split("/")[1]).filter(Boolean),
+    featured: FEATURED_ORDERBOOK_PAIRS,
+    pairs,
     default_pair: "XDX/XRP",
     books,
     source: "db",
@@ -932,6 +987,7 @@ async function loadAmmReserveIndex(db) {
       reserve_currency: Number(row.reserve_currency || 0),
       lp_supply: Number(row.lp_supply || 0) || null,
       trading_fee: Number(row.trading_fee || 0) || null,
+      price: Number(row.price || 0) || null,
       timestamp: row.timestamp || null,
     };
     if (name && (overwrite || !byName.has(name))) byName.set(name, extra);
@@ -942,11 +998,11 @@ async function loadAmmReserveIndex(db) {
 
   const history = await tryQuery(
     db,
-    `SELECT pool_name, reserve_asset, reserve_currency, lp_supply, timestamp
+    `SELECT pool_name, reserve_asset, reserve_currency, lp_supply, price, timestamp
      FROM amm_pool_history
-     WHERE reserve_currency::numeric > 0
+     WHERE reserve_asset::numeric > 0
      ORDER BY timestamp DESC
-     LIMIT 4000`
+     LIMIT 8000`
   );
   for (const row of history.rows) take(row, false);
 

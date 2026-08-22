@@ -2,7 +2,12 @@ import { api, getHandshakeState, handshake, INDEXER_ORIGIN } from "../api";
 import { pairFromRow, XDX_TOTAL_SUPPLY } from "../constants/ledger";
 import { recordedXdxUsdFromPrices, xrpPerXdx } from "../utils/recordedPrice";
 import { poolAssetSplit, quoteUsdFromMap } from "../utils/poolSplit";
-import { asOrderbookPayload, emptyOrderbook, ORDERBOOK_PAIRS } from "../orderbook";
+import {
+  asOrderbookPayload,
+  emptyOrderbook,
+  sortOrderbookPairs,
+  FEATURED_ORDERBOOK_PAIRS,
+} from "../orderbook";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -306,23 +311,30 @@ export async function getAmm() {
 export async function getOrderbooks() {
   try {
     const body = await api.orderbooks();
+    const names = sortOrderbookPairs([
+      ...FEATURED_ORDERBOOK_PAIRS,
+      ...(Array.isArray(body?.pairs) ? body.pairs : []),
+      ...Object.keys(body?.books || {}),
+    ]);
     const books = {};
-    for (const pair of ORDERBOOK_PAIRS) {
+    for (const pair of names) {
       books[pair] = asOrderbookPayload(body?.books?.[pair] || body?.[pair], pair);
     }
     return {
-      quotes: Array.isArray(body?.quotes) && body.quotes.length ? body.quotes : ["XRP", "RLUSD"],
+      quotes: names.map((pair) => pair.split("/")[1]).filter(Boolean),
+      featured: FEATURED_ORDERBOOK_PAIRS,
+      pairs: names,
       default_pair: body?.default_pair || "XDX/XRP",
       books,
     };
   } catch {
+    const names = [...FEATURED_ORDERBOOK_PAIRS];
     return {
-      quotes: ["XRP", "RLUSD"],
+      quotes: names.map((pair) => pair.split("/")[1]),
+      featured: names,
+      pairs: names,
       default_pair: "XDX/XRP",
-      books: {
-        "XDX/XRP": emptyOrderbook("XDX/XRP"),
-        "XDX/RLUSD": emptyOrderbook("XDX/RLUSD"),
-      },
+      books: Object.fromEntries(names.map((pair) => [pair, emptyOrderbook(pair)])),
     };
   }
 }

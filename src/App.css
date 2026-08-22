@@ -774,9 +774,65 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
+  flex-wrap: nowrap;
   margin-bottom: 12px;
+}
+
+.orderbook-pairs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.orderbook-search-wrap {
+  position: relative;
+  flex: 1 1 160px;
+  min-width: 140px;
+  max-width: 240px;
+}
+
+.orderbook-search {
+  width: 100%;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--dpmf-border-soft);
+  background: var(--dpmf-bg-elevated);
+  color: var(--dpmf-text-main);
+  font: inherit;
+  font-size: 12px;
+}
+
+.orderbook-search-list {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: 12px;
+  border: 1px solid var(--dpmf-border-soft);
+  background: #0b0f1a;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.orderbook-search-list button {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--dpmf-text-main);
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.orderbook-search-list button:hover {
+  background: rgba(199, 112, 255, 0.18);
 }
 
 .orderbook-unit {
@@ -1136,6 +1192,10 @@ body {
 
   .activity-plot {
     height: 200px;
+  }
+
+  .orderbook-toolbar {
+    flex-wrap: wrap;
   }
 
   .orderbook-board {

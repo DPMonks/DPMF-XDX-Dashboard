@@ -4,18 +4,70 @@ import {
   asOrderbookPayload,
   bookHeader,
   combineOrderbookSide,
+  composeAmmBook,
   emptyOrderbook,
+  filterOrderbookPairs,
   normalizeOrderbookPair,
   ORDERBOOK_VISIBLE_LEVELS,
   orderBookRowStamp,
   padOrderbookLevels,
+  sortOrderbookPairs,
 } from "../src/orderbook.js";
+import { ammCurveLevels } from "../src/ammCurve.js";
 
-test("normalizeOrderbookPair maps quote aliases onto the two Worker 2 books", () => {
+test("normalizeOrderbookPair maps quote aliases onto featured and detected AMM pairs", () => {
   assert.equal(normalizeOrderbookPair("XRP"), "XDX/XRP");
   assert.equal(normalizeOrderbookPair("rlusd"), "XDX/RLUSD");
   assert.equal(normalizeOrderbookPair("XDX-RLUSD"), "XDX/RLUSD");
-  assert.equal(normalizeOrderbookPair("SOLO"), "XDX/XRP");
+  assert.equal(normalizeOrderbookPair("XIO"), "XDX/XIO");
+  assert.equal(normalizeOrderbookPair("xsquad"), "XDX/XSQUAD");
+  assert.equal(normalizeOrderbookPair("SOLO"), "XDX/SOLO");
+  assert.equal(normalizeOrderbookPair("XDX/POWDER KEG"), "XDX/POWDER KEG");
+});
+
+test("sortOrderbookPairs keeps XRP, RLUSD, XIO, XSQUAD first", () => {
+  assert.deepEqual(sortOrderbookPairs(["XDX/SOLO", "XDX/XSQUAD", "XDX/XIO"]), [
+    "XDX/XRP",
+    "XDX/RLUSD",
+    "XDX/XIO",
+    "XDX/XSQUAD",
+    "XDX/SOLO",
+  ]);
+});
+
+test("filterOrderbookPairs matches quote search without requiring the XDX/ prefix", () => {
+  const rows = filterOrderbookPairs(
+    ["XDX/XRP", "XDX/XIO", "XDX/XSQUAD", "XDX/SOLO"],
+    "xio"
+  );
+  assert.deepEqual(rows, ["XDX/XIO"]);
+});
+
+test("ammCurveLevels fills 20 bids and 20 asks from pool reserves", () => {
+  const curve = ammCurveLevels({
+    reserveBase: 63_000_000,
+    reserveQuote: 1875,
+    tradingFee: 1000,
+  });
+  assert.equal(curve.asks.length, 20);
+  assert.equal(curve.bids.length, 20);
+  assert.ok(curve.asks[0].price > curve.price);
+  assert.ok(curve.bids[0].price < curve.price);
+  assert.equal(curve.asks[0].source, "amm");
+});
+
+test("composeAmmBook blends an empty DEX book with a 20-level AMM curve", () => {
+  const book = composeAmmBook(emptyOrderbook("XDX/XIO"), {
+    reserve_asset: 51_000_000,
+    reserve_currency: 120_000,
+    trading_fee: 1000,
+  }, "XDX/XIO");
+  const asks = (book.amm.levels || []).filter((row) => row.side === "ask");
+  const bids = (book.amm.levels || []).filter((row) => row.side === "bid");
+  assert.equal(book.pair, "XDX/XIO");
+  assert.equal(book.present, true);
+  assert.equal(asks.length, 20);
+  assert.equal(bids.length, 20);
 });
 
 test("empty order book matches the catching_up envelope", () => {

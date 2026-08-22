@@ -1,4 +1,12 @@
+import { ammCurveLevels } from "./ammCurve.js";
+
 export const ORDERBOOK_PAIRS = ["XDX/XRP", "XDX/RLUSD"];
+export const FEATURED_ORDERBOOK_PAIRS = [
+  "XDX/XRP",
+  "XDX/RLUSD",
+  "XDX/XIO",
+  "XDX/XSQUAD",
+];
 export const ORDERBOOK_VISIBLE_LEVELS = 20;
 
 export function combineOrderbookSide(dexRows, ammRows, side = "bid") {
@@ -29,14 +37,44 @@ export function padOrderbookLevels(rows, count = ORDERBOOK_VISIBLE_LEVELS) {
 }
 
 export function normalizeOrderbookPair(value) {
-  const raw = String(value || "XDX/XRP")
-    .toUpperCase()
-    .replace(/\s+/g, "")
-    .replace(/-/g, "/");
-  if (raw === "RLUSD" || raw === "XDX/RLUSD") return "XDX/RLUSD";
-  if (raw === "XRP" || raw === "XDX/XRP" || raw === "XRP/XDX") return "XDX/XRP";
-  if (raw.startsWith("XDX/") && ORDERBOOK_PAIRS.includes(raw)) return raw;
+  const trimmed = String(value || "XDX/XRP").trim();
+  const spaced = trimmed.replace(/\s*\/\s*/g, "/").replace(/-/g, "/");
+  const upper = spaced.toUpperCase();
+  if (upper === "RLUSD" || upper === "XDX/RLUSD") return "XDX/RLUSD";
+  if (upper === "XRP" || upper === "XDX/XRP" || upper === "XRP/XDX") return "XDX/XRP";
+  if (upper === "XIO" || upper === "XDX/XIO") return "XDX/XIO";
+  if (upper === "XSQUAD" || upper === "XDX/XSQUAD") return "XDX/XSQUAD";
+  if (upper.startsWith("XDX/")) {
+    const quote = spaced.slice(spaced.indexOf("/") + 1).trim();
+    return quote ? `XDX/${quote}` : "XDX/XRP";
+  }
+  if (spaced && !spaced.includes("/")) return `XDX/${spaced}`;
   return "XDX/XRP";
+}
+
+export function sortOrderbookPairs(pairs) {
+  const seen = new Set();
+  const out = [];
+  for (const name of [...FEATURED_ORDERBOOK_PAIRS, ...(pairs || [])]) {
+    const pair = normalizeOrderbookPair(name);
+    if (seen.has(pair.toUpperCase())) continue;
+    seen.add(pair.toUpperCase());
+    out.push(pair);
+  }
+  return out;
+}
+
+export function filterOrderbookPairs(pairs, query) {
+  const q = String(query || "")
+    .trim()
+    .replace(/^XDX\s*\/\s*/i, "")
+    .toUpperCase();
+  if (!q) return pairs || [];
+  return (pairs || []).filter((pair) => {
+    const name = normalizeOrderbookPair(pair);
+    const quote = name.split("/")[1] || "";
+    return name.toUpperCase().includes(q) || quote.toUpperCase().includes(q);
+  });
 }
 
 export function emptyOrderbook(pair = "XDX/XRP") {
@@ -95,6 +133,61 @@ export function bookHeader(book = {}) {
 export function orderBookRowStamp(row = {}) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   return row.as_of || payload.as_of || row.timestamp || row.updated_at || null;
+}
+
+export function composeAmmBook(stored, reserves = {}, pair = "XDX/XRP") {
+  const name = normalizeOrderbookPair(stored?.pair || pair);
+  const base = asOrderbookPayload(stored, name);
+  const reserveBase = Number(
+    reserves.reserve_asset ?? reserves.reserve_xdx ?? base.amm?.reserve_asset ?? 0
+  );
+  const reserveQuote = Number(
+    reserves.reserve_currency ?? reserves.reserve_quote ?? base.amm?.reserve_currency ?? 0
+  );
+  const tradingFee = Number(
+    reserves.trading_fee ?? base.amm?.trading_fee ?? 1000
+  );
+  const curve = ammCurveLevels({
+    reserveBase,
+    reserveQuote,
+    tradingFee,
+    steps: ORDERBOOK_VISIBLE_LEVELS,
+  });
+  const ammLevels = [...curve.asks, ...curve.bids];
+  const useCurve = curve.asks.length >= ORDERBOOK_VISIBLE_LEVELS &&
+    curve.bids.length >= ORDERBOOK_VISIBLE_LEVELS;
+  const levels = useCurve
+    ? ammLevels
+    : Array.isArray(base.amm?.levels) && base.amm.levels.length
+      ? base.amm.levels
+      : ammLevels;
+  const present =
+    base.bids.length > 0 ||
+    base.asks.length > 0 ||
+    levels.length > 0;
+  const amm = {
+    ...(base.amm || {}),
+    reserve_asset: reserveBase || base.amm?.reserve_asset || null,
+    reserve_currency: reserveQuote || base.amm?.reserve_currency || null,
+    trading_fee: tradingFee,
+    price: curve.price || base.amm?.price || null,
+    levels,
+    source: useCurve ? "amm_curve" : base.amm?.source || "db",
+  };
+  return {
+    ...base,
+    pair: name,
+    quote: base.quote || name.split("/")[1] || "XRP",
+    present,
+    catching_up: !present,
+    amm: levels.length ? amm : base.amm,
+    mid_usd:
+      Number(base.mid_usd) > 0
+        ? Number(base.mid_usd)
+        : Number(reserves.mid_usd) > 0
+          ? Number(reserves.mid_usd)
+          : null,
+  };
 }
 
 export function asOrderbookPayload(raw, pair = "XDX/XRP") {

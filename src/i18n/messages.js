@@ -31,6 +31,7 @@ const en = {
   spreadBps: "Spread bps",
   midUsdHint: "Mid USD (not recorded price)",
   orderbookUnit: "Quote per 1 XDX ·",
+  searchPair: "Search XDX / asset",
   ammDepth: "AMM curve",
   emptyOrderbook: "Waiting for Worker 2 order book (catching_up).",
   emptyOrderbookSide: "No DEX levels yet.",
