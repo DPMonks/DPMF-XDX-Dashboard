@@ -337,6 +337,8 @@ body {
 }
 
 .account-link {
+  display: inline;
+  max-width: 100%;
   background: none;
   border: 0;
   color: var(--dpmf-text-muted);
@@ -774,6 +776,7 @@ body {
 }
 
 .col-balance {
+  width: 28%;
   overflow: visible;
   text-overflow: unset;
   white-space: nowrap;
@@ -813,12 +816,24 @@ body {
 }
 
 .col-rank {
-  width: 36px;
+  width: 2.25rem;
   color: var(--dpmf-text-muted);
 }
 
 .col-address {
-  width: 42%;
+  width: auto;
+}
+
+.col-pair {
+  width: 6.5rem;
+}
+
+.col-share {
+  width: 4.75rem;
+}
+
+.col-copy {
+  width: 3.75rem;
 }
 
 .col-num {
@@ -834,6 +849,17 @@ body {
 .address-short {
   display: inline;
 }
+
+@media (min-width: 700px) {
+  .rich-list .address-full {
+    display: inline;
+  }
+
+  .rich-list .address-short {
+    display: none;
+  }
+}
+
 
 .frozen-badge,
 .pair-badge {
@@ -1815,8 +1841,9 @@ body {
     height: 240px;
   }
 
-  .rich-table th:last-child,
-  .rich-table td:last-child {
+  .rich-table th.col-copy,
+  .rich-table td.col-copy,
+  .rich-table col.col-copy {
     width: 44px;
   }
 
@@ -1830,6 +1857,53 @@ body {
   .wallet-token-row,
   .wallet-infographics {
     grid-template-columns: 1fr;
+  }
+
+  .wallet-hero {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 10px;
+  }
+
+  .wallet-hero-brand {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .lists-row > .dashboard-card {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .lists-row .rich-table-wrap {
+    max-height: 420px;
+  }
+
+  .col-rank,
+  .rich-table col.col-rank {
+    width: 1.7rem;
+  }
+
+  .col-pair,
+  .rich-table col.col-pair {
+    width: 5.25rem;
+  }
+
+  .col-share,
+  .rich-table col.col-share {
+    width: 4.25rem;
+  }
+
+  .col-balance {
+    width: 32%;
+  }
+
+  .pair-badge {
+    margin-inline-start: 0;
+    padding: 2px 6px;
+    font-size: 10px;
   }
 
   .wallet-token-row > .dashboard-card {
@@ -1989,9 +2063,13 @@ body {
     display: none;
   }
 
+  .rich-table col.col-copy,
+  .rich-table th.col-copy,
+  .rich-table td.col-copy,
   .rich-table th:last-child,
   .rich-table td:last-child {
     display: none;
+    width: 0;
   }
 
   .tab,

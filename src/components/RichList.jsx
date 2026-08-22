@@ -214,15 +214,23 @@ export default function RichList({
     body = <p className="empty-message">{showPair ? t.emptyLpPair : emptyLabel}</p>;
   } else {
     body = (
-      <table className="rich-table">
+      <table className={`rich-table${showPair ? " has-pair" : ""}`}>
+        <colgroup>
+          <col className="col-rank" />
+          <col className="col-address" />
+          {showPair ? <col className="col-pair" /> : null}
+          <col className="col-balance" />
+          <col className="col-share" />
+          <col className="col-copy" />
+        </colgroup>
         <thead>
           <tr>
-            <th>{t.rank}</th>
-            <th>{t.address}</th>
-            {showPair && <th>{t.pair}</th>}
-            <th>{t.balance}</th>
-            <th>{t.share}</th>
-            <th />
+            <th className="col-rank">{t.rank}</th>
+            <th className="col-address">{t.address}</th>
+            {showPair && <th className="col-pair">{t.pair}</th>}
+            <th className="col-balance col-num">{t.balance}</th>
+            <th className="col-share col-num">{t.share}</th>
+            <th className="col-copy" />
           </tr>
         </thead>
         <tbody>
@@ -242,7 +250,7 @@ export default function RichList({
                 {row.frozen && <span className="frozen-badge">{t.frozen}</span>}
               </td>
               {showPair && (
-                <td>
+                <td className="col-pair">
                   <span className="pair-badge">
                     {normalizeOrderbookPair(row.pair || "XDX/XRP")}
                   </span>
@@ -251,10 +259,10 @@ export default function RichList({
               <td className="col-num col-balance">
                 {formatToken(row[valueKey], locale, 8)} {unit}
               </td>
-              <td className="col-num">
+              <td className="col-num col-share">
                 {formatPercent(shareOf(row[valueKey], total), locale)}
               </td>
-              <td>
+              <td className="col-copy">
                 <button
                   type="button"
                   className="copy-btn"
