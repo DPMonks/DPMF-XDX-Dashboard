@@ -9,8 +9,8 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
   const xdxLead = ready && (lead === "xdx" || xdxPct >= quotePct);
   const xdxLabel = ready ? `${formatPoolPct(xdxPct)}% ${asset}` : `${asset} —`;
   const quoteLabel = ready ? `${formatPoolPct(quotePct)}% ${quote}` : `${quote} —`;
-  const xdxWidth = ready ? Math.max(xdxPct, 0) : 50;
-  const quoteWidth = ready ? Math.max(quotePct, 0) : 50;
+  const xdxShare = ready ? Math.max(xdxPct, 0) : 50;
+  const quoteShare = ready ? Math.max(quotePct, 0) : 50;
 
   return (
     <div className={`pool-split ${ready ? (xdxLead ? "is-xdx-lead" : "is-quote-lead") : "is-pending"}`}>
@@ -36,8 +36,15 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
             : `${asset} / ${quote} split not in the indexer yet`
         }
       >
-        <span className="pool-split-bar-xdx" style={{ width: `${xdxWidth}%` }} />
-        <span className="pool-split-bar-quote" style={{ width: `${quoteWidth}%` }} />
+        <span
+          className="pool-split-bar-xdx"
+          style={{ flexGrow: xdxShare, flexShrink: 0, flexBasis: 0 }}
+        />
+        <span
+          className="pool-split-bar-quote"
+          style={{ flexGrow: quoteShare, flexShrink: 0, flexBasis: 0 }}
+        />
+        <i className="pool-split-mid" aria-hidden="true" />
       </div>
     </div>
   );

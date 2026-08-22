@@ -732,12 +732,13 @@ body {
 }
 
 .pool-split-bar {
+  position: relative;
   display: flex;
-  height: 16px;
+  height: 18px;
   border-radius: 999px;
   overflow: hidden;
   background: #101018;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .pool-split-bar-xdx,
@@ -748,19 +749,31 @@ body {
 }
 
 .pool-split-bar-xdx {
-  background: linear-gradient(90deg, #007a8c 0%, #00eaff 100%);
+  background: linear-gradient(90deg, #005f6d 0%, #00eaff 100%);
 }
 
 .pool-split-bar-quote {
   background: linear-gradient(90deg, #c770ff 0%, #ff4ad8 100%);
 }
 
+.pool-split-mid {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
+
 .pool-split-bar.is-xdx-lead .pool-split-bar-xdx {
-  box-shadow: 0 0 16px rgba(0, 234, 255, 0.55);
+  box-shadow: 0 0 18px rgba(0, 234, 255, 0.7);
 }
 
 .pool-split-bar.is-quote-lead .pool-split-bar-quote {
-  box-shadow: 0 0 16px rgba(199, 112, 255, 0.55);
+  box-shadow: 0 0 18px rgba(199, 112, 255, 0.7);
 }
 
 .pool-split.is-pending .pool-split-bar-xdx,
