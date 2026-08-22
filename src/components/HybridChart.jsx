@@ -23,16 +23,12 @@ import { walletOrdersFromBooks } from "../wallet/composeWallet";
 import { useWallet } from "../context/useWallet";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
+import { nextDrawingState } from "../chart/drawings";
+import ChartTools from "./ChartTools";
 import HybridPlot from "./HybridPlot";
 import "./HybridChart.css";
 
 const RANGES = ["1D", "5D", "1M", "3M", "6M", "1Y", "5Y", "Max"];
-const TOOLS = [
-  { id: "cursor", label: "Cursor" },
-  { id: "hline", label: "H-line" },
-  { id: "trend", label: "Trend" },
-  { id: "fib", label: "Fib" },
-];
 
 function poolForPair(pools, pair) {
   return (Array.isArray(pools) ? pools : []).find(
@@ -47,6 +43,8 @@ export default function HybridChart() {
   const [timeframe, setTimeframe] = useState("1D");
   const [range, setRange] = useState("1M");
   const [tool, setTool] = useState("cursor");
+  const [drawColor, setDrawColor] = useState("#3d8bff");
+  const [magnet, setMagnet] = useState(true);
   const [showSma, setShowSma] = useState(true);
   const [books, setBooks] = useState(null);
   const [pools, setPools] = useState([]);
@@ -155,17 +153,34 @@ export default function HybridChart() {
   const historyReady = (locked.pairs?.[pair]?.candles || []).length > 0;
 
   function addDrawing(point) {
-    if (tool === "hline") {
-      setDrawings((rows) => [...rows, { kind: "hline", price: point.price }]);
-      return;
-    }
-    if (!pending) {
-      setPending({ t: point.t, price: point.price });
-      return;
-    }
-    setDrawings((rows) => [...rows, { kind: tool, a: pending, b: { t: point.t, price: point.price } }]);
+    const next = nextDrawingState({ tool, color: drawColor, pending, point });
+    setPending(next.pending);
+    if (next.drawing) setDrawings((rows) => [...rows, next.drawing]);
+  }
+
+  function selectTool(id) {
+    setTool(id);
     setPending(null);
   }
+
+  function undoDrawing() {
+    setPending(null);
+    setDrawings((rows) => rows.slice(0, -1));
+  }
+
+  function clearDrawings() {
+    setDrawings([]);
+    setPending(null);
+    setGhost(null);
+  }
+
+  useEffect(() => {
+    function onKey(event) {
+      if (event.key === "Escape") setPending(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   function runSim(side) {
     setGhost(
@@ -212,25 +227,17 @@ export default function HybridChart() {
       </div>
 
       <div className="hybrid-body">
-        <aside className="hybrid-tools" aria-label={t.chartTools}>
-          {TOOLS.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              className={tool === row.id ? "hybrid-tool active" : "hybrid-tool"}
-              onClick={() => {
-                setTool(row.id);
-                setPending(null);
-              }}
-              title={row.label}
-            >
-              {row.id === "cursor" ? "+" : row.id === "hline" ? "—" : row.id === "trend" ? "/" : "F"}
-            </button>
-          ))}
-          <button type="button" className="hybrid-tool" onClick={() => { setDrawings([]); setPending(null); setGhost(null); }} title={t.chartClear}>
-            ×
-          </button>
-        </aside>
+        <ChartTools
+          tool={tool}
+          color={drawColor}
+          magnet={magnet}
+          t={t}
+          onSelectTool={selectTool}
+          onSelectColor={setDrawColor}
+          onUndo={undoDrawing}
+          onClear={clearDrawings}
+          onToggleMagnet={() => setMagnet((on) => !on)}
+        />
 
         <div className="hybrid-main">
           <div className="hybrid-meta">
@@ -273,6 +280,8 @@ export default function HybridChart() {
             drawings={drawings}
             pending={pending}
             tool={tool}
+            color={drawColor}
+            magnet={magnet}
             sma20={sma20}
             sma50={sma50}
             typicalVolume={typicalVolume}

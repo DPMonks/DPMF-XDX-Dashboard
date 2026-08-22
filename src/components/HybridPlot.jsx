@@ -2,6 +2,8 @@ import { useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { depthIntensity } from "../chart/overlays";
 import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../chart/axis";
+import { previewDrawing, snapPoint } from "../chart/drawings";
+import ChartDrawings from "./ChartDrawings";
 
 const PRICE_H = 348;
 const VOL_H = 82;
@@ -21,6 +23,8 @@ export default function HybridPlot({
   drawings = [],
   pending,
   tool = "cursor",
+  color = "#3d8bff",
+  magnet = false,
   sma20 = [],
   sma50 = [],
   typicalVolume = 0,
@@ -78,7 +82,16 @@ export default function HybridPlot({
         nearest = row;
       }
     }
-    return { x, y, t, price, candle: nearest, inPrice: y >= PAD.t && y <= plotBottom };
+    const raw = { t, price };
+    const snapped = magnet ? snapPoint(raw, candles) : raw;
+    return {
+      x,
+      y,
+      t: snapped.t,
+      price: snapped.price,
+      candle: nearest,
+      inPrice: y >= PAD.t && y <= plotBottom,
+    };
   }
 
   function onMove(event) {
@@ -93,7 +106,7 @@ export default function HybridPlot({
   }
 
   const hoverCandle = hover?.candle;
-  const fib = drawings.filter((row) => row.kind === "fib");
+  const preview = hover?.inPrice ? previewDrawing({ tool, color, pending, hover }) : null;
   const clipId = `hybrid-plot-${uid}`;
   const timeLabel = hoverCandle ? formatCursorWhen(hoverCandle.t, locale) : "";
   const timeTagW = Math.max(108, timeLabel.length * 6.1);
@@ -294,55 +307,15 @@ export default function HybridPlot({
             </g>
           ) : null}
 
-          {drawings.map((row, index) => {
-            if (row.kind === "hline") {
-              return (
-                <line
-                  key={`d-${index}`}
-                  className="hybrid-draw"
-                  x1={PAD.l}
-                  x2={width - PAD.r}
-                  y1={scale.y(row.price)}
-                  y2={scale.y(row.price)}
-                />
-              );
-            }
-            if (row.kind === "trend" && row.a && row.b) {
-              return (
-                <line
-                  key={`d-${index}`}
-                  className="hybrid-draw"
-                  x1={scale.x(row.a.t)}
-                  y1={scale.y(row.a.price)}
-                  x2={scale.x(row.b.t)}
-                  y2={scale.y(row.b.price)}
-                />
-              );
-            }
-            return null;
-          })}
-          {fib.map((row) => {
-            if (!row.a || !row.b) return null;
-            const hi = Math.max(row.a.price, row.b.price);
-            const lo = Math.min(row.a.price, row.b.price);
-            const span = hi - lo || 1;
-            return [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1].map((level) => {
-              const price = hi - span * level;
-              return (
-                <line
-                  key={`fib-${row.a.t}-${level}`}
-                  className="hybrid-fib"
-                  x1={PAD.l}
-                  x2={width - PAD.r}
-                  y1={scale.y(price)}
-                  y2={scale.y(price)}
-                />
-              );
-            });
-          })}
-          {pending ? (
-            <circle className="hybrid-pending" cx={scale.x(pending.t)} cy={scale.y(pending.price)} r="3" />
-          ) : null}
+          <ChartDrawings
+            drawings={drawings}
+            preview={preview}
+            pending={pending}
+            scale={scale}
+            pad={PAD}
+            width={width}
+            plotBottom={plotBottom}
+          />
         </g>
 
         {heatmap.map((row, index) => (

@@ -14,6 +14,14 @@ import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from ".
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../src/chart/axis.js";
+import {
+  nextDrawingState,
+  previewDrawing,
+  raySegment,
+  rangeStats,
+  snapPoint,
+  toolMeta,
+} from "../src/chart/drawings.js";
 
 test("bucketTime uses UTC midnight and Monday weeks", () => {
   assert.equal(bucketTime(Date.parse("2021-10-24T13:31:20.000Z"), "1D"), Date.parse("2021-10-24T00:00:00.000Z"));
@@ -216,6 +224,70 @@ test("priceTicks and timeTicks fill left and bottom chart scales", () => {
   assert.equal(formatAxisTime(start, { spanMs: end - start, intervalId: "1D", locale: "en-GB" }), "24 Jul");
   assert.match(formatCursorWhen(start, "en-GB"), /24 Jul 2026/);
   assert.match(formatCursorWhen(start, "en-GB"), /00:00/);
+});
+
+test("drawing tools trail from the first drop to the hover point", () => {
+  const start = { t: 100, price: 2 };
+  const hover = { t: 400, price: 5 };
+  const first = nextDrawingState({ tool: "trend", color: "#ff5d73", pending: null, point: start });
+  assert.equal(first.pending.points.length, 1);
+  assert.equal(first.drawing, null);
+  const ghost = previewDrawing({ tool: "trend", color: "#ff5d73", pending: first.pending, hover });
+  assert.equal(ghost.kind, "trend");
+  assert.equal(ghost.preview, true);
+  assert.equal(ghost.a.t, 100);
+  assert.equal(ghost.b.t, 400);
+  assert.equal(ghost.color, "#ff5d73");
+  const done = nextDrawingState({ tool: "trend", color: "#ff5d73", pending: first.pending, point: hover });
+  assert.equal(done.pending, null);
+  assert.equal(done.drawing.kind, "trend");
+  assert.equal(done.drawing.b.price, 5);
+});
+
+test("horizontal line trails under the cursor from the first drop to the final click", () => {
+  const ghost = previewDrawing({ tool: "hline", color: "#98f050", pending: null, hover: { t: 10, price: 0.4 } });
+  assert.equal(ghost.kind, "hline");
+  assert.equal(ghost.price, 0.4);
+  const first = nextDrawingState({ tool: "hline", color: "#98f050", pending: null, point: { t: 10, price: 0.4 } });
+  assert.equal(first.drawing, null);
+  const trailing = previewDrawing({
+    tool: "hline",
+    color: "#98f050",
+    pending: first.pending,
+    hover: { t: 20, price: 0.55 },
+  });
+  assert.equal(trailing.price, 0.55);
+  const placed = nextDrawingState({
+    tool: "hline",
+    color: "#98f050",
+    pending: first.pending,
+    point: { t: 20, price: 0.55 },
+  });
+  assert.equal(placed.drawing.kind, "hline");
+  assert.equal(placed.drawing.price, 0.55);
+});
+
+test("snapPoint locks to the nearest candle open high low or close", () => {
+  const snapped = snapPoint(
+    { t: 150, price: 1.8 },
+    [
+      { t: 100, o: 1, h: 2, l: 0.5, c: 1.2 },
+      { t: 200, o: 3, h: 4, l: 2.5, c: 3.5 },
+    ]
+  );
+  assert.equal(snapped.t, 100);
+  assert.equal(snapped.price, 2);
+});
+
+test("ray extends past the second point and range stats keep the percent move", () => {
+  const [a, b] = raySegment({ t: 10, price: 1 }, { t: 20, price: 2 }, 0, 100);
+  assert.equal(a.t, 10);
+  assert.equal(b.t, 100);
+  assert.equal(b.price, 10);
+  const stats = rangeStats({ t: 0, price: 2 }, { t: 5, price: 3 });
+  assert.equal(stats.delta, 1);
+  assert.equal(stats.pct, 50);
+  assert.equal(toolMeta("channel").clicks, 3);
 });
 
 test("appendLiveClose updates the current UTC day instead of inventing a second candle", () => {
