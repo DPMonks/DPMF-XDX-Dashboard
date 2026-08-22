@@ -43,28 +43,41 @@ function PairSelect({ pairs, value, onChange, t }) {
   }
 
   return (
-    <div className="pair-select" ref={boxRef}>
-      <input
-        className="pair-select-input"
-        type="search"
-        value={open ? query : label}
-        placeholder={t.searchPair}
-        aria-label={t.searchPair}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        onFocus={() => setOpen(true)}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setOpen(true);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            setOpen(false);
-            setQuery("");
-          }
-          if (event.key === "Enter" && matches[0]) select(matches[0]);
-        }}
-      />
+    <div className={`pair-select ${open ? "is-open" : ""}`} ref={boxRef}>
+      <div className="pair-select-control">
+        <input
+          className="pair-select-input"
+          type="search"
+          value={open ? query : label}
+          placeholder={t.searchPair}
+          aria-label={t.searchPair}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          onFocus={() => setOpen(true)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setOpen(false);
+              setQuery("");
+            }
+            if (event.key === "Enter" && matches[0]) select(matches[0]);
+          }}
+        />
+        <button
+          type="button"
+          className="pair-select-chevron"
+          tabIndex={-1}
+          aria-hidden="true"
+          onClick={() => setOpen((current) => !current)}
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14">
+            <path d="M3.2 5.6 8 10.4l4.8-4.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
       {open ? (
         <ul className="pair-select-list" role="listbox">
           {!query.trim() ? (
@@ -284,27 +297,25 @@ export default function RichList({
         )}
       </div>
 
-      {totalPages > 1 && (
-        <div className="pagination">
-          <button
-            type="button"
-            disabled={currentPage === 1}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-          >
-            ‹
-          </button>
-          <span>
-            {t.page} {currentPage} {t.of} {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={currentPage === totalPages}
-            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-          >
-            ›
-          </button>
-        </div>
-      )}
+      <div className="pagination">
+        <button
+          type="button"
+          disabled={currentPage === 1}
+          onClick={() => setPage((value) => Math.max(1, value - 1))}
+        >
+          ‹
+        </button>
+        <span>
+          {t.page} {currentPage} {t.of} {totalPages}
+        </span>
+        <button
+          type="button"
+          disabled={currentPage === totalPages}
+          onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+        >
+          ›
+        </button>
+      </div>
     </div>
   );
 }

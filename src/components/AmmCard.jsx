@@ -8,8 +8,6 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
   const split = displayPoolSplit(xdxPct, quotePct);
   const ready = split.measured;
   const xdxLead = lead === "xdx" || split.xdxPct >= split.quotePct;
-  const xdxLabel = `${formatPoolPct(split.xdxPct)}% ${asset}`;
-  const quoteLabel = `${formatPoolPct(split.quotePct)}% ${quote}`;
   const xdxShare = Math.max(split.xdxPct, 0);
   const quoteShare = Math.max(split.quotePct, 0);
 
@@ -18,13 +16,15 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
       <div className="pool-split-labels">
         <span className={`pool-split-xdx ${xdxLead ? "is-lead" : ""}`}>
           <i className="pool-split-swatch is-xdx" aria-hidden="true" />
-          {xdxLabel}
+          <span className="pool-split-pct">{formatPoolPct(split.xdxPct)}%</span>
+          <span className="pool-split-asset">{asset}</span>
         </span>
         <span className="pool-split-ratio">
           {`${formatPoolPct(split.xdxPct)} / ${formatPoolPct(split.quotePct)}`}
         </span>
-        <span className={`pool-split-quote ${ready && !xdxLead ? "is-lead" : ""}`}>
-          {quoteLabel}
+        <span className={`pool-split-quote ${!xdxLead ? "is-lead" : ""}`}>
+          <span className="pool-split-pct">{formatPoolPct(split.quotePct)}%</span>
+          <span className="pool-split-asset">{quote}</span>
           <i className="pool-split-swatch is-quote" aria-hidden="true" />
         </span>
       </div>
