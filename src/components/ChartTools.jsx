@@ -159,6 +159,8 @@ export default function ChartTools({
         >
           <ToolIcon name="magnet" />
         </button>
+      </div>
+      <div className="hybrid-tool-pair" role="group" aria-label={t.chartEdit}>
         <button
           type="button"
           className="hybrid-tool"
@@ -172,7 +174,7 @@ export default function ChartTools({
         </button>
         <button
           type="button"
-          className="hybrid-tool"
+          className="hybrid-tool is-clear"
           onPointerDown={(event) => {
             event.preventDefault();
             onClear();

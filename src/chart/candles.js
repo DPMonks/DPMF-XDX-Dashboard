@@ -278,6 +278,36 @@ export function movingAverage(type, values, period, volumes = []) {
   return sma(values, period);
 }
 
+export function seedSeriesForAverages(series = []) {
+  const list = Array.isArray(series) ? series : [];
+  const out = [];
+  for (const row of list) {
+    const prev = out[out.length - 1];
+    if (prev && row?.source === "carry" && Number(prev.c) === Number(row.c)) continue;
+    out.push(row);
+  }
+  return out.length ? out : list;
+}
+
+export function interpolateAverage(knots = [], time) {
+  const points = (Array.isArray(knots) ? knots : []).filter(
+    (row) => Number.isFinite(row?.t) && Number.isFinite(row?.v)
+  );
+  if (!points.length || !Number.isFinite(time)) return null;
+  if (time < points[0].t) return null;
+  if (time === points[0].t) return points[0].v;
+  const last = points[points.length - 1];
+  if (time >= last.t) return last.v;
+  let hi = 1;
+  while (hi < points.length && points[hi].t < time) hi += 1;
+  const left = points[hi - 1];
+  const right = points[hi];
+  const span = right.t - left.t;
+  const mu = span > 0 ? (time - left.t) / span : 0;
+  const ease = (1 - Math.cos(mu * Math.PI)) / 2;
+  return left.v * (1 - ease) + right.v * ease;
+}
+
 export function averagesForWindow({
   series = [],
   visible = [],
@@ -285,16 +315,19 @@ export function averagesForWindow({
   periods = [],
   periodMeta = MA_PERIODS,
 } = {}) {
-  const closes = series.map((row) => row.c);
-  const volumes = series.map((row) => row.v);
+  const source = seedSeriesForAverages(series);
+  const closes = source.map((row) => row.c);
+  const volumes = source.map((row) => row.v);
   return periods.map((period) => {
     const values = movingAverage(type, closes, period, volumes);
-    const byTime = new Map(series.map((row, index) => [row.t, values[index]]));
+    const knots = source
+      .map((row, index) => ({ t: row.t, v: values[index] }))
+      .filter((row) => Number.isFinite(row.v));
     const color = periodMeta.find((row) => row.period === period)?.color || "#00eaff";
     return {
       id: `${type}-${period}`,
       color,
-      values: visible.map((row) => (byTime.has(row.t) ? byTime.get(row.t) : null)),
+      values: (Array.isArray(visible) ? visible : []).map((row) => interpolateAverage(knots, row.t)),
     };
   });
 }

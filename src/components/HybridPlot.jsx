@@ -420,7 +420,8 @@ export default function HybridPlot({
               maCurvePoints(candles, row.values).map((point) => ({
                 x: scale.x(point.t),
                 y: scale.y(point.v),
-              }))
+              })),
+              { tension: 1.45 }
             );
             if (!d) return null;
             return (
@@ -447,7 +448,14 @@ export default function HybridPlot({
             return (
               <g key={row.t} className={up ? "hybrid-candle is-up" : "hybrid-candle is-down"}>
                 <line className="hybrid-wick" x1={x} x2={x} y1={scale.y(row.h)} y2={scale.y(row.l)} />
-                <rect className="hybrid-body" x={x - candleW / 2} y={bodyTop} width={candleW} height={bodyH} />
+                <rect
+                  className="hybrid-candle-body"
+                  x={x - candleW / 2}
+                  y={bodyTop}
+                  width={candleW}
+                  height={bodyH}
+                  fill={hollow ? "none" : undefined}
+                />
               </g>
             );
           })}

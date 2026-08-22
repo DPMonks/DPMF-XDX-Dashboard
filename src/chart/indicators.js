@@ -76,34 +76,43 @@ export function volumeWaveValues(candles = [], { smooth = 6 } = {}) {
 }
 
 export function maCurvePoints(candles = [], values = []) {
-  const out = [];
+  const rows = [];
   for (let i = 0; i < candles.length; i += 1) {
     const v = Number(values[i]);
     if (!Number.isFinite(v) || !candles[i]) continue;
-    const last = out[out.length - 1];
-    if (!last || last.v !== v) out.push({ t: candles[i].t, v });
-    else last.tEnd = candles[i].t;
+    rows.push({ t: candles[i].t, v });
   }
-  if (out.length && Number.isFinite(out[out.length - 1].tEnd) && out[out.length - 1].tEnd !== out[out.length - 1].t) {
-    const last = out[out.length - 1];
-    out.push({ t: last.tEnd, v: last.v });
+  if (rows.length < 3) return rows;
+  const span = Math.max(...rows.map((row) => row.v)) - Math.min(...rows.map((row) => row.v));
+  const eps = Math.max(span * 0.0015, 1e-12);
+  const out = [rows[0]];
+  for (let i = 1; i < rows.length - 1; i += 1) {
+    const prev = out[out.length - 1];
+    const cur = rows[i];
+    const next = rows[i + 1];
+    const flat = Math.abs(cur.v - prev.v) <= eps && Math.abs(next.v - cur.v) <= eps;
+    if (flat) continue;
+    out.push(cur);
   }
-  return out.map(({ t, v }) => ({ t, v }));
+  const last = rows[rows.length - 1];
+  if (out[out.length - 1].t !== last.t) out.push(last);
+  return out;
 }
 
-export function wavePath(points = []) {
+export function wavePath(points = [], { tension = 1 } = {}) {
   const rows = Array.isArray(points) ? points.filter((row) => Number.isFinite(row?.x) && Number.isFinite(row?.y)) : [];
   if (!rows.length) return "";
+  const k = 6 / Math.max(0.4, Number(tension) || 1);
   let d = `M${rows[0].x} ${rows[0].y}`;
   for (let i = 0; i < rows.length - 1; i += 1) {
     const p0 = rows[i - 1] || rows[i];
     const p1 = rows[i];
     const p2 = rows[i + 1];
     const p3 = rows[i + 2] || p2;
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
+    const c1x = p1.x + (p2.x - p0.x) / k;
+    const c1y = p1.y + (p2.y - p0.y) / k;
+    const c2x = p2.x - (p3.x - p1.x) / k;
+    const c2y = p2.y - (p3.y - p1.y) / k;
     d += ` C${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`;
   }
   return d;

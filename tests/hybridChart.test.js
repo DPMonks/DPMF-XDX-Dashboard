@@ -9,6 +9,8 @@ import {
   vwma,
   movingAverage,
   averagesForWindow,
+  interpolateAverage,
+  seedSeriesForAverages,
   candleBodyWidth,
   appendLiveClose,
   resampleCandles,
@@ -166,9 +168,38 @@ test("maCurvePoints keeps value changes so the line can curve instead of stair-s
     { t: 5 },
   ];
   const points = maCurvePoints(candles, [1, 1, 1, 2, 3]);
-  assert.deepEqual(points.map((row) => row.v), [1, 2, 3]);
+  assert.deepEqual(points.map((row) => row.v), [1, 1, 2, 3]);
   assert.equal(points[0].t, 1);
+  assert.equal(points[1].t, 3);
   assert.equal(points[points.length - 1].t, 5);
+});
+
+test("averages skip carry flats and ease between real closes", () => {
+  const series = [
+    { t: 0, c: 10, v: 1, source: "locked" },
+    { t: 1, c: 10, v: 0, source: "carry" },
+    { t: 2, c: 10, v: 0, source: "carry" },
+    { t: 3, c: 12, v: 1, source: "locked" },
+    { t: 4, c: 12, v: 0, source: "carry" },
+    { t: 5, c: 14, v: 1, source: "locked" },
+  ];
+  assert.deepEqual(
+    seedSeriesForAverages(series).map((row) => row.t),
+    [0, 3, 5]
+  );
+  assert.equal(interpolateAverage([{ t: 0, v: 10 }, { t: 4, v: 14 }], 2), 12);
+  const [sma] = averagesForWindow({
+    series,
+    visible: series,
+    type: "sma",
+    periods: [2],
+  });
+  assert.equal(sma.values[0], null);
+  assert.equal(sma.values[1], null);
+  assert.equal(sma.values[2], null);
+  assert.equal(sma.values[3], 11);
+  assert.ok(sma.values[4] > 11 && sma.values[4] < 13);
+  assert.equal(sma.values[5], 13);
 });
 
 test("volume wave spreads a daily print and stays a curve, not a spike", () => {

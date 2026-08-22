@@ -93,6 +93,24 @@
   color: var(--dpmf-neon-violet);
 }
 
+.hybrid-tool-pair {
+  display: grid;
+  grid-template-columns: 30px 30px;
+  justify-content: center;
+  gap: 4px;
+}
+
+.hybrid-tool.is-clear {
+  color: #ef5350;
+  border-color: rgba(239, 83, 80, 0.55);
+}
+
+.hybrid-tool.is-clear:hover,
+.hybrid-tool.is-clear:focus-visible {
+  color: #ff7b84;
+  border-color: #ef5350;
+}
+
 .hybrid-colors.is-docked {
   display: grid;
   grid-template-columns: repeat(2, 14px);
@@ -178,9 +196,18 @@
   filter: drop-shadow(0 0 1.1px rgba(239, 83, 80, 0.45));
 }
 
+.hybrid-candle-body {
+  stroke-width: 1;
+}
+
 .hybrid-plot.is-hollow .hybrid-candle.is-up,
 .hybrid-plot.is-hollow .hybrid-candle.is-down {
   fill: none;
+}
+
+.hybrid-plot.is-hollow .hybrid-candle-body {
+  fill: none;
+  stroke-width: 1.35;
 }
 
 .hybrid-plot.is-hollow .hybrid-candle.is-up {
@@ -192,10 +219,6 @@
 }
 
 .hybrid-wick {
-  stroke-width: 1;
-}
-
-.hybrid-body {
   stroke-width: 1;
 }
 
@@ -229,26 +252,26 @@
 }
 
 .hybrid-sma {
-  stroke-width: 1.35;
+  stroke-width: 1.45;
   fill: none;
-  opacity: 0.92;
+  opacity: 0.94;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
 
 .hybrid-sma-glow {
   fill: none;
-  stroke-width: 5;
+  stroke-width: 7;
   stroke-linecap: round;
-  stroke-dasharray: 0.16 1;
-  filter: drop-shadow(0 0 7px currentColor);
-  animation: hybrid-ma-sweep 1.4s linear forwards;
+  stroke-dasharray: 0.14 1;
+  filter: drop-shadow(0 0 10px currentColor) drop-shadow(0 0 3px #fff);
+  animation: hybrid-ma-sweep 1.55s ease-out forwards;
   pointer-events: none;
 }
 
 @keyframes hybrid-ma-sweep {
   from {
-    stroke-dashoffset: 0.16;
+    stroke-dashoffset: 0.14;
   }
   to {
     stroke-dashoffset: -1;
