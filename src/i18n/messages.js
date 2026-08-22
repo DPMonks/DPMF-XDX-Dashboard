@@ -109,6 +109,8 @@ const en = {
   atl: "ATL",
   yes: "Yes",
   no: "No",
+  fixed: "fixed",
+  blackholedYes: "Yes, fixed",
   price: "Price",
   recordedPrice: "Recorded price",
   volume: "Volume",

@@ -75,6 +75,8 @@ export function composeTokenDetails({
     issuer: overview.issuer,
     issuerFee: overview.issuer_fee,
     blackholed: overview.blackholed,
+    blackholed_fixed: overview.blackholed_fixed,
+    blackholed_at: overview.blackholed_at,
     created: overview.created,
     change24h: change.xdx ?? change.XDX,
     source: overview.source,

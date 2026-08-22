@@ -44,6 +44,11 @@ import { issuedActivitySeries } from "../src/activityHistory.js";
 import { inferTradesFromHistory } from "../src/xdxTrades.js";
 import { loadIssuedHolderHistory } from "./issuedHolderHistory.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
+import {
+  XDX_BLACKHOLED_AT,
+  blackholeAtFromTransactions,
+  issuerBlackholeFromAccount,
+} from "../src/utils/blackhole.js";
 
 let pool = null;
 
@@ -1555,6 +1560,54 @@ async function loadIssuerLocked(db) {
   return issuerLockedCache;
 }
 
+const BLACKHOLE_POLL_MS = 6 * 60 * 60 * 1000;
+let issuerBlackholeCache = { at: 0, body: null };
+
+async function loadIssuerBlackhole() {
+  if (issuerBlackholeCache.body && Date.now() - issuerBlackholeCache.at < BLACKHOLE_POLL_MS) {
+    return issuerBlackholeCache.body;
+  }
+  try {
+    const info = await xrplRpc("account_info", {
+      account: XDX_ISSUER,
+      ledger_index: "validated",
+    });
+    const detected = issuerBlackholeFromAccount(info);
+    let at = issuerBlackholeCache.body?.blackholed_at || null;
+    if (detected.blackholed && !at) {
+      try {
+        const history = await xrplRpc("account_tx", {
+          account: XDX_ISSUER,
+          ledger_index_min: -1,
+          ledger_index_max: -1,
+          limit: 20,
+          forward: true,
+        });
+        at = blackholeAtFromTransactions(history.transactions);
+      } catch {
+        at = null;
+      }
+    }
+    const body = {
+      blackholed: detected.blackholed,
+      blackholed_fixed: detected.fixed,
+      blackholed_at: detected.blackholed ? at || XDX_BLACKHOLED_AT : null,
+      source: "xrpl",
+    };
+    issuerBlackholeCache = { at: Date.now(), body };
+    return body;
+  } catch {
+    return (
+      issuerBlackholeCache.body || {
+        blackholed: null,
+        blackholed_fixed: null,
+        blackholed_at: null,
+        source: "empty",
+      }
+    );
+  }
+}
+
 async function tokenBalanceFor(db, address) {
   const latest = await tryQuery(
     db,
@@ -1842,12 +1895,13 @@ async function buildPrices(db) {
 }
 
 async function buildTokenOverview(db) {
-  const [amm, quote, holders, trustlines, issuerLocked, ammXdx] = await Promise.all([
+  const [amm, quote, holders, trustlines, issuerLocked, blackhole, ammXdx] = await Promise.all([
     hydrateAmm(db),
     loadXrpQuote(db),
     tokenHolderCount(db),
     tokenTrustlineCount(db),
     loadIssuerLocked(db),
+    loadIssuerBlackhole(),
     tokenBalanceFor(db, XDX_XRP_AMM),
   ]);
 
@@ -1896,6 +1950,9 @@ async function buildTokenOverview(db) {
     xrplMarketCap: totalSupply * xdxUsd,
     circulatingMarketCap: circulating * xdxUsd,
     issuer: XDX_ISSUER,
+    blackholed: blackhole.blackholed,
+    blackholed_fixed: blackhole.blackholed_fixed,
+    blackholed_at: blackhole.blackholed_at,
     amm_account: XDX_XRP_AMM,
     updated: amm.timestamp,
     reserve_source: amm.reserve_source || "amm_pool_latest",
@@ -1904,7 +1961,7 @@ async function buildTokenOverview(db) {
 }
 
 async function buildSnapshot(db) {
-  const [amm, quote, holders, trustlines, lpOwners, lpTrustlines, lpSupply, issuerLocked, ammXdx] =
+  const [amm, quote, holders, trustlines, lpOwners, lpTrustlines, lpSupply, issuerLocked, blackhole, ammXdx] =
     await Promise.all([
       hydrateAmm(db),
       loadXrpQuote(db),
@@ -1914,6 +1971,7 @@ async function buildSnapshot(db) {
       loadLpTrustlineCount(db, "all"),
       loadAllLpSupply(db),
       loadIssuerLocked(db),
+      loadIssuerBlackhole(),
       tokenBalanceFor(db, XDX_XRP_AMM),
     ]);
 
@@ -1964,6 +2022,9 @@ async function buildSnapshot(db) {
     circulatingMarketCap: circulating * xdxUsd,
     pools,
     issuer: XDX_ISSUER,
+    blackholed: blackhole.blackholed,
+    blackholed_fixed: blackhole.blackholed_fixed,
+    blackholed_at: blackhole.blackholed_at,
     amm_account: XDX_XRP_AMM,
     updated: amm.timestamp,
     reserve_source: amm.reserve_source || "amm_pool_latest",

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getTokenDetails } from "../api/indexer";
 import {
+  formatDay,
   formatNumber,
   formatUsd,
   formatUsdPrice,
@@ -98,6 +99,7 @@ export default function TokenDetails() {
   }
 
   const blackholed = pick(data, ["blackholed"]);
+  const blackholedAt = pick(data, ["blackholed_at", "blackholedAt"]);
   const issuer = pick(data, ["issuer"]);
   const usdPrice = pick(data, ["recorded_price", "xdxUsd"]);
   const xrpPrice = pick(data, ["xdxPerXrp", "xdx_per_xrp"]);
@@ -177,7 +179,10 @@ export default function TokenDetails() {
       <Detail label={t.issuerAccount} value={issuer ? shortAddress(issuer) : "—"} />
       <Detail
         label={t.blackholed}
-        value={blackholed == null ? "—" : blackholed ? t.yes : t.no}
+        value={
+          blackholed == null ? "—" : blackholed ? t.blackholedYes || `${t.yes}, ${t.fixed}` : t.no
+        }
+        hint={blackholed && blackholedAt ? formatDay(blackholedAt, locale) : null}
       />
     </div>
   );
