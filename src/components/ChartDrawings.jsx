@@ -271,7 +271,8 @@ export default function ChartDrawings({
           const bands = fibExtensionBands(row.a, row.b, row.c);
           const x0 = scale.x(row.c.t);
           const x1 = width - pad.r;
-          const label = fibLabelPlacement(x0, { side: "left", minX: (pad?.l ?? 16) + 4 });
+          const toolLeft = Math.min(scale.x(row.a.t), scale.x(row.b.t), x0);
+          const label = fibLabelPlacement(toolLeft, { side: "left", gap: 10, minX: (pad?.l ?? 16) + 4 });
           return (
             <g key={key} className={dashed ? "hybrid-fib is-preview" : "hybrid-fib"}>
               {bands.map((band) => (
@@ -286,11 +287,11 @@ export default function ChartDrawings({
                     vectorEffect="non-scaling-stroke"
                   />
                   <text
-                    className="hybrid-draw-label hybrid-fib-label"
+                    className="hybrid-draw-label hybrid-fib-label is-left"
                     x={label.x}
                     y={scale.y(band.price) + 3}
-                    textAnchor={label.textAnchor}
-                    style={{ fill: band.color }}
+                    textAnchor="end"
+                    style={{ fill: band.color, textAnchor: "end" }}
                   >
                     {band.label} ({formatAxisPrice(band.price)})
                   </text>

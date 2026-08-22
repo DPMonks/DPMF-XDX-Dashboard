@@ -151,7 +151,7 @@ export function fibExtent(a, b) {
   return { t0: Math.min(t0, t1), t1: Math.max(t0, t1) };
 }
 
-export function fibLabelPlacement(x0, { side = "left", gap = 6, minX = 8, maxX } = {}) {
+export function fibLabelPlacement(x0, { side = "left", gap = 10, minX = 8, maxX } = {}) {
   const origin = Number(x0);
   if (!Number.isFinite(origin)) return { x: minX, textAnchor: "end" };
   if (side === "right") {

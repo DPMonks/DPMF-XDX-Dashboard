@@ -720,7 +720,7 @@ export default function HybridPlot({
           </g>
         ) : null}
 
-        <g className="hybrid-crosshair" pointerEvents="none">
+        <g className={`hybrid-crosshair${tool !== "cursor" ? " is-place" : ""}`} pointerEvents="none">
           <line ref={hairVRef} visibility="hidden" x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={height - PAD.b} />
           <line ref={hairHRef} visibility="hidden" x1={PAD.l} x2={width - PAD.r} y1={PAD.t} y2={PAD.t} />
           <g ref={timeTagRef} className="hybrid-cursor-tag is-time" visibility="hidden">

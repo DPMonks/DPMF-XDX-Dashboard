@@ -205,15 +205,16 @@ export function paintToolPreview(group, {
     const bands = fibExtensionBands(ghost.a, ghost.b, ghost.c);
     const x0 = scale.x(ghost.c.t);
     const x1 = width - pad.r;
-    const label = fibLabelPlacement(x0, { side: "left", minX: (pad?.l ?? 16) + 4 });
+    const toolLeft = Math.min(scale.x(ghost.a.t), scale.x(ghost.b.t), x0);
+    const label = fibLabelPlacement(toolLeft, { side: "left", gap: 10, minX: (pad?.l ?? 16) + 4 });
     for (const band of bands) {
       line(group, x0, scale.y(band.price), x1, scale.y(band.price), band.color, { className: "hybrid-fib-line", ...ink });
       const node = svg("text", {
-        class: "hybrid-draw-label hybrid-fib-label",
+        class: "hybrid-draw-label hybrid-fib-label is-left",
         x: label.x,
         y: scale.y(band.price) + 3,
-        "text-anchor": label.textAnchor,
-        style: `fill:${band.color}`,
+        "text-anchor": "end",
+        style: `fill:${band.color};text-anchor:end`,
       });
       node.textContent = `${band.label} (${formatAxisPrice(band.price)})`;
       group.appendChild(node);

@@ -424,10 +424,22 @@
   gap: 8px;
 }
 
+.hybrid-plot-wrap {
+  position: relative;
+}
+
 .hybrid-zoom {
+  position: absolute;
+  top: 10px;
+  right: 22px;
+  z-index: 6;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.hybrid-topbar .hybrid-zoom {
+  position: static;
   margin-left: auto;
 }
 
@@ -639,9 +651,10 @@
   pointer-events: none;
 }
 
-.hybrid-svg.is-placing .hybrid-crosshair line {
-  stroke: rgba(209, 212, 220, 0.34);
-  stroke-dasharray: 5 5;
+.hybrid-svg.is-placing .hybrid-crosshair line,
+.hybrid-crosshair.is-place line {
+  stroke: rgba(209, 212, 220, 0.28);
+  stroke-dasharray: 4 6;
 }
 
 .hybrid-draw.is-preview {
@@ -677,6 +690,10 @@
 
 .hybrid-fib-label {
   font-variant-numeric: tabular-nums;
+}
+
+.hybrid-fib-label.is-left {
+  text-anchor: end;
 }
 
 .hybrid-pending {

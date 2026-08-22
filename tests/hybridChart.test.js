@@ -661,7 +661,7 @@ test("draw style and extra City Index tools stay available from one toolbox", ()
   assert.ok(ext.some((row) => row.level === 1.618));
   const extLabel = fibLabelPlacement(220, { side: "left", minX: 88 });
   assert.equal(extLabel.textAnchor, "end");
-  assert.ok(extLabel.x < 220);
+  assert.ok(extLabel.x <= 210);
   const fork = pitchforkRays(a, b, c, 0, 20);
   assert.equal(fork.length, 3);
   const triangle = nextDrawingState({

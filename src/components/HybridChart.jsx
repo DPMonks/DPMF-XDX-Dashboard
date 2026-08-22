@@ -494,6 +494,25 @@ export default function HybridChart() {
             ) : null}
           </div>
 
+          <div className="hybrid-plot-wrap">
+            <div className="hybrid-zoom" role="group" aria-label={t.chartZoom}>
+              <button
+                type="button"
+                aria-label={t.chartZoomOut}
+                disabled={visibleCount >= ZOOM_BAR_MAX}
+                onClick={() => applyZoom(-1)}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                aria-label={t.chartZoomIn}
+                disabled={visibleCount <= ZOOM_BAR_MIN}
+                onClick={() => applyZoom(1)}
+              >
+                +
+              </button>
+            </div>
           <HybridPlot
             key={windowKey}
             candles={candles}
@@ -531,6 +550,7 @@ export default function HybridChart() {
             }}
             onZoom={applyZoom}
           />
+          </div>
 
           <div className="hybrid-ranges" role="tablist" aria-label={t.chartTimeframes || "Candle size"}>
             {INTERVALS.map((row) => (
