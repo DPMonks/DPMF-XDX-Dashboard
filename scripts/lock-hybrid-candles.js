@@ -2,9 +2,9 @@
 /**
  * Pull XDX candle history once and lock it.
  *
- * XDX/XRP: OnTheDEX public OHLC (XRPL DEX, from issuance when available).
- * XRP/USD: Yahoo XRP-USD daily from issuance, used to backdate
- *          XDX/RLUSD = XDX/XRP * XRP/USD (RLUSD ≈ $1) until the RLUSD AMM exists.
+ * XDX/XRP daily OHLC: InFTF XRPL DEX market_data (open/high/low/close/volume).
+ * XRP/USD daily: Yahoo XRP-USD from issuance.
+ * XDX/RLUSD: XDX/XRP × that day's XRP/USD (RLUSD ≈ $1) until native AMM prints exist.
  *
  * Re-run only when you intentionally refresh the locked snapshot.
  * Does not start indexer workers. Does not call XRPL from the browser.
@@ -14,15 +14,16 @@
 import { writeFileSync } from "node:fs";
 import { XDX_ISSUED_AT, XDX_ISSUER } from "../src/constants/ledger.js";
 import { backdateRlusdCandle, usdLookup } from "../src/chart/pairQuote.js";
-import { ticksToCandles } from "../src/chart/candles.js";
+import { candlesFromMarketData, ticksToCandles } from "../src/chart/candles.js";
 
 const ISSUED = Date.parse(XDX_ISSUED_AT);
 const OUT = new URL("../src/data/lockedCandles.json", import.meta.url);
+const INFTF_BASE = `https://xrpldata.inftf.org/v1/iou/market_data/${XDX_ISSUER}_XDX/XRP`;
 
 async function getJson(url) {
   const response = await fetch(url, {
     headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 DPMF-XDX-Dashboard" },
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(60_000),
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`${response.status} ${url}`);
@@ -44,18 +45,19 @@ async function lockXrpUsd() {
   const result = body?.chart?.result?.[0];
   const stamps = result?.timestamp || [];
   const quote = result?.indicators?.quote?.[0] || {};
-  const candles = stamps.map((stamp, index) => ({
-    t: Number(stamp) * 1000,
-    o: Number(quote.open?.[index]),
-    h: Number(quote.high?.[index]),
-    l: Number(quote.low?.[index]),
-    c: Number(quote.close?.[index]),
-    v: Number(quote.volume?.[index]) || 0,
-    source: "yahoo-xrp-usd",
-  })).filter((row) => row.t >= ISSUED && row.c > 0);
+  const candles = stamps
+    .map((stamp, index) => ({
+      t: Number(stamp) * 1000,
+      o: Number(quote.open?.[index]),
+      h: Number(quote.high?.[index]),
+      l: Number(quote.low?.[index]),
+      c: Number(quote.close?.[index]),
+      v: Number(quote.volume?.[index]) || 0,
+      source: "yahoo-xrp-usd",
+    }))
+    .filter((row) => row.t >= ISSUED && row.c > 0);
   if (candles.length) return ticksToCandles(candles, "1D", { continuous: false });
 
-  // Fallback: Kraken only keeps ~720 public daily bars.
   const kraken = await getJson("https://api.kraken.com/0/public/OHLC?pair=XRPUSD&interval=1440");
   return ticksToCandles(
     krakenRows(kraken).map((row) => ({
@@ -73,29 +75,23 @@ async function lockXrpUsd() {
 }
 
 async function lockXdxXrp() {
-  const url =
-    `https://api.onthedex.live/public/v1/ohlc?base=XDX.${XDX_ISSUER}&quote=XRP&interval=D&bars=5000&cf=yes`;
-  try {
-    const body = await getJson(url);
-    if (body?.error) throw new Error(body.message || body.error);
-    const rows = body?.data?.ohlc || body?.ohlc || [];
-    return ticksToCandles(
-      rows.map((row) => ({
-        t: Number(row.t || row.time) * (Number(row.t || row.time) < 1e12 ? 1000 : 1),
-        o: Number(row.o),
-        h: Number(row.h),
-        l: Number(row.l),
-        c: Number(row.c),
-        v: Number(row.vb || row.v || 0),
-        source: "onthedex",
-      })),
-      "1D",
-      { continuous: false }
+  const pages = [];
+  let start = "2021-10-24T00:00:00Z";
+  for (let page = 0; page < 8; page += 1) {
+    const rows = await getJson(
+      `${INFTF_BASE}?interval=1d&start=${encodeURIComponent(start)}&limit=1000`
     );
-  } catch (error) {
-    console.error("OnTheDEX XDX/XRP lock skipped:", error.message);
-    return [];
+    if (!Array.isArray(rows) || !rows.length) break;
+    pages.push(...rows);
+    const last = rows[rows.length - 1]?.timestamp;
+    if (!last || rows.length < 1000) break;
+    start = last;
   }
+  const seen = new Map();
+  for (const row of candlesFromMarketData(pages, "inftf")) {
+    seen.set(row.t, row);
+  }
+  return [...seen.values()].sort((left, right) => left.t - right.t);
 }
 
 const xrpUsd = await lockXrpUsd();
@@ -111,7 +107,7 @@ const locked = {
   pairs: {
     "XDX/XRP": {
       quote: "XRP",
-      source: xdxXrp.length ? "onthedex" : "pending",
+      source: xdxXrp.length ? "inftf-xrpl-dex" : "pending",
       candles: xdxXrp,
     },
     "XDX/RLUSD": {
@@ -131,8 +127,8 @@ console.log(
       xrpUsd: xrpUsd.length,
       xdxXrp: xdxXrp.length,
       xdxRlusd: xdxRlusd.length,
-      firstXrp: xrpUsd[0]?.t && new Date(xrpUsd[0].t).toISOString(),
-      lastXrp: xrpUsd.at(-1)?.t && new Date(xrpUsd.at(-1).t).toISOString(),
+      firstXdx: xdxXrp[0]?.t && new Date(xdxXrp[0].t).toISOString(),
+      lastXdx: xdxXrp.at(-1)?.t && new Date(xdxXrp.at(-1).t).toISOString(),
     },
     null,
     2

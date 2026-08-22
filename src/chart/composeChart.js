@@ -1,5 +1,12 @@
 import lockedCandles from "../data/lockedCandles.json" with { type: "json" };
-import { appendLiveClose, resampleCandles, ticksToCandles, windowCandles } from "./candles.js";
+import {
+  appendLiveClose,
+  candlesFromMarketData,
+  fillDailyGaps,
+  resampleCandles,
+  ticksToCandles,
+  windowCandles,
+} from "./candles.js";
 import { quotePerXdx, stitchRlusdCandles } from "./pairQuote.js";
 
 export function lockedSnapshot() {
@@ -73,12 +80,23 @@ export function composePairCandles({
     ...ticksFromSparkline(sparkline, name, { xrpUsd: prices.xrpUsd || latestLockedUsd() }),
     ...ticksFromTrades(trades, name),
   ];
-  const live = ticksToCandles(liveTicks, interval, { continuous: false });
-  const history = interval === "1W" ? resampleCandles(base, "1W") : base;
-  const merged = new Map(history.map((row) => [row.t, row]));
-  for (const row of live) merged.set(row.t, { ...merged.get(row.t), ...row, source: row.source || "live" });
+  const dbHistory = candlesFromMarketData(locked.dbMarket?.[name] || [], "db");
+  if (dbHistory.length) {
+    const map = new Map(base.map((row) => [row.t, row]));
+    for (const row of dbHistory) map.set(row.t, row);
+    base = [...map.values()].sort((left, right) => left.t - right.t);
+  }
+
+  const live = ticksToCandles(liveTicks, interval === "1W" ? "1D" : interval, { continuous: false });
+  let daily = interval === "1W" || interval === "1D" ? fillDailyGaps(base, base[0]?.t, now) : base;
+  const merged = new Map(daily.map((row) => [row.t, row]));
+  for (const row of live) {
+    const prev = merged.get(row.t);
+    merged.set(row.t, prev ? { ...prev, ...row, o: prev.o, source: row.source || "live" } : row);
+  }
   let candles = [...merged.values()].sort((left, right) => left.t - right.t);
   candles = appendLiveClose(candles, livePrice, now, interval === "1W" ? "1D" : interval);
+  if (interval === "1D") candles = fillDailyGaps(candles, candles[0]?.t, now);
   if (interval === "1W") candles = resampleCandles(candles, "1W");
   return windowCandles(candles, range, now);
 }

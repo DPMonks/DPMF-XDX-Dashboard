@@ -1,11 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ticksToCandles, sma, appendLiveClose, resampleCandles } from "../src/chart/candles.js";
+import {
+  ticksToCandles,
+  sma,
+  appendLiveClose,
+  resampleCandles,
+  fillDailyGaps,
+  candlesFromMarketData,
+} from "../src/chart/candles.js";
 import { bucketTime } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
 import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
-import { composePairCandles } from "../src/chart/composeChart.js";
+import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 
 test("bucketTime uses UTC midnight and Monday weeks", () => {
   assert.equal(bucketTime(Date.parse("2021-10-24T13:31:20.000Z"), "1D"), Date.parse("2021-10-24T00:00:00.000Z"));
@@ -31,6 +38,42 @@ test("ticksToCandles builds exact OHLC and continuous opens", () => {
   assert.equal(candles[0].v, 15);
   assert.equal(candles[1].o, 0.00006);
   assert.equal(candles[1].c, 0.00005);
+});
+
+test("fillDailyGaps carries the previous close so every UTC day has a candle", () => {
+  const start = Date.parse("2021-11-10T00:00:00.000Z");
+  const filled = fillDailyGaps(
+    [
+      { t: start, o: 1, h: 1, l: 1, c: 1, v: 3 },
+      { t: start + 2 * 86_400_000, o: 2, h: 2, l: 2, c: 2, v: 1 },
+    ],
+    start,
+    start + 2 * 86_400_000
+  );
+  assert.equal(filled.length, 3);
+  assert.equal(filled[1].c, 1);
+  assert.equal(filled[1].v, 0);
+  assert.equal(filled[1].source, "carry");
+  assert.equal(filled[2].c, 2);
+});
+
+test("candlesFromMarketData reads InFTF open/high/low/close/volume", () => {
+  const rows = candlesFromMarketData([
+    {
+      timestamp: "2021-11-10T00:00:00.000Z",
+      open: 0.001,
+      high: 0.002,
+      low: 0.0009,
+      close: 0.0015,
+      base_volume: 3000,
+    },
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].o, 0.001);
+  assert.equal(rows[0].h, 0.002);
+  assert.equal(rows[0].l, 0.0009);
+  assert.equal(rows[0].c, 0.0015);
+  assert.equal(rows[0].v, 3000);
 });
 
 test("sma is the arithmetic mean of the last N closes", () => {
@@ -133,6 +176,28 @@ test("resampleCandles weekly uses Monday buckets", () => {
   assert.equal(week[0].h, 3);
   assert.equal(week[0].c, 2);
   assert.equal(week[0].v, 3);
+});
+
+test("locked XDX/RLUSD daily history paints one candle per UTC day on 1M", () => {
+  const lock = lockedSnapshot();
+  const xrp = lock.pairs?.["XDX/XRP"]?.candles || [];
+  const rlusd = lock.pairs?.["XDX/RLUSD"]?.candles || [];
+  assert.ok(xrp.length > 365, `expected locked XDX/XRP history, got ${xrp.length}`);
+  assert.ok(rlusd.length > 365, `expected locked XDX/RLUSD history, got ${rlusd.length}`);
+  assert.equal(new Date(xrp[0].t).toISOString().slice(0, 10), "2021-11-10");
+  const now = Date.parse("2026-08-22T12:00:00.000Z");
+  const month = composePairCandles({
+    pair: "XDX/RLUSD",
+    interval: "1D",
+    range: "1M",
+    locked: lock,
+    now,
+  });
+  assert.equal(month.length, 30);
+  assert.equal(new Date(month[0].t).toISOString().slice(0, 10), "2026-07-24");
+  assert.equal(new Date(month[month.length - 1].t).toISOString().slice(0, 10), "2026-08-22");
+  const uniqueDays = new Set(month.map((row) => row.t));
+  assert.equal(uniqueDays.size, 30);
 });
 
 test("appendLiveClose updates the current UTC day instead of inventing a second candle", () => {

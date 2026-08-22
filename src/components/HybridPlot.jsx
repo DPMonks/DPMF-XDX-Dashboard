@@ -48,7 +48,7 @@ export default function HybridPlot({
     };
   }, [view, candles, innerW]);
 
-  const candleW = Math.max(2, innerW / Math.max(candles.length, 1) * 0.7);
+  const candleW = Math.min(12, Math.max(2, (innerW / Math.max(candles.length, 8)) * 0.7));
 
   function locate(event) {
     const node = box.current;

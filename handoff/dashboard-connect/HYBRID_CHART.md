@@ -14,7 +14,7 @@ That script pulls history **once** into `src/data/lockedCandles.json`.
 | Series | Source | Status |
 |---|---|---|
 | XRP/USD daily | Yahoo `XRP-USD` from 24 Oct 2021 | Locked |
-| XDX/XRP daily | OnTheDEX `GET /ohlc` | Re-run the script when OnTheDEX is out of maintenance |
+| XDX/XRP daily | InFTF `GET /v1/iou/market_data/{issuer}_XDX/XRP?interval=1d` | Locked from first DEX print (10 Nov 2021) |
 | XDX/RLUSD daily | `XDX/XRP × XRP/USD` (RLUSD ≈ $1) until native AMM prints exist | Built from the XDX/XRP lock |
 
 Live candles still merge `/api/sparkline/XDX`, `/api/xdx-flows`, AMM spot, and order-book mid. Browser stays SELECT-only.

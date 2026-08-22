@@ -214,3 +214,57 @@ export function windowCandles(candles, rangeId, now = Date.now()) {
 export function intervalMsOf(id) {
   return intervalMs(id);
 }
+
+const DAY_MS = 86_400_000;
+
+export function candlesFromMarketData(rows = [], source = "inftf") {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) =>
+      normalizeCandle(
+        {
+          t: Date.parse(row.timestamp || row.t || row.time),
+          o: row.open ?? row.o,
+          h: row.high ?? row.h,
+          l: row.low ?? row.l,
+          c: row.close ?? row.c,
+          v: row.base_volume ?? row.vb ?? row.v ?? 0,
+          source,
+        },
+        "1D"
+      )
+    )
+    .filter(Boolean)
+    .sort((left, right) => left.t - right.t);
+}
+
+export function fillDailyGaps(candles = [], fromMs, toMs) {
+  const list = (Array.isArray(candles) ? candles : [])
+    .map((row) => normalizeCandle(row, "1D"))
+    .filter(Boolean)
+    .sort((left, right) => left.t - right.t);
+  if (!list.length) return [];
+  const start = bucketTime(fromMs ?? list[0].t, "1D");
+  const end = bucketTime(toMs ?? list[list.length - 1].t, "1D");
+  if (start == null || end == null || end < start) return list;
+  const map = new Map(list.map((row) => [row.t, row]));
+  const out = [];
+  let prev = null;
+  for (let t = start; t <= end; t += DAY_MS) {
+    const row = map.get(t);
+    if (row) {
+      prev = row;
+      out.push(row);
+    } else if (prev) {
+      out.push({
+        t,
+        o: prev.c,
+        h: prev.c,
+        l: prev.c,
+        c: prev.c,
+        v: 0,
+        source: "carry",
+      });
+    }
+  }
+  return out;
+}
