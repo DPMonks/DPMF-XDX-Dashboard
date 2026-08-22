@@ -251,6 +251,7 @@
   position: relative;
   padding: 0;
   background: #000000;
+  overscroll-behavior: contain;
 }
 
 .hybrid-svg {
@@ -262,12 +263,27 @@
   touch-action: none;
 }
 
+.hybrid-svg.is-pan,
 .hybrid-svg.is-grab {
   cursor: grab;
 }
 
+.hybrid-svg.is-panning,
 .hybrid-svg.is-grabbing {
   cursor: grabbing;
+}
+
+.hybrid-candle.is-enter {
+  animation: hybrid-candle-in 0.32s ease-out;
+}
+
+@keyframes hybrid-candle-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .hybrid-handle {

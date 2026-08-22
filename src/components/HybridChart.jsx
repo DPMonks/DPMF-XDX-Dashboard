@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAmm, getOrderbooks, getPrices, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
-import { CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, visibleBarsForInterval } from "../chart/intervals";
-import { averagesForWindow, MA_PERIODS, MA_TYPES, windowLastBars } from "../chart/candles";
+import { CHART_MA_PAD, CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, visibleBarsForInterval } from "../chart/intervals";
+import { averagesForWindow, clampPanOffset, MA_PERIODS, MA_TYPES, windowBars } from "../chart/candles";
 import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../chart/indicators";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { quotePerXdx } from "../chart/pairQuote";
@@ -116,6 +116,11 @@ export default function HybridChart() {
   const [simAmount, setSimAmount] = useState("100000");
   const [ghost, setGhost] = useState(null);
   const [now, setNow] = useState(0);
+  const [panOffset, setPanOffset] = useState(0);
+  const [loadedBars, setLoadedBars] = useState(() => visibleBarsForInterval(DEFAULT_INTERVAL) + CHART_MA_PAD);
+  const [seriesLen, setSeriesLen] = useState(0);
+  const windowKey = `${pair}:${timeframe}`;
+  const [activeWindow, setActiveWindow] = useState(windowKey);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,10 +176,30 @@ export default function HybridChart() {
         livePrice,
         now,
         windowed: false,
+        lookbackBars: loadedBars,
       }),
-    [pair, timeframe, sparkline, trades, prices, livePrice, now]
+    [pair, timeframe, sparkline, trades, prices, livePrice, now, loadedBars]
   );
-  const candles = useMemo(() => windowLastBars(series, visibleBarsForInterval(timeframe)), [series, timeframe]);
+  const visibleCount = visibleBarsForInterval(timeframe);
+  if (activeWindow !== windowKey) {
+    setActiveWindow(windowKey);
+    setSeriesLen(0);
+    setPanOffset(0);
+    setLoadedBars(visibleCount + CHART_MA_PAD);
+  }
+  const wantLoaded = visibleCount + panOffset + CHART_MA_PAD + 32;
+  if (wantLoaded > loadedBars) setLoadedBars(wantLoaded);
+  if (series.length !== seriesLen) {
+    const grew = series.length - seriesLen;
+    setSeriesLen(series.length);
+    if (grew > 0 && panOffset > 0) setPanOffset((current) => current + grew);
+  }
+  const clampedPan = clampPanOffset(panOffset, series.length, visibleCount);
+  if (clampedPan !== panOffset) setPanOffset(clampedPan);
+  const candles = useMemo(
+    () => windowBars(series, { bars: visibleCount, offset: clampedPan }),
+    [series, visibleCount, clampedPan]
+  );
   const averages = useMemo(
     () =>
       averagesForWindow({
@@ -412,6 +437,7 @@ export default function HybridChart() {
           </div>
 
           <HybridPlot
+            key={windowKey}
             candles={candles}
             quote={quote}
             interval={timeframe}
@@ -441,6 +467,10 @@ export default function HybridChart() {
             locale={locale}
             onDraw={addDrawing}
             onMoveHandle={moveHandle}
+            onPan={(steps) => {
+              if (!steps) return;
+              setPanOffset((current) => current + steps);
+            }}
           />
 
           <div className="hybrid-ranges" role="tablist" aria-label={t.chartTimeframes || "Candle size"}>

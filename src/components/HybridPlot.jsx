@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks } from "../chart/axis";
-import { candleBodyBox, candleBodyWidth } from "../chart/candles";
+import { candleBodyBox, candleBodyWidth, wheelPanSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
 import { applyPlaceOffset, hitDrawingHandle, snapPoint } from "../chart/drawings";
@@ -48,6 +48,7 @@ export default function HybridPlot({
   locale,
   onDraw,
   onMoveHandle,
+  onPan,
 }) {
   const box = useRef(null);
   const svgRef = useRef(null);
@@ -63,7 +64,12 @@ export default function HybridPlot({
   const previewRef = useRef(null);
   const [hover, setHover] = useState(null);
   const [drag, setDrag] = useState(null);
+  const [panDrag, setPanDrag] = useState(null);
+  const [enterTs, setEnterTs] = useState([]);
+  const [seenTs, setSeenTs] = useState([]);
   const [maDraw, setMaDraw] = useState({ ready: [], armed: [] });
+  const wheelLeft = useRef(0);
+  const onPanRef = useRef(onPan);
   const uid = useId().replace(/:/g, "");
   const width = 960;
   const volH = showVolume ? VOL_H : 0;
@@ -101,6 +107,13 @@ export default function HybridPlot({
   const yTicks = useMemo(() => priceTicks(scale.min, scale.max, 6), [scale.min, scale.max]);
   const xTicks = useMemo(() => scale.ticks(6), [scale]);
   const volumes = useMemo(() => volumeWaveValues(candles), [candles]);
+  const seenSet = new Set(seenTs);
+  const freshBars = candles.map((row) => row.t).filter((stamp) => !seenSet.has(stamp) && !enterTs.includes(stamp));
+  if (freshBars.length) {
+    setSeenTs((current) => [...current, ...freshBars]);
+    setEnterTs((current) => [...current, ...freshBars]);
+  }
+
   const maIds = averages.map((row) => row.id);
   const maLive = new Set(maIds);
   const maReady = maDraw.ready.filter((id) => maLive.has(id));
@@ -114,8 +127,23 @@ export default function HybridPlot({
     setMaDraw({ ready: maReady, armed: [...maArmed, ...maAdded] });
   }
   useEffect(() => {
+    onPanRef.current = onPan;
+  }, [onPan]);
+  useEffect(() => {
     if (tool === "cursor") hideToolPreview(previewRef.current, placeMarkRef.current);
   }, [tool]);
+  useEffect(() => {
+    const node = svgRef.current;
+    if (!node) return undefined;
+    function onWheel(event) {
+      event.preventDefault();
+      const next = wheelPanSteps(event.deltaX, event.deltaY, wheelLeft.current);
+      wheelLeft.current = next.leftover;
+      if (next.steps && onPanRef.current) onPanRef.current(next.steps);
+    }
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+  }, []);
 
   const candleW = candleBodyWidth({
     innerW,
@@ -248,6 +276,19 @@ export default function HybridPlot({
   }
 
   function onMove(event) {
+    if (panDrag) {
+      const slot = Math.max(
+        4,
+        ((svgRef.current?.getBoundingClientRect?.().width || width) / width) * (innerW / Math.max(1, candles.length))
+      );
+      const moved = event.clientX - panDrag.x;
+      const steps = Math.trunc(moved / slot);
+      if (steps && onPanRef.current) {
+        onPanRef.current(steps);
+        setPanDrag((current) => (current ? { ...current, x: current.x + steps * slot } : current));
+      }
+      return;
+    }
     const pointer = locate(event);
     const next = tool === "cursor" || drag ? pointer : locate(event, { place: true });
     paintCursor(next);
@@ -259,10 +300,9 @@ export default function HybridPlot({
   }
 
   function onPointerDown(event) {
-    if (event.button !== 0) return;
     const pointer = locate(event);
     if (!pointer) return;
-    const hit = hitDrawingHandle(drawings, scale, pointer.x, pointer.y);
+    const hit = event.button === 0 ? hitDrawingHandle(drawings, scale, pointer.x, pointer.y) : null;
     if (hit) {
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -270,6 +310,13 @@ export default function HybridPlot({
       if (onMoveHandle) onMoveHandle(hit.index, hit.key, pointer);
       return;
     }
+    if (event.button === 1 || (event.button === 0 && tool === "cursor" && pointer.inPrice)) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      setPanDrag({ x: event.clientX });
+      return;
+    }
+    if (event.button !== 0) return;
     const next = tool === "cursor" ? pointer : locate(event, { place: true });
     if (!next?.inPrice) return;
     if (tool === "cursor" || !onDraw) return;
@@ -279,6 +326,7 @@ export default function HybridPlot({
 
   function onPointerUp() {
     setDrag(null);
+    setPanDrag(null);
   }
 
   const hoverCandle = hover?.candle;
@@ -314,7 +362,7 @@ export default function HybridPlot({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : ""}${drag ? " is-grabbing" : hover && hitDrawingHandle(drawings, scale, hover.x, hover.y) ? " is-grab" : ""}`}
+        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${drag ? " is-grabbing" : hover && hitDrawingHandle(drawings, scale, hover.x, hover.y) ? " is-grab" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => {
           if (drag) return;
@@ -475,8 +523,17 @@ export default function HybridPlot({
             const bodyTop = scale.y(Math.max(row.o, row.c));
             const bodyH = Math.max(1.2, Math.abs(scale.y(row.c) - scale.y(row.o)));
             const box = candleBodyBox({ width: candleW, height: bodyH, hollow });
+            const entering = enterTs.includes(row.t);
             return (
-              <g key={row.t} className={up ? "hybrid-candle is-up" : "hybrid-candle is-down"}>
+              <g
+                key={row.t}
+                className={`${up ? "hybrid-candle is-up" : "hybrid-candle is-down"}${entering ? " is-enter" : ""}`}
+                onAnimationEnd={
+                  entering
+                    ? () => setEnterTs((current) => current.filter((stamp) => stamp !== row.t))
+                    : undefined
+                }
+              >
                 <line className="hybrid-wick" x1={x} x2={x} y1={scale.y(row.h)} y2={scale.y(row.l)} />
                 <rect
                   className="hybrid-candle-body"

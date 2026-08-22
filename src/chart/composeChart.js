@@ -67,6 +67,7 @@ export function composePairCandles({
   livePrice,
   now = Date.now(),
   windowed = true,
+  lookbackBars,
 } = {}) {
   const name = String(pair || "XDX/RLUSD").toUpperCase();
   let base = locked.pairs?.[name]?.candles || [];
@@ -106,7 +107,11 @@ export function composePairCandles({
   }
   if (!isDailyOrLonger(interval)) {
     const step = intervalMs(interval);
-    const from = now - (visibleBarsForInterval(interval) + CHART_MA_PAD) * step;
+    const need = Math.min(
+      4000,
+      Math.max(visibleBarsForInterval(interval) + CHART_MA_PAD, Math.trunc(Number(lookbackBars) || 0))
+    );
+    const from = now - need * step;
     candles = expandDailyToInterval(candles, interval, from, now);
     const intra = ticksToCandles(liveTicks, interval, { continuous: false });
     const intraMap = new Map(candles.map((row) => [row.t, row]));

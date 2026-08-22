@@ -362,10 +362,32 @@ export function candleBodyBox({ width, height, hollow = false } = {}) {
   };
 }
 
-export function windowLastBars(candles = [], bars = CHART_VISIBLE_BARS) {
+export function clampPanOffset(offset, total, visible) {
+  const count = Math.max(1, Math.trunc(Number(visible) || 1));
+  const size = Array.isArray(total) ? total.length : Math.max(0, Math.trunc(Number(total) || 0));
+  const max = Math.max(0, size - count);
+  const n = Math.trunc(Number(offset) || 0);
+  return Math.min(max, Math.max(0, n));
+}
+
+export function windowBars(candles = [], { bars = CHART_VISIBLE_BARS, offset = 0 } = {}) {
+  const rows = Array.isArray(candles) ? candles : [];
   const n = Math.max(1, Math.trunc(Number(bars) || CHART_VISIBLE_BARS));
-  if (!Array.isArray(candles) || candles.length <= n) return candles;
-  return candles.slice(-n);
+  if (rows.length <= n) return rows;
+  const end = rows.length - clampPanOffset(offset, rows.length, n);
+  return rows.slice(end - n, end);
+}
+
+export function windowLastBars(candles = [], bars = CHART_VISIBLE_BARS) {
+  return windowBars(candles, { bars, offset: 0 });
+}
+
+export function wheelPanSteps(deltaX, deltaY, leftover = 0, threshold = 36) {
+  const raw = Math.abs(Number(deltaX)) >= Math.abs(Number(deltaY)) ? Number(deltaX) : Number(deltaY);
+  const total = Number(leftover) + (Number.isFinite(raw) ? raw : 0);
+  const step = Math.max(8, Number(threshold) || 36);
+  const steps = Math.trunc(total / step);
+  return { steps, leftover: total - steps * step };
 }
 
 export function expandDailyToInterval(daily = [], intervalId, fromMs, toMs) {
@@ -380,7 +402,8 @@ export function expandDailyToInterval(daily = [], intervalId, fromMs, toMs) {
   );
   const out = [];
   let prev = null;
-  const limit = start + step * 1200;
+  const want = Math.ceil((end - start) / step) + 2;
+  const limit = start + step * Math.min(4000, Math.max(1200, want));
   for (let t = start; t <= end && t <= limit; t += step) {
     const dayKey = bucketTime(t, "1D");
     const dayRow = byDay.get(dayKey);

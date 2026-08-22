@@ -18,6 +18,9 @@ import {
   fillDailyGaps,
   candlesFromMarketData,
   expandDailyToInterval,
+  clampPanOffset,
+  wheelPanSteps,
+  windowBars,
   windowLastBars,
 } from "../src/chart/candles.js";
 import { bucketTime, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
@@ -307,6 +310,13 @@ test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail"
   assert.equal(expanded[1].source, "session");
   assert.equal(windowLastBars(expanded, 2).length, 2);
   assert.equal(windowLastBars(expanded, 2)[0].t, expanded[4].t);
+  const panned = windowBars(expanded, { bars: 2, offset: 2 });
+  assert.equal(panned.length, 2);
+  assert.equal(panned[0].t, expanded[2].t);
+  assert.equal(panned[1].t, expanded[3].t);
+  assert.equal(clampPanOffset(80, expanded.length, 2), 4);
+  assert.equal(wheelPanSteps(40, 0, 0, 36).steps, 1);
+  assert.equal(wheelPanSteps(0, -40, 0, 36).steps, -1);
   const slots = barSlots(expanded, { left: 0, width: 600 });
   assert.ok(Math.abs(slots.x(expanded[1].t) - slots.x(expanded[0].t) - slots.slot) < 1e-6);
 });
