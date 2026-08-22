@@ -343,7 +343,7 @@ export default function ActivityChart() {
               </LineChart>
             </ResponsiveContainer>
             )}
-            {isLongRange(range) && chartRows.length ? (
+            {chartRows.length ? (
               <p className="orderbook-asof">{t.historyFromIssuance}</p>
             ) : null}
           </div>

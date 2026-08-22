@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   dailyLastPoints,
   downsampleSeries,
+  issuedActivitySeries,
   mergeActivityRows,
   rowsFromXrplToGraph,
 } from "../src/activityHistory.js";
@@ -24,7 +25,7 @@ test("rowsFromXrplToGraph keeps issuance-to-now holder and trustline counts", ()
   assert.ok(new Date(rows[0].timestamp) >= new Date("2021-10-24"));
 });
 
-test("mergeActivityRows lets SQL overwrite the same timestamp", () => {
+test("mergeActivityRows lets a later list overwrite the same timestamp", () => {
   const merged = mergeActivityRows(
     [{ timestamp: "2026-08-22T00:00:00.000Z", holders: 15940, trustlines: 19970 }],
     [{ timestamp: "2026-08-22T00:00:00.000Z", holders: 15944, trustlines: 19980 }]
@@ -32,6 +33,22 @@ test("mergeActivityRows lets SQL overwrite the same timestamp", () => {
   assert.equal(merged.length, 1);
   assert.equal(merged[0].holders, 15944);
   assert.equal(merged[0].trustlines, 19980);
+});
+
+test("issuedActivitySeries keeps XDX history and only appends a live tip", () => {
+  const issued = [
+    { timestamp: "2021-10-24T13:31:20.000Z", holders: 1, trustlines: 1121 },
+    { timestamp: "2026-08-21T00:00:00.000Z", holders: 15940, trustlines: 19970 },
+  ];
+  const rows = issuedActivitySeries(issued, {
+    timestamp: "2026-08-22T09:00:00.000Z",
+    holders: 15945,
+    trustlines: 19977,
+  });
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0].trustlines, 1121);
+  assert.equal(rows[1].trustlines, 19970);
+  assert.equal(rows[2].trustlines, 19977);
 });
 
 test("downsampleSeries keeps first and last points", () => {

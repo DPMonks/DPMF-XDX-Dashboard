@@ -2,7 +2,6 @@ import pg from "pg";
 import {
   issuerLockedFromIssued,
   XDX_ISSUER,
-  XDX_RLUSD_AMM,
   XDX_TOTAL_SUPPLY,
   XDX_XRP_AMM,
 } from "../src/constants/ledger.js";
@@ -36,7 +35,7 @@ import {
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
 } from "../src/orderbook.js";
-import { mergeActivityRows, RECENT_SCAN_DAYS } from "../src/activityHistory.js";
+import { issuedActivitySeries, mergeActivityRows } from "../src/activityHistory.js";
 import { loadIssuedHolderHistory } from "./issuedHolderHistory.js";
 
 let pool = null;
@@ -1136,76 +1135,39 @@ async function tokenHoldersPage(db, limit, offset, options = {}) {
   };
 }
 
-const NON_TRADER_ACCOUNTS = [XDX_ISSUER, XDX_XRP_AMM, XDX_RLUSD_AMM];
-
-async function recentHolderScans(db) {
-  return tryQuery(
-    db,
-    `SELECT timestamp,
-            COUNT(*) FILTER (WHERE ABS(balance::numeric) > 0) AS holders,
-            COUNT(*) AS trustlines
-     FROM token_holders_history
-     WHERE timestamp >= NOW() - ($1 * INTERVAL '1 day')
-     GROUP BY timestamp
-     ORDER BY timestamp`,
-    [RECENT_SCAN_DAYS]
-  );
-}
-
-async function storedDailyHolders(db) {
-  return tryQuery(
-    db,
-    `SELECT day AS timestamp, holder_count AS holders, NULL::numeric AS trustlines
-     FROM holders_history
-     ORDER BY day`
-  );
-}
-
 async function nativeTraderSeries(db) {
   const hourly = await tryQuery(
     db,
-    `WITH ordered AS (
-       SELECT account, timestamp, ABS(balance::numeric) AS balance,
-              LAG(ABS(balance::numeric)) OVER (PARTITION BY account ORDER BY timestamp) AS prev
-       FROM token_holders_history
-       WHERE account <> ALL($1::text[])
-         AND timestamp >= NOW() - ($2 * INTERVAL '1 day')
-     )
-     SELECT date_trunc('hour', timestamp) AS timestamp,
-            COUNT(DISTINCT account) FILTER (WHERE prev IS NOT NULL AND balance <> prev) AS traders,
-            COUNT(*) FILTER (WHERE prev IS NOT NULL AND balance > prev) AS buys,
-            COUNT(*) FILTER (WHERE prev IS NOT NULL AND balance < prev) AS sells,
-            COALESCE(SUM(ABS(balance - prev)) FILTER (WHERE prev IS NOT NULL AND balance <> prev), 0) AS volume
-     FROM ordered
+    `SELECT date_trunc('hour', timestamp) AS timestamp,
+            COUNT(DISTINCT account)::int AS traders,
+            COUNT(*)::int AS trades,
+            COALESCE(SUM(ABS(COALESCE(xdx, amount)::numeric)), 0) AS volume
+     FROM trades
      GROUP BY 1
-     ORDER BY 1`,
-    [NON_TRADER_ACCOUNTS, RECENT_SCAN_DAYS]
+     ORDER BY 1`
   );
   return hourly.rows;
 }
 
 async function loadLongHolderSeries(db) {
-  const [issued, daily, recent, holders, trustlines] = await Promise.all([
+  const [issued, holders, trustlines] = await Promise.all([
     loadIssuedHolderHistory().catch(() => []),
-    storedDailyHolders(db),
-    recentHolderScans(db),
     tokenHolderCount(db),
     tokenTrustlineCount(db),
   ]);
-  const live =
+  return issuedActivitySeries(
+    issued,
     holders || trustlines
-      ? [
-          {
-            timestamp: new Date().toISOString(),
-            holders,
-            holder_count: holders,
-            trustlines,
-            trustline_count: trustlines,
-            source: "db",
-          },
-        ]
-      : [];
-  return mergeActivityRows(issued, daily.rows, recent.rows, live);
+      ? {
+          timestamp: new Date().toISOString(),
+          holders,
+          holder_count: holders,
+          trustlines,
+          trustline_count: trustlines,
+          source: "live",
+        }
+      : null
+  );
 }
 
 async function nativeActivitySeries(db) {
@@ -1217,29 +1179,7 @@ async function nativeActivitySeries(db) {
 }
 
 async function nativeXdxFlows(db) {
-  const result = await tryQuery(
-    db,
-    `WITH ordered AS (
-       SELECT account, timestamp, ABS(balance::numeric) AS balance,
-              LAG(ABS(balance::numeric)) OVER (PARTITION BY account ORDER BY timestamp) AS prev
-       FROM token_holders_history
-       WHERE account <> ALL($1::text[])
-         AND timestamp >= NOW() - ($2 * INTERVAL '1 day')
-     )
-     SELECT timestamp, account, balance, (balance - prev) AS delta
-     FROM ordered
-     WHERE prev IS NOT NULL AND ABS(balance - prev) > 1e-8
-     ORDER BY timestamp DESC
-     LIMIT 500`,
-    [NON_TRADER_ACCOUNTS, RECENT_SCAN_DAYS]
-  );
-  return result.rows.map((row) => ({
-    timestamp: row.timestamp,
-    account: row.account,
-    side: Number(row.delta) > 0 ? "buy" : "sell",
-    xdx: Math.abs(Number(row.delta || 0)),
-    balance: Number(row.balance || 0),
-  }));
+  return readAmmTrades(db);
 }
 
 const ISSUER_POLL_MS = 30_000;

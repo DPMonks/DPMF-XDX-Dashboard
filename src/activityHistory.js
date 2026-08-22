@@ -67,6 +67,21 @@ export function mergeActivityRows(...lists) {
   );
 }
 
+// XDX history only: xrpl.to issuance series plus a live tip. Do not merge
+// token_holders_history scan timestamps — those are when rows entered our DB.
+export function issuedActivitySeries(issuedRows, live = null) {
+  const issued = Array.isArray(issuedRows) ? issuedRows : [];
+  if (!live || typeof live !== "object") return mergeActivityRows(issued);
+  const liveTs = new Date(live.timestamp || Date.now()).getTime();
+  const last = issued[issued.length - 1];
+  const lastTs = last ? new Date(last.timestamp).getTime() : 0;
+  if (!Number.isFinite(liveTs)) return mergeActivityRows(issued);
+  if (issued.length && Number.isFinite(lastTs) && liveTs < lastTs) {
+    return mergeActivityRows(issued);
+  }
+  return mergeActivityRows(issued, [live]);
+}
+
 export function downsampleSeries(rows, maxPoints = ACTIVITY_PLOT_POINTS) {
   const list = Array.isArray(rows) ? rows : [];
   if (list.length <= maxPoints) return list;
