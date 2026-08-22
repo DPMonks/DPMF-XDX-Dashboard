@@ -232,7 +232,8 @@ export default function ChartTools({
   );
   const activeGroup = groupForTool(tool).id;
   const remembered = { ...lastTool, [activeGroup]: tool };
-  const open = panel && tool !== "cursor";
+  const flyoutGroup = TOOL_GROUPS.find((group) => group.id === activeGroup && group.id !== "pointer");
+  const open = panel && Boolean(flyoutGroup);
 
   useEffect(() => {
     if (!panel) return undefined;
@@ -276,30 +277,28 @@ export default function ChartTools({
         );
       })}
       {open ? (
-        <div className="hybrid-tool-flyout" role="dialog" aria-label={t.chartAllTools}>
-          {TOOL_GROUPS.map((group) => (
-            <div key={group.id} className="hybrid-flyout-group">
-              <p className="hybrid-tool-group-label">{t[group.labelKey] || group.id}</p>
-              <div className="hybrid-flyout-tools">
-                {group.tools.map((row) => (
-                  <button
-                    key={row.id}
-                    type="button"
-                    className={tool === row.id ? "hybrid-flyout-tool active" : "hybrid-flyout-tool"}
-                    style={tool === row.id && row.colors !== false ? { borderColor: color, color } : undefined}
-                    onPointerDown={(event) => {
-                      event.preventDefault();
-                      pickTool(row.id);
-                    }}
-                    title={t[row.labelKey] || row.id}
-                  >
-                    <ToolIcon name={row.icon} />
-                    <span>{t[row.labelKey] || row.id}</span>
-                  </button>
-                ))}
-              </div>
+        <div className="hybrid-tool-flyout" role="dialog" aria-label={t[flyoutGroup.labelKey] || flyoutGroup.id}>
+          <div className="hybrid-flyout-group">
+            <p className="hybrid-tool-group-label">{t[flyoutGroup.labelKey] || flyoutGroup.id}</p>
+            <div className="hybrid-flyout-tools">
+              {flyoutGroup.tools.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  className={tool === row.id ? "hybrid-flyout-tool active" : "hybrid-flyout-tool"}
+                  style={tool === row.id && row.colors !== false ? { borderColor: color, color } : undefined}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    pickTool(row.id);
+                  }}
+                  title={t[row.labelKey] || row.id}
+                >
+                  <ToolIcon name={row.icon} />
+                  <span>{t[row.labelKey] || row.id}</span>
+                </button>
+              ))}
             </div>
-          ))}
+          </div>
           <DrawStyle
             color={color}
             strokeWidth={strokeWidth}
@@ -338,7 +337,7 @@ export default function ChartTools({
       <div className="hybrid-tool-pair" role="group" aria-label={t.chartEdit}>
         <button
           type="button"
-          className="hybrid-tool"
+          className="hybrid-tool is-undo"
           onPointerDown={(event) => {
             event.preventDefault();
             onUndo();

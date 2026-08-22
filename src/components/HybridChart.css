@@ -103,9 +103,20 @@
 
 .hybrid-tool-pair {
   display: grid;
-  grid-template-columns: 30px 30px;
+  grid-template-columns: 30px;
   justify-content: center;
   gap: 4px;
+}
+
+.hybrid-tool.is-undo {
+  color: #ffe14a;
+  border-color: rgba(255, 225, 74, 0.55);
+}
+
+.hybrid-tool.is-undo:hover,
+.hybrid-tool.is-undo:focus-visible {
+  color: #fff3a3;
+  border-color: #ffe14a;
 }
 
 .hybrid-tool.is-clear {
