@@ -45,16 +45,22 @@ export function requestOrigin(req) {
   return `${proto}://${host}`.replace(/\/$/, "");
 }
 
-export function buildSignInPayload(origin, txjson) {
+export function shouldSubmitTxjson(txjson) {
+  const type = txjson?.TransactionType;
+  return Boolean(type && type !== "SignIn");
+}
+
+export function buildXamanPayload(origin, txjson, options = {}) {
   const web = String(origin || "https://xdx-exchange.dpmf.technology").replace(
     /\/$/,
     ""
   );
+  const tx = txjson && typeof txjson === "object" ? txjson : { TransactionType: "SignIn" };
   return {
-    txjson: txjson && typeof txjson === "object" ? txjson : { TransactionType: "SignIn" },
+    txjson: tx,
     options: {
-      submit: false,
-      expire: 5,
+      submit: options.submit ?? shouldSubmitTxjson(tx),
+      expire: options.expire ?? 5,
       return_url: {
         // App-only: identical web+app URLs make Xaman steal the current
         // browser tab and show their hosted sign-in page.
@@ -62,6 +68,14 @@ export function buildSignInPayload(origin, txjson) {
       },
     },
   };
+}
+
+export function buildSignInPayload(origin, txjson) {
+  return buildXamanPayload(origin, txjson || { TransactionType: "SignIn" }, { submit: false });
+}
+
+export function buildTrustSetPayload(origin, txjson) {
+  return buildXamanPayload(origin, txjson, { submit: true });
 }
 
 export function xamanErrorMessage(raw, fallback = "Failed to start Xaman sign-in") {

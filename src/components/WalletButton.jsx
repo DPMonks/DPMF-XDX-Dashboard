@@ -1,19 +1,27 @@
 import xamanLogo from "../assets/XAMAN.jpg";
 import { useI18n } from "../i18n/useI18n";
 
-export default function WalletButton({ onClick, disabled, connected, address }) {
+export default function WalletButton({
+  onClick,
+  disabled,
+  connected = false,
+  address,
+  label,
+  title,
+}) {
   const { t } = useI18n();
+  const caption = label || (connected ? `${t.connected} ${address}` : t.connectWallet);
 
   return (
     <button
       type="button"
-      className={connected ? "connect-wallet-btn is-connected" : "connect-wallet-btn"}
+      className={connected && !label ? "connect-wallet-btn is-connected" : "connect-wallet-btn"}
       onClick={onClick}
       disabled={disabled}
-      title={connected ? t.disconnect : t.connectWallet}
+      title={title || (connected ? t.disconnect : t.connectWallet)}
     >
       <img src={xamanLogo} alt="" className="wallet-btn-logo" />
-      {connected ? (
+      {connected && !label ? (
         <>
           <span className="wallet-status-online" aria-hidden="true">
             ●
@@ -23,7 +31,7 @@ export default function WalletButton({ onClick, disabled, connected, address }) 
           </span>
         </>
       ) : (
-        <span>{t.connectWallet}</span>
+        <span>{caption}</span>
       )}
     </button>
   );

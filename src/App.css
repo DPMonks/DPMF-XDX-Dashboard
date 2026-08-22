@@ -87,6 +87,16 @@ body {
   min-width: 0;
 }
 
+.header-actions {
+  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 100%;
+}
+
 .dashboard-title {
   font-size: clamp(1.45rem, 4vw, 2.4rem);
   font-weight: 700;
@@ -1933,6 +1943,12 @@ body {
   .wallet-fees {
     align-items: center;
     text-align: center;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .wallet-control,

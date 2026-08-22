@@ -8,6 +8,8 @@ export default function WalletModal({
   mobileUrl,
   uuid,
   status,
+  preparingLabel,
+  scanLabel,
   onClose,
 }) {
   const { t } = useI18n();
@@ -17,6 +19,12 @@ export default function WalletModal({
   const appHref = xamanAppUrl(uuid) || mobileUrl;
   const webHref = xamanSignUrl(uuid) || mobileUrl;
   const connectLabel = t.connectXaman || t.openApp;
+  const heading =
+    status === "loading"
+      ? preparingLabel || t.preparing
+      : phone
+        ? connectLabel
+        : scanLabel || t.scan;
 
   function openXaman(event) {
     if (!appHref && !webHref) return;
@@ -42,11 +50,7 @@ export default function WalletModal({
       >
         <img src={xamanLogo} alt="" className="wallet-modal-logo" />
         <h2 id="wallet-modal-title" className="modal-title">
-          {status === "loading"
-            ? t.preparing
-            : phone
-              ? connectLabel
-              : t.scan}
+          {heading}
         </h2>
 
         {!phone && qrUrl && status !== "loading" ? (

@@ -48,14 +48,14 @@ export function isPhoneDevice(userAgent = typeof navigator !== "undefined" ? nav
   return /Android|iPhone|iPod/i.test(String(userAgent || ""));
 }
 
-export async function createPayload() {
+export async function createPayload(body = {}) {
   const response = await fetch("/api/xaman/create-payload", {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({}),
+    body: JSON.stringify(body && typeof body === "object" ? body : {}),
   });
   const raw = await response.json().catch(() => ({}));
   if (!response.ok) {

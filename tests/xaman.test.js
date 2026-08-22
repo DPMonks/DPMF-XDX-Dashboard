@@ -2,11 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildSignInPayload,
+  buildTrustSetPayload,
+  buildXamanPayload,
   cleanCredential,
   requestOrigin,
+  shouldSubmitTxjson,
   xamanErrorMessage,
   xummConfigured,
 } from "../api/xaman/_xumm.js";
+import {
+  TF_SET_NO_RIPPLE,
+  XDX_ISSUER,
+  XDX_TOTAL_SUPPLY,
+  xdxTrustSetTxjson,
+} from "../src/constants/ledger.js";
 import {
   isPhoneDevice,
   normalizePayload,
@@ -18,6 +27,36 @@ test("cleanCredential strips quotes and whitespace", () => {
   assert.equal(cleanCredential('  "abc-def" \n'), "abc-def");
   assert.equal(cleanCredential(""), "");
   assert.equal(cleanCredential(null), "");
+});
+
+test("xdxTrustSetTxjson is a NoRipple TrustSet for the XDX issuer", () => {
+  const txjson = xdxTrustSetTxjson("rTestAccount111111111111111111111");
+  assert.equal(txjson.TransactionType, "TrustSet");
+  assert.equal(txjson.Flags, TF_SET_NO_RIPPLE);
+  assert.equal(txjson.LimitAmount.currency, "XDX");
+  assert.equal(txjson.LimitAmount.issuer, XDX_ISSUER);
+  assert.equal(txjson.LimitAmount.value, String(XDX_TOTAL_SUPPLY));
+  assert.equal(txjson.Account, "rTestAccount111111111111111111111");
+  assert.equal(xdxTrustSetTxjson().Account, undefined);
+});
+
+test("TrustSet payloads submit to XRPL; SignIn payloads do not", () => {
+  const signIn = buildSignInPayload("https://xdx-exchange.dpmf.technology/");
+  assert.equal(signIn.options.submit, false);
+  assert.equal(shouldSubmitTxjson(signIn.txjson), false);
+
+  const trust = buildTrustSetPayload(
+    "https://xdx-exchange.dpmf.technology/",
+    xdxTrustSetTxjson()
+  );
+  assert.equal(trust.txjson.TransactionType, "TrustSet");
+  assert.equal(trust.options.submit, true);
+  assert.equal(trust.options.return_url.app, "https://xdx-exchange.dpmf.technology");
+  assert.equal(trust.options.return_url.web, undefined);
+  assert.equal(shouldSubmitTxjson(trust.txjson), true);
+
+  const fromBody = buildXamanPayload("https://xdx-exchange.dpmf.technology", xdxTrustSetTxjson());
+  assert.equal(fromBody.options.submit, true);
 });
 
 test("buildSignInPayload returns to the site from the app, not a Xaman web page", () => {

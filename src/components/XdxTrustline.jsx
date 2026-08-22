@@ -1,34 +1,32 @@
 import { useWallet } from "../context/useWallet";
-import { shortAddress } from "../utils/format";
+import { xdxTrustSetTxjson } from "../constants/ledger";
 import { useXamanPayload } from "../xaman/useXamanPayload";
 import { useI18n } from "../i18n/useI18n";
 import WalletButton from "./WalletButton";
 import WalletModal from "./WalletModal";
 
-export default function ConnectWallet() {
+export default function XdxTrustline() {
   const { t } = useI18n();
-  const { walletAddress, connectWallet, disconnectWallet } = useWallet();
+  const { walletAddress, connectWallet } = useWallet();
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
 
-  function startConnection() {
-    if (walletAddress) {
-      disconnectWallet();
-      return;
-    }
-
+  function startTrustline() {
     start({
-      onSigned: (account) => connectWallet(account),
-      errorMessage: t.walletError,
+      body: { txjson: xdxTrustSetTxjson(walletAddress) },
+      onSigned: (account) => {
+        if (account) connectWallet(account);
+      },
+      errorMessage: t.trustlineError,
     });
   }
 
   return (
     <div className="wallet-control">
       <WalletButton
-        onClick={startConnection}
+        onClick={startTrustline}
         disabled={status === "loading" || status === "waiting"}
-        connected={Boolean(walletAddress)}
-        address={shortAddress(walletAddress)}
+        label={t.xdxTrustline}
+        title={t.xdxTrustlineHint}
       />
       {error && <p className="wallet-error">{error}</p>}
       <WalletModal
@@ -37,6 +35,8 @@ export default function ConnectWallet() {
         mobileUrl={mobileUrl}
         uuid={uuid}
         status={status}
+        preparingLabel={t.preparingTrustline}
+        scanLabel={t.scanTrustline}
         onClose={reset}
       />
     </div>

@@ -1,5 +1,5 @@
 import {
-  buildSignInPayload,
+  buildXamanPayload,
   readJson,
   requestOrigin,
   xamanErrorMessage,
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     const response = await fetch("https://xumm.app/api/v1/platform/payload", {
       method: "POST",
       headers: xummHeaders(origin),
-      body: JSON.stringify(buildSignInPayload(origin, body.txjson)),
+      body: JSON.stringify(buildXamanPayload(origin, body.txjson, body.options)),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {

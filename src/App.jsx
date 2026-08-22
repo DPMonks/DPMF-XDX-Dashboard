@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
+import XdxTrustline from "./components/XdxTrustline";
 import { useI18n } from "./i18n/useI18n";
 import TokenDetails from "./components/TokenDetails";
 import RichList from "./components/RichList";
@@ -151,7 +152,10 @@ export default function App() {
               <p className="dashboard-subtitle">{t.subtitle}</p>
             </div>
           </div>
-          <ConnectWallet />
+          <div className="header-actions">
+            <XdxTrustline />
+            <ConnectWallet />
+          </div>
         </div>
       </header>
 

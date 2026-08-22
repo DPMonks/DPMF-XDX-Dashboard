@@ -16,6 +16,25 @@ export function issuerLockedFromIssued(issued, total = XDX_TOTAL_SUPPLY) {
 export const XDX_XRP_AMM = "rhEwhutV5EyYzTbBYDdK7dHxwdi5omqffB";
 export const XDX_XRP_LP_HEX = "03970105D80AE3C54085F6E97EE16CEDE6CE8200";
 
+// tfSetNoRipple — standard IOU trustline so the line cannot ripple.
+export const TF_SET_NO_RIPPLE = 131072;
+export const XDX_TRUST_LIMIT = String(XDX_TOTAL_SUPPLY);
+
+export function xdxTrustSetTxjson(account) {
+  const txjson = {
+    TransactionType: "TrustSet",
+    Flags: TF_SET_NO_RIPPLE,
+    LimitAmount: {
+      currency: XDX_CURRENCY,
+      issuer: XDX_ISSUER,
+      value: XDX_TRUST_LIMIT,
+    },
+  };
+  const signer = String(account || "").trim();
+  if (signer) txjson.Account = signer;
+  return txjson;
+}
+
 export const RLUSD_ISSUER = "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De";
 export const RLUSD_HEX = "524C555344000000000000000000000000000000";
 export const XDX_RLUSD_AMM = "rLbBzF9oxntVf4XxcyakNKJTci4yqSmQUu";

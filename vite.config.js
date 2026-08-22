@@ -3,7 +3,8 @@ import react from "@vitejs/plugin-react";
 import { attachIndexerProxy } from "./server/attachProxy.js";
 import { indexerOrigin } from "./server/proxyIndexer.js";
 import {
-  buildSignInPayload,
+  buildXamanPayload,
+  readJson,
   requestOrigin,
   xamanErrorMessage,
   xummHeaders,
@@ -14,10 +15,11 @@ function xamanDevPlugin() {
     try {
       const origin = requestOrigin(req);
       if (req.url?.startsWith("/api/xaman/create-payload") && req.method === "POST") {
+        const body = await readJson(req);
         const response = await fetch("https://xumm.app/api/v1/platform/payload", {
           method: "POST",
           headers: xummHeaders(origin),
-          body: JSON.stringify(buildSignInPayload(origin)),
+          body: JSON.stringify(buildXamanPayload(origin, body.txjson, body.options)),
         });
         const data = await response.json().catch(() => ({}));
         res.statusCode = response.status;
