@@ -111,6 +111,29 @@ export function issuedActivitySeries(issuedRows, live = null) {
   return mergeActivityRows(issued, [live]);
 }
 
+export function carryActivityMetrics(rows = []) {
+  let holders = null;
+  let trustlines = null;
+  let traders = null;
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const nextHolders = metricNumber(row, "holders");
+    const nextTrustlines = metricNumber(row, "trustlines");
+    const nextTraders = metricNumber(row, "traders");
+    if (nextHolders != null) holders = nextHolders;
+    if (nextTrustlines != null) trustlines = nextTrustlines;
+    if (nextTraders != null) traders = nextTraders;
+    return {
+      ...row,
+      holders,
+      holder_count: holders,
+      trustlines,
+      trustline_count: trustlines,
+      traders,
+      trader_count: traders,
+    };
+  });
+}
+
 export function downsampleSeries(rows, maxPoints = ACTIVITY_PLOT_POINTS) {
   const list = Array.isArray(rows) ? rows : [];
   if (list.length <= maxPoints) return list;

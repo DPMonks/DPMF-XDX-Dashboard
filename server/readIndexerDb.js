@@ -40,7 +40,7 @@ import {
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
 } from "../src/orderbook.js";
-import { issuedActivitySeries } from "../src/activityHistory.js";
+import { carryActivityMetrics, issuedActivitySeries } from "../src/activityHistory.js";
 import { inferTradesFromHistory } from "../src/xdxTrades.js";
 import { loadIssuedHolderHistory } from "./issuedHolderHistory.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
@@ -1555,20 +1555,22 @@ async function loadLongHolderSeries(db) {
     liveTradersRaw == null || liveTradersRaw === ""
       ? null
       : Number(liveTradersRaw);
-  return issuedActivitySeries(
-    issued,
-    holders || trustlines || liveTraders != null
-      ? {
-          timestamp: new Date().toISOString(),
-          holders,
-          holder_count: holders,
-          trustlines,
-          trustline_count: trustlines,
-          traders: Number.isFinite(liveTraders) ? liveTraders : null,
-          trader_count: Number.isFinite(liveTraders) ? liveTraders : null,
-          source: "live",
-        }
-      : null
+  return carryActivityMetrics(
+    issuedActivitySeries(
+      issued,
+      holders || trustlines || liveTraders != null
+        ? {
+            timestamp: new Date().toISOString(),
+            holders,
+            holder_count: holders,
+            trustlines,
+            trustline_count: trustlines,
+            traders: Number.isFinite(liveTraders) ? liveTraders : null,
+            trader_count: Number.isFinite(liveTraders) ? liveTraders : null,
+            source: "live",
+          }
+        : null
+    )
   );
 }
 

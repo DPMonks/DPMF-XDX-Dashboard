@@ -2,6 +2,7 @@ import { api, INDEXER_ORIGIN } from "../api";
 import { pairFromRow } from "../constants/ledger";
 import { keepLastGoodOwners } from "../todayOwners";
 import {
+  carryActivityMetrics,
   issuedActivitySeries,
   mergeActivityRows,
   rowsFromXrplToGraph,
@@ -552,42 +553,35 @@ async function fetchXrplToIssued() {
 
 export async function getChartHistory() {
   const errors = [];
-  const [apiIssued, remote] = await Promise.all([
-    api
-      .holdersHistory({ queue: false, retries: 1 })
-      .then(chartArray)
-      .catch((error) => {
-        errors.push(error);
-        return [];
-      }),
+  const take = (promise) =>
+    promise.then(chartArray).catch((error) => {
+      errors.push(error);
+      return [];
+    });
+  const [apiIssued, apiActivity, apiTraders, remote] = await Promise.all([
+    take(api.holdersHistory({ queue: false, retries: 1 })),
+    take(api.activityHistory()),
+    take(api.tradersHistory()),
     fetchXrplToIssued(),
   ]);
-  const issued = mergeActivityRows(
-    apiIssued.map((row) =>
-      row?.source === "live"
-        ? { ...row, traders: null, trader_count: null }
-        : row
-    ),
-    remote
-  );
+  const issued = mergeActivityRows(apiIssued, apiActivity, apiTraders, remote);
 
   const live = await api.overview().catch(() => null);
   const lastTraders = [...issued]
     .reverse()
-    .find((row) => {
-      if (row?.source === "live") return false;
-      return numberOrNull(row.traders ?? row.trader_count) != null;
-    });
-  const rows = issuedActivitySeries(
-    issued,
-    live && (live.holder_count != null || live.trustline_count != null)
-      ? {
-          timestamp: new Date().toISOString(),
-          holders: live.holder_count ?? live.holders,
-          trustlines: live.trustline_count ?? live.trustlines,
-          traders: lastTraders?.traders ?? lastTraders?.trader_count,
-        }
-      : null
+    .find((row) => numberOrNull(row.traders ?? row.trader_count) != null);
+  const rows = carryActivityMetrics(
+    issuedActivitySeries(
+      issued,
+      live && (live.holder_count != null || live.trustline_count != null)
+        ? {
+            timestamp: new Date().toISOString(),
+            holders: live.holder_count ?? live.holders,
+            trustlines: live.trustline_count ?? live.trustlines,
+            traders: lastTraders?.traders ?? lastTraders?.trader_count,
+          }
+        : null
+    )
   );
   if (!rows.length && errors.length) {
     throw errors[0];

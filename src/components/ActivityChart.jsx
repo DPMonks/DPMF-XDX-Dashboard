@@ -125,10 +125,15 @@ export default function ActivityChart() {
   const [data, setData] = useState([]);
   const [trades, setTrades] = useState([]);
   const [metric, setMetric] = useState("holders");
-  const [range, setRange] = useState("Max");
+  const [ranges, setRanges] = useState({
+    holders: "24H",
+    trustlines: "24H",
+    traders: "24H",
+  });
+  const range = ranges[metric] || "24H";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [now, setNow] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -232,14 +237,9 @@ export default function ActivityChart() {
   }, [chartRows, xRange, targetY, metric, range]);
 
   const historyRows = useMemo(() => {
-    const windowMs = RANGE_MS[range];
-    const start = range === "Max" ? 0 : now - windowMs;
     const scoped = data
       .map(withTs)
-      .filter((row) => {
-        if (!row || row.ts < start) return false;
-        return metricValue(row, metric) != null;
-      });
+      .filter((row) => row && metricValue(row, metric) != null);
     const visible = dailyLastPoints(scoped)
       .sort((a, b) => b.ts - a.ts)
       .map((row, index, list) => {
@@ -250,7 +250,7 @@ export default function ActivityChart() {
         return { ...row, value, previous: prior, change };
       });
     return visible;
-  }, [data, metric, range, now]);
+  }, [data, metric]);
 
   const visibleTrades = useMemo(() => {
     const windowMs = RANGE_MS[range];
@@ -285,7 +285,7 @@ export default function ActivityChart() {
               type="button"
               className={item === range ? "range active" : "range"}
               onClick={() => {
-                setRange(item);
+                setRanges((current) => ({ ...current, [metric]: item }));
                 setNow(Date.now());
               }}
             >
@@ -378,7 +378,7 @@ export default function ActivityChart() {
           <div className="history-block">
             <h3 className="history-title">{t.history}</h3>
             <HistoryPager
-              key={`hist-${metric}-${range}`}
+              key={`hist-${metric}`}
               rows={historyRows}
               renderHead={() => (
                 <tr>

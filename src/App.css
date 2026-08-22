@@ -540,6 +540,11 @@ body {
   height: 260px;
 }
 
+.activity-plot .recharts-line-curve,
+.activity-plot .activity-line {
+  stroke: var(--dpmf-neon-lime) !important;
+}
+
 .activity-plot.is-live .recharts-line-curve,
 .activity-plot.is-live .activity-line {
   filter: drop-shadow(0 0 5px var(--dpmf-neon-lime)) drop-shadow(0 0 12px var(--dpmf-neon-lime-soft));
@@ -549,10 +554,10 @@ body {
 @keyframes activity-glow {
   0%,
   100% {
-    filter: drop-shadow(0 0 4px var(--dpmf-neon-lime)) drop-shadow(0 0 8px rgba(199, 112, 255, 0.2));
+    filter: drop-shadow(0 0 4px var(--dpmf-neon-lime)) drop-shadow(0 0 8px var(--dpmf-neon-lime-soft));
   }
   50% {
-    filter: drop-shadow(0 0 10px var(--dpmf-neon-lime)) drop-shadow(0 0 18px rgba(199, 112, 255, 0.45));
+    filter: drop-shadow(0 0 10px var(--dpmf-neon-lime)) drop-shadow(0 0 16px var(--dpmf-neon-lime-soft));
   }
 }
 

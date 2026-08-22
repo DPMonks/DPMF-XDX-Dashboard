@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   dailyLastPoints,
   downsampleSeries,
+  carryActivityMetrics,
   issuedActivitySeries,
   mergeActivityRows,
   metricNumber,
@@ -101,6 +102,19 @@ test("metricNumber keeps a missing side empty instead of plotting zero", () => {
   assert.equal(metricNumber({ holders: 15945 }, "holders"), 15945);
   assert.equal(metricNumber({ holders: 15945 }, "trustlines"), null);
   assert.equal(metricNumber({ active24H: 0, traders: 0 }, "traders"), 0);
+});
+
+test("carryActivityMetrics fills holders, trustlines, and traders forward", () => {
+  const rows = carryActivityMetrics([
+    { timestamp: "2021-10-24T13:31:20.000Z", holders: 1, trustlines: 1121 },
+    { timestamp: "2026-08-21T00:00:00.000Z", holders: 15940, traders: 410 },
+    { timestamp: "2026-08-22T09:00:00.000Z", holders: 15945, trustlines: 19977 },
+  ]);
+  assert.equal(rows[0].traders, null);
+  assert.equal(rows[1].trustlines, 1121);
+  assert.equal(rows[1].traders, 410);
+  assert.equal(rows[2].traders, 410);
+  assert.equal(rows[2].trustlines, 19977);
 });
 
 test("dailyLastPoints keeps one row per UTC day", () => {
