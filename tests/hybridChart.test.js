@@ -28,10 +28,12 @@ import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js
 import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
 import { maCurvePoints, maPath, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
+  applyPlaceOffset,
   drawingHandles,
   fibBands,
   fibExtent,
   fibPrice,
+  PLACE_OFFSET,
   hitDrawingHandle,
   moveDrawingHandle,
   nextDrawingState,
@@ -427,6 +429,18 @@ test("priceTicks and timeTicks fill left and bottom chart scales", () => {
   assert.equal(formatAxisTime(start, { spanMs: end - start, intervalId: "1D", locale: "en-GB" }), "24 Jul");
   assert.match(formatCursorWhen(start, "en-GB"), /24 Jul 2026/);
   assert.match(formatCursorWhen(start, "en-GB"), /00:00/);
+});
+
+test("tool place mark sits up and right of the mouse so the pointer is not on the drop", () => {
+  const at = applyPlaceOffset(
+    { x: 200, y: 120 },
+    { tool: "trend", pad: { l: 84, r: 18, t: 16 }, width: 960, plotBottom: 364 }
+  );
+  assert.equal(at.x, 200 + PLACE_OFFSET.x);
+  assert.equal(at.y, 120 + PLACE_OFFSET.y);
+  assert.ok(at.x > 200);
+  assert.ok(at.y < 120);
+  assert.equal(applyPlaceOffset({ x: 200, y: 120 }, { tool: "cursor" }).x, 200);
 });
 
 test("drawing tools trail from the first drop to the hover point", () => {

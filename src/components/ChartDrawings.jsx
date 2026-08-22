@@ -115,8 +115,6 @@ function Handles({ row, scale, fallbackPrice, activeKey }) {
 
 export default function ChartDrawings({
   drawings = [],
-  preview,
-  pending,
   scale,
   pad,
   width,
@@ -126,14 +124,10 @@ export default function ChartDrawings({
 }) {
   const tMin = scale.start;
   const tMax = scale.end;
-  const items = preview ? [...drawings, preview] : drawings;
-  const first = pending?.points?.[0];
+  const items = drawings;
 
   return (
     <g className="hybrid-drawings">
-      {first ? (
-        <circle className="hybrid-pending" cx={scale.x(first.t)} cy={scale.y(first.price)} r="3.5" style={{ fill: pending.color || "#ff9a3c" }} />
-      ) : null}
       {items.map((row, index) => {
         const color = stroke(row);
         const dashed = row.preview;

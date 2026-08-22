@@ -454,6 +454,25 @@
   stroke: none;
 }
 
+.hybrid-svg.is-placing {
+  cursor: crosshair;
+}
+
+.hybrid-place-mark {
+  pointer-events: none;
+}
+
+.hybrid-place-mark circle {
+  fill: rgba(0, 0, 0, 0.35);
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.hybrid-place-mark line {
+  stroke: currentColor;
+  stroke-width: 1.15;
+}
+
 .hybrid-grid {
   stroke: #1e222d;
   stroke-width: 1;

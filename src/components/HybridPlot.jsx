@@ -4,7 +4,8 @@ import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTi
 import { candleBodyBox, candleBodyWidth } from "../chart/candles";
 import { maCurvePoints, maPath, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
-import { hitDrawingHandle, previewDrawing, snapPoint } from "../chart/drawings";
+import { applyPlaceOffset, hitDrawingHandle, snapPoint } from "../chart/drawings";
+import { hideToolPreview, paintPlaceMark, paintToolPreview } from "../chart/paintPreview";
 import ChartDrawings from "./ChartDrawings";
 
 const PRICE_H = 348;
@@ -54,6 +55,8 @@ export default function HybridPlot({
   const priceTextRef = useRef(null);
   const hoverRef = useRef(null);
   const rafRef = useRef(0);
+  const placeMarkRef = useRef(null);
+  const previewRef = useRef(null);
   const [hover, setHover] = useState(null);
   const [drag, setDrag] = useState(null);
   const [glowIds, setGlowIds] = useState([]);
@@ -100,6 +103,9 @@ export default function HybridPlot({
     seenMa.current = new Set(ids);
     if (added.length) setGlowIds((current) => [...new Set([...current, ...added])]);
   }, [averages]);
+  useEffect(() => {
+    if (tool === "cursor") hideToolPreview(previewRef.current, placeMarkRef.current);
+  }, [tool]);
 
   const candleW = candleBodyWidth({
     innerW,
@@ -109,11 +115,15 @@ export default function HybridPlot({
     stepMs: intervalMs(interval),
   });
 
-  function locate(event) {
+  function locate(event, { place = false } = {}) {
     const mapped = clientToSvg(svgRef.current || event.currentTarget, event.clientX, event.clientY, width, height);
     if (!mapped) return null;
-    const x = mapped.x;
-    const y = mapped.y;
+    const shifted =
+      place && tool !== "cursor"
+        ? applyPlaceOffset(mapped, { tool, pad: PAD, width, plotBottom })
+        : mapped;
+    const x = shifted.x;
+    const y = shifted.y;
     const t = scale.start + ((x - PAD.l) / innerW) * (scale.end - scale.start);
     const price = scale.max - ((y - PAD.t) / PRICE_H) * (scale.max - scale.min);
     const inPrice = y >= PAD.t - 2 && y <= plotBottom + 2 && x >= PAD.l && x <= width - PAD.r;
@@ -191,12 +201,33 @@ export default function HybridPlot({
     }
   }
 
-  function queueHover(next) {
-    hoverRef.current = next;
-    if (pending) {
-      setHover(next);
+  function paintPlacement(next) {
+    const placing = tool !== "cursor";
+    paintPlaceMark(placeMarkRef.current, {
+      x: next?.x,
+      y: next?.y,
+      color,
+      visible: Boolean(placing && next?.inPrice),
+    });
+    if (!placing) {
+      hideToolPreview(previewRef.current, null);
       return;
     }
+    paintToolPreview(previewRef.current, {
+      tool,
+      color,
+      pending,
+      hover: next,
+      scale,
+      pad: PAD,
+      width,
+      plotBottom,
+    });
+  }
+
+  function queueHover(next) {
+    hoverRef.current = next;
+    if (tool !== "cursor") return;
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;
@@ -205,26 +236,30 @@ export default function HybridPlot({
   }
 
   function onMove(event) {
-    const next = locate(event);
+    const pointer = locate(event);
+    const next = tool === "cursor" || drag ? pointer : locate(event, { place: true });
     paintCursor(next);
-    queueHover(next);
-    if (drag && next && Number.isFinite(next.t) && Number.isFinite(next.price) && onMoveHandle) {
-      onMoveHandle(drag.index, drag.key, next);
+    paintPlacement(tool === "cursor" || drag ? null : next);
+    queueHover(pointer);
+    if (drag && pointer && Number.isFinite(pointer.t) && Number.isFinite(pointer.price) && onMoveHandle) {
+      onMoveHandle(drag.index, drag.key, pointer);
     }
   }
 
   function onPointerDown(event) {
     if (event.button !== 0) return;
-    const next = locate(event);
-    if (!next?.inPrice) return;
-    const hit = hitDrawingHandle(drawings, scale, next.x, next.y);
+    const pointer = locate(event);
+    if (!pointer) return;
+    const hit = hitDrawingHandle(drawings, scale, pointer.x, pointer.y);
     if (hit) {
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
       setDrag(hit);
-      if (onMoveHandle) onMoveHandle(hit.index, hit.key, next);
+      if (onMoveHandle) onMoveHandle(hit.index, hit.key, pointer);
       return;
     }
+    const next = tool === "cursor" ? pointer : locate(event, { place: true });
+    if (!next?.inPrice) return;
     if (tool === "cursor" || !onDraw) return;
     event.preventDefault();
     onDraw(next);
@@ -235,7 +270,6 @@ export default function HybridPlot({
   }
 
   const hoverCandle = hover?.candle;
-  const preview = hover?.inPrice ? previewDrawing({ tool, color, pending, hover }) : null;
   const clipId = `hybrid-plot-${uid}`;
   const volClipId = `hybrid-vol-${uid}`;
   const rsiClipId = `hybrid-rsi-${uid}`;
@@ -268,11 +302,12 @@ export default function HybridPlot({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className={`hybrid-svg${drag ? " is-grabbing" : hover && hitDrawingHandle(drawings, scale, hover.x, hover.y) ? " is-grab" : ""}`}
+        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : ""}${drag ? " is-grabbing" : hover && hitDrawingHandle(drawings, scale, hover.x, hover.y) ? " is-grab" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => {
           if (drag) return;
           paintCursor(null);
+          hideToolPreview(previewRef.current, placeMarkRef.current);
           hoverRef.current = null;
           setHover(null);
         }}
@@ -509,8 +544,6 @@ export default function HybridPlot({
         </g>
         <ChartDrawings
           drawings={drawings}
-          preview={preview}
-          pending={pending}
           scale={scale}
           pad={PAD}
           width={width}
@@ -518,6 +551,14 @@ export default function HybridPlot({
           clipId={clipId}
           activeHandle={drag}
         />
+        <g className="hybrid-place-layer" pointerEvents="none">
+          <g ref={previewRef} clipPath={`url(#${clipId})`} />
+          <g ref={placeMarkRef} className="hybrid-place-mark" visibility="hidden">
+            <circle r="5" />
+            <line x1="-7" x2="7" y1="0" y2="0" />
+            <line x1="0" x2="0" y1="-7" y2="7" />
+          </g>
+        </g>
 
         {volH > 0 ? (
           <g className="hybrid-volume" clipPath={`url(#${volClipId})`}>

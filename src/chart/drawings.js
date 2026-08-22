@@ -1,3 +1,20 @@
+export const PLACE_OFFSET = { x: 16, y: -14 };
+
+export function applyPlaceOffset(point, { tool = "cursor", pad, width, plotBottom } = {}) {
+  if (!point || tool === "cursor") return point;
+  const left = Number(pad?.l) || 0;
+  const right = Number.isFinite(Number(width)) ? Number(width) - (Number(pad?.r) || 0) : Infinity;
+  const top = Number(pad?.t) || 0;
+  const bottom = Number(plotBottom);
+  const x = (Number(point.x) || 0) + PLACE_OFFSET.x;
+  const y = (Number(point.y) || 0) + PLACE_OFFSET.y;
+  return {
+    ...point,
+    x: Math.min(right - 2, Math.max(left, x)),
+    y: Number.isFinite(bottom) ? Math.min(bottom - 2, Math.max(top + 2, y)) : Math.max(top + 2, y),
+  };
+}
+
 export const DRAW_COLORS = [
   { id: "green", hex: "#98f050" },
   { id: "red", hex: "#ff5d73" },
