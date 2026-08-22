@@ -23,7 +23,7 @@ import { walletOrdersFromBooks } from "../wallet/composeWallet";
 import { useWallet } from "../context/useWallet";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
-import { nextDrawingState } from "../chart/drawings";
+import { moveDrawingHandle, nextDrawingState } from "../chart/drawings";
 import ChartTools from "./ChartTools";
 import HybridPlot from "./HybridPlot";
 import "./HybridChart.css";
@@ -172,6 +172,12 @@ export default function HybridChart() {
     const next = nextDrawingState({ tool, color: drawColor, pending, point });
     setPending(next.pending);
     if (next.drawing) setDrawings((rows) => [...rows, next.drawing]);
+  }
+
+  function moveHandle(index, key, point) {
+    setDrawings((rows) =>
+      rows.map((row, current) => (current === index ? moveDrawingHandle(row, key, point) : row))
+    );
   }
 
   function selectTool(id) {
@@ -372,6 +378,7 @@ export default function HybridChart() {
             showRsi={showRsi}
             locale={locale}
             onDraw={addDrawing}
+            onMoveHandle={moveHandle}
           />
 
           <div className="hybrid-ranges" role="tablist" aria-label={t.chartTimeframes || "Candle size"}>

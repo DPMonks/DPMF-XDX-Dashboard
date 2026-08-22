@@ -160,7 +160,7 @@ export function rangeStats(a, b) {
 export function shapeFromPoints(kind, points = [], color) {
   const [a, b, c] = points;
   if (kind === "hline" || kind === "hray") return { kind, color, t: (b || a)?.t, price: (b || a)?.price };
-  if (kind === "vline") return { kind, color, t: (b || a)?.t };
+  if (kind === "vline") return { kind, color, t: (b || a)?.t, price: (b || a)?.price };
   if (kind === "text") return { kind, color, t: a?.t, price: a?.price, text: "Note" };
   if (kind === "pricelabel") return { kind, color, t: a?.t, price: a?.price };
   if (kind === "channel") return { kind, color, a, b, c };
@@ -181,6 +181,54 @@ export function nextDrawingState({ tool, color, pending, point }) {
     return { pending: { tool, color, points }, drawing: null };
   }
   return { pending: null, drawing: shapeFromPoints(tool, points, color) };
+}
+
+export const HANDLE_HIT_R = 12;
+
+export function drawingHandles(row, fallbackPrice) {
+  if (!row || row.preview) return [];
+  const mid = Number(fallbackPrice);
+  if (row.kind === "hline" || row.kind === "hray" || row.kind === "pricelabel" || row.kind === "text") {
+    if (!Number.isFinite(Number(row.price))) return [];
+    return [{ key: "point", t: Number(row.t) || 0, price: Number(row.price) }];
+  }
+  if (row.kind === "vline") {
+    if (!Number.isFinite(Number(row.t))) return [];
+    return [{
+      key: "point",
+      t: Number(row.t),
+      price: Number.isFinite(Number(row.price)) ? Number(row.price) : mid,
+    }];
+  }
+  return ["a", "b", "c"]
+    .filter((key) => row[key] && Number.isFinite(Number(row[key].t)) && Number.isFinite(Number(row[key].price)))
+    .map((key) => ({ key, t: Number(row[key].t), price: Number(row[key].price) }));
+}
+
+export function moveDrawingHandle(row, key, point) {
+  if (!row || !isUsablePoint(point)) return row;
+  const next = { t: Number(point.t), price: Number(point.price) };
+  if (key === "point") {
+    return { ...row, t: next.t, price: next.price };
+  }
+  if (key === "a" || key === "b" || key === "c") {
+    return { ...row, [key]: next };
+  }
+  return row;
+}
+
+export function hitDrawingHandle(drawings = [], scale, x, y, radius = HANDLE_HIT_R) {
+  const r2 = radius * radius;
+  const fallback = Number.isFinite(scale?.min) && Number.isFinite(scale?.max) ? (scale.min + scale.max) / 2 : 0;
+  for (let index = drawings.length - 1; index >= 0; index -= 1) {
+    const handles = drawingHandles(drawings[index], fallback);
+    for (const handle of handles) {
+      const dx = scale.x(handle.t) - x;
+      const dy = scale.y(handle.price) - y;
+      if (dx * dx + dy * dy <= r2) return { index, key: handle.key };
+    }
+  }
+  return null;
 }
 
 export function previewDrawing({ tool, color, pending, hover }) {

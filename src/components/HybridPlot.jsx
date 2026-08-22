@@ -4,7 +4,7 @@ import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTick
 import { candleBodyWidth } from "../chart/candles";
 import { volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
-import { previewDrawing, snapPoint } from "../chart/drawings";
+import { hitDrawingHandle, previewDrawing, snapPoint } from "../chart/drawings";
 import ChartDrawings from "./ChartDrawings";
 
 const PRICE_H = 348;
@@ -41,9 +41,11 @@ export default function HybridPlot({
   showRsi = true,
   locale,
   onDraw,
+  onMoveHandle,
 }) {
   const box = useRef(null);
   const [hover, setHover] = useState(null);
+  const [drag, setDrag] = useState(null);
   const uid = useId().replace(/:/g, "");
   const width = 960;
   const volH = showVolume ? VOL_H : 0;
@@ -126,15 +128,30 @@ export default function HybridPlot({
   function onMove(event) {
     const next = locate(event);
     setHover(next);
+    if (drag && next && Number.isFinite(next.t) && Number.isFinite(next.price) && onMoveHandle) {
+      onMoveHandle(drag.index, drag.key, next);
+    }
   }
 
   function onPointerDown(event) {
-    if (event.button !== 0 || tool === "cursor" || !onDraw) return;
+    if (event.button !== 0) return;
     const next = locate(event);
-    if (next?.inPrice) {
+    if (!next?.inPrice) return;
+    const hit = hitDrawingHandle(drawings, scale, next.x, next.y);
+    if (hit) {
       event.preventDefault();
-      onDraw(next);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      setDrag(hit);
+      if (onMoveHandle) onMoveHandle(hit.index, hit.key, next);
+      return;
     }
+    if (tool === "cursor" || !onDraw) return;
+    event.preventDefault();
+    onDraw(next);
+  }
+
+  function onPointerUp() {
+    setDrag(null);
   }
 
   const hoverCandle = hover?.candle;
@@ -178,10 +195,14 @@ export default function HybridPlot({
     <div className={hollow ? "hybrid-plot is-hollow" : "hybrid-plot"} ref={box}>
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="hybrid-svg"
+        className={`hybrid-svg${drag ? " is-grabbing" : hover && hitDrawingHandle(drawings, scale, hover.x, hover.y) ? " is-grab" : ""}`}
         onPointerMove={onMove}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={() => {
+          if (!drag) setHover(null);
+        }}
         onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
         role="img"
         aria-label={`${quote} hybrid chart`}
       >
@@ -398,6 +419,7 @@ export default function HybridPlot({
             pad={PAD}
             width={width}
             plotBottom={plotBottom}
+            activeHandle={drag}
           />
         </g>
 

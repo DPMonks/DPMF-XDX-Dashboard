@@ -25,9 +25,12 @@ import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js
 import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../src/chart/axis.js";
 import { rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
+  drawingHandles,
   fibBands,
   fibExtent,
   fibPrice,
+  hitDrawingHandle,
+  moveDrawingHandle,
   nextDrawingState,
   previewDrawing,
   raySegment,
@@ -392,6 +395,29 @@ test("horizontal line trails under the cursor and drops on one click", () => {
   assert.equal(placed.drawing.kind, "hline");
   assert.equal(placed.drawing.price, 0.4);
   assert.equal(toolMeta("hline").clicks, 1);
+});
+
+test("placed drawings keep white handles that can be moved", () => {
+  const line = nextDrawingState({
+    tool: "trend",
+    color: "#3d8bff",
+    pending: { tool: "trend", color: "#3d8bff", points: [{ t: 10, price: 1 }] },
+    point: { t: 40, price: 2 },
+  }).drawing;
+  const handles = drawingHandles(line);
+  assert.equal(handles.length, 2);
+  assert.equal(handles[0].key, "a");
+  assert.equal(handles[1].key, "b");
+  const moved = moveDrawingHandle(line, "b", { t: 80, price: 3 });
+  assert.equal(moved.b.t, 80);
+  assert.equal(moved.b.price, 3);
+  assert.equal(moved.a.price, 1);
+  const vline = nextDrawingState({ tool: "vline", color: "#fff", pending: null, point: { t: 12, price: 0.5 } }).drawing;
+  assert.equal(drawingHandles(vline).length, 1);
+  const scale = { x: (t) => t, y: (p) => p * 10, min: 0, max: 4 };
+  const hit = hitDrawingHandle([line], scale, 40, 20);
+  assert.equal(hit.key, "b");
+  assert.equal(hitDrawingHandle([line], scale, 400, 200), null);
 });
 
 test("fib retracement uses TradingView level colors and click order", () => {

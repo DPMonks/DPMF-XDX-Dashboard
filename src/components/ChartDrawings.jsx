@@ -1,4 +1,4 @@
-import { channelOffset, extendSegment, fibBands, fibExtent, raySegment, rangeStats } from "../chart/drawings";
+import { channelOffset, drawingHandles, extendSegment, fibBands, fibExtent, raySegment, rangeStats } from "../chart/drawings";
 import { formatAxisPrice } from "../chart/axis";
 
 function stroke(row) {
@@ -71,6 +71,18 @@ function FibRetracement({ row, scale, dashed }) {
   );
 }
 
+function Handles({ row, scale, fallbackPrice, activeKey }) {
+  return drawingHandles(row, fallbackPrice).map((handle) => (
+    <circle
+      key={`handle-${handle.key}`}
+      className={activeKey === handle.key ? "hybrid-handle is-active" : "hybrid-handle"}
+      cx={scale.x(handle.t)}
+      cy={scale.y(handle.price)}
+      r="4"
+    />
+  ));
+}
+
 export default function ChartDrawings({
   drawings = [],
   preview,
@@ -79,6 +91,7 @@ export default function ChartDrawings({
   pad,
   width,
   plotBottom,
+  activeHandle,
 }) {
   const tMin = scale.start;
   const tMax = scale.end;
@@ -214,6 +227,16 @@ export default function ChartDrawings({
         }
         return null;
       })}
+      {drawings.map((row, index) => (
+        <g key={`handles-${index}`}>
+          <Handles
+            row={row}
+            scale={scale}
+            fallbackPrice={(scale.min + scale.max) / 2}
+            activeKey={activeHandle?.index === index ? activeHandle.key : null}
+          />
+        </g>
+      ))}
     </g>
   );
 }

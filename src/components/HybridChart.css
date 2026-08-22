@@ -135,6 +135,26 @@
   background: #000000;
 }
 
+.hybrid-svg.is-grab {
+  cursor: grab;
+}
+
+.hybrid-svg.is-grabbing {
+  cursor: grabbing;
+}
+
+.hybrid-handle {
+  fill: #ffffff;
+  stroke: #111111;
+  stroke-width: 1.2;
+  pointer-events: all;
+}
+
+.hybrid-handle.is-active {
+  stroke: #00eaff;
+  stroke-width: 1.6;
+}
+
 .hybrid-plot-bg,
 .hybrid-axis-gutter {
   fill: #000000;
