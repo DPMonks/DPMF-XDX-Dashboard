@@ -34,6 +34,8 @@ import {
   orderBookRowStamp,
   ORDERBOOK_PAIRS,
 } from "../src/orderbook.js";
+import { mergeActivityRows, RECENT_SCAN_DAYS } from "../src/activityHistory.js";
+import { loadIssuedHolderHistory } from "./issuedHolderHistory.js";
 
 let pool = null;
 
@@ -1064,26 +1066,27 @@ async function tokenHoldersPage(db, limit, offset, options = {}) {
 
 const NON_TRADER_ACCOUNTS = [XDX_ISSUER, XDX_XRP_AMM, XDX_RLUSD_AMM];
 
-async function nativeSnapshotSeries(db) {
-  const scans = await tryQuery(
+async function recentHolderScans(db) {
+  return tryQuery(
     db,
     `SELECT timestamp,
             COUNT(*) FILTER (WHERE ABS(balance::numeric) > 0) AS holders,
             COUNT(*) AS trustlines
      FROM token_holders_history
+     WHERE timestamp >= NOW() - ($1 * INTERVAL '1 day')
      GROUP BY timestamp
-     ORDER BY timestamp`
+     ORDER BY timestamp`,
+    [RECENT_SCAN_DAYS]
   );
-  const scanMax = Math.max(0, ...scans.rows.map((row) => Number(row.holders || 0)));
-  if (scans.rows.length && scanMax >= 10) return scans.rows;
+}
 
-  const daily = await tryQuery(
+async function storedDailyHolders(db) {
+  return tryQuery(
     db,
     `SELECT day AS timestamp, holder_count AS holders, NULL::numeric AS trustlines
      FROM holders_history
      ORDER BY day`
   );
-  return daily.rows;
 }
 
 async function nativeTraderSeries(db) {
@@ -1094,6 +1097,7 @@ async function nativeTraderSeries(db) {
               LAG(ABS(balance::numeric)) OVER (PARTITION BY account ORDER BY timestamp) AS prev
        FROM token_holders_history
        WHERE account <> ALL($1::text[])
+         AND timestamp >= NOW() - ($2 * INTERVAL '1 day')
      )
      SELECT date_trunc('hour', timestamp) AS timestamp,
             COUNT(DISTINCT account) FILTER (WHERE prev IS NOT NULL AND balance <> prev) AS traders,
@@ -1103,46 +1107,41 @@ async function nativeTraderSeries(db) {
      FROM ordered
      GROUP BY 1
      ORDER BY 1`,
-    [NON_TRADER_ACCOUNTS]
+    [NON_TRADER_ACCOUNTS, RECENT_SCAN_DAYS]
   );
   return hourly.rows;
 }
 
-async function nativeActivitySeries(db) {
-  const [snaps, traders, holders, trustlines] = await Promise.all([
-    nativeSnapshotSeries(db),
-    nativeTraderSeries(db),
+async function loadLongHolderSeries(db) {
+  const [issued, daily, recent, holders, trustlines] = await Promise.all([
+    loadIssuedHolderHistory().catch(() => []),
+    storedDailyHolders(db),
+    recentHolderScans(db),
     tokenHolderCount(db),
     tokenTrustlineCount(db),
   ]);
-  const merged = new Map();
-  for (const row of snaps) {
-    if (!row.timestamp) continue;
-    const timestamp = new Date(row.timestamp).toISOString();
-    merged.set(timestamp, {
-      timestamp,
-      holders: Number(row.holders || 0) || null,
-      trustlines: Number(row.trustlines || 0) || null,
-    });
-  }
-  for (const row of traders) {
-    if (!row.timestamp) continue;
-    const timestamp = new Date(row.timestamp).toISOString();
-    const current = merged.get(timestamp) || { timestamp };
-    current.traders = Number(row.traders || 0);
-    current.buys = Number(row.buys || 0);
-    current.sells = Number(row.sells || 0);
-    current.volume = Number(row.volume || 0);
-    merged.set(timestamp, current);
-  }
-  merged.set(new Date().toISOString(), {
-    timestamp: new Date().toISOString(),
-    holders,
-    trustlines,
-  });
-  return [...merged.values()].sort(
-    (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-  );
+  const live =
+    holders || trustlines
+      ? [
+          {
+            timestamp: new Date().toISOString(),
+            holders,
+            holder_count: holders,
+            trustlines,
+            trustline_count: trustlines,
+            source: "db",
+          },
+        ]
+      : [];
+  return mergeActivityRows(issued, daily.rows, recent.rows, live);
+}
+
+async function nativeActivitySeries(db) {
+  const [longSeries, traders] = await Promise.all([
+    loadLongHolderSeries(db),
+    nativeTraderSeries(db),
+  ]);
+  return mergeActivityRows(longSeries, traders);
 }
 
 async function nativeXdxFlows(db) {
@@ -1153,13 +1152,14 @@ async function nativeXdxFlows(db) {
               LAG(ABS(balance::numeric)) OVER (PARTITION BY account ORDER BY timestamp) AS prev
        FROM token_holders_history
        WHERE account <> ALL($1::text[])
+         AND timestamp >= NOW() - ($2 * INTERVAL '1 day')
      )
      SELECT timestamp, account, balance, (balance - prev) AS delta
      FROM ordered
      WHERE prev IS NOT NULL AND ABS(balance - prev) > 1e-8
      ORDER BY timestamp DESC
      LIMIT 500`,
-    [NON_TRADER_ACCOUNTS]
+    [NON_TRADER_ACCOUNTS, RECENT_SCAN_DAYS]
   );
   return result.rows.map((row) => ({
     timestamp: row.timestamp,
@@ -1712,67 +1712,11 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "charts/holders") {
-      const result = await tryQuery(
-        db,
-        `SELECT day, holder_count FROM holders_history ORDER BY day ASC`
-      );
-      if (result.rows.length) return ok(result.rows);
-      const byScan = await tryQuery(
-        db,
-        `SELECT timestamp, COUNT(*) AS holder_count
-         FROM token_holders_history
-         WHERE ABS(balance::numeric) > 0
-         GROUP BY timestamp
-         ORDER BY timestamp`
-      );
-      const scanMax = Math.max(0, ...byScan.rows.map((row) => Number(row.holder_count || 0)));
-      if (byScan.rows.length && scanMax >= 10) return ok(byScan.rows);
-      const fromLedger = await tryQuery(
-        db,
-        `SELECT day, COUNT(*) AS holder_count
-         FROM (
-           SELECT DISTINCT ON (date_trunc('day', timestamp), account)
-                  date_trunc('day', timestamp)::date AS day,
-                  account,
-                  balance
-           FROM token_holders_history
-           ORDER BY date_trunc('day', timestamp), account, timestamp DESC
-         ) latest
-         WHERE ABS(balance::numeric) > 0
-         GROUP BY day
-         ORDER BY day`
-      );
-      if (fromLedger.rows.length) return ok(fromLedger.rows);
-      const count = await tokenHolderCount(db);
-      return ok(count ? [{ timestamp: new Date().toISOString(), holder_count: count }] : []);
+      return ok(await loadLongHolderSeries(db));
     }
 
     if (suffix === "charts/trustlines") {
-      const byScan = await tryQuery(
-        db,
-        `SELECT timestamp, COUNT(*) AS trustline_count
-         FROM token_holders_history
-         GROUP BY timestamp
-         ORDER BY timestamp`
-      );
-      const scanMax = Math.max(0, ...byScan.rows.map((row) => Number(row.trustline_count || 0)));
-      if (byScan.rows.length && scanMax >= 10) return ok(byScan.rows);
-      const fromLedger = await tryQuery(
-        db,
-        `SELECT day, COUNT(*) AS trustline_count
-         FROM (
-           SELECT DISTINCT ON (date_trunc('day', timestamp), account)
-                  date_trunc('day', timestamp)::date AS day,
-                  account
-           FROM token_holders_history
-           ORDER BY date_trunc('day', timestamp), account, timestamp DESC
-         ) latest
-         GROUP BY day
-         ORDER BY day`
-      );
-      if (fromLedger.rows.length) return ok(fromLedger.rows);
-      const count = await tokenTrustlineCount(db);
-      return ok(count ? [{ timestamp: new Date().toISOString(), trustline_count: count }] : []);
+      return ok(await loadLongHolderSeries(db));
     }
 
     if (suffix === "charts/activity") {

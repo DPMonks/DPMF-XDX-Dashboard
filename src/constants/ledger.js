@@ -4,6 +4,8 @@ export const XDX_ISSUER = "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo";
 export const XDX_CURRENCY = "XDX";
 export const XDX_HEX = "5844580000000000000000000000000000000000";
 export const XDX_TOTAL_SUPPLY = 10_000_000_000;
+export const XDX_ISSUED_AT = "2021-10-24T13:31:20.000Z";
+export const XDX_XRPL_TO_MD5 = "20bb6167c0c9809d91d0bba2e1e888cd";
 
 export function issuerLockedFromIssued(issued, total = XDX_TOTAL_SUPPLY) {
   const out = Number(issued);
