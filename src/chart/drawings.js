@@ -97,6 +97,11 @@ export function groupForTool(id) {
   return TOOL_GROUPS.find((group) => group.tools.some((row) => row.id === id)) || TOOL_GROUPS[0];
 }
 
+export function toggleTool(current, next) {
+  if (!next || next === "cursor") return "cursor";
+  return next === current ? "cursor" : next;
+}
+
 // TradingView default Fib retracement colors (dark theme).
 export const FIB_LEVELS = [
   { level: 0, color: "#787B86" },

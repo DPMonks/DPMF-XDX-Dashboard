@@ -47,6 +47,7 @@ import {
   rangeColor,
   rangeStats,
   snapPoint,
+  toggleTool,
   toolMeta,
 } from "../src/chart/drawings.js";
 
@@ -632,6 +633,13 @@ test("draw style and extra City Index tools stay available from one toolbox", ()
   });
   assert.equal(triangle.drawing.kind, "triangle");
   assert.equal(triangle.drawing.c.price, 12);
+});
+
+test("selecting the live tool again turns it off", () => {
+  assert.equal(toggleTool("cursor", "trend"), "trend");
+  assert.equal(toggleTool("trend", "trend"), "cursor");
+  assert.equal(toggleTool("trend", "ray"), "ray");
+  assert.equal(toggleTool("ray", "cursor"), "cursor");
 });
 
 test("snapPoint locks to the nearest candle open high low or close", () => {

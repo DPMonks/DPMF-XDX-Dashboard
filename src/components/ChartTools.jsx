@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DRAW_COLORS, LINE_STYLES, LINE_WIDTHS, TOOL_GROUPS, groupForTool, toolMeta } from "../chart/drawings";
+import { DRAW_COLORS, LINE_STYLES, LINE_WIDTHS, TOOL_GROUPS, groupForTool, toggleTool, toolMeta } from "../chart/drawings";
 
 const ICONS = {
   cross: (
@@ -245,10 +245,13 @@ export default function ChartTools({
   }, [panel, tool]);
 
   function pickTool(id) {
-    const group = groupForTool(id);
-    onSelectTool(id);
-    setLastTool((current) => ({ ...current, [group.id]: id }));
-    setPanel(toolMeta(id).clicks > 0);
+    const next = toggleTool(tool, id);
+    if (next !== "cursor") {
+      const group = groupForTool(next);
+      setLastTool((current) => ({ ...current, [group.id]: next }));
+    }
+    onSelectTool(next);
+    setPanel(toolMeta(next).clicks > 0);
   }
 
   return (
@@ -264,7 +267,6 @@ export default function ChartTools({
             style={active && shown.colors !== false ? { borderColor: color, color } : undefined}
             onPointerDown={(event) => {
               event.preventDefault();
-              setPanel(true);
               pickTool(shown.id);
             }}
             title={t[group.labelKey] || group.id}
