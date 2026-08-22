@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks } from "../chart/axis";
 import { candleBodyBox, candleBodyWidth } from "../chart/candles";
@@ -33,6 +33,8 @@ export default function HybridPlot({
   pending,
   tool = "cursor",
   color = "#3d8bff",
+  strokeWidth = 1,
+  lineStyle = "solid",
   magnet = false,
   hollow = false,
   averages = [],
@@ -61,8 +63,7 @@ export default function HybridPlot({
   const previewRef = useRef(null);
   const [hover, setHover] = useState(null);
   const [drag, setDrag] = useState(null);
-  const [glowIds, setGlowIds] = useState([]);
-  const seenMa = useRef(new Set());
+  const [maDraw, setMaDraw] = useState({ ready: [], armed: [] });
   const uid = useId().replace(/:/g, "");
   const width = 960;
   const volH = showVolume ? VOL_H : 0;
@@ -100,15 +101,18 @@ export default function HybridPlot({
   const yTicks = useMemo(() => priceTicks(scale.min, scale.max, 6), [scale.min, scale.max]);
   const xTicks = useMemo(() => scale.ticks(6), [scale]);
   const volumes = useMemo(() => volumeWaveValues(candles), [candles]);
-  useLayoutEffect(() => {
-    const ids = averages.map((row) => row.id);
-    const live = new Set(ids);
-    for (const id of [...seenMa.current]) {
-      if (!live.has(id)) seenMa.current.delete(id);
-    }
-    const added = ids.filter((id) => !seenMa.current.has(id) && !glowIds.includes(id));
-    if (added.length) setGlowIds((current) => [...new Set([...current, ...added])]);
-  }, [averages, glowIds]);
+  const maIds = averages.map((row) => row.id);
+  const maLive = new Set(maIds);
+  const maReady = maDraw.ready.filter((id) => maLive.has(id));
+  const maArmed = maDraw.armed.filter((id) => maLive.has(id));
+  const maAdded = maIds.filter((id) => !maReady.includes(id) && !maArmed.includes(id));
+  if (
+    maAdded.length ||
+    maReady.length !== maDraw.ready.length ||
+    maArmed.length !== maDraw.armed.length
+  ) {
+    setMaDraw({ ready: maReady, armed: [...maArmed, ...maAdded] });
+  }
   useEffect(() => {
     if (tool === "cursor") hideToolPreview(previewRef.current, placeMarkRef.current);
   }, [tool]);
@@ -228,6 +232,8 @@ export default function HybridPlot({
       pad: PAD,
       width,
       plotBottom,
+      strokeWidth,
+      lineStyle,
     });
   }
 
@@ -493,7 +499,7 @@ export default function HybridPlot({
           ) : null}
 
           {averages.map((row) => {
-            const reveal = maRevealState(row.id, { seen: seenMa.current, armed: glowIds });
+            const reveal = maRevealState(row.id, { seen: maDraw.ready, armed: maDraw.armed });
             if (reveal === "wait") return null;
             const drawing = reveal === "drawing";
             const d = maPath(
@@ -507,8 +513,10 @@ export default function HybridPlot({
             );
             if (!d) return null;
             const finishDraw = () => {
-              seenMa.current.add(row.id);
-              setGlowIds((current) => current.filter((id) => id !== row.id));
+              setMaDraw((current) => ({
+                ready: current.ready.includes(row.id) ? current.ready : [...current.ready, row.id],
+                armed: current.armed.filter((id) => id !== row.id),
+              }));
             };
             return (
               <g key={row.id}>

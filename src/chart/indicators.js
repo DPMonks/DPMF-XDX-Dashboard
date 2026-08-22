@@ -102,7 +102,8 @@ export function maCurvePoints(candles = [], values = []) {
 export function maRevealState(id, { seen, armed } = {}) {
   const key = String(id || "");
   const isArmed = Array.isArray(armed) && armed.includes(key);
-  const isSeen = seen instanceof Set && seen.has(key);
+  const seenIds = seen instanceof Set ? seen : new Set(Array.isArray(seen) ? seen : []);
+  const isSeen = seenIds.has(key);
   if (!isSeen && !isArmed) return "wait";
   if (isArmed) return "drawing";
   return "ready";

@@ -1,15 +1,20 @@
-import { channelOffset, drawingHandles, extendSegment, fibBands, fibExtent, rangeColor, raySegment, rangeStats } from "../chart/drawings";
+import { channelOffset, dashForStyle, drawingHandles, extendSegment, fibBands, fibExtent, fibExtensionBands, pitchforkRays, rangeColor, raySegment, rangeStats } from "../chart/drawings";
 import { formatAxisPrice, formatPriceLabel } from "../chart/axis";
 
 function stroke(row) {
   return row?.color || "#d1d4dc";
 }
 
-function paint(color) {
-  return { stroke: color, color };
+function paint(color, row = {}) {
+  return {
+    stroke: color,
+    color,
+    strokeWidth: row.strokeWidth || 1,
+    strokeDasharray: row.dasharray || dashForStyle(row.lineStyle) || undefined,
+  };
 }
 
-function Line({ a, b, scale, color, dashed, marker }) {
+function Line({ a, b, scale, color, dashed, marker, row }) {
   if (!a || !b) return null;
   return (
     <line
@@ -18,7 +23,7 @@ function Line({ a, b, scale, color, dashed, marker }) {
       y1={scale.y(a.price)}
       x2={scale.x(b.t)}
       y2={scale.y(b.price)}
-      style={paint(color)}
+      style={paint(color, row)}
       markerEnd={marker}
       vectorEffect="non-scaling-stroke"
     />
@@ -132,19 +137,32 @@ export default function ChartDrawings({
         const color = stroke(row);
         const dashed = row.preview;
         const key = `${row.kind}-${index}-${row.preview ? "p" : "d"}`;
-        if ((row.kind === "hline" || row.kind === "hray") && Number.isFinite(Number(row.price))) {
+        if ((row.kind === "hline" || row.kind === "hray" || row.kind === "crossline") && Number.isFinite(Number(row.price))) {
           const x1 = row.kind === "hray" && Number(row.t) > 0 ? scale.x(row.t) : pad.l;
+          const y = scale.y(row.price);
           return (
-            <line
-              key={key}
-              className={dashed ? "hybrid-draw is-preview" : "hybrid-draw"}
-              x1={x1}
-              x2={width - pad.r}
-              y1={scale.y(row.price)}
-              y2={scale.y(row.price)}
-              style={paint(color)}
-              vectorEffect="non-scaling-stroke"
-            />
+            <g key={key}>
+              <line
+                className={dashed ? "hybrid-draw is-preview" : "hybrid-draw"}
+                x1={x1}
+                x2={width - pad.r}
+                y1={y}
+                y2={y}
+                style={paint(color, row)}
+                vectorEffect="non-scaling-stroke"
+              />
+              {row.kind === "crossline" && Number.isFinite(Number(row.t)) ? (
+                <line
+                  className={dashed ? "hybrid-draw is-preview" : "hybrid-draw"}
+                  x1={scale.x(row.t)}
+                  x2={scale.x(row.t)}
+                  y1={pad.t}
+                  y2={plotBottom}
+                  style={paint(color, row)}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : null}
+            </g>
           );
         }
         if (row.kind === "vline" && Number.isFinite(Number(row.t))) {
@@ -156,13 +174,25 @@ export default function ChartDrawings({
               x2={scale.x(row.t)}
               y1={pad.t}
               y2={plotBottom}
-              style={paint(color)}
+              style={paint(color, row)}
               vectorEffect="non-scaling-stroke"
             />
           );
         }
-        if (row.kind === "trend" && row.a && row.b) {
-          return <Line key={key} a={row.a} b={row.b} scale={scale} color={color} dashed={dashed} />;
+        if ((row.kind === "trend" || row.kind === "infoline") && row.a && row.b) {
+          const stats = rangeStats(row.a, row.b);
+          const midX = (scale.x(row.a.t) + scale.x(row.b.t)) / 2;
+          const midY = (scale.y(row.a.price) + scale.y(row.b.price)) / 2;
+          return (
+            <g key={key}>
+              <Line a={row.a} b={row.b} scale={scale} color={color} dashed={dashed} row={row} />
+              {row.kind === "infoline" ? (
+                <text className="hybrid-draw-label" x={midX + 6} y={midY - 6} style={{ fill: color }}>
+                  {formatAxisPrice(stats.delta)} ({stats.pct.toFixed(2)}%)
+                </text>
+              ) : null}
+            </g>
+          );
         }
         if (row.kind === "arrow" && row.a && row.b) {
           const mark = `arrow-${key.replace(/[^a-z0-9-]/gi, "")}`;
@@ -173,17 +203,17 @@ export default function ChartDrawings({
                   <path d="M0,0 L7,3 L0,6 Z" fill={color} />
                 </marker>
               </defs>
-              <Line a={row.a} b={row.b} scale={scale} color={color} dashed={dashed} marker={`url(#${mark})`} />
+              <Line a={row.a} b={row.b} scale={scale} color={color} dashed={dashed} marker={`url(#${mark})`} row={row} />
             </g>
           );
         }
         if (row.kind === "ray" && row.a && row.b) {
           const [a, b] = raySegment(row.a, row.b, tMin, tMax);
-          return <Line key={key} a={a} b={b} scale={scale} color={color} dashed={dashed} />;
+          return <Line key={key} a={a} b={b} scale={scale} color={color} dashed={dashed} row={row} />;
         }
         if (row.kind === "extended" && row.a && row.b) {
           const [a, b] = extendSegment(row.a, row.b, tMin, tMax);
-          return <Line key={key} a={a} b={b} scale={scale} color={color} dashed={dashed} />;
+          return <Line key={key} a={a} b={b} scale={scale} color={color} dashed={dashed} row={row} />;
         }
         if ((row.kind === "rect" || row.kind === "range") && row.a && row.b) {
           const x = Math.min(scale.x(row.a.t), scale.x(row.b.t));
@@ -201,7 +231,7 @@ export default function ChartDrawings({
                 y={y}
                 width={w}
                 height={h}
-                style={{ ...paint(tone), fill: tone, fillOpacity: row.kind === "range" ? 0.14 : undefined }}
+                style={{ ...paint(tone, row), fill: tone, fillOpacity: row.kind === "range" ? 0.14 : 0.06 }}
               />
               {row.kind === "range" ? (
                 <text className="hybrid-draw-label" x={x + 6} y={y + 12} style={{ fill: tone }}>
@@ -219,8 +249,8 @@ export default function ChartDrawings({
           ];
           return (
             <g key={key}>
-              <Line a={row.a} b={row.b} scale={scale} color={color} dashed={dashed} />
-              {row.c ? <Line a={parallel[0]} b={parallel[1]} scale={scale} color={color} dashed={dashed} /> : null}
+              <Line a={row.a} b={row.b} scale={scale} color={color} dashed={dashed} row={row} />
+              {row.c ? <Line a={parallel[0]} b={parallel[1]} scale={scale} color={color} dashed={dashed} row={row} /> : null}
             </g>
           );
         }
@@ -234,6 +264,78 @@ export default function ChartDrawings({
               plotBottom={plotBottom}
               clipId={clipId}
               dashed={dashed}
+            />
+          );
+        }
+        if (row.kind === "fibext" && row.a && row.b && row.c) {
+          const bands = fibExtensionBands(row.a, row.b, row.c);
+          const x0 = scale.x(row.c.t);
+          const x1 = width - pad.r;
+          return (
+            <g key={key} className={dashed ? "hybrid-fib is-preview" : "hybrid-fib"}>
+              {bands.map((band) => (
+                <g key={`ext-${band.level}`}>
+                  <line
+                    className="hybrid-fib-line"
+                    x1={x0}
+                    x2={x1}
+                    y1={scale.y(band.price)}
+                    y2={scale.y(band.price)}
+                    style={paint(band.color, row)}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <text
+                    className="hybrid-draw-label hybrid-fib-label"
+                    x={x0 + 6}
+                    y={scale.y(band.price) + 3}
+                    style={{ fill: band.color }}
+                  >
+                    {band.label} ({formatAxisPrice(band.price)})
+                  </text>
+                </g>
+              ))}
+              <Line a={row.a} b={row.b} scale={scale} color="#787B86" dashed={dashed} row={row} />
+            </g>
+          );
+        }
+        if (row.kind === "pitchfork" && row.a && row.b && row.c) {
+          return (
+            <g key={key}>
+              {pitchforkRays(row.a, row.b, row.c, tMin, tMax).map((seg, i) => (
+                <Line key={`fork-${i}`} a={seg[0]} b={seg[1]} scale={scale} color={color} dashed={dashed} row={row} />
+              ))}
+            </g>
+          );
+        }
+        if ((row.kind === "ellipse" || row.kind === "circle") && row.a && row.b) {
+          const x1 = scale.x(row.a.t);
+          const y1 = scale.y(row.a.price);
+          const x2 = scale.x(row.b.t);
+          const y2 = scale.y(row.b.price);
+          const cx = row.kind === "circle" ? x1 : (x1 + x2) / 2;
+          const cy = row.kind === "circle" ? y1 : (y1 + y2) / 2;
+          const rx = row.kind === "circle" ? Math.hypot(x2 - x1, y2 - y1) : Math.max(1, Math.abs(x2 - x1) / 2);
+          const ry = row.kind === "circle" ? rx : Math.max(1, Math.abs(y2 - y1) / 2);
+          return (
+            <ellipse
+              key={key}
+              className={dashed ? "hybrid-shape is-preview" : "hybrid-shape"}
+              cx={cx}
+              cy={cy}
+              rx={rx}
+              ry={ry}
+              style={{ ...paint(color, row), fill: color, fillOpacity: 0.06 }}
+            />
+          );
+        }
+        if (row.kind === "triangle" && row.a && row.b && row.c) {
+          const points = [row.a, row.b, row.c].map((point) => `${scale.x(point.t)},${scale.y(point.price)}`).join(" ");
+          return (
+            <polygon
+              key={key}
+              className={dashed ? "hybrid-shape is-preview" : "hybrid-shape"}
+              points={points}
+              style={{ ...paint(color, row), fill: color, fillOpacity: 0.06 }}
             />
           );
         }
@@ -264,7 +366,7 @@ export default function ChartDrawings({
                 x2={tickX2}
                 y1={cy}
                 y2={cy}
-                style={paint(color)}
+                style={paint(color, row)}
                 vectorEffect="non-scaling-stroke"
               />
               <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="3" style={{ stroke: color }} />

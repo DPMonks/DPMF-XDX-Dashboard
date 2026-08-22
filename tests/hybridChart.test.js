@@ -30,13 +30,16 @@ import { extendMaPoints, maCurvePoints, maPath, maRevealState, rsi, rsiForWindow
 import {
   applyPlaceOffset,
   drawingHandles,
+  drawingStyle,
   fibBands,
   fibExtent,
+  fibExtensionBands,
   fibPrice,
   PLACE_OFFSET,
   hitDrawingHandle,
   moveDrawingHandle,
   nextDrawingState,
+  pitchforkRays,
   previewDrawing,
   raySegment,
   RANGE_DOWN,
@@ -198,6 +201,7 @@ test("maRevealState keeps a new MA unmounted until the glow is armed", () => {
   seen.add("sma-9");
   assert.equal(maRevealState("sma-9", { seen, armed: ["sma-9"] }), "drawing");
   assert.equal(maRevealState("sma-9", { seen, armed: [] }), "ready");
+  assert.equal(maRevealState("sma-50", { seen: ["sma-50"], armed: [] }), "ready");
 });
 
 test("maCurvePoints keeps value changes so the line can curve instead of stair-step", () => {
@@ -589,6 +593,45 @@ test("fib retracement uses TradingView level colors and click order", () => {
   assert.equal(rangeGhost.b.t, b.t);
   assert.equal(fibExtent(rangeGhost.a, rangeGhost.b).t0, span.t0);
   assert.equal(fibExtent(rangeGhost.a, rangeGhost.b).t1, span.t1);
+});
+
+test("draw style and extra City Index tools stay available from one toolbox", () => {
+  assert.deepEqual(drawingStyle({ strokeWidth: 3, lineStyle: "dash" }), {
+    strokeWidth: 3,
+    lineStyle: "dash",
+    dasharray: "7 4",
+  });
+  assert.equal(toolMeta("crossline").clicks, 1);
+  assert.equal(toolMeta("infoline").clicks, 2);
+  assert.equal(toolMeta("fibext").clicks, 3);
+  assert.equal(toolMeta("pitchfork").clicks, 3);
+  const cross = nextDrawingState({
+    tool: "crossline",
+    color: "#ffe14a",
+    pending: null,
+    point: { t: 10, price: 0.4 },
+    strokeWidth: 2,
+    lineStyle: "dot",
+  });
+  assert.equal(cross.drawing.kind, "crossline");
+  assert.equal(cross.drawing.strokeWidth, 2);
+  assert.equal(cross.drawing.lineStyle, "dot");
+  const a = { t: 1, price: 10 };
+  const b = { t: 5, price: 20 };
+  const c = { t: 8, price: 12 };
+  const ext = fibExtensionBands(a, b, c);
+  assert.equal(ext.find((row) => row.level === 1).price, 22);
+  assert.ok(ext.some((row) => row.level === 1.618));
+  const fork = pitchforkRays(a, b, c, 0, 20);
+  assert.equal(fork.length, 3);
+  const triangle = nextDrawingState({
+    tool: "triangle",
+    color: "#3d8bff",
+    pending: { tool: "triangle", color: "#3d8bff", points: [a, b] },
+    point: c,
+  });
+  assert.equal(triangle.drawing.kind, "triangle");
+  assert.equal(triangle.drawing.c.price, 12);
 });
 
 test("snapPoint locks to the nearest candle open high low or close", () => {

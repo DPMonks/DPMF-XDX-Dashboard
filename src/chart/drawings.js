@@ -24,6 +24,23 @@ export const DRAW_COLORS = [
   { id: "purple", hex: "#c770ff" },
 ];
 
+export const LINE_WIDTHS = [1, 2, 3, 4];
+export const LINE_STYLES = [
+  { id: "solid", dash: "" },
+  { id: "dash", dash: "7 4" },
+  { id: "dot", dash: "1.6 3.4" },
+];
+
+export function dashForStyle(lineStyle) {
+  return LINE_STYLES.find((row) => row.id === lineStyle)?.dash || "";
+}
+
+export function drawingStyle({ strokeWidth, lineStyle } = {}) {
+  const width = LINE_WIDTHS.includes(Number(strokeWidth)) ? Number(strokeWidth) : 1;
+  const style = LINE_STYLES.some((row) => row.id === lineStyle) ? lineStyle : "solid";
+  return { strokeWidth: width, lineStyle: style, dasharray: dashForStyle(style) };
+}
+
 export const TOOL_GROUPS = [
   {
     id: "pointer",
@@ -37,9 +54,11 @@ export const TOOL_GROUPS = [
       { id: "hline", labelKey: "chartHLine", clicks: 1, icon: "hline" },
       { id: "vline", labelKey: "chartVLine", clicks: 1, icon: "vline" },
       { id: "hray", labelKey: "chartHRay", clicks: 1, icon: "hray" },
+      { id: "crossline", labelKey: "chartCrossLine", clicks: 1, icon: "crossline" },
       { id: "trend", labelKey: "chartTrend", clicks: 2, icon: "trend" },
       { id: "ray", labelKey: "chartRay", clicks: 2, icon: "ray" },
       { id: "extended", labelKey: "chartExtended", clicks: 2, icon: "extended" },
+      { id: "infoline", labelKey: "chartInfoLine", clicks: 2, icon: "infoline" },
       { id: "arrow", labelKey: "chartArrow", clicks: 2, icon: "arrow" },
     ],
   },
@@ -48,7 +67,9 @@ export const TOOL_GROUPS = [
     labelKey: "chartFibGroup",
     tools: [
       { id: "fib", labelKey: "chartFib", clicks: 2, icon: "fib" },
+      { id: "fibext", labelKey: "chartFibExt", clicks: 3, icon: "fibext" },
       { id: "range", labelKey: "chartRange", clicks: 2, icon: "range" },
+      { id: "pitchfork", labelKey: "chartPitchfork", clicks: 3, icon: "pitchfork" },
     ],
   },
   {
@@ -56,6 +77,9 @@ export const TOOL_GROUPS = [
     labelKey: "chartShapes",
     tools: [
       { id: "rect", labelKey: "chartRect", clicks: 2, icon: "rect" },
+      { id: "ellipse", labelKey: "chartEllipse", clicks: 2, icon: "ellipse" },
+      { id: "circle", labelKey: "chartCircle", clicks: 2, icon: "circle" },
+      { id: "triangle", labelKey: "chartTriangle", clicks: 3, icon: "triangle" },
       { id: "channel", labelKey: "chartChannel", clicks: 3, icon: "channel" },
     ],
   },
@@ -68,6 +92,10 @@ export const TOOL_GROUPS = [
     ],
   },
 ];
+
+export function groupForTool(id) {
+  return TOOL_GROUPS.find((group) => group.tools.some((row) => row.id === id)) || TOOL_GROUPS[0];
+}
 
 // TradingView default Fib retracement colors (dark theme).
 export const FIB_LEVELS = [
@@ -116,6 +144,41 @@ export function fibExtent(a, b) {
   const t1 = Number(b.t);
   if (!Number.isFinite(t0) || !Number.isFinite(t1)) return null;
   return { t0: Math.min(t0, t1), t1: Math.max(t0, t1) };
+}
+
+export const FIB_EXT_LEVELS = [
+  { level: 0, color: "#787B86" },
+  { level: 0.382, color: "#FF9800" },
+  { level: 0.618, color: "#089981" },
+  { level: 1, color: "#3179F5" },
+  { level: 1.272, color: "#2962FF" },
+  { level: 1.618, color: "#F23645" },
+  { level: 2.618, color: "#9C27B0" },
+];
+
+export function fibExtensionBands(a, b, c) {
+  if (!a || !b || !c) return [];
+  const impulse = Number(b.price) - Number(a.price);
+  if (!Number.isFinite(impulse)) return [];
+  const rows = FIB_EXT_LEVELS.map((row) => ({
+    ...row,
+    label: formatFibLevel(row.level),
+    price: Number(c.price) + impulse * row.level,
+  })).filter((row) => Number.isFinite(row.price));
+  return rows.map((row, index) => ({
+    ...row,
+    nextPrice: rows[index + 1]?.price ?? null,
+  }));
+}
+
+export function pitchforkRays(a, b, c, tMin, tMax) {
+  if (!a || !b || !c) return [];
+  const mid = { t: (Number(b.t) + Number(c.t)) / 2, price: (Number(b.price) + Number(c.price)) / 2 };
+  const dt = mid.t - Number(a.t);
+  const dp = mid.price - Number(a.price);
+  const through = (point) =>
+    extendSegment(point, { t: Number(point.t) + dt, price: Number(point.price) + dp }, tMin, tMax);
+  return [extendSegment(a, mid, tMin, tMax), through(b), through(c)].filter((row) => row.length === 2);
 }
 
 export function allTools() {
@@ -195,11 +258,15 @@ export function rangeColor(a, b) {
 
 export function shapeFromPoints(kind, points = [], color) {
   const [a, b, c] = points;
-  if (kind === "hline" || kind === "hray") return { kind, color, t: (b || a)?.t, price: (b || a)?.price };
+  if (kind === "hline" || kind === "hray" || kind === "crossline") {
+    return { kind, color, t: (b || a)?.t, price: (b || a)?.price };
+  }
   if (kind === "vline") return { kind, color, t: (b || a)?.t, price: (b || a)?.price };
   if (kind === "text") return { kind, color, t: a?.t, price: a?.price, text: "Note" };
   if (kind === "pricelabel") return { kind, color, t: a?.t, price: a?.price };
-  if (kind === "channel") return { kind, color, a, b, c };
+  if (kind === "channel" || kind === "triangle" || kind === "pitchfork" || kind === "fibext") {
+    return { kind, color, a, b, c };
+  }
   return { kind, color, a, b };
 }
 
@@ -207,16 +274,20 @@ export function isUsablePoint(point) {
   return Boolean(point) && Number.isFinite(Number(point.t)) && Number.isFinite(Number(point.price));
 }
 
-export function nextDrawingState({ tool, color, pending, point }) {
+export function nextDrawingState({ tool, color, pending, point, strokeWidth, lineStyle } = {}) {
   const meta = toolMeta(tool);
+  const style = drawingStyle({
+    strokeWidth: strokeWidth ?? pending?.strokeWidth,
+    lineStyle: lineStyle ?? pending?.lineStyle,
+  });
   if (!meta || meta.clicks < 1 || !isUsablePoint(point)) {
     return { pending: pending || null, drawing: null };
   }
   const points = [...(pending?.points || []), { t: Number(point.t), price: Number(point.price) }];
   if (points.length < meta.clicks) {
-    return { pending: { tool, color, points }, drawing: null };
+    return { pending: { tool, color, points, ...style }, drawing: null };
   }
-  return { pending: null, drawing: shapeFromPoints(tool, points, color) };
+  return { pending: null, drawing: { ...shapeFromPoints(tool, points, color), ...style } };
 }
 
 export const HANDLE_HIT_R = 12;
@@ -224,7 +295,13 @@ export const HANDLE_HIT_R = 12;
 export function drawingHandles(row, fallbackPrice) {
   if (!row || row.preview) return [];
   const mid = Number(fallbackPrice);
-  if (row.kind === "hline" || row.kind === "hray" || row.kind === "pricelabel" || row.kind === "text") {
+  if (
+    row.kind === "hline" ||
+    row.kind === "hray" ||
+    row.kind === "crossline" ||
+    row.kind === "pricelabel" ||
+    row.kind === "text"
+  ) {
     if (!Number.isFinite(Number(row.price))) return [];
     return [{ key: "point", t: Number(row.t) || 0, price: Number(row.price) }];
   }
@@ -267,10 +344,17 @@ export function hitDrawingHandle(drawings = [], scale, x, y, radius = HANDLE_HIT
   return null;
 }
 
-export function previewDrawing({ tool, color, pending, hover }) {
+export function previewDrawing({ tool, color, pending, hover, strokeWidth, lineStyle } = {}) {
   const meta = toolMeta(tool);
   if (!meta || meta.clicks < 1 || !isUsablePoint(hover)) return null;
   if (!pending && meta.clicks > 1) return null;
   const points = [...(pending?.points || []), { t: Number(hover.t), price: Number(hover.price) }];
-  return { ...shapeFromPoints(tool, points, color), preview: true };
+  return {
+    ...shapeFromPoints(tool, points, color),
+    ...drawingStyle({
+      strokeWidth: strokeWidth ?? pending?.strokeWidth,
+      lineStyle: lineStyle ?? pending?.lineStyle,
+    }),
+    preview: true,
+  };
 }

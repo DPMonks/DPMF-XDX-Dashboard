@@ -84,6 +84,9 @@ export default function HybridChart() {
   const [timeframe, setTimeframe] = useState(DEFAULT_INTERVAL);
   const [tool, setTool] = useState("cursor");
   const [drawColor, setDrawColor] = useState("#3d8bff");
+  const [strokeWidth, setStrokeWidth] = useState(1);
+  const [lineStyle, setLineStyle] = useState("solid");
+  const [stayDraw, setStayDraw] = useState(true);
   const [magnet, setMagnet] = useState(false);
   const [hollow, setHollow] = useState(false);
   const [showArb, setShowArb] = useState(false);
@@ -212,9 +215,15 @@ export default function HybridChart() {
   const historyReady = (locked.pairs?.[pair]?.candles || []).length > 0;
 
   function addDrawing(point) {
-    const next = nextDrawingState({ tool, color: drawColor, pending, point });
+    const next = nextDrawingState({ tool, color: drawColor, pending, point, strokeWidth, lineStyle });
     setPending(next.pending);
-    if (next.drawing) setDrawings((rows) => [...rows, next.drawing]);
+    if (next.drawing) {
+      setDrawings((rows) => [...rows, next.drawing]);
+      if (!stayDraw) {
+        setTool("cursor");
+        setPending(null);
+      }
+    }
   }
 
   function moveHandle(index, key, point) {
@@ -353,13 +362,19 @@ export default function HybridChart() {
         <ChartTools
           tool={tool}
           color={drawColor}
+          strokeWidth={strokeWidth}
+          lineStyle={lineStyle}
           magnet={magnet}
+          stay={stayDraw}
           t={t}
           onSelectTool={selectTool}
           onSelectColor={setDrawColor}
+          onSelectWidth={setStrokeWidth}
+          onSelectStyle={setLineStyle}
           onUndo={undoDrawing}
           onClear={clearDrawings}
           onToggleMagnet={() => setMagnet((on) => !on)}
+          onToggleStay={() => setStayDraw((on) => !on)}
         />
 
         <div className="hybrid-main">
@@ -404,6 +419,8 @@ export default function HybridChart() {
             pending={pending}
             tool={tool}
             color={drawColor}
+            strokeWidth={strokeWidth}
+            lineStyle={lineStyle}
             magnet={magnet}
             hollow={hollow}
             averages={averages}

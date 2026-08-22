@@ -26,7 +26,7 @@
 
 .hybrid-body {
   display: grid;
-  grid-template-columns: 80px 1fr;
+  grid-template-columns: 52px 1fr;
   min-height: 460px;
   overflow: visible;
 }
@@ -34,21 +34,29 @@
 .hybrid-tools {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 6px;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
   border-right: 1px solid rgba(152, 24, 240, 0.25);
   overflow: visible;
+  position: relative;
   z-index: 4;
 }
 
 .hybrid-tool-group {
   display: grid;
-  grid-template-columns: repeat(2, 30px);
+  grid-template-columns: 30px;
   justify-content: center;
   justify-items: center;
   gap: 4px;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(152, 24, 240, 0.2);
+}
+
+.hybrid-tool-group.is-edit {
+  grid-template-columns: 30px;
+  border-bottom: none;
+  padding: 4px 0 0;
 }
 
 .hybrid-tool-group-label {
@@ -113,12 +121,112 @@
 
 .hybrid-colors.is-docked {
   display: grid;
-  grid-template-columns: repeat(2, 14px);
+  grid-template-columns: repeat(6, 14px);
   justify-content: center;
-  gap: 5px 8px;
+  gap: 5px 6px;
   width: 100%;
   padding: 4px 0 8px;
-  border-bottom: 1px solid #222;
+}
+
+.hybrid-tool-flyout {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 8px;
+  z-index: 16;
+  width: 228px;
+  max-height: min(460px, 72vh);
+  overflow: auto;
+  padding: 8px;
+  border-radius: 12px;
+  background: #070708;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+}
+
+.hybrid-flyout-group + .hybrid-flyout-group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.hybrid-flyout-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hybrid-flyout-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #d1d4dc;
+  cursor: pointer;
+  text-align: left;
+  font-size: 11px;
+}
+
+.hybrid-flyout-tool svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hybrid-flyout-tool.active {
+  border-color: currentColor;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.hybrid-draw-style {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.hybrid-style-row {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  margin: 0 0 8px;
+}
+
+.hybrid-style-btn {
+  width: 36px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #000;
+  color: #d1d4dc;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.hybrid-style-btn.active {
+  border-color: var(--dpmf-neon-cyan);
+  color: var(--dpmf-neon-cyan);
+}
+
+.hybrid-style-btn svg {
+  width: 22px;
+  height: 8px;
+}
+
+.hybrid-width-mark {
+  display: block;
+  width: 16px;
+  background: currentColor;
+  border-radius: 1px;
 }
 
 .hybrid-swatch {
@@ -598,6 +706,12 @@
   }
 
   .hybrid-tool-group {
-    min-width: 68px;
+    min-width: 36px;
+  }
+
+  .hybrid-tool-flyout {
+    left: 8px;
+    top: calc(100% + 8px);
+    width: min(228px, calc(100vw - 24px));
   }
 }
