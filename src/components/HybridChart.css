@@ -26,7 +26,7 @@
 
 .hybrid-body {
   display: grid;
-  grid-template-columns: 58px 1fr;
+  grid-template-columns: 80px 1fr;
   min-height: 460px;
   overflow: visible;
 }
@@ -42,20 +42,23 @@
 }
 
 .hybrid-tool-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(2, 30px);
+  justify-content: center;
+  justify-items: center;
   gap: 4px;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(152, 24, 240, 0.2);
 }
 
 .hybrid-tool-group-label {
+  grid-column: 1 / -1;
   margin: 0;
   font-size: 8px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #7b76a0;
+  text-align: center;
 }
 
 .hybrid-tool-wrap {
@@ -63,8 +66,8 @@
 }
 
 .hybrid-tool {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   border: 1px solid rgba(0, 234, 255, 0.25);
   background: rgba(0, 0, 0, 0.35);
@@ -91,11 +94,11 @@
 }
 
 .hybrid-colors.is-docked {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, 14px);
   justify-content: center;
-  gap: 4px;
-  width: 44px;
+  gap: 5px 8px;
+  width: 100%;
   padding: 4px 0 8px;
   border-bottom: 1px solid #222;
 }
@@ -389,5 +392,9 @@
     align-items: flex-start;
     border-right: 0;
     border-bottom: 1px solid #222;
+  }
+
+  .hybrid-tool-group {
+    min-width: 68px;
   }
 }
