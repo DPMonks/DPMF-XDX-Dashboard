@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getAmm, getOrderbooks, getPrices, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
 import { CHART_PAIRS, INTERVALS } from "../chart/intervals";
-import { sma } from "../chart/candles";
+import { MA_PERIODS, MA_TYPES, movingAverage } from "../chart/candles";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { quotePerXdx } from "../chart/pairQuote";
 import {
@@ -45,7 +45,8 @@ export default function HybridChart() {
   const [drawColor, setDrawColor] = useState("#3d8bff");
   const [magnet, setMagnet] = useState(false);
   const [hollow, setHollow] = useState(false);
-  const [showSma, setShowSma] = useState(true);
+  const [maType, setMaType] = useState("sma");
+  const [maPeriods, setMaPeriods] = useState([20, 50]);
   const [books, setBooks] = useState(null);
   const [pools, setPools] = useState([]);
   const [prices, setPrices] = useState({});
@@ -115,8 +116,12 @@ export default function HybridChart() {
   );
 
   const closes = candles.map((row) => row.c);
-  const sma20 = showSma ? sma(closes, 20) : [];
-  const sma50 = showSma ? sma(closes, 50) : [];
+  const volumes = candles.map((row) => row.v);
+  const averages = MA_PERIODS.filter((row) => maPeriods.includes(row.period)).map((row) => ({
+    id: `${maType}-${row.period}`,
+    color: row.color,
+    values: movingAverage(maType, closes, row.period, volumes),
+  }));
   const bands = { ...bookBands(book), bias: liquidityPressure({
     xdxPct: pool?.xdx_pct,
     quotePct: pool?.quote_pct,
@@ -219,10 +224,34 @@ export default function HybridChart() {
             </button>
           ))}
         </div>
-        <label className="hybrid-toggle">
-          <input type="checkbox" checked={showSma} onChange={(event) => setShowSma(event.target.checked)} />
-          SMA 20/50
-        </label>
+        <div className="hybrid-ma">
+          <label className="hybrid-toggle">
+            {t.chartMa}
+            <select value={maType} onChange={(event) => setMaType(event.target.value)}>
+              {MA_TYPES.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {t[row.labelKey] || row.id.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </label>
+          {MA_PERIODS.map((row) => (
+            <label key={row.period} className="hybrid-toggle">
+              <input
+                type="checkbox"
+                checked={maPeriods.includes(row.period)}
+                onChange={() =>
+                  setMaPeriods((current) =>
+                    current.includes(row.period)
+                      ? current.filter((period) => period !== row.period)
+                      : [...current, row.period].sort((left, right) => left - right)
+                  )
+                }
+              />
+              <span style={{ color: row.color }}>{row.period}</span>
+            </label>
+          ))}
+        </div>
         <label className="hybrid-toggle">
           <input type="checkbox" checked={hollow} onChange={(event) => setHollow(event.target.checked)} />
           {t.chartHollow}
@@ -286,8 +315,7 @@ export default function HybridChart() {
             color={drawColor}
             magnet={magnet}
             hollow={hollow}
-            sma20={sma20}
-            sma50={sma50}
+            averages={averages}
             locale={locale}
             onDraw={addDrawing}
           />

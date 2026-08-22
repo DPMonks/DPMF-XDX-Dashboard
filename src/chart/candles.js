@@ -151,6 +151,133 @@ export function sma(values, period) {
   return out;
 }
 
+export function ema(values, period) {
+  const n = Math.trunc(Number(period));
+  const out = new Array(values.length).fill(null);
+  if (!(n > 1) || values.length < n) return out;
+  const k = 2 / (n + 1);
+  let prev = null;
+  let seed = 0;
+  for (let i = 0; i < values.length; i += 1) {
+    const value = Number(values[i]) || 0;
+    if (i < n - 1) {
+      seed += value;
+      continue;
+    }
+    if (prev == null) {
+      prev = (seed + value) / n;
+    } else {
+      prev = value * k + prev * (1 - k);
+    }
+    out[i] = prev;
+  }
+  return out;
+}
+
+export function wma(values, period) {
+  const n = Math.trunc(Number(period));
+  const out = new Array(values.length).fill(null);
+  const denom = (n * (n + 1)) / 2;
+  if (!(n > 1) || values.length < n || !(denom > 0)) return out;
+  for (let i = n - 1; i < values.length; i += 1) {
+    let sum = 0;
+    for (let weight = 1; weight <= n; weight += 1) {
+      sum += (Number(values[i - n + weight]) || 0) * weight;
+    }
+    out[i] = sum / denom;
+  }
+  return out;
+}
+
+export function smma(values, period) {
+  const n = Math.trunc(Number(period));
+  const out = new Array(values.length).fill(null);
+  if (!(n > 1) || values.length < n) return out;
+  let prev = null;
+  let seed = 0;
+  for (let i = 0; i < values.length; i += 1) {
+    const value = Number(values[i]) || 0;
+    if (i < n - 1) {
+      seed += value;
+      continue;
+    }
+    prev = prev == null ? (seed + value) / n : (prev * (n - 1) + value) / n;
+    out[i] = prev;
+  }
+  return out;
+}
+
+export function vwma(values, volumes = [], period) {
+  const n = Math.trunc(Number(period));
+  const out = new Array(values.length).fill(null);
+  if (!(n > 1) || values.length < n) return out;
+  for (let i = n - 1; i < values.length; i += 1) {
+    let priceVol = 0;
+    let vol = 0;
+    for (let j = 0; j < n; j += 1) {
+      const close = Number(values[i - n + 1 + j]) || 0;
+      const size = Number(volumes[i - n + 1 + j]) || 0;
+      priceVol += close * size;
+      vol += size;
+    }
+    out[i] = vol > 0 ? priceVol / vol : null;
+  }
+  return out;
+}
+
+export function hma(values, period) {
+  const n = Math.trunc(Number(period));
+  const out = new Array(values.length).fill(null);
+  if (!(n > 1) || values.length < n) return out;
+  const half = Math.max(2, Math.round(n / 2));
+  const root = Math.max(2, Math.round(Math.sqrt(n)));
+  const wmaHalf = wma(values, half);
+  const wmaFull = wma(values, n);
+  const raw = values.map((_, index) =>
+    wmaHalf[index] == null || wmaFull[index] == null ? null : 2 * wmaHalf[index] - wmaFull[index]
+  );
+  const denom = (root * (root + 1)) / 2;
+  for (let i = root - 1; i < raw.length; i += 1) {
+    let sum = 0;
+    let ok = true;
+    for (let weight = 1; weight <= root; weight += 1) {
+      const value = raw[i - root + weight];
+      if (value == null) {
+        ok = false;
+        break;
+      }
+      sum += value * weight;
+    }
+    if (ok) out[i] = sum / denom;
+  }
+  return out;
+}
+
+export const MA_TYPES = [
+  { id: "sma", labelKey: "chartSma" },
+  { id: "ema", labelKey: "chartEma" },
+  { id: "wma", labelKey: "chartWma" },
+  { id: "smma", labelKey: "chartSmma" },
+  { id: "vwma", labelKey: "chartVwma" },
+  { id: "hma", labelKey: "chartHma" },
+];
+
+export const MA_PERIODS = [
+  { period: 9, color: "#ffe14a" },
+  { period: 20, color: "#00eaff" },
+  { period: 50, color: "#c770ff" },
+  { period: 200, color: "#ff9a3c" },
+];
+
+export function movingAverage(type, values, period, volumes = []) {
+  if (type === "ema") return ema(values, period);
+  if (type === "wma") return wma(values, period);
+  if (type === "smma") return smma(values, period);
+  if (type === "vwma") return vwma(values, volumes, period);
+  if (type === "hma") return hma(values, period);
+  return sma(values, period);
+}
+
 export function trueRange(candles = []) {
   return candles.map((row, index) => {
     const high = Number(row.h);

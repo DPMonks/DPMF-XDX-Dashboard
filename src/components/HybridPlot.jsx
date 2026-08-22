@@ -25,8 +25,7 @@ export default function HybridPlot({
   color = "#3d8bff",
   magnet = false,
   hollow = false,
-  sma20 = [],
-  sma50 = [],
+  averages = [],
   locale,
   onDraw,
 }) {
@@ -232,36 +231,23 @@ export default function HybridPlot({
             />
           ) : null}
 
-          {sma20.map((value, index) => {
-            if (value == null || !candles[index]) return null;
-            const next = sma20[index + 1];
-            if (next == null || !candles[index + 1]) return null;
-            return (
-              <line
-                key={`sma20-${candles[index].t}`}
-                className="hybrid-sma is-20"
-                x1={scale.x(candles[index].t)}
-                y1={scale.y(value)}
-                x2={scale.x(candles[index + 1].t)}
-                y2={scale.y(next)}
-              />
-            );
-          })}
-          {sma50.map((value, index) => {
-            if (value == null || !candles[index]) return null;
-            const next = sma50[index + 1];
-            if (next == null || !candles[index + 1]) return null;
-            return (
-              <line
-                key={`sma50-${candles[index].t}`}
-                className="hybrid-sma is-50"
-                x1={scale.x(candles[index].t)}
-                y1={scale.y(value)}
-                x2={scale.x(candles[index + 1].t)}
-                y2={scale.y(next)}
-              />
-            );
-          })}
+          {averages.flatMap((row) =>
+            (row.values || []).map((value, index) => {
+              const next = row.values[index + 1];
+              if (value == null || next == null || !candles[index] || !candles[index + 1]) return null;
+              return (
+                <line
+                  key={`${row.id}-${candles[index].t}`}
+                  className="hybrid-sma"
+                  x1={scale.x(candles[index].t)}
+                  y1={scale.y(value)}
+                  x2={scale.x(candles[index + 1].t)}
+                  y2={scale.y(next)}
+                  style={{ stroke: row.color }}
+                />
+              );
+            })
+          )}
 
           {candles.map((row) => {
             const x = scale.x(row.t);

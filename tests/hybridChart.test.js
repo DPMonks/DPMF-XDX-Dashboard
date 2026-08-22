@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 import {
   ticksToCandles,
   sma,
+  ema,
+  wma,
+  smma,
+  vwma,
+  movingAverage,
   appendLiveClose,
   resampleCandles,
   fillDailyGaps,
@@ -89,6 +94,19 @@ test("candlesFromMarketData reads InFTF open/high/low/close/volume", () => {
 
 test("sma is the arithmetic mean of the last N closes", () => {
   assert.deepEqual(sma([1, 2, 3, 4], 2), [null, 1.5, 2.5, 3.5]);
+});
+
+test("ema wma smma and vwma cover the moving-average set", () => {
+  const ema3 = ema([1, 2, 3, 4], 3);
+  assert.equal(ema3[0], null);
+  assert.equal(ema3[2], 2);
+  assert.ok(Math.abs(ema3[3] - 3) < 1e-12);
+  assert.deepEqual(wma([1, 2, 3], 3), [null, null, (1 * 1 + 2 * 2 + 3 * 3) / 6]);
+  const smooth = smma([1, 2, 3, 4], 3);
+  assert.equal(smooth[2], 2);
+  assert.equal(smooth[3], (2 * 2 + 4) / 3);
+  assert.deepEqual(vwma([1, 2, 3], [1, 1, 4], 3), [null, null, (1 + 2 + 12) / 6]);
+  assert.deepEqual(movingAverage("sma", [1, 2, 3, 4], 2), [null, 1.5, 2.5, 3.5]);
 });
 
 test("XDX/RLUSD backdate is XDX/XRP times that day's XRP/USD", () => {
