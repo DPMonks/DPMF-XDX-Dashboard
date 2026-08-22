@@ -185,37 +185,23 @@
 }
 
 .hybrid-candle.is-up {
-  fill: #26a69a;
   stroke: #26a69a;
   filter: drop-shadow(0 0 1.1px rgba(38, 166, 154, 0.45));
 }
 
 .hybrid-candle.is-down {
-  fill: #ef5350;
   stroke: #ef5350;
   filter: drop-shadow(0 0 1.1px rgba(239, 83, 80, 0.45));
 }
 
 .hybrid-candle-body {
-  stroke-width: 1;
+  stroke-linejoin: miter;
 }
 
 .hybrid-plot.is-hollow .hybrid-candle.is-up,
-.hybrid-plot.is-hollow .hybrid-candle.is-down {
-  fill: none;
-}
-
+.hybrid-plot.is-hollow .hybrid-candle.is-down,
 .hybrid-plot.is-hollow .hybrid-candle-body {
   fill: none;
-  stroke-width: 1.35;
-}
-
-.hybrid-plot.is-hollow .hybrid-candle.is-up {
-  stroke: #26a69a;
-}
-
-.hybrid-plot.is-hollow .hybrid-candle.is-down {
-  stroke: #ef5350;
 }
 
 .hybrid-wick {

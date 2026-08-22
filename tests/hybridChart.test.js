@@ -11,6 +11,7 @@ import {
   averagesForWindow,
   interpolateAverage,
   seedSeriesForAverages,
+  candleBodyBox,
   candleBodyWidth,
   appendLiveClose,
   resampleCandles,
@@ -237,6 +238,15 @@ test("candle bodies are a quarter of the previous slot so more bars fit", () => 
   const slot = innerW / 39;
   const previous = Math.max(2, Math.min(slot * 0.92, innerW * 0.22));
   assert.ok(Math.abs(width / previous - 0.25) < 0.05, `expected ~25% of ${previous}, got ${width}`);
+});
+
+test("hollow candle boxes stay wide enough to show an empty body", () => {
+  const solid = candleBodyBox({ width: 1.2, height: 1.2, hollow: false });
+  const hollow = candleBodyBox({ width: 1.2, height: 1.2, hollow: true });
+  assert.equal(solid.width, 1.2);
+  assert.ok(hollow.width >= 4);
+  assert.ok(hollow.height >= 4);
+  assert.ok(hollow.width - hollow.strokeWidth * 2 > 1.5);
 });
 
 test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail", () => {

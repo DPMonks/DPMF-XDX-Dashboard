@@ -343,6 +343,22 @@ export function candleBodyWidth({ innerW, candles = [], start, end, stepMs = 86_
   return Math.max(1.2, Math.min(slot * 0.23, width * 0.055));
 }
 
+export function candleBodyBox({ width, height, hollow = false } = {}) {
+  const w = Math.max(0, Number(width) || 0);
+  const h = Math.max(0, Number(height) || 0);
+  if (!hollow) {
+    return { width: w, height: h, strokeWidth: 1, offsetY: 0 };
+  }
+  const nextW = Math.max(w, 4.8);
+  const nextH = Math.max(h, 4);
+  return {
+    width: nextW,
+    height: nextH,
+    strokeWidth: 1.2,
+    offsetY: (nextH - h) / 2,
+  };
+}
+
 export function windowLastBars(candles = [], bars = CHART_VISIBLE_BARS) {
   const n = Math.max(1, Math.trunc(Number(bars) || CHART_VISIBLE_BARS));
   if (!Array.isArray(candles) || candles.length <= n) return candles;

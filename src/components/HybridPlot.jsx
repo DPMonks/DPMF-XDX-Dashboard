@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../chart/axis";
-import { candleBodyWidth } from "../chart/candles";
+import { candleBodyBox, candleBodyWidth } from "../chart/candles";
 import { maCurvePoints, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
 import { hitDrawingHandle, previewDrawing, snapPoint } from "../chart/drawings";
@@ -443,18 +443,24 @@ export default function HybridPlot({
           {candles.map((row) => {
             const x = scale.x(row.t);
             const up = row.c >= row.o;
+            const color = up ? UP : DOWN;
             const bodyTop = scale.y(Math.max(row.o, row.c));
             const bodyH = Math.max(1.2, Math.abs(scale.y(row.c) - scale.y(row.o)));
+            const box = candleBodyBox({ width: candleW, height: bodyH, hollow });
             return (
               <g key={row.t} className={up ? "hybrid-candle is-up" : "hybrid-candle is-down"}>
                 <line className="hybrid-wick" x1={x} x2={x} y1={scale.y(row.h)} y2={scale.y(row.l)} />
                 <rect
                   className="hybrid-candle-body"
-                  x={x - candleW / 2}
-                  y={bodyTop}
-                  width={candleW}
-                  height={bodyH}
-                  fill={hollow ? "none" : undefined}
+                  x={x - box.width / 2}
+                  y={bodyTop - box.offsetY}
+                  width={box.width}
+                  height={box.height}
+                  style={{
+                    fill: hollow ? "none" : color,
+                    stroke: color,
+                    strokeWidth: box.strokeWidth,
+                  }}
                 />
               </g>
             );
