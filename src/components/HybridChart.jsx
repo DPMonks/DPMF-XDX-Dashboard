@@ -376,6 +376,7 @@ export default function HybridChart() {
             rsiOversold={rsiOversold}
             showVolume={showVolume}
             showRsi={showRsi}
+            showArb={showArb}
             locale={locale}
             onDraw={addDrawing}
             onMoveHandle={moveHandle}

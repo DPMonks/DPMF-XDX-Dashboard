@@ -39,6 +39,7 @@ export default function HybridPlot({
   rsiOversold = 30,
   showVolume = true,
   showRsi = true,
+  showArb = false,
   locale,
   onDraw,
   onMoveHandle,
@@ -288,14 +289,14 @@ export default function HybridPlot({
         })}
 
         <g clipPath={`url(#${clipId})`}>
-          {bands?.bias === "down" ? (
+          {showArb && bands?.bias === "down" ? (
             <rect x={PAD.l} y={PAD.t} width={innerW} height={PRICE_H} fill={`url(#pressure-down-${uid})`} />
           ) : null}
-          {bands?.bias === "up" ? (
+          {showArb && bands?.bias === "up" ? (
             <rect x={PAD.l} y={PAD.t} width={innerW} height={PRICE_H} fill={`url(#pressure-up-${uid})`} />
           ) : null}
 
-          {bands?.bid && bands?.mid ? (
+          {showArb && bands?.bid && bands?.mid ? (
             <rect
               className="hybrid-band is-bid"
               x={PAD.l}
@@ -304,7 +305,7 @@ export default function HybridPlot({
               height={Math.max(1, scale.y(bands.bid) - scale.y(bands.mid))}
             />
           ) : null}
-          {bands?.ask && bands?.mid ? (
+          {showArb && bands?.ask && bands?.mid ? (
             <rect
               className="hybrid-band is-ask"
               x={PAD.l}
@@ -313,7 +314,7 @@ export default function HybridPlot({
               height={Math.max(1, scale.y(bands.mid) - scale.y(bands.ask))}
             />
           ) : null}
-          {bands?.bid && bands?.ask ? (
+          {showArb && bands?.bid && bands?.ask ? (
             <rect
               className="hybrid-spread"
               x={PAD.l}
@@ -323,7 +324,7 @@ export default function HybridPlot({
             />
           ) : null}
 
-          {walls.map((wall) => (
+          {(showArb ? walls : []).map((wall) => (
             <rect
               key={`wall-${wall.side}-${wall.price}`}
               className={`hybrid-wall is-${wall.side}`}
@@ -374,7 +375,7 @@ export default function HybridPlot({
             );
           })}
 
-          {bands?.mid ? (
+          {showArb && bands?.mid ? (
             <line className="hybrid-mid" x1={PAD.l} x2={width - PAD.r} y1={scale.y(bands.mid)} y2={scale.y(bands.mid)} />
           ) : null}
 
