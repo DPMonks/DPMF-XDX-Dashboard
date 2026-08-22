@@ -13,10 +13,10 @@ import {
   shareOf,
   shortAddress,
 } from "../utils/format";
+import { LIST_PAGE_SIZE, pageSlice } from "../utils/pagination";
 import { useI18n } from "../i18n/useI18n";
+import PaginationBar from "./PaginationBar";
 import Skeleton from "./Skeleton";
-
-const PAGE_SIZE = 100;
 
 function PairSelect({ pairs, value, onChange, t }) {
   const boxRef = useRef(null);
@@ -120,6 +120,16 @@ function PairSelect({ pairs, value, onChange, t }) {
   );
 }
 
+function TableSkeletons() {
+  return (
+    <div className="scroll-area">
+      {Array.from({ length: 8 }, (_, i) => (
+        <Skeleton key={i} height={36} />
+      ))}
+    </div>
+  );
+}
+
 export default function RichList({
   rows,
   loading,
@@ -162,34 +172,17 @@ export default function RichList({
     Number.isFinite(Number(shareTotal)) && Number(shareTotal) > 0
       ? Number(shareTotal)
       : listedTotal;
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pageRows = filtered
-    .slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-    .map((row, index) => ({
-      ...row,
-      rank: showPair ? (currentPage - 1) * PAGE_SIZE + index + 1 : row.rank,
-    }));
+  const { currentPage, totalPages, rows: pageRows } = pageSlice(filtered, page);
+  const rankedRows = pageRows.map((row, index) => ({
+    ...row,
+    rank: showPair ? (currentPage - 1) * LIST_PAGE_SIZE + index + 1 : row.rank,
+  }));
 
   const copy = async (address) => {
     await copyToClipboard(address);
     setCopied(address);
     setTimeout(() => setCopied((current) => (current === address ? null : current)), 1600);
   };
-
-  if (loading && !rows.length) {
-    return (
-      <div className="scroll-area">
-        {Array.from({ length: 8 }, (_, i) => (
-          <Skeleton key={i} height={36} />
-        ))}
-      </div>
-    );
-  }
-
-  if (error && !rows.length) {
-    return <p className="error-message">{error}</p>;
-  }
 
   const freshnessLine = freshness ? (
     <p
@@ -210,12 +203,70 @@ export default function RichList({
     </p>
   ) : null;
 
-  if (!rows.length) {
-    return (
-      <div className="rich-list">
-        {freshnessLine}
-        <p className="empty-message">{emptyLabel}</p>
-      </div>
+  let body;
+  if (loading && !rows.length) {
+    body = <TableSkeletons />;
+  } else if (error && !rows.length) {
+    body = <p className="error-message">{error}</p>;
+  } else if (!rows.length) {
+    body = <p className="empty-message">{emptyLabel}</p>;
+  } else if (!filtered.length) {
+    body = <p className="empty-message">{showPair ? t.emptyLpPair : emptyLabel}</p>;
+  } else {
+    body = (
+      <table className="rich-table">
+        <thead>
+          <tr>
+            <th>{t.rank}</th>
+            <th>{t.address}</th>
+            {showPair && <th>{t.pair}</th>}
+            <th>{t.balance}</th>
+            <th>{t.share}</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rankedRows.map((row) => (
+            <tr key={`${row.account}-${row.pair || "xdx"}-${row.rank}`}>
+              <td className="col-rank">{row.rank}</td>
+              <td className="col-address">
+                <button
+                  type="button"
+                  className="account-link"
+                  title={row.account}
+                  onClick={() => copy(row.account)}
+                >
+                  <span className="address-full">{row.account}</span>
+                  <span className="address-short">{shortAddress(row.account)}</span>
+                </button>
+                {row.frozen && <span className="frozen-badge">{t.frozen}</span>}
+              </td>
+              {showPair && (
+                <td>
+                  <span className="pair-badge">
+                    {normalizeOrderbookPair(row.pair || "XDX/XRP")}
+                  </span>
+                </td>
+              )}
+              <td className="col-num col-balance">
+                {formatToken(row[valueKey], locale, 8)} {unit}
+              </td>
+              <td className="col-num">
+                {formatPercent(shareOf(row[valueKey], total), locale)}
+              </td>
+              <td>
+                <button
+                  type="button"
+                  className="copy-btn"
+                  onClick={() => copy(row.account)}
+                >
+                  {copied === row.account ? t.copied : t.copy}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     );
   }
 
@@ -249,85 +300,14 @@ export default function RichList({
       </div>
       {freshnessLine}
 
-      <div className="rich-table-wrap">
-        {filtered.length ? (
-          <table className="rich-table">
-            <thead>
-              <tr>
-                <th>{t.rank}</th>
-                <th>{t.address}</th>
-                {showPair && <th>{t.pair}</th>}
-                <th>{t.balance}</th>
-                <th>{t.share}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((row) => (
-                <tr key={`${row.account}-${row.pair || "xdx"}-${row.rank}`}>
-                  <td className="col-rank">{row.rank}</td>
-                  <td className="col-address">
-                    <button
-                      type="button"
-                      className="account-link"
-                      title={row.account}
-                      onClick={() => copy(row.account)}
-                    >
-                      <span className="address-full">{row.account}</span>
-                      <span className="address-short">{shortAddress(row.account)}</span>
-                    </button>
-                    {row.frozen && <span className="frozen-badge">{t.frozen}</span>}
-                  </td>
-                  {showPair && (
-                    <td>
-                      <span className="pair-badge">
-                        {normalizeOrderbookPair(row.pair || "XDX/XRP")}
-                      </span>
-                    </td>
-                  )}
-                  <td className="col-num col-balance">
-                    {formatToken(row[valueKey], locale, 8)} {unit}
-                  </td>
-                  <td className="col-num">
-                    {formatPercent(shareOf(row[valueKey], total), locale)}
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="copy-btn"
-                      onClick={() => copy(row.account)}
-                    >
-                      {copied === row.account ? t.copied : t.copy}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="empty-message">{showPair ? t.emptyLpPair : emptyLabel}</p>
-        )}
-      </div>
+      <div className="rich-table-wrap">{body}</div>
 
-      <div className="pagination">
-        <button
-          type="button"
-          disabled={currentPage === 1}
-          onClick={() => setPage((value) => Math.max(1, value - 1))}
-        >
-          ‹
-        </button>
-        <span>
-          {t.page} {currentPage} {t.of} {totalPages}
-        </span>
-        <button
-          type="button"
-          disabled={currentPage === totalPages}
-          onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-        >
-          ›
-        </button>
-      </div>
+      <PaginationBar
+        page={currentPage}
+        totalPages={totalPages}
+        onPage={setPage}
+        disabled={loading && !rows.length}
+      />
     </div>
   );
 }

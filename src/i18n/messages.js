@@ -117,6 +117,8 @@ const en = {
   emptyPools: "Waiting for the XDX AMM catalog from the indexer (catching_up).",
   page: "Page",
   of: "of",
+  prevPage: "Previous page",
+  nextPage: "Next page",
   showing: "Showing",
   addresses: "addresses",
   reserve: "Reserve",

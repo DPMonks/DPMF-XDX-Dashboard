@@ -242,6 +242,10 @@ body {
   flex: 0 0 auto;
 }
 
+.lists-row .pagination {
+  margin-top: auto;
+}
+
 .lists-row .rich-list,
 .lists-row .scroll-area {
   flex: 1 1 auto;
@@ -802,6 +806,20 @@ body {
   color: var(--dpmf-text-muted);
   font-size: 13px;
   flex: 0 0 auto;
+  margin-top: auto;
+  min-height: 40px;
+}
+
+.pagination .pagination-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: 16px;
 }
 
 .pagination button:disabled {

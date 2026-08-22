@@ -9,6 +9,7 @@ import {
 } from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
 import { quoteUsdFromMap, resolvePoolSplit } from "../utils/poolSplit";
+import { LIST_PAGE_SIZE, shouldFetchMoreRows } from "../utils/pagination";
 import {
   composeAmmBook,
   emptyOrderbook,
@@ -20,9 +21,9 @@ import {
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
 
-const FIRST_HOLDERS = 100;
-const FIRST_LP = 100;
-const PAGE_SIZE = 100;
+const FIRST_HOLDERS = LIST_PAGE_SIZE;
+const FIRST_LP = LIST_PAGE_SIZE;
+const PAGE_SIZE = LIST_PAGE_SIZE;
 const MAX_ROWS = 2500;
 const SESSION_TTL_MS = 5 * 60_000;
 
@@ -353,72 +354,69 @@ export async function getOrderbooks() {
   }
 }
 
-export async function getTopHolders(onPage) {
-  const cached = sessionRead("holders");
+async function loadPagedOwners({
+  cacheKey,
+  requestFirst,
+  requestRest,
+  finish,
+  onPage,
+  firstSize,
+  restPageSize,
+}) {
+  const cached = sessionRead(cacheKey);
   if (cached?.rows?.length) onPage?.(cached.rows, cached.freshness || null);
   else if (Array.isArray(cached) && cached.length) onPage?.(cached, null);
 
-  const payload = await api.topHolders(FIRST_HOLDERS, 0, { snapshot: "today" });
+  const payload = await requestFirst();
   const first = asArray(payload);
-  const firstMapped = finishHolders(first);
+  const firstMapped = finish(first);
   const freshness = pickFreshness(payload, firstMapped);
-  const catchingUp = Boolean(
-    payload &&
-      typeof payload === "object" &&
-      !Array.isArray(payload) &&
-      (payload.catching_up || payload.present === false)
-  );
   onPage?.(firstMapped, freshness);
-  sessionWrite("holders", { rows: firstMapped, freshness });
+  sessionWrite(cacheKey, { rows: firstMapped, freshness });
 
-  if (catchingUp || first.length < FIRST_HOLDERS) return firstMapped;
+  if (!shouldFetchMoreRows(first.length, firstSize, freshness.count)) {
+    return firstMapped;
+  }
 
   const rest = await paginate(
-    (limit, offset) =>
-      api.topHolders(limit, FIRST_HOLDERS + offset, { snapshot: "today" }),
-    PAGE_SIZE,
+    requestRest,
+    restPageSize,
     (all) => {
-      const mapped = finishHolders([...first, ...all]);
+      const mapped = finish([...first, ...all]);
       onPage?.(mapped, freshness);
-      sessionWrite("holders", { rows: mapped, freshness });
+      sessionWrite(cacheKey, { rows: mapped, freshness });
     },
-    MAX_ROWS - FIRST_HOLDERS
+    MAX_ROWS - firstSize
   );
-  return finishHolders([...first, ...rest]);
+  const mapped = finish([...first, ...rest]);
+  sessionWrite(cacheKey, { rows: mapped, freshness });
+  return mapped;
+}
+
+export async function getTopHolders(onPage) {
+  return loadPagedOwners({
+    cacheKey: "holders",
+    requestFirst: () => api.topHolders(FIRST_HOLDERS, 0, { snapshot: "today" }),
+    requestRest: (limit, offset) =>
+      api.topHolders(limit, FIRST_HOLDERS + offset, { snapshot: "today" }),
+    finish: finishHolders,
+    onPage,
+    firstSize: FIRST_HOLDERS,
+    restPageSize: PAGE_SIZE,
+  });
 }
 
 export async function getTopLp(onPage) {
-  const cached = sessionRead("lpHolders");
-  if (cached?.rows?.length) onPage?.(cached.rows, cached.freshness || null);
-  else if (Array.isArray(cached) && cached.length) onPage?.(cached, null);
-
-  const payload = await api.topLp(FIRST_LP, 0, { snapshot: "today", pool: "all" });
-  const first = asArray(payload);
-  const firstMapped = finishLp(first);
-  const freshness = pickFreshness(payload, firstMapped);
-  const catchingUp = Boolean(
-    payload &&
-      typeof payload === "object" &&
-      !Array.isArray(payload) &&
-      (payload.catching_up || payload.present === false)
-  );
-  onPage?.(firstMapped, freshness);
-  sessionWrite("lpHolders", { rows: firstMapped, freshness });
-
-  if (catchingUp || first.length < FIRST_LP) return firstMapped;
-
-  const rest = await paginate(
-    (limit, offset) =>
+  return loadPagedOwners({
+    cacheKey: "lpHolders",
+    requestFirst: () => api.topLp(FIRST_LP, 0, { snapshot: "today", pool: "all" }),
+    requestRest: (limit, offset) =>
       api.topLp(limit, FIRST_LP + offset, { snapshot: "today", pool: "all" }),
-    50,
-    (all) => {
-      const mapped = finishLp([...first, ...all]);
-      onPage?.(mapped, freshness);
-      sessionWrite("lpHolders", { rows: mapped, freshness });
-    },
-    MAX_ROWS - FIRST_LP
-  );
-  return finishLp([...first, ...rest]);
+    finish: finishLp,
+    onPage,
+    firstSize: FIRST_LP,
+    restPageSize: 50,
+  });
 }
 
 export async function getTokenDetails(onPartial) {

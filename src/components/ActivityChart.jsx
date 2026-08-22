@@ -11,7 +11,9 @@ import { getChartHistory, getXdxFlows } from "../api/indexer";
 import { dailyLastPoints, downsampleSeries, metricNumber } from "../activityHistory";
 import { XDX_ISSUED_AT } from "../constants/ledger";
 import { formatDay, formatNumber, formatWhen, shortAddress } from "../utils/format";
+import { LIST_PAGE_SIZE, pageSlice } from "../utils/pagination";
 import { useI18n } from "../i18n/useI18n";
+import PaginationBar from "./PaginationBar";
 import Skeleton from "./Skeleton";
 
 const METRICS = ["holders", "trustlines", "traders"];
@@ -26,8 +28,6 @@ const RANGE_MS = {
   "3M": 90 * 86400000,
   "1Y": 365 * 86400000,
 };
-const PAGE_SIZE = 100;
-
 function toTs(value) {
   const ts = new Date(value).getTime();
   return Number.isFinite(ts) ? ts : null;
@@ -99,11 +99,8 @@ function metricValue(row, metric) {
 }
 
 function HistoryPager({ rows, renderHead, renderRow }) {
-  const { t } = useI18n();
   const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const { currentPage, totalPages, rows: pageRows } = pageSlice(rows, page);
 
   return (
     <>
@@ -112,32 +109,12 @@ function HistoryPager({ rows, renderHead, renderRow }) {
           <thead>{renderHead()}</thead>
           <tbody>
             {pageRows.map((row, index) =>
-              renderRow(row, (currentPage - 1) * PAGE_SIZE + index)
+              renderRow(row, (currentPage - 1) * LIST_PAGE_SIZE + index)
             )}
           </tbody>
         </table>
       </div>
-      {totalPages > 1 && (
-        <div className="pagination">
-          <button
-            type="button"
-            disabled={currentPage === 1}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-          >
-            ‹
-          </button>
-          <span>
-            {t.page} {currentPage} {t.of} {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={currentPage === totalPages}
-            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-          >
-            ›
-          </button>
-        </div>
-      )}
+      <PaginationBar page={currentPage} totalPages={totalPages} onPage={setPage} />
     </>
   );
 }
