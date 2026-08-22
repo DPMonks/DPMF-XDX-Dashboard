@@ -1,13 +1,12 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
-import { depthIntensity } from "../chart/overlays";
 import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../chart/axis";
 import { previewDrawing, snapPoint } from "../chart/drawings";
 import ChartDrawings from "./ChartDrawings";
 
 const PRICE_H = 348;
 const VOL_H = 82;
-const PAD = { l: 78, r: 16, t: 18, b: 38 };
+const PAD = { l: 84, r: 18, t: 16, b: 36 };
 
 export default function HybridPlot({
   candles = [],
@@ -25,9 +24,9 @@ export default function HybridPlot({
   tool = "cursor",
   color = "#3d8bff",
   magnet = false,
+  hollow = false,
   sma20 = [],
   sma50 = [],
-  typicalVolume = 0,
   locale,
   onDraw,
 }) {
@@ -73,6 +72,7 @@ export default function HybridPlot({
     const y = ((event.clientY - rect.top) / rect.height) * height;
     const t = scale.start + ((x - PAD.l) / innerW) * (scale.end - scale.start);
     const price = scale.max - ((y - PAD.t) / PRICE_H) * (scale.max - scale.min);
+    const inPrice = y >= PAD.t - 2 && y <= plotBottom + 2 && x >= PAD.l && x <= width - PAD.r;
     let nearest = candles[0];
     let best = Infinity;
     for (const row of candles) {
@@ -90,7 +90,7 @@ export default function HybridPlot({
       t: snapped.t,
       price: snapped.price,
       candle: nearest,
-      inPrice: y >= PAD.t && y <= plotBottom,
+      inPrice,
     };
   }
 
@@ -99,30 +99,35 @@ export default function HybridPlot({
     setHover(next);
   }
 
-  function onClick(event) {
-    if (tool === "cursor" || !onDraw) return;
+  function onPointerDown(event) {
+    if (event.button !== 0 || tool === "cursor" || !onDraw) return;
     const next = locate(event);
-    if (next) onDraw(next);
+    if (next?.inPrice) {
+      event.preventDefault();
+      onDraw(next);
+    }
   }
 
   const hoverCandle = hover?.candle;
   const preview = hover?.inPrice ? previewDrawing({ tool, color, pending, hover }) : null;
   const clipId = `hybrid-plot-${uid}`;
-  const timeLabel = hoverCandle ? formatCursorWhen(hoverCandle.t, locale) : "";
+  const cursorT = hover && Number.isFinite(hover.t) ? hover.t : hoverCandle?.t;
+  const timeLabel = cursorT != null ? formatCursorWhen(cursorT, locale) : "";
   const timeTagW = Math.max(108, timeLabel.length * 6.1);
-  const timeTagX = hoverCandle
-    ? Math.min(width - PAD.r - timeTagW / 2, Math.max(PAD.l + timeTagW / 2, scale.x(hoverCandle.t)))
+  const cursorX = hover ? Math.min(width - PAD.r, Math.max(PAD.l, hover.x)) : 0;
+  const timeTagX = hover
+    ? Math.min(width - PAD.r - timeTagW / 2, Math.max(PAD.l + timeTagW / 2, cursorX))
     : 0;
   const priceY = hover?.inPrice ? Math.min(plotBottom - 1, Math.max(PAD.t + 1, hover.y)) : null;
 
   return (
-    <div className="hybrid-plot" ref={box}>
+    <div className={hollow ? "hybrid-plot is-hollow" : "hybrid-plot"} ref={box}>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="hybrid-svg"
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
-        onClick={onClick}
+        onPointerMove={onMove}
+        onPointerLeave={() => setHover(null)}
+        onPointerDown={onPointerDown}
         role="img"
         aria-label={`${quote} hybrid chart`}
       >
@@ -140,6 +145,8 @@ export default function HybridPlot({
           </linearGradient>
         </defs>
 
+        <rect className="hybrid-plot-bg" x="0" y="0" width={width} height={height} />
+        <rect className="hybrid-axis-gutter" x="0" y={PAD.t} width={PAD.l} height={PRICE_H} />
         <rect className="hybrid-plot-frame" x={PAD.l} y={PAD.t} width={innerW} height={PRICE_H} />
 
         {yTicks.map((price) => (
@@ -210,10 +217,10 @@ export default function HybridPlot({
               key={`wall-${wall.side}-${wall.price}`}
               className={`hybrid-wall is-${wall.side}`}
               x={PAD.l}
-              y={scale.y(wall.price) - Math.min(10, wall.dominance)}
+              y={scale.y(wall.price) - 1}
               width={innerW}
-              height={Math.max(2, Math.min(16, wall.dominance * 2))}
-              opacity={Math.min(0.55, 0.15 + wall.dominance / 12)}
+              height="2"
+              opacity={Math.min(0.28, 0.1 + wall.dominance / 20)}
             />
           ))}
 
@@ -261,11 +268,10 @@ export default function HybridPlot({
             const up = row.c >= row.o;
             const bodyTop = scale.y(Math.max(row.o, row.c));
             const bodyH = Math.max(1.2, Math.abs(scale.y(row.c) - scale.y(row.o)));
-            const intensity = depthIntensity(row.v, typicalVolume);
             return (
-              <g key={row.t} className={up ? "hybrid-candle is-up" : "hybrid-candle is-down"} opacity={intensity}>
-                <line x1={x} x2={x} y1={scale.y(row.h)} y2={scale.y(row.l)} />
-                <rect x={x - candleW / 2} y={bodyTop} width={candleW} height={bodyH} rx="1" />
+              <g key={row.t} className={up ? "hybrid-candle is-up" : "hybrid-candle is-down"}>
+                <line className="hybrid-wick" x1={x} x2={x} y1={scale.y(row.h)} y2={scale.y(row.l)} />
+                <rect className="hybrid-body" x={x - candleW / 2} y={bodyTop} width={candleW} height={bodyH} />
               </g>
             );
           })}
@@ -329,11 +335,11 @@ export default function HybridPlot({
           />
         ))}
 
-        {hoverCandle ? (
+        {hover ? (
           <g className="hybrid-crosshair">
             <line
-              x1={scale.x(hoverCandle.t)}
-              x2={scale.x(hoverCandle.t)}
+              x1={cursorX}
+              x2={cursorX}
               y1={PAD.t}
               y2={height - PAD.b}
             />

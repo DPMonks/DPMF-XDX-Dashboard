@@ -21,6 +21,12 @@ const ICONS = {
       <path d="M3 12 L13 4" />
     </svg>
   ),
+  hray: (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3 8h10" />
+      <path d="M11 6l2 2-2 2" />
+    </svg>
+  ),
   ray: (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M3 12 L10 6" />
@@ -103,42 +109,40 @@ export default function ChartTools({
 }) {
   return (
     <aside className="hybrid-tools" aria-label={t.chartTools}>
+      <div className="hybrid-colors is-docked" role="group" aria-label="draw color">
+        {DRAW_COLORS.map((swatch) => (
+          <button
+            key={swatch.id}
+            type="button"
+            className={color === swatch.hex ? "hybrid-swatch active" : "hybrid-swatch"}
+            style={{ background: swatch.hex }}
+            title={swatch.id}
+            aria-label={swatch.id}
+            onMouseEnter={() => onSelectColor(swatch.hex)}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              onSelectColor(swatch.hex);
+            }}
+          />
+        ))}
+      </div>
       {TOOL_GROUPS.map((group) => (
         <div key={group.id} className="hybrid-tool-group">
           <p className="hybrid-tool-group-label">{t[group.labelKey] || group.id}</p>
           {group.tools.map((row) => (
-            <div key={row.id} className="hybrid-tool-wrap">
-              <button
-                type="button"
-                className={tool === row.id ? "hybrid-tool active" : "hybrid-tool"}
-                style={tool === row.id && row.colors !== false ? { borderColor: color, color } : undefined}
-                onClick={() => onSelectTool(row.id)}
-                title={t[row.labelKey] || row.id}
-              >
-                <ToolIcon name={row.icon} />
-              </button>
-              {row.colors !== false ? (
-                <div className="hybrid-colors" role="group" aria-label={`${t[row.labelKey] || row.id} color`}>
-                  {DRAW_COLORS.map((swatch) => (
-                    <button
-                      key={swatch.id}
-                      type="button"
-                      className={color === swatch.hex ? "hybrid-swatch active" : "hybrid-swatch"}
-                      style={{ background: swatch.hex }}
-                      title={swatch.id}
-                      aria-label={swatch.id}
-                      onMouseEnter={() => onSelectColor(swatch.hex)}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onSelectColor(swatch.hex);
-                        onSelectTool(row.id);
-                      }}
-                    />
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            <button
+              key={row.id}
+              type="button"
+              className={tool === row.id ? "hybrid-tool active" : "hybrid-tool"}
+              style={tool === row.id && row.colors !== false ? { borderColor: color, color } : undefined}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                onSelectTool(row.id);
+              }}
+              title={t[row.labelKey] || row.id}
+            >
+              <ToolIcon name={row.icon} />
+            </button>
           ))}
         </div>
       ))}
@@ -147,15 +151,34 @@ export default function ChartTools({
         <button
           type="button"
           className={magnet ? "hybrid-tool active" : "hybrid-tool"}
-          onClick={onToggleMagnet}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            onToggleMagnet();
+          }}
           title={t.chartMagnet}
         >
           <ToolIcon name="magnet" />
         </button>
-        <button type="button" className="hybrid-tool" onClick={onUndo} title={t.chartUndo}>
+        <button
+          type="button"
+          className="hybrid-tool"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            onUndo();
+          }}
+          title={t.chartUndo}
+        >
           <ToolIcon name="undo" />
         </button>
-        <button type="button" className="hybrid-tool" onClick={onClear} title={t.chartClear}>
+        <button
+          type="button"
+          className="hybrid-tool"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            onClear();
+          }}
+          title={t.chartClear}
+        >
           <ToolIcon name="clear" />
         </button>
       </div>

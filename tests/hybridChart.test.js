@@ -15,6 +15,8 @@ import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../src/chart/axis.js";
 import {
+  fibBands,
+  fibPrice,
   nextDrawingState,
   previewDrawing,
   raySegment,
@@ -244,27 +246,33 @@ test("drawing tools trail from the first drop to the hover point", () => {
   assert.equal(done.drawing.b.price, 5);
 });
 
-test("horizontal line trails under the cursor from the first drop to the final click", () => {
+test("horizontal line trails under the cursor and drops on one click", () => {
   const ghost = previewDrawing({ tool: "hline", color: "#98f050", pending: null, hover: { t: 10, price: 0.4 } });
   assert.equal(ghost.kind, "hline");
   assert.equal(ghost.price, 0.4);
-  const first = nextDrawingState({ tool: "hline", color: "#98f050", pending: null, point: { t: 10, price: 0.4 } });
-  assert.equal(first.drawing, null);
-  const trailing = previewDrawing({
-    tool: "hline",
-    color: "#98f050",
-    pending: first.pending,
-    hover: { t: 20, price: 0.55 },
-  });
-  assert.equal(trailing.price, 0.55);
-  const placed = nextDrawingState({
-    tool: "hline",
-    color: "#98f050",
-    pending: first.pending,
-    point: { t: 20, price: 0.55 },
-  });
+  const placed = nextDrawingState({ tool: "hline", color: "#98f050", pending: null, point: { t: 10, price: 0.4 } });
+  assert.equal(placed.pending, null);
   assert.equal(placed.drawing.kind, "hline");
-  assert.equal(placed.drawing.price, 0.55);
+  assert.equal(placed.drawing.price, 0.4);
+  assert.equal(toolMeta("hline").clicks, 1);
+});
+
+test("fib retracement uses TradingView level colors and click order", () => {
+  const a = { t: 1, price: 100 };
+  const b = { t: 5, price: 0 };
+  assert.equal(fibPrice(a, b, 0), 0);
+  assert.equal(fibPrice(a, b, 1), 100);
+  assert.equal(fibPrice(a, b, 0.618), 61.8);
+  const bands = fibBands(a, b);
+  assert.equal(bands[0].color, "#787B86");
+  assert.equal(bands.find((row) => row.level === 0.618).color, "#089981");
+  assert.equal(bands.find((row) => row.level === 0.236).color, "#F23645");
+  const first = nextDrawingState({ tool: "fib", color: "#3d8bff", pending: null, point: a });
+  assert.equal(first.drawing, null);
+  const ghost = previewDrawing({ tool: "fib", color: "#3d8bff", pending: first.pending, hover: b });
+  assert.equal(ghost.kind, "fib");
+  assert.equal(ghost.a.price, 100);
+  assert.equal(ghost.b.price, 0);
 });
 
 test("snapPoint locks to the nearest candle open high low or close", () => {

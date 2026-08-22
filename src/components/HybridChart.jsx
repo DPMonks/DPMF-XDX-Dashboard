@@ -13,7 +13,6 @@ import {
   heatmapDots,
   liquidityPressure,
   liquidityWalls,
-  median,
   microEvents,
   smartView,
 } from "../chart/overlays";
@@ -44,7 +43,8 @@ export default function HybridChart() {
   const [range, setRange] = useState("1M");
   const [tool, setTool] = useState("cursor");
   const [drawColor, setDrawColor] = useState("#3d8bff");
-  const [magnet, setMagnet] = useState(true);
+  const [magnet, setMagnet] = useState(false);
+  const [hollow, setHollow] = useState(false);
   const [showSma, setShowSma] = useState(true);
   const [books, setBooks] = useState(null);
   const [pools, setPools] = useState([]);
@@ -148,7 +148,6 @@ export default function HybridChart() {
     walls,
     lastFill: trades[0],
   });
-  const typicalVolume = median(candles.map((row) => row.v));
   const locked = lockedSnapshot();
   const historyReady = (locked.pairs?.[pair]?.candles || []).length > 0;
 
@@ -224,6 +223,10 @@ export default function HybridChart() {
           <input type="checkbox" checked={showSma} onChange={(event) => setShowSma(event.target.checked)} />
           SMA 20/50
         </label>
+        <label className="hybrid-toggle">
+          <input type="checkbox" checked={hollow} onChange={(event) => setHollow(event.target.checked)} />
+          {t.chartHollow}
+        </label>
       </div>
 
       <div className="hybrid-body">
@@ -282,9 +285,9 @@ export default function HybridChart() {
             tool={tool}
             color={drawColor}
             magnet={magnet}
+            hollow={hollow}
             sma20={sma20}
             sma50={sma50}
-            typicalVolume={typicalVolume}
             locale={locale}
             onDraw={addDrawing}
           />

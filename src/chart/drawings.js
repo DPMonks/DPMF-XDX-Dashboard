@@ -17,8 +17,9 @@ export const TOOL_GROUPS = [
     id: "lines",
     labelKey: "chartLines",
     tools: [
-      { id: "hline", labelKey: "chartHLine", clicks: 2, icon: "hline" },
-      { id: "vline", labelKey: "chartVLine", clicks: 2, icon: "vline" },
+      { id: "hline", labelKey: "chartHLine", clicks: 1, icon: "hline" },
+      { id: "vline", labelKey: "chartVLine", clicks: 1, icon: "vline" },
+      { id: "hray", labelKey: "chartHRay", clicks: 1, icon: "hray" },
       { id: "trend", labelKey: "chartTrend", clicks: 2, icon: "trend" },
       { id: "ray", labelKey: "chartRay", clicks: 2, icon: "ray" },
       { id: "extended", labelKey: "chartExtended", clicks: 2, icon: "extended" },
@@ -51,7 +52,34 @@ export const TOOL_GROUPS = [
   },
 ];
 
-export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+// TradingView default Fib retracement colors (dark theme).
+export const FIB_LEVELS = [
+  { level: 0, color: "#787B86" },
+  { level: 0.236, color: "#F23645" },
+  { level: 0.382, color: "#FF9800" },
+  { level: 0.5, color: "#3179F5" },
+  { level: 0.618, color: "#089981" },
+  { level: 0.786, color: "#2962FF" },
+  { level: 1, color: "#787B86" },
+  { level: 1.618, color: "#F23645" },
+];
+
+export function fibPrice(a, b, level) {
+  if (!a || !b) return null;
+  return Number(b.price) + (Number(a.price) - Number(b.price)) * Number(level);
+}
+
+export function fibBands(a, b) {
+  return FIB_LEVELS.map((row, index) => {
+    const next = FIB_LEVELS[index + 1];
+    return {
+      level: row.level,
+      color: row.color,
+      price: fibPrice(a, b, row.level),
+      nextPrice: next ? fibPrice(a, b, next.level) : null,
+    };
+  }).filter((row) => Number.isFinite(row.price));
+}
 
 export function allTools() {
   return TOOL_GROUPS.flatMap((group) => group.tools);
@@ -120,7 +148,7 @@ export function rangeStats(a, b) {
 
 export function shapeFromPoints(kind, points = [], color) {
   const [a, b, c] = points;
-  if (kind === "hline") return { kind, color, price: (b || a)?.price };
+  if (kind === "hline" || kind === "hray") return { kind, color, t: (b || a)?.t, price: (b || a)?.price };
   if (kind === "vline") return { kind, color, t: (b || a)?.t };
   if (kind === "text") return { kind, color, t: a?.t, price: a?.price, text: "Note" };
   if (kind === "pricelabel") return { kind, color, t: a?.t, price: a?.price };
@@ -128,12 +156,16 @@ export function shapeFromPoints(kind, points = [], color) {
   return { kind, color, a, b };
 }
 
+export function isUsablePoint(point) {
+  return Boolean(point) && Number.isFinite(Number(point.t)) && Number.isFinite(Number(point.price));
+}
+
 export function nextDrawingState({ tool, color, pending, point }) {
   const meta = toolMeta(tool);
-  if (!meta || meta.clicks < 1 || !point) {
-    return { pending: null, drawing: null };
+  if (!meta || meta.clicks < 1 || !isUsablePoint(point)) {
+    return { pending: pending || null, drawing: null };
   }
-  const points = [...(pending?.points || []), { t: point.t, price: point.price }];
+  const points = [...(pending?.points || []), { t: Number(point.t), price: Number(point.price) }];
   if (points.length < meta.clicks) {
     return { pending: { tool, color, points }, drawing: null };
   }
@@ -142,8 +174,8 @@ export function nextDrawingState({ tool, color, pending, point }) {
 
 export function previewDrawing({ tool, color, pending, hover }) {
   const meta = toolMeta(tool);
-  if (!meta || meta.clicks < 1 || !hover) return null;
-  if (!pending && meta.clicks > 1 && tool !== "hline" && tool !== "vline") return null;
-  const points = [...(pending?.points || []), { t: hover.t, price: hover.price }];
+  if (!meta || meta.clicks < 1 || !isUsablePoint(hover)) return null;
+  if (!pending && meta.clicks > 1) return null;
+  const points = [...(pending?.points || []), { t: Number(hover.t), price: Number(hover.price) }];
   return { ...shapeFromPoints(tool, points, color), preview: true };
 }

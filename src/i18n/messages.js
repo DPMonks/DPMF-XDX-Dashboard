@@ -69,6 +69,8 @@ const en = {
   chartCrosshair: "Crosshair",
   chartHLine: "Horizontal line",
   chartVLine: "Vertical line",
+  chartHRay: "Horizontal ray",
+  chartHollow: "Hollow candles",
   chartTrend: "Trend line",
   chartRay: "Ray",
   chartExtended: "Extended line",

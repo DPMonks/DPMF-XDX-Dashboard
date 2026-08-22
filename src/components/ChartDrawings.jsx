@@ -1,8 +1,8 @@
-import { channelOffset, extendSegment, FIB_LEVELS, raySegment, rangeStats } from "../chart/drawings";
+import { channelOffset, extendSegment, fibBands, raySegment, rangeStats } from "../chart/drawings";
 import { formatAxisPrice } from "../chart/axis";
 
 function stroke(row) {
-  return row?.color || "#ffffff";
+  return row?.color || "#d1d4dc";
 }
 
 function Line({ a, b, scale, color, dashed, marker }) {
@@ -16,7 +16,53 @@ function Line({ a, b, scale, color, dashed, marker }) {
       y2={scale.y(b.price)}
       stroke={color}
       markerEnd={marker}
+      vectorEffect="non-scaling-stroke"
     />
+  );
+}
+
+function FibRetracement({ row, scale, pad, width, dashed }) {
+  if (!row.a || !row.b) return null;
+  const x0 = Math.min(scale.x(row.a.t), scale.x(row.b.t));
+  const xBox = Math.max(scale.x(row.a.t), scale.x(row.b.t));
+  const xRight = width - pad.r;
+  const bands = fibBands(row.a, row.b);
+  return (
+    <g className={dashed ? "hybrid-fib is-preview" : "hybrid-fib"}>
+      <Line a={row.a} b={row.b} scale={scale} color="#787B86" dashed={dashed} />
+      {bands.map((band) => {
+        const y = scale.y(band.price);
+        const nextY = band.nextPrice != null ? scale.y(band.nextPrice) : y;
+        const top = Math.min(y, nextY);
+        const height = Math.abs(nextY - y);
+        return (
+          <g key={band.level}>
+            {band.nextPrice != null && height > 0.4 ? (
+              <rect
+                className="hybrid-fib-fill"
+                x={x0}
+                y={top}
+                width={Math.max(1, xBox - x0)}
+                height={height}
+                fill={band.color}
+              />
+            ) : null}
+            <line
+              className="hybrid-fib-line"
+              x1={x0}
+              x2={xRight}
+              y1={y}
+              y2={y}
+              stroke={band.color}
+              vectorEffect="non-scaling-stroke"
+            />
+            <text className="hybrid-draw-label" x={xRight - 2} y={y - 3} textAnchor="end" fill={band.color}>
+              {band.level} ({formatAxisPrice(band.price)})
+            </text>
+          </g>
+        );
+      })}
+    </g>
   );
 }
 
@@ -36,25 +82,29 @@ export default function ChartDrawings({
 
   return (
     <g className="hybrid-drawings">
-      {first ? <circle className="hybrid-pending" cx={scale.x(first.t)} cy={scale.y(first.price)} r="3" fill={pending.color} /> : null}
+      {first ? (
+        <circle className="hybrid-pending" cx={scale.x(first.t)} cy={scale.y(first.price)} r="3" fill={pending.color} />
+      ) : null}
       {items.map((row, index) => {
         const color = stroke(row);
         const dashed = row.preview;
         const key = `${row.kind}-${index}-${row.preview ? "p" : "d"}`;
-        if (row.kind === "hline" && Number(row.price) > 0) {
+        if ((row.kind === "hline" || row.kind === "hray") && Number.isFinite(Number(row.price))) {
+          const x1 = row.kind === "hray" && Number(row.t) > 0 ? scale.x(row.t) : pad.l;
           return (
             <line
               key={key}
               className={dashed ? "hybrid-draw is-preview" : "hybrid-draw"}
-              x1={pad.l}
+              x1={x1}
               x2={width - pad.r}
               y1={scale.y(row.price)}
               y2={scale.y(row.price)}
               stroke={color}
+              vectorEffect="non-scaling-stroke"
             />
           );
         }
-        if (row.kind === "vline" && Number(row.t) > 0) {
+        if (row.kind === "vline" && Number.isFinite(Number(row.t))) {
           return (
             <line
               key={key}
@@ -64,6 +114,7 @@ export default function ChartDrawings({
               y1={pad.t}
               y2={plotBottom}
               stroke={color}
+              vectorEffect="non-scaling-stroke"
             />
           );
         }
@@ -75,8 +126,8 @@ export default function ChartDrawings({
           return (
             <g key={key}>
               <defs>
-                <marker id={mark} markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
-                  <path d="M0,0 L8,3 L0,6 Z" fill={color} />
+                <marker id={mark} markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L7,3 L0,6 Z" fill={color} />
                 </marker>
               </defs>
               <Line a={row.a} b={row.b} scale={scale} color={color} dashed={dashed} marker={`url(#${mark})`} />
@@ -94,8 +145,8 @@ export default function ChartDrawings({
         if ((row.kind === "rect" || row.kind === "range") && row.a && row.b) {
           const x = Math.min(scale.x(row.a.t), scale.x(row.b.t));
           const y = Math.min(scale.y(row.a.price), scale.y(row.b.price));
-          const w = Math.max(2, Math.abs(scale.x(row.b.t) - scale.x(row.a.t)));
-          const h = Math.max(2, Math.abs(scale.y(row.b.price) - scale.y(row.a.price)));
+          const w = Math.max(1, Math.abs(scale.x(row.b.t) - scale.x(row.a.t)));
+          const h = Math.max(1, Math.abs(scale.y(row.b.price) - scale.y(row.a.price)));
           const stats = rangeStats(row.a, row.b);
           return (
             <g key={key}>
@@ -108,7 +159,7 @@ export default function ChartDrawings({
                 stroke={color}
               />
               {row.kind === "range" ? (
-                <text className="hybrid-draw-label" x={x + 6} y={y + 14} fill={color}>
+                <text className="hybrid-draw-label" x={x + 6} y={y + 12} fill={color}>
                   {formatAxisPrice(stats.delta)} ({stats.pct.toFixed(2)}%)
                 </text>
               ) : null}
@@ -129,40 +180,16 @@ export default function ChartDrawings({
           );
         }
         if (row.kind === "fib" && row.a && row.b) {
-          const hi = Math.max(row.a.price, row.b.price);
-          const lo = Math.min(row.a.price, row.b.price);
-          const span = hi - lo || 1;
-          return (
-            <g key={key}>
-              {FIB_LEVELS.map((level) => {
-                const price = hi - span * level;
-                return (
-                  <g key={`${key}-${level}`}>
-                    <line
-                      className={dashed ? "hybrid-fib is-preview" : "hybrid-fib"}
-                      x1={pad.l}
-                      x2={width - pad.r}
-                      y1={scale.y(price)}
-                      y2={scale.y(price)}
-                      stroke={color}
-                    />
-                    <text className="hybrid-draw-label" x={pad.l + 4} y={scale.y(price) - 3} fill={color}>
-                      {level.toFixed(3)}
-                    </text>
-                  </g>
-                );
-              })}
-            </g>
-          );
+          return <FibRetracement key={key} row={row} scale={scale} pad={pad} width={width} dashed={dashed} />;
         }
-        if (row.kind === "text" && row.t && row.price) {
+        if (row.kind === "text" && row.t && Number.isFinite(Number(row.price))) {
           return (
             <text key={key} className="hybrid-draw-label is-note" x={scale.x(row.t)} y={scale.y(row.price)} fill={color}>
               {row.text || "Note"}
             </text>
           );
         }
-        if (row.kind === "pricelabel" && Number(row.price) > 0) {
+        if (row.kind === "pricelabel" && Number.isFinite(Number(row.price))) {
           return (
             <g key={key}>
               <line
@@ -172,6 +199,7 @@ export default function ChartDrawings({
                 y1={scale.y(row.price)}
                 y2={scale.y(row.price)}
                 stroke={color}
+                vectorEffect="non-scaling-stroke"
               />
               <text className="hybrid-draw-label" x={width - pad.r - 4} y={scale.y(row.price) - 4} textAnchor="end" fill={color}>
                 {formatAxisPrice(row.price)}
