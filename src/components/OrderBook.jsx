@@ -5,6 +5,7 @@ import {
   emptyOrderbook,
   FEATURED_ORDERBOOK_PAIRS,
   filterOrderbookPairs,
+  mergeOrderbookPayloads,
   normalizeOrderbookPair,
   padOrderbookLevels,
 } from "../orderbook";
@@ -108,7 +109,7 @@ export default function OrderBook() {
       try {
         const next = await getOrderbooks();
         if (!cancelled) {
-          setBooks(next);
+          setBooks((current) => mergeOrderbookPayloads(current, next));
           setError(null);
         }
       } catch (err) {

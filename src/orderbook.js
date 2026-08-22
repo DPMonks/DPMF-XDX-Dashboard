@@ -358,12 +358,40 @@ export function pickNativeBookRow(latest, historyRows = [], pair = "XDX/XRP") {
       };
     }
   }
-  if (!latest) return null;
-  return {
-    payload: latest.payload != null ? latest.payload : latest,
-    pair: name,
-    as_of: orderBookRowStamp(latest),
-  };
+  return null;
+}
+
+export function bookHasNativeDex(book) {
+  if (!book || typeof book !== "object") return false;
+  if (book.dex_present) return true;
+  const bids = Array.isArray(book.bids) ? book.bids : [];
+  const asks = Array.isArray(book.asks) ? book.asks : [];
+  return bids.some((row) => !row?.placeholder && Number(row?.base_size) > 0)
+    || asks.some((row) => !row?.placeholder && Number(row?.base_size) > 0);
+}
+
+export function keepLastGoodBook(previous, next, pair = "XDX/XRP") {
+  const name = normalizeOrderbookPair(pair || next?.pair || previous?.pair);
+  if (bookHasNativeDex(next)) return next;
+  if (bookHasNativeDex(previous)) {
+    return {
+      ...previous,
+      pair: name,
+      catching_up: true,
+      stale: true,
+    };
+  }
+  return next || previous || emptyOrderbook(name);
+}
+
+export function mergeOrderbookPayloads(previous, next) {
+  if (!previous?.books) return next;
+  if (!next?.books) return previous;
+  const books = { ...previous.books };
+  for (const [pair, book] of Object.entries(next.books)) {
+    books[pair] = keepLastGoodBook(previous.books[pair], book, pair);
+  }
+  return { ...next, books };
 }
 
 export function nativeDexRows(rows) {

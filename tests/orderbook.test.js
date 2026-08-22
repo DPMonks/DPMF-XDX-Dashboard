@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   asOrderbookPayload,
+  bookHasNativeDex,
   bookHeader,
   collectPairOptions,
   combineOrderbookSide,
@@ -9,6 +10,8 @@ import {
   emptyOrderbook,
   extractDexSides,
   filterOrderbookPairs,
+  keepLastGoodBook,
+  mergeOrderbookPayloads,
   normalizeOrderbookPair,
   offerToDexRow,
   ORDERBOOK_VISIBLE_LEVELS,
@@ -141,6 +144,39 @@ test("pickNativeBookRow skips empty latest and uses a history snapshot with DEX 
   );
   assert.equal(picked.as_of, "2026-08-22T08:55:00.000Z");
   assert.equal(asOrderbookPayload(picked.payload).bids[0].base_size, 4000);
+});
+
+test("pickNativeBookRow does not keep an empty latest snapshot", () => {
+  assert.equal(
+    pickNativeBookRow(
+      { payload: { pair: "XDX/XRP", bids: [], asks: [] }, timestamp: "2026-08-22T11:00:00.000Z" },
+      [{ payload: { pair: "XDX/XRP", bids: [] }, timestamp: "2026-08-22T10:59:00.000Z" }],
+      "XDX/XRP"
+    ),
+    null
+  );
+});
+
+test("keepLastGoodBook holds the previous tape until a new native book arrives", () => {
+  const previous = composeAmmBook(
+    {
+      pair: "XDX/XRP",
+      bids: [{ price: 0.0000285, base_size: 4000 }],
+      asks: [{ price: 0.0000378, base_size: 29032 }],
+    },
+    {},
+    "XDX/XRP"
+  );
+  const empty = emptyOrderbook("XDX/XRP");
+  const held = keepLastGoodBook(previous, empty, "XDX/XRP");
+  assert.equal(bookHasNativeDex(empty), false);
+  assert.equal(held.bids[0].base_size, 4000);
+  assert.equal(held.stale, true);
+  const merged = mergeOrderbookPayloads(
+    { books: { "XDX/XRP": previous } },
+    { books: { "XDX/XRP": empty }, pairs: ["XDX/XRP"] }
+  );
+  assert.equal(merged.books["XDX/XRP"].asks[0].base_size, 29032);
 });
 
 test("composeAmmBook keeps native sizes and measures AMM opposing at those prices", () => {

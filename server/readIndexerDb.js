@@ -28,8 +28,10 @@ import {
 } from "../src/todayLpOwners.js";
 import {
   asOrderbookPayload,
+  bookHasNativeDex,
   composeAmmBook,
   emptyOrderbook,
+  keepLastGoodBook,
   normalizeOrderbookPair,
   pickNativeBookRow,
   sortOrderbookPairs,
@@ -898,24 +900,39 @@ async function composeStoredBook(stored, pair, reserveIndex, xrpPool, pool) {
   return composeAmmBook(stored || emptyOrderbook(name), reserves, name);
 }
 
+const lastGoodBooks = new Map();
+
+function rememberGoodBook(pair, book) {
+  if (!bookHasNativeDex(book)) return;
+  lastGoodBooks.set(normalizeOrderbookPair(pair), book);
+}
+
 async function withLiveTape(composed, pair, pool) {
-  if (composed?.dex_present) return composed;
-  const live = await fillNativeBookFromXrpl(pair, pool);
-  if (!live) return composed;
-  return {
-    ...composeAmmBook(
-      { ...composed, ...live, bids: live.bids, asks: live.asks },
-      {
-        reserve_asset: composed.amm?.reserve_asset,
-        reserve_currency: composed.amm?.reserve_currency,
-        trading_fee: composed.amm?.trading_fee,
-        price: composed.amm?.price,
-      },
-      pair
-    ),
-    as_of: live.as_of || composed.as_of,
-    source: "xrpl",
-  };
+  const name = normalizeOrderbookPair(pair);
+  if (composed?.dex_present) {
+    rememberGoodBook(name, composed);
+    return composed;
+  }
+  const live = await fillNativeBookFromXrpl(name, pool);
+  if (live) {
+    const filled = {
+      ...composeAmmBook(
+        { ...composed, ...live, bids: live.bids, asks: live.asks },
+        {
+          reserve_asset: composed.amm?.reserve_asset,
+          reserve_currency: composed.amm?.reserve_currency,
+          trading_fee: composed.amm?.trading_fee,
+          price: composed.amm?.price,
+        },
+        name
+      ),
+      as_of: live.as_of || composed.as_of,
+      source: "xrpl",
+    };
+    rememberGoodBook(name, filled);
+    return filled;
+  }
+  return keepLastGoodBook(lastGoodBooks.get(name), composed, name);
 }
 
 async function loadOrderbook(db, pair = "XDX/XRP") {

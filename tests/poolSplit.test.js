@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  displayPoolSplit,
   formatPoolPct,
   inferQuoteReserve,
   poolAssetSplit,
@@ -20,6 +21,12 @@ test("poolAssetSplit is a USD value share, not a raw unit share", () => {
   assert.ok(split.xdxPct > 40 && split.xdxPct < 70);
   assert.ok(split.quotePct > 30 && split.quotePct < 60);
   assert.equal(formatPoolPct(split.xdxPct).includes("."), true);
+});
+
+test("displayPoolSplit labels a 50/50 bar when the pool split is not measured", () => {
+  assert.deepEqual(displayPoolSplit(50, 50), { xdxPct: 50, quotePct: 50, measured: true });
+  assert.deepEqual(displayPoolSplit(null, null), { xdxPct: 50, quotePct: 50, measured: false });
+  assert.equal(formatPoolPct(50), "50.0");
 });
 
 test("poolAssetSplit reports one decimal like 40.0 / 60.0", () => {

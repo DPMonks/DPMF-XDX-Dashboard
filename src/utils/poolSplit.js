@@ -40,6 +40,13 @@ export function formatPoolPct(value) {
   return num.toFixed(1);
 }
 
+export function displayPoolSplit(xdxPct, quotePct) {
+  if (xdxPct != null && quotePct != null && Number.isFinite(Number(xdxPct)) && Number.isFinite(Number(quotePct))) {
+    return { xdxPct: Number(xdxPct), quotePct: Number(quotePct), measured: true };
+  }
+  return { xdxPct: 50, quotePct: 50, measured: false };
+}
+
 export function inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) {
   const xdx = Number(reserveXdx);
   const xdxPrice = Number(xdxUsd);

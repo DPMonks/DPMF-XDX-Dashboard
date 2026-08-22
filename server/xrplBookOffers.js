@@ -66,8 +66,7 @@ export async function fillNativeBookFromXrpl(pair, pool = {}, options = {}) {
     const asks = topDexLevels(extractDexSides({ offers: asksRes.offers || [] }).asks, "ask");
     const bids = topDexLevels(extractDexSides({ offers: bidsRes.offers || [] }).bids, "bid");
     if (!bids.length && !asks.length) {
-      cache.set(name, { at: Date.now(), book: null });
-      return null;
+      return hit?.book || null;
     }
     const book = {
       pair: name,
@@ -82,6 +81,6 @@ export async function fillNativeBookFromXrpl(pair, pool = {}, options = {}) {
     cache.set(name, { at: Date.now(), book });
     return book;
   } catch {
-    return null;
+    return hit?.book || null;
   }
 }

@@ -12,6 +12,7 @@ import { quoteUsdFromMap, resolvePoolSplit } from "../utils/poolSplit";
 import {
   composeAmmBook,
   emptyOrderbook,
+  mergeOrderbookPayloads,
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
 } from "../orderbook";
@@ -315,6 +316,8 @@ export async function getAmm() {
   );
 }
 
+let lastOrderbooks = null;
+
 export async function getOrderbooks() {
   try {
     const body = await api.orderbooks();
@@ -328,14 +331,17 @@ export async function getOrderbooks() {
       const raw = body?.books?.[pair] || body?.[pair] || emptyOrderbook(pair);
       books[pair] = composeAmmBook(raw, raw.amm || {}, pair);
     }
-    return {
+    const next = {
       quotes: names.map((pair) => pair.split("/")[1]).filter(Boolean),
       featured: FEATURED_ORDERBOOK_PAIRS,
       pairs: names,
       default_pair: body?.default_pair || "XDX/XRP",
       books,
     };
+    lastOrderbooks = mergeOrderbookPayloads(lastOrderbooks, next);
+    return lastOrderbooks;
   } catch {
+    if (lastOrderbooks) return lastOrderbooks;
     const names = [...FEATURED_ORDERBOOK_PAIRS];
     return {
       quotes: names.map((pair) => pair.split("/")[1]),
