@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getAmm, getOrderbooks, getPrices, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
 import { CHART_PAIRS, INTERVALS } from "../chart/intervals";
-import { MA_PERIODS, MA_TYPES, movingAverage } from "../chart/candles";
+import { averagesForWindow, MA_PERIODS, MA_TYPES, windowCandles } from "../chart/candles";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { quotePerXdx } from "../chart/pairQuote";
 import {
@@ -99,29 +99,33 @@ export default function HybridChart() {
     xdxRlusd: pair === "XDX/RLUSD" ? book.mid || ammPrice : null,
   });
 
-  const candles = useMemo(
+  const series = useMemo(
     () =>
       composePairCandles({
         pair,
         interval: timeframe,
-        range,
+        range: "Max",
         locked: lockedSnapshot(),
         sparkline,
         trades,
         prices,
         livePrice,
         now,
+        windowed: false,
       }),
-    [pair, timeframe, range, sparkline, trades, prices, livePrice, now]
+    [pair, timeframe, sparkline, trades, prices, livePrice, now]
   );
-
-  const closes = candles.map((row) => row.c);
-  const volumes = candles.map((row) => row.v);
-  const averages = MA_PERIODS.filter((row) => maPeriods.includes(row.period)).map((row) => ({
-    id: `${maType}-${row.period}`,
-    color: row.color,
-    values: movingAverage(maType, closes, row.period, volumes),
-  }));
+  const candles = useMemo(() => windowCandles(series, range, now), [series, range, now]);
+  const averages = useMemo(
+    () =>
+      averagesForWindow({
+        series,
+        visible: candles,
+        type: maType,
+        periods: maPeriods,
+      }),
+    [series, candles, maType, maPeriods]
+  );
   const bands = { ...bookBands(book), bias: liquidityPressure({
     xdxPct: pool?.xdx_pct,
     quotePct: pool?.quote_pct,

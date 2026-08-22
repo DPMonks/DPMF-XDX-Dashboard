@@ -1,6 +1,8 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../chart/axis";
+import { candleBodyWidth } from "../chart/candles";
+import { intervalMs } from "../chart/intervals";
 import { previewDrawing, snapPoint } from "../chart/drawings";
 import ChartDrawings from "./ChartDrawings";
 
@@ -61,7 +63,13 @@ export default function HybridPlot({
     [scale.start, scale.end, interval]
   );
 
-  const candleW = Math.min(12, Math.max(2, (innerW / Math.max(candles.length, 8)) * 0.7));
+  const candleW = candleBodyWidth({
+    innerW,
+    candles,
+    start: scale.start,
+    end: scale.end,
+    stepMs: intervalMs(interval),
+  });
 
   function locate(event) {
     const node = box.current;

@@ -64,6 +64,7 @@ export function composePairCandles({
   prices = {},
   livePrice,
   now = Date.now(),
+  windowed = true,
 } = {}) {
   const name = String(pair || "XDX/RLUSD").toUpperCase();
   let base = locked.pairs?.[name]?.candles || [];
@@ -98,7 +99,7 @@ export function composePairCandles({
   candles = appendLiveClose(candles, livePrice, now, interval === "1W" ? "1D" : interval);
   if (interval === "1D") candles = fillDailyGaps(candles, candles[0]?.t, now);
   if (interval === "1W") candles = resampleCandles(candles, "1W");
-  return windowCandles(candles, range, now);
+  return windowed ? windowCandles(candles, range, now) : candles;
 }
 
 export function latestLockedUsd() {

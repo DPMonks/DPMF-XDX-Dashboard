@@ -278,6 +278,38 @@ export function movingAverage(type, values, period, volumes = []) {
   return sma(values, period);
 }
 
+export function averagesForWindow({
+  series = [],
+  visible = [],
+  type = "sma",
+  periods = [],
+  periodMeta = MA_PERIODS,
+} = {}) {
+  const closes = series.map((row) => row.c);
+  const volumes = series.map((row) => row.v);
+  return periods.map((period) => {
+    const values = movingAverage(type, closes, period, volumes);
+    const byTime = new Map(series.map((row, index) => [row.t, values[index]]));
+    const color = periodMeta.find((row) => row.period === period)?.color || "#00eaff";
+    return {
+      id: `${type}-${period}`,
+      color,
+      values: visible.map((row) => (byTime.has(row.t) ? byTime.get(row.t) : null)),
+    };
+  });
+}
+
+export function candleBodyWidth({ innerW, candles = [], start, end, stepMs = 86_400_000 } = {}) {
+  const width = Number(innerW) || 0;
+  const span = Math.max(Number(end) - Number(start), 1);
+  let slot = (Number(stepMs) || 86_400_000) / span * width;
+  if (candles.length >= 2) {
+    const dt = (candles[candles.length - 1].t - candles[0].t) / (candles.length - 1);
+    slot = (dt / span) * width;
+  }
+  return Math.max(2, Math.min(slot * 0.92, width * 0.22));
+}
+
 export function trueRange(candles = []) {
   return candles.map((row, index) => {
     const high = Number(row.h);

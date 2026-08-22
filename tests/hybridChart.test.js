@@ -8,6 +8,8 @@ import {
   smma,
   vwma,
   movingAverage,
+  averagesForWindow,
+  candleBodyWidth,
   appendLiveClose,
   resampleCandles,
   fillDailyGaps,
@@ -107,6 +109,47 @@ test("ema wma smma and vwma cover the moving-average set", () => {
   assert.equal(smooth[3], (2 * 2 + 4) / 3);
   assert.deepEqual(vwma([1, 2, 3], [1, 1, 4], 3), [null, null, (1 + 2 + 12) / 6]);
   assert.deepEqual(movingAverage("sma", [1, 2, 3, 4], 2), [null, 1.5, 2.5, 3.5]);
+});
+
+test("averagesForWindow uses full history so a 200 SMA covers the visible month", () => {
+  const series = Array.from({ length: 250 }, (_, index) => ({
+    t: index * 86_400_000,
+    c: 1 + index / 100,
+    v: 10,
+  }));
+  const visible = series.slice(-30);
+  const [sma200] = averagesForWindow({
+    series,
+    visible,
+    type: "sma",
+    periods: [200],
+  });
+  assert.equal(sma200.values.length, 30);
+  assert.ok(sma200.values.every((value) => Number.isFinite(value)));
+});
+
+test("candle bodies sit tight on 1D 5D and 1M windows", () => {
+  const day = 86_400_000;
+  const month = Array.from({ length: 30 }, (_, index) => ({ t: index * day }));
+  const five = month.slice(0, 5);
+  const innerW = 858;
+  const monthW = candleBodyWidth({
+    innerW,
+    candles: month,
+    start: month[0].t,
+    end: month[29].t,
+    stepMs: day,
+  });
+  const fiveW = candleBodyWidth({
+    innerW,
+    candles: five,
+    start: five[0].t,
+    end: five[4].t,
+    stepMs: day,
+  });
+  assert.ok(monthW > 20, `1M candles should be wider than the old 12px cap, got ${monthW}`);
+  assert.ok(fiveW > 100, `5D candles should sit side by side, got ${fiveW}`);
+  assert.ok(fiveW > monthW);
 });
 
 test("XDX/RLUSD backdate is XDX/XRP times that day's XRP/USD", () => {
