@@ -23,7 +23,7 @@ import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from ".
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
-import { rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
+import { maCurvePoints, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   drawingHandles,
   fibBands,
@@ -155,6 +155,20 @@ test("rsi uses Wilder averages and maps onto the visible window", () => {
   assert.equal(windowed.length, 8);
   assert.ok(windowed.every((value) => Number.isFinite(value)));
   assert.ok(windowed.every((value) => value > 70));
+});
+
+test("maCurvePoints keeps value changes so the line can curve instead of stair-step", () => {
+  const candles = [
+    { t: 1 },
+    { t: 2 },
+    { t: 3 },
+    { t: 4 },
+    { t: 5 },
+  ];
+  const points = maCurvePoints(candles, [1, 1, 1, 2, 3]);
+  assert.deepEqual(points.map((row) => row.v), [1, 2, 3]);
+  assert.equal(points[0].t, 1);
+  assert.equal(points[points.length - 1].t, 5);
 });
 
 test("volume wave spreads a daily print and stays a curve, not a spike", () => {

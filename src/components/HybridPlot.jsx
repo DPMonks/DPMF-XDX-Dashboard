@@ -1,8 +1,8 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { clientToSvg, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks, timeTicks } from "../chart/axis";
 import { candleBodyWidth } from "../chart/candles";
-import { volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
+import { maCurvePoints, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
 import { hitDrawingHandle, previewDrawing, snapPoint } from "../chart/drawings";
 import ChartDrawings from "./ChartDrawings";
@@ -56,6 +56,8 @@ export default function HybridPlot({
   const rafRef = useRef(0);
   const [hover, setHover] = useState(null);
   const [drag, setDrag] = useState(null);
+  const [glowIds, setGlowIds] = useState([]);
+  const seenMa = useRef(new Set());
   const uid = useId().replace(/:/g, "");
   const width = 960;
   const volH = showVolume ? VOL_H : 0;
@@ -92,6 +94,12 @@ export default function HybridPlot({
     [scale.start, scale.end, interval]
   );
   const volumes = useMemo(() => volumeWaveValues(candles), [candles]);
+  useEffect(() => {
+    const ids = averages.map((row) => row.id);
+    const added = ids.filter((id) => !seenMa.current.has(id));
+    seenMa.current = new Set(ids);
+    if (added.length) setGlowIds((current) => [...new Set([...current, ...added])]);
+  }, [averages]);
 
   const candleW = candleBodyWidth({
     innerW,
@@ -407,23 +415,29 @@ export default function HybridPlot({
             />
           ) : null}
 
-          {averages.flatMap((row) =>
-            (row.values || []).map((value, index) => {
-              const next = row.values[index + 1];
-              if (value == null || next == null || !candles[index] || !candles[index + 1]) return null;
-              return (
-                <line
-                  key={`${row.id}-${candles[index].t}`}
-                  className="hybrid-sma"
-                  x1={scale.x(candles[index].t)}
-                  y1={scale.y(value)}
-                  x2={scale.x(candles[index + 1].t)}
-                  y2={scale.y(next)}
-                  style={{ stroke: row.color }}
-                />
-              );
-            })
-          )}
+          {averages.map((row) => {
+            const d = wavePath(
+              maCurvePoints(candles, row.values).map((point) => ({
+                x: scale.x(point.t),
+                y: scale.y(point.v),
+              }))
+            );
+            if (!d) return null;
+            return (
+              <g key={row.id}>
+                <path className="hybrid-sma" d={d} style={{ stroke: row.color }} />
+                {glowIds.includes(row.id) ? (
+                  <path
+                    className="hybrid-sma-glow"
+                    d={d}
+                    pathLength="1"
+                    style={{ stroke: row.color, color: row.color }}
+                    onAnimationEnd={() => setGlowIds((current) => current.filter((id) => id !== row.id))}
+                  />
+                ) : null}
+              </g>
+            );
+          })}
 
           {candles.map((row) => {
             const x = scale.x(row.t);

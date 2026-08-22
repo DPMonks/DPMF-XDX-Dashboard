@@ -75,6 +75,22 @@ export function volumeWaveValues(candles = [], { smooth = 6 } = {}) {
   return smoothWave(spread, smooth);
 }
 
+export function maCurvePoints(candles = [], values = []) {
+  const out = [];
+  for (let i = 0; i < candles.length; i += 1) {
+    const v = Number(values[i]);
+    if (!Number.isFinite(v) || !candles[i]) continue;
+    const last = out[out.length - 1];
+    if (!last || last.v !== v) out.push({ t: candles[i].t, v });
+    else last.tEnd = candles[i].t;
+  }
+  if (out.length && Number.isFinite(out[out.length - 1].tEnd) && out[out.length - 1].tEnd !== out[out.length - 1].t) {
+    const last = out[out.length - 1];
+    out.push({ t: last.tEnd, v: last.v });
+  }
+  return out.map(({ t, v }) => ({ t, v }));
+}
+
 export function wavePath(points = []) {
   const rows = Array.isArray(points) ? points.filter((row) => Number.isFinite(row?.x) && Number.isFinite(row?.y)) : [];
   if (!rows.length) return "";

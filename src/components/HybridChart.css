@@ -229,9 +229,30 @@
 }
 
 .hybrid-sma {
-  stroke-width: 1.15;
+  stroke-width: 1.35;
   fill: none;
   opacity: 0.92;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.hybrid-sma-glow {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-dasharray: 0.16 1;
+  filter: drop-shadow(0 0 7px currentColor);
+  animation: hybrid-ma-sweep 1.4s linear forwards;
+  pointer-events: none;
+}
+
+@keyframes hybrid-ma-sweep {
+  from {
+    stroke-dashoffset: 0.16;
+  }
+  to {
+    stroke-dashoffset: -1;
+  }
 }
 
 .hybrid-ma {
