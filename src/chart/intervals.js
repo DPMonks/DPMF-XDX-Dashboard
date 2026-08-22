@@ -29,6 +29,7 @@ export const RANGE_WINDOWS = {
   Max: null,
 };
 
+export const DEFAULT_INTERVAL = "12h";
 export const CHART_VISIBLE_BARS = 280;
 export const CHART_MA_PAD = 200;
 

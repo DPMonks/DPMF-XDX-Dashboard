@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getAmm, getOrderbooks, getPrices, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
-import { CHART_PAIRS, CHART_VISIBLE_BARS, INTERVALS } from "../chart/intervals";
+import { CHART_PAIRS, CHART_VISIBLE_BARS, DEFAULT_INTERVAL, INTERVALS } from "../chart/intervals";
 import { averagesForWindow, MA_PERIODS, MA_TYPES, windowLastBars } from "../chart/candles";
 import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../chart/indicators";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
@@ -38,7 +38,7 @@ export default function HybridChart() {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
   const [pair, setPair] = useState("XDX/RLUSD");
-  const [timeframe, setTimeframe] = useState("1h");
+  const [timeframe, setTimeframe] = useState(DEFAULT_INTERVAL);
   const [tool, setTool] = useState("cursor");
   const [drawColor, setDrawColor] = useState("#3d8bff");
   const [magnet, setMagnet] = useState(false);

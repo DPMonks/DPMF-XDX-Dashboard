@@ -17,7 +17,7 @@ import {
   expandDailyToInterval,
   windowLastBars,
 } from "../src/chart/candles.js";
-import { bucketTime } from "../src/chart/intervals.js";
+import { bucketTime, DEFAULT_INTERVAL } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
 import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
@@ -40,6 +40,7 @@ test("bucketTime uses UTC midnight and Monday weeks", () => {
   assert.equal(bucketTime(Date.parse("2021-10-24T13:31:20.000Z"), "1W"), Date.parse("2021-10-18T00:00:00.000Z"));
   assert.equal(bucketTime(Date.parse("2026-08-22T13:00:00.000Z"), "1M"), Date.parse("2026-08-01T00:00:00.000Z"));
   assert.equal(bucketTime(Date.parse("2026-08-22T13:31:00.000Z"), "1h"), Date.parse("2026-08-22T13:00:00.000Z"));
+  assert.equal(DEFAULT_INTERVAL, "12h");
 });
 
 test("ticksToCandles builds exact OHLC and continuous opens", () => {
