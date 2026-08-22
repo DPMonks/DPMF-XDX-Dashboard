@@ -45,7 +45,17 @@ export async function createPayload() {
   });
   const raw = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(raw.error || raw.detail || "Failed to start Xaman sign-in");
+    const message =
+      typeof raw.error === "string"
+        ? raw.error
+        : typeof raw.detail === "string"
+          ? raw.detail
+          : typeof raw.message === "string"
+            ? raw.message
+            : Number.isFinite(Number(raw.code))
+              ? `Xaman sign-in failed (${raw.code})`
+              : "Failed to start Xaman sign-in";
+    throw new Error(message);
   }
 
   const payload = normalizePayload(raw);

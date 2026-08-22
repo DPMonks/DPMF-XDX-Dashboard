@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Line,
   LineChart,
@@ -11,6 +11,7 @@ import { getChartHistory, getXdxFlows } from "../api/indexer";
 import { dailyLastPoints, downsampleSeries, metricNumber } from "../activityHistory";
 import { XDX_ISSUED_AT } from "../constants/ledger";
 import { formatDay, formatNumber, formatWhen, shortAddress } from "../utils/format";
+import { DRIFT_MS, driftPlot, easeInOutCubic, lerpPair } from "../utils/lineDrift";
 import { LIST_PAGE_SIZE, pageSlice } from "../utils/pagination";
 import { useI18n } from "../i18n/useI18n";
 import PaginationBar from "./PaginationBar";
@@ -164,7 +165,6 @@ export default function ActivityChart() {
     () => downsampleSeries(windowedSeries(data, range, now, metric)),
     [data, range, metric, now]
   );
-  const yValues = chartRows.map((row) => Number(row.plot));
   const xRange = useMemo(() => {
     if (range === "Max") {
       const issued = new Date(XDX_ISSUED_AT).getTime();
@@ -175,6 +175,61 @@ export default function ActivityChart() {
     }
     return [now - RANGE_MS[range], now];
   }, [chartRows, range, now]);
+
+  const targetY = useMemo(
+    () => yDomain(chartRows.map((row) => Number(row.plot))),
+    [chartRows]
+  );
+  const [displayRows, setDisplayRows] = useState(chartRows);
+  const [displayX, setDisplayX] = useState(xRange);
+  const [displayY, setDisplayY] = useState(targetY);
+  const displayRef = useRef({
+    rows: chartRows,
+    x: xRange,
+    y: targetY,
+    metric,
+    range,
+  });
+
+  useEffect(() => {
+    const nextX = xRange;
+    const nextY = targetY;
+    const prev = displayRef.current;
+    const shouldDrift =
+      prev.rows.length > 0 &&
+      chartRows.length > 0 &&
+      (prev.metric !== metric || prev.range !== range);
+
+    if (!shouldDrift) {
+      setDisplayRows(chartRows);
+      setDisplayX(nextX);
+      setDisplayY(nextY);
+      displayRef.current = { rows: chartRows, x: nextX, y: nextY, metric, range };
+      return undefined;
+    }
+
+    const fromRows = prev.rows;
+    const fromX = prev.x || nextX;
+    const fromY = prev.y || nextY;
+    const started = performance.now();
+    let frame = 0;
+
+    const step = (stamp) => {
+      const t = Math.min(1, (stamp - started) / DRIFT_MS);
+      const eased = easeInOutCubic(t);
+      const rows = t >= 1 ? chartRows : driftPlot(fromRows, chartRows, t);
+      const x = t >= 1 ? nextX : lerpPair(fromX, nextX, eased);
+      const y = t >= 1 ? nextY : lerpPair(fromY, nextY, eased);
+      setDisplayRows(rows);
+      setDisplayX(x);
+      setDisplayY(y);
+      displayRef.current = { rows, x, y, metric, range };
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [chartRows, xRange, targetY, metric, range]);
 
   const historyRows = useMemo(() => {
     const windowMs = RANGE_MS[range];
@@ -247,15 +302,15 @@ export default function ActivityChart() {
       ) : (
         <>
           <div className="activity-plot is-live">
-            {!chartRows.length ? (
+            {!chartRows.length && !displayRows.length ? (
               <p className="empty-message">{t.noRangeData}</p>
             ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartRows}>
+              <LineChart data={displayRows.length ? displayRows : chartRows}>
                 <XAxis
                   type="number"
                   dataKey="ts"
-                  domain={xRange}
+                  domain={displayX}
                   tick={{ fill: "#7f8ba8", fontSize: 11 }}
                   tickFormatter={(value) => {
                     const date = new Date(value);
@@ -280,7 +335,7 @@ export default function ActivityChart() {
                 <YAxis
                   tick={{ fill: "#7f8ba8", fontSize: 11 }}
                   width={64}
-                  domain={yDomain(yValues)}
+                  domain={displayY}
                   allowDecimals={false}
                   tickFormatter={(value) =>
                     formatNumber(value, locale, { maximumFractionDigits: 0 })
@@ -300,7 +355,6 @@ export default function ActivityChart() {
                   ]}
                 />
                 <Line
-                  key={`${metric}-${range}`}
                   type="monotone"
                   dataKey="plot"
                   stroke="#00ff6a"
@@ -308,9 +362,7 @@ export default function ActivityChart() {
                   dot={false}
                   activeDot={{ r: 5, fill: "#00ff6a", stroke: "#c770ff", strokeWidth: 2 }}
                   connectNulls
-                  isAnimationActive
-                  animationDuration={900}
-                  animationEasing="ease-in-out"
+                  isAnimationActive={false}
                   className="activity-line"
                 />
               </LineChart>

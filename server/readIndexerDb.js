@@ -1294,10 +1294,14 @@ async function loadLongHolderSeries(db) {
     tokenTrustlineCount(db),
   ]);
   const last = issued[issued.length - 1];
-  const liveTraders = Number(last?.traders ?? last?.trader_count);
+  const liveTradersRaw = last?.traders ?? last?.trader_count;
+  const liveTraders =
+    liveTradersRaw == null || liveTradersRaw === ""
+      ? null
+      : Number(liveTradersRaw);
   return issuedActivitySeries(
     issued,
-    holders || trustlines || Number.isFinite(liveTraders)
+    holders || trustlines || liveTraders != null
       ? {
           timestamp: new Date().toISOString(),
           holders,

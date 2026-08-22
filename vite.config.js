@@ -2,34 +2,31 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { attachIndexerProxy } from "./server/attachProxy.js";
 import { indexerOrigin } from "./server/proxyIndexer.js";
+import {
+  buildSignInPayload,
+  requestOrigin,
+  xamanErrorMessage,
+  xummHeaders,
+} from "./api/xaman/_xumm.js";
 
-function xamanDevPlugin(env) {
-  const headers = () => {
-    const key = env.XUMM_API_KEY || env.VITE_XUMM_API_KEY;
-    const secret = env.XUMM_API_SECRET || env.VITE_XUMM_API_SECRET;
-    if (!key || !secret) {
-      throw new Error("XUMM_API_KEY and XUMM_API_SECRET are not configured");
-    }
-    return {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "X-API-Key": key,
-      "X-API-Secret": secret,
-    };
-  };
-
+function xamanDevPlugin() {
   const middleware = async (req, res, next) => {
     try {
+      const origin = requestOrigin(req);
       if (req.url?.startsWith("/api/xaman/create-payload") && req.method === "POST") {
         const response = await fetch("https://xumm.app/api/v1/platform/payload", {
           method: "POST",
-          headers: headers(),
-          body: JSON.stringify({ txjson: { TransactionType: "SignIn" } }),
+          headers: xummHeaders(origin),
+          body: JSON.stringify(buildSignInPayload(origin)),
         });
-        const text = await response.text();
+        const data = await response.json().catch(() => ({}));
         res.statusCode = response.status;
         res.setHeader("Content-Type", "application/json");
-        res.end(text);
+        res.end(
+          JSON.stringify(
+            response.ok ? data : { error: xamanErrorMessage(data), code: data?.error?.code }
+          )
+        );
         return;
       }
 
@@ -37,12 +34,18 @@ function xamanDevPlugin(env) {
         const uuid = new URL(req.url, "http://localhost").searchParams.get("uuid");
         const response = await fetch(
           `https://xumm.app/api/v1/platform/payload/${encodeURIComponent(uuid || "")}`,
-          { headers: headers() }
+          { headers: xummHeaders(origin) }
         );
-        const text = await response.text();
+        const data = await response.json().catch(() => ({}));
         res.statusCode = response.status;
         res.setHeader("Content-Type", "application/json");
-        res.end(text);
+        res.end(
+          JSON.stringify(
+            response.ok
+              ? data
+              : { error: xamanErrorMessage(data, "Failed to read Xaman payload") }
+          )
+        );
         return;
       }
     } catch (error) {

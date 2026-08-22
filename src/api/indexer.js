@@ -4,7 +4,6 @@ import { keepLastGoodOwners } from "../todayOwners";
 import {
   issuedActivitySeries,
   mergeActivityRows,
-  needsFullIssuanceHistory,
   rowsFromXrplToGraph,
   xrplToHolderGraphUrl,
 } from "../activityHistory";
@@ -517,7 +516,7 @@ export async function getTokenDetails(onPartial) {
 
 async function fetchXrplToIssued() {
   const graphs = await Promise.all(
-    ["ALL", "24H"].map(async (range) => {
+    ["ALL", "24H", "5Y"].map(async (range) => {
       try {
         const response = await fetch(xrplToHolderGraphUrl(range), {
           headers: { Accept: "application/json" },
@@ -535,24 +534,32 @@ async function fetchXrplToIssued() {
 
 export async function getChartHistory() {
   const errors = [];
-  let issued = [];
-  try {
-    issued = chartArray(
-      await api.holdersHistory({ queue: false, retries: 1 })
-    );
-  } catch (error) {
-    errors.push(error);
-  }
-
-  if (needsFullIssuanceHistory(issued)) {
-    const remote = await fetchXrplToIssued();
-    issued = mergeActivityRows(issued, remote);
-  }
+  const [apiIssued, remote] = await Promise.all([
+    api
+      .holdersHistory({ queue: false, retries: 1 })
+      .then(chartArray)
+      .catch((error) => {
+        errors.push(error);
+        return [];
+      }),
+    fetchXrplToIssued(),
+  ]);
+  const issued = mergeActivityRows(
+    apiIssued.map((row) =>
+      row?.source === "live"
+        ? { ...row, traders: null, trader_count: null }
+        : row
+    ),
+    remote
+  );
 
   const live = await api.overview().catch(() => null);
   const lastTraders = [...issued]
     .reverse()
-    .find((row) => numberOrNull(row.traders ?? row.trader_count) != null);
+    .find((row) => {
+      if (row?.source === "live") return false;
+      return numberOrNull(row.traders ?? row.trader_count) != null;
+    });
   const rows = issuedActivitySeries(
     issued,
     live && (live.holder_count != null || live.trustline_count != null)

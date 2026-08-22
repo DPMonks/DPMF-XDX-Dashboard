@@ -1,4 +1,10 @@
-import { readJson, xummHeaders } from "./_xumm.js";
+import {
+  buildSignInPayload,
+  readJson,
+  requestOrigin,
+  xamanErrorMessage,
+  xummHeaders,
+} from "./_xumm.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -8,14 +14,20 @@ export default async function handler(req, res) {
 
   try {
     const body = await readJson(req);
+    const origin = requestOrigin(req);
     const response = await fetch("https://xumm.app/api/v1/platform/payload", {
       method: "POST",
-      headers: xummHeaders(),
-      body: JSON.stringify({
-        txjson: body.txjson || { TransactionType: "SignIn" },
-      }),
+      headers: xummHeaders(origin),
+      body: JSON.stringify(buildSignInPayload(origin, body.txjson)),
     });
     const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      res.status(response.status).json({
+        error: xamanErrorMessage(data),
+        code: data?.error?.code ?? data?.code ?? response.status,
+      });
+      return;
+    }
     res.status(response.status).json(data);
   } catch (error) {
     res.status(500).json({ error: error.message || "Failed to create Xaman payload" });

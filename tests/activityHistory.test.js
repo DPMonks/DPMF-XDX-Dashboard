@@ -40,6 +40,15 @@ test("mergeActivityRows lets a later list overwrite the same timestamp", () => {
   assert.equal(merged[0].trustlines, 19980);
 });
 
+test("mergeActivityRows does not turn a missing trader count into zero", () => {
+  const merged = mergeActivityRows(
+    [{ timestamp: "2026-08-22T00:00:00.000Z", holders: 15940, traders: 410 }],
+    [{ timestamp: "2026-08-22T00:00:00.000Z", holders: 15944, traders: null, trader_count: null }]
+  );
+  assert.equal(merged[0].holders, 15944);
+  assert.equal(merged[0].traders, 410);
+});
+
 test("issuedActivitySeries keeps XDX history and only appends a live tip", () => {
   const issued = [
     { timestamp: "2021-10-24T13:31:20.000Z", holders: 1, trustlines: 1121 },

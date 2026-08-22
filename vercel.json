@@ -4,7 +4,9 @@
     "api/overview.js": { "maxDuration": 20 },
     "api/health.js": { "maxDuration": 10 },
     "api/[...path].js": { "maxDuration": 20 },
-    "api/top-holders.js": { "maxDuration": 20 }
+    "api/top-holders.js": { "maxDuration": 20 },
+    "api/xaman/create-payload.js": { "maxDuration": 15 },
+    "api/xaman/payload-result.js": { "maxDuration": 15 }
   },
   "rewrites": [
     { "source": "/health", "destination": "/api/health" },

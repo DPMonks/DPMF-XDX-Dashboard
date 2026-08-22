@@ -72,18 +72,18 @@ export function mergeActivityRows(...lists) {
       const iso = new Date(timestamp).toISOString();
       if (!Number.isFinite(new Date(iso).getTime())) continue;
       const current = merged.get(iso) || { timestamp: iso };
-      const holders = Number(row.holders ?? row.holder_count);
-      const trustlines = Number(row.trustlines ?? row.trustline_count);
-      const traders = Number(row.traders ?? row.trader_count);
-      if (Number.isFinite(holders) && holders > 0) {
+      const holders = metricNumber(row, "holders");
+      const trustlines = metricNumber(row, "trustlines");
+      const traders = metricNumber(row, "traders");
+      if (holders != null && holders > 0) {
         current.holders = holders;
         current.holder_count = holders;
       }
-      if (Number.isFinite(trustlines) && trustlines > 0) {
+      if (trustlines != null && trustlines > 0) {
         current.trustlines = trustlines;
         current.trustline_count = trustlines;
       }
-      if (Number.isFinite(traders)) {
+      if (traders != null) {
         current.traders = traders;
         current.trader_count = traders;
       }

@@ -9,6 +9,7 @@ function localeOf(locale) {
 }
 
 export function formatNumber(value, locale, options = {}) {
+  if (value == null || value === "") return "—";
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
   return num.toLocaleString(localeOf(locale), {

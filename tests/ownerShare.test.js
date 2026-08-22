@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { XDX_TOTAL_SUPPLY } from "../src/constants/ledger.js";
-import { shareOf } from "../src/utils/format.js";
+import { formatNumber, shareOf } from "../src/utils/format.js";
 
 test("XDX owner share is wallet balance / 10B total supply", () => {
   const top = 3_016_093_753.766;
@@ -14,4 +14,11 @@ test("XDX owner share is wallet balance / 10B total supply", () => {
   const againstDetected = shareOf(top, detectedWallets);
   assert.ok(againstDetected > 32);
   assert.ok(share < againstDetected);
+});
+
+test("formatNumber keeps a missing metric blank instead of zero", () => {
+  assert.equal(formatNumber(null), "—");
+  assert.equal(formatNumber(undefined), "—");
+  assert.equal(formatNumber(""), "—");
+  assert.equal(formatNumber(0, "en-US", { maximumFractionDigits: 0 }), "0");
 });
