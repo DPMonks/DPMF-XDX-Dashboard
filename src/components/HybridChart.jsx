@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { getAmm, getOrderbooks, getPrices, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
-import { CHART_PAIRS, INTERVALS } from "../chart/intervals";
-import { averagesForWindow, MA_PERIODS, MA_TYPES, windowCandles } from "../chart/candles";
+import { CHART_PAIRS, CHART_VISIBLE_BARS, INTERVALS } from "../chart/intervals";
+import { averagesForWindow, MA_PERIODS, MA_TYPES, windowLastBars } from "../chart/candles";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { quotePerXdx } from "../chart/pairQuote";
 import {
@@ -27,8 +27,6 @@ import ChartTools from "./ChartTools";
 import HybridPlot from "./HybridPlot";
 import "./HybridChart.css";
 
-const RANGES = ["1D", "5D", "1M", "3M", "6M", "1Y", "5Y", "Max"];
-
 function poolForPair(pools, pair) {
   return (Array.isArray(pools) ? pools : []).find(
     (row) => String(row.pool || row.pool_name || "").toUpperCase() === pair
@@ -39,8 +37,7 @@ export default function HybridChart() {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
   const [pair, setPair] = useState("XDX/RLUSD");
-  const [timeframe, setTimeframe] = useState("1D");
-  const [range, setRange] = useState("1M");
+  const [timeframe, setTimeframe] = useState("1h");
   const [tool, setTool] = useState("cursor");
   const [drawColor, setDrawColor] = useState("#3d8bff");
   const [magnet, setMagnet] = useState(false);
@@ -115,7 +112,7 @@ export default function HybridChart() {
       }),
     [pair, timeframe, sparkline, trades, prices, livePrice, now]
   );
-  const candles = useMemo(() => windowCandles(series, range, now), [series, range, now]);
+  const candles = useMemo(() => windowLastBars(series, CHART_VISIBLE_BARS), [series]);
   const averages = useMemo(
     () =>
       averagesForWindow({
@@ -139,7 +136,7 @@ export default function HybridChart() {
   const walls = liquidityWalls(book);
   const header = bookHeader(book);
   const arb = arbitrageWindow(ammPrice, header.mid || livePrice);
-  const view = smartView(candles, { rangeId: range, spread: bands.spread, now });
+  const view = smartView(candles, { rangeId: "Max", spread: bands.spread, now });
   const heat = heatmapDots(trades.filter((row) => !row.pool || String(row.pool).toUpperCase() === pair));
   const trail = ammRebalanceTrail(
     candles.slice(-24).map((row) => ({ t: row.t, price: row.c, timestamp: row.t }))
@@ -213,18 +210,6 @@ export default function HybridChart() {
               onClick={() => setPair(name)}
             >
               {name}
-            </button>
-          ))}
-        </div>
-        <div className="hybrid-intervals">
-          {INTERVALS.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              className={timeframe === row.id ? "range active" : "range"}
-              onClick={() => setTimeframe(row.id)}
-            >
-              {row.label}
             </button>
           ))}
         </div>
@@ -324,15 +309,15 @@ export default function HybridChart() {
             onDraw={addDrawing}
           />
 
-          <div className="hybrid-ranges">
-            {RANGES.map((name) => (
+          <div className="hybrid-ranges" role="tablist" aria-label={t.chartTimeframes || "Candle size"}>
+            {INTERVALS.map((row) => (
               <button
-                key={name}
+                key={row.id}
                 type="button"
-                className={range === name ? "range active" : "range"}
-                onClick={() => setRange(name)}
+                className={timeframe === row.id ? "range active" : "range"}
+                onClick={() => setTimeframe(row.id)}
               >
-                {name === "Max" ? t.max || "Max" : name}
+                {row.label}
               </button>
             ))}
           </div>

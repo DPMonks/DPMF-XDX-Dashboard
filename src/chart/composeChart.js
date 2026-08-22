@@ -2,11 +2,13 @@ import lockedCandles from "../data/lockedCandles.json" with { type: "json" };
 import {
   appendLiveClose,
   candlesFromMarketData,
+  expandDailyToInterval,
   fillDailyGaps,
   resampleCandles,
   ticksToCandles,
   windowCandles,
 } from "./candles.js";
+import { CHART_MA_PAD, CHART_VISIBLE_BARS, intervalMs, isDailyOrLonger } from "./intervals.js";
 import { quotePerXdx, stitchRlusdCandles } from "./pairQuote.js";
 
 export function lockedSnapshot() {
@@ -88,17 +90,33 @@ export function composePairCandles({
     base = [...map.values()].sort((left, right) => left.t - right.t);
   }
 
-  const live = ticksToCandles(liveTicks, interval === "1W" ? "1D" : interval, { continuous: false });
-  let daily = interval === "1W" || interval === "1D" ? fillDailyGaps(base, base[0]?.t, now) : base;
+  const liveInterval = isDailyOrLonger(interval) ? (interval === "1W" || interval === "3D" || interval === "1M" ? "1D" : interval) : interval;
+  const live = ticksToCandles(liveTicks, liveInterval, { continuous: false });
+  let daily = fillDailyGaps(base, base[0]?.t, now);
   const merged = new Map(daily.map((row) => [row.t, row]));
   for (const row of live) {
     const prev = merged.get(row.t);
     merged.set(row.t, prev ? { ...prev, ...row, o: prev.o, source: row.source || "live" } : row);
   }
   let candles = [...merged.values()].sort((left, right) => left.t - right.t);
-  candles = appendLiveClose(candles, livePrice, now, interval === "1W" ? "1D" : interval);
+  candles = appendLiveClose(candles, livePrice, now, liveInterval);
   if (interval === "1D") candles = fillDailyGaps(candles, candles[0]?.t, now);
-  if (interval === "1W") candles = resampleCandles(candles, "1W");
+  if (interval === "1W" || interval === "3D" || interval === "1M") {
+    candles = resampleCandles(candles, interval);
+  }
+  if (!isDailyOrLonger(interval)) {
+    const step = intervalMs(interval);
+    const from = now - (CHART_VISIBLE_BARS + CHART_MA_PAD) * step;
+    candles = expandDailyToInterval(candles, interval, from, now);
+    const intra = ticksToCandles(liveTicks, interval, { continuous: false });
+    const intraMap = new Map(candles.map((row) => [row.t, row]));
+    for (const row of intra) {
+      const prev = intraMap.get(row.t);
+      intraMap.set(row.t, prev ? { ...prev, ...row, o: prev.o, source: row.source || "live" } : row);
+    }
+    candles = [...intraMap.values()].sort((left, right) => left.t - right.t);
+    candles = appendLiveClose(candles, livePrice, now, interval);
+  }
   return windowed ? windowCandles(candles, range, now) : candles;
 }
 

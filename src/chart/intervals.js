@@ -2,12 +2,20 @@ export const CHART_PAIRS = ["XDX/RLUSD", "XDX/XRP"];
 
 export const INTERVALS = [
   { id: "1m", label: "1m", ms: 60_000 },
+  { id: "3m", label: "3m", ms: 180_000 },
   { id: "5m", label: "5m", ms: 300_000 },
   { id: "15m", label: "15m", ms: 900_000 },
-  { id: "1h", label: "1h", ms: 3_600_000 },
-  { id: "4h", label: "4h", ms: 14_400_000 },
-  { id: "1D", label: "D", ms: 86_400_000 },
-  { id: "1W", label: "W", ms: 7 * 86_400_000 },
+  { id: "30m", label: "30m", ms: 1_800_000 },
+  { id: "1h", label: "1H", ms: 3_600_000 },
+  { id: "2h", label: "2H", ms: 7_200_000 },
+  { id: "4h", label: "4H", ms: 14_400_000 },
+  { id: "6h", label: "6H", ms: 21_600_000 },
+  { id: "8h", label: "8H", ms: 28_800_000 },
+  { id: "12h", label: "12H", ms: 43_200_000 },
+  { id: "1D", label: "1D", ms: 86_400_000 },
+  { id: "3D", label: "3D", ms: 3 * 86_400_000 },
+  { id: "1W", label: "1W", ms: 7 * 86_400_000 },
+  { id: "1M", label: "1M", ms: 30 * 86_400_000 },
 ];
 
 export const RANGE_WINDOWS = {
@@ -21,15 +29,18 @@ export const RANGE_WINDOWS = {
   Max: null,
 };
 
+export const CHART_VISIBLE_BARS = 280;
+export const CHART_MA_PAD = 200;
+
 export function intervalMs(id) {
   return INTERVALS.find((row) => row.id === id)?.ms || 86_400_000;
 }
 
 export function isDailyOrLonger(id) {
-  return id === "1D" || id === "1W" || id === "D" || id === "W";
+  return id === "1D" || id === "3D" || id === "1W" || id === "1M" || id === "D" || id === "W";
 }
 
-// UTC buckets. Daily = 00:00 UTC. Weekly = Monday 00:00 UTC (crypto convention).
+// UTC buckets. Daily = 00:00 UTC. Weekly = Monday 00:00 UTC. Monthly = 1st 00:00 UTC.
 export function bucketTime(ts, intervalId = "1D") {
   const time = Number(ts);
   if (!Number.isFinite(time)) return null;
@@ -49,6 +60,11 @@ export function bucketTime(ts, intervalId = "1D") {
       date.getUTCMonth(),
       date.getUTCDate() - mondayOffset
     );
+  }
+
+  if (id === "1M") {
+    const date = new Date(time);
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
   }
 
   const ms = intervalMs(id);

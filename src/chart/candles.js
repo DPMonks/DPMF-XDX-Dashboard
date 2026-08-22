@@ -1,4 +1,4 @@
-import { bucketTime, intervalMs, isDailyOrLonger, tickMs } from "./intervals.js";
+import { bucketTime, CHART_VISIBLE_BARS, intervalMs, isDailyOrLonger, tickMs } from "./intervals.js";
 
 export function candlePrice(row) {
   const close = Number(row?.c ?? row?.close ?? row?.price ?? row?.p);
@@ -307,7 +307,47 @@ export function candleBodyWidth({ innerW, candles = [], start, end, stepMs = 86_
     const dt = (candles[candles.length - 1].t - candles[0].t) / (candles.length - 1);
     slot = (dt / span) * width;
   }
-  return Math.max(2, Math.min(slot * 0.92, width * 0.22));
+  return Math.max(1.2, Math.min(slot * 0.23, width * 0.055));
+}
+
+export function windowLastBars(candles = [], bars = CHART_VISIBLE_BARS) {
+  const n = Math.max(1, Math.trunc(Number(bars) || CHART_VISIBLE_BARS));
+  if (!Array.isArray(candles) || candles.length <= n) return candles;
+  return candles.slice(-n);
+}
+
+export function expandDailyToInterval(daily = [], intervalId, fromMs, toMs) {
+  const step = intervalMs(intervalId);
+  const start = bucketTime(fromMs ?? daily[0]?.t, intervalId);
+  const end = bucketTime(toMs ?? daily[daily.length - 1]?.t, intervalId);
+  if (start == null || end == null || end < start || !(step > 0)) return daily;
+  const byDay = new Map(
+    (Array.isArray(daily) ? daily : [])
+      .map((row) => [bucketTime(row.t, "1D"), row])
+      .filter(([key]) => key != null)
+  );
+  const out = [];
+  let prev = null;
+  const limit = start + step * 1200;
+  for (let t = start; t <= end && t <= limit; t += step) {
+    const dayKey = bucketTime(t, "1D");
+    const dayRow = byDay.get(dayKey);
+    if (dayRow && t === dayKey) {
+      prev = { ...dayRow, t, source: dayRow.source || "locked" };
+      out.push(prev);
+    } else if (prev) {
+      out.push({
+        t,
+        o: prev.c,
+        h: prev.c,
+        l: prev.c,
+        c: prev.c,
+        v: 0,
+        source: "carry",
+      });
+    }
+  }
+  return out;
 }
 
 export function trueRange(candles = []) {

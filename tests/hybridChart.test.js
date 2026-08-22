@@ -14,6 +14,8 @@ import {
   resampleCandles,
   fillDailyGaps,
   candlesFromMarketData,
+  expandDailyToInterval,
+  windowLastBars,
 } from "../src/chart/candles.js";
 import { bucketTime } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
@@ -35,6 +37,8 @@ import {
 test("bucketTime uses UTC midnight and Monday weeks", () => {
   assert.equal(bucketTime(Date.parse("2021-10-24T13:31:20.000Z"), "1D"), Date.parse("2021-10-24T00:00:00.000Z"));
   assert.equal(bucketTime(Date.parse("2021-10-24T13:31:20.000Z"), "1W"), Date.parse("2021-10-18T00:00:00.000Z"));
+  assert.equal(bucketTime(Date.parse("2026-08-22T13:00:00.000Z"), "1M"), Date.parse("2026-08-01T00:00:00.000Z"));
+  assert.equal(bucketTime(Date.parse("2026-08-22T13:31:00.000Z"), "1h"), Date.parse("2026-08-22T13:00:00.000Z"));
 });
 
 test("ticksToCandles builds exact OHLC and continuous opens", () => {
@@ -128,28 +132,36 @@ test("averagesForWindow uses full history so a 200 SMA covers the visible month"
   assert.ok(sma200.values.every((value) => Number.isFinite(value)));
 });
 
-test("candle bodies sit tight on 1D 5D and 1M windows", () => {
-  const day = 86_400_000;
-  const month = Array.from({ length: 30 }, (_, index) => ({ t: index * day }));
-  const five = month.slice(0, 5);
+test("candle bodies are a quarter of the previous slot so more bars fit", () => {
+  const hour = 3_600_000;
+  const bars = Array.from({ length: 40 }, (_, index) => ({ t: index * hour }));
   const innerW = 858;
-  const monthW = candleBodyWidth({
+  const width = candleBodyWidth({
     innerW,
-    candles: month,
-    start: month[0].t,
-    end: month[29].t,
-    stepMs: day,
+    candles: bars,
+    start: bars[0].t,
+    end: bars[39].t,
+    stepMs: hour,
   });
-  const fiveW = candleBodyWidth({
-    innerW,
-    candles: five,
-    start: five[0].t,
-    end: five[4].t,
-    stepMs: day,
-  });
-  assert.ok(monthW > 20, `1M candles should be wider than the old 12px cap, got ${monthW}`);
-  assert.ok(fiveW > 100, `5D candles should sit side by side, got ${fiveW}`);
-  assert.ok(fiveW > monthW);
+  const slot = innerW / 39;
+  const previous = Math.max(2, Math.min(slot * 0.92, innerW * 0.22));
+  assert.ok(Math.abs(width / previous - 0.25) < 0.05, `expected ~25% of ${previous}, got ${width}`);
+});
+
+test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail", () => {
+  const day = Date.parse("2026-08-21T00:00:00.000Z");
+  const expanded = expandDailyToInterval(
+    [{ t: day, o: 1, h: 2, l: 0.5, c: 1.5, v: 4 }],
+    "1h",
+    day,
+    day + 5 * 3_600_000
+  );
+  assert.equal(expanded.length, 6);
+  assert.equal(expanded[0].h, 2);
+  assert.equal(expanded[1].c, 1.5);
+  assert.equal(expanded[1].source, "carry");
+  assert.equal(windowLastBars(expanded, 2).length, 2);
+  assert.equal(windowLastBars(expanded, 2)[0].t, expanded[4].t);
 });
 
 test("XDX/RLUSD backdate is XDX/XRP times that day's XRP/USD", () => {

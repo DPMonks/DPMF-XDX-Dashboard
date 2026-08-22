@@ -71,6 +71,7 @@ const en = {
   chartVLine: "Vertical line",
   chartHRay: "Horizontal ray",
   chartHollow: "Hollow candles",
+  chartTimeframes: "Candle size",
   chartMa: "MA",
   chartSma: "SMA",
   chartEma: "EMA",
