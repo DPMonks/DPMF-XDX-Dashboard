@@ -80,19 +80,34 @@ body {
 
 .indexer-source {
   color: var(--dpmf-text-muted);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   text-align: center;
   margin: 14px 0 0;
-  overflow-wrap: anywhere;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
 }
 
-.indexer-source code {
-  color: var(--dpmf-neon-cyan);
+.indexer-source-label {
+  font-weight: 600;
+}
+
+.indexer-source.is-online {
+  color: #2ee59d;
+  text-shadow: 0 0 10px rgba(46, 229, 157, 0.35);
+}
+
+.indexer-source.is-connecting {
+  color: #7ee7ff;
+  text-shadow: 0 0 10px rgba(126, 231, 255, 0.35);
+}
+
+.indexer-source.is-offline {
+  color: #ff5d73;
+  text-shadow: 0 0 10px rgba(255, 93, 115, 0.45);
 }
 
 .handshake-dot {
@@ -103,19 +118,32 @@ body {
   box-shadow: 0 0 8px rgba(122, 122, 144, 0.6);
 }
 
-.indexer-source.is-ok .handshake-dot {
+.indexer-source.is-online .handshake-dot {
   background: #2ee59d;
   box-shadow: 0 0 10px rgba(46, 229, 157, 0.8);
 }
 
-.indexer-source.is-fallback .handshake-dot {
-  background: #ffd166;
-  box-shadow: 0 0 10px rgba(255, 209, 102, 0.7);
+.indexer-source.is-connecting .handshake-dot {
+  background: #7ee7ff;
+  box-shadow: 0 0 10px rgba(126, 231, 255, 0.8);
+  animation: handshake-pulse 1.4s ease-in-out infinite;
 }
 
-.indexer-source.is-error .handshake-dot {
+.indexer-source.is-offline .handshake-dot {
   background: #ff5d73;
   box-shadow: 0 0 10px rgba(255, 93, 115, 0.7);
+}
+
+@keyframes handshake-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.65;
+  }
 }
 
 .wallet-control {

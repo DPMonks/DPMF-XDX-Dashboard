@@ -13,6 +13,7 @@ import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
 import { handshake } from "./api";
 import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
+import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 
 const DexChart = lazy(() => import("./components/DexChart"));
@@ -119,6 +120,8 @@ export default function App() {
     };
   }, []);
 
+  const linkState = interfaceLinkState(link, t);
+
   return (
     <div className="dashboard-container">
       <header className="dashboard-header neon-border">
@@ -131,27 +134,9 @@ export default function App() {
         </div>
       </header>
 
-      <p className={`indexer-source is-${link.status}`}>
+      <p className={`indexer-source is-${linkState.tone}`} title={INDEXER_ORIGIN}>
         <span className="handshake-dot" aria-hidden="true" />
-        {link.database === "auth-failed" || /password authentication failed/i.test(`${link.error || ""} ${link.hint || ""}`)
-          ? t.handshakeAuth
-          : link.database === "postgres" && link.health === "ok"
-            ? t.handshakeOk
-            : link.status === "error"
-              ? t.handshakeError
-              : link.status === "connecting"
-                ? t.handshakeConnecting
-                : t.handshakeFallback}
-        {": "}
-        <code>{INDEXER_ORIGIN}</code>
-        {link.protocol ? ` · ${link.protocol}` : ""}
-        {link.path ? ` · ${link.path}` : ""}
-        {link.health ? ` · health ${link.health}` : ""}
-        {link.source ? ` · ${link.source}` : ""}
-        {link.database ? ` · DATABASE_URL ${link.database}` : ""}
-        {link.onV1 != null ? ` · xrpl /v1 ${link.onV1 ? "yes" : "no"}` : ""}
-        {" · SELECT only, workers not started"}
-        {link.hint ? ` · ${link.hint}` : ""}
+        <span className="indexer-source-label">{linkState.label}</span>
       </p>
 
       <div className="dashboard-grid">
