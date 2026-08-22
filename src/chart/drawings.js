@@ -151,6 +151,16 @@ export function fibExtent(a, b) {
   return { t0: Math.min(t0, t1), t1: Math.max(t0, t1) };
 }
 
+export function fibLabelPlacement(x0, { side = "left", gap = 6, minX = 8, maxX } = {}) {
+  const origin = Number(x0);
+  if (!Number.isFinite(origin)) return { x: minX, textAnchor: "end" };
+  if (side === "right") {
+    const raw = origin + gap;
+    return { x: Number.isFinite(maxX) ? Math.min(maxX, raw) : raw, textAnchor: "start" };
+  }
+  return { x: Math.max(minX, origin - gap), textAnchor: "end" };
+}
+
 export const FIB_EXT_LEVELS = [
   { level: 0, color: "#787B86" },
   { level: 0.382, color: "#FF9800" },

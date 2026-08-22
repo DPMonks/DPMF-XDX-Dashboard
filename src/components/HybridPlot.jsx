@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, priceTicks } from "../chart/axis";
-import { candleBodyBox, candleBodyWidth, wheelPanSteps } from "../chart/candles";
+import { candleBodyBox, candleBodyWidth, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
 import { applyPlaceOffset, hitDrawingHandle, snapPoint } from "../chart/drawings";
@@ -49,6 +49,7 @@ export default function HybridPlot({
   onDraw,
   onMoveHandle,
   onPan,
+  onZoom,
 }) {
   const box = useRef(null);
   const svgRef = useRef(null);
@@ -69,7 +70,9 @@ export default function HybridPlot({
   const [seenTs, setSeenTs] = useState([]);
   const [maDraw, setMaDraw] = useState({ ready: [], armed: [] });
   const wheelLeft = useRef(0);
+  const wheelZoomLeft = useRef(0);
   const onPanRef = useRef(onPan);
+  const onZoomRef = useRef(onZoom);
   const uid = useId().replace(/:/g, "");
   const width = 960;
   const volH = showVolume ? VOL_H : 0;
@@ -130,20 +133,38 @@ export default function HybridPlot({
     onPanRef.current = onPan;
   }, [onPan]);
   useEffect(() => {
+    onZoomRef.current = onZoom;
+  }, [onZoom]);
+  useEffect(() => {
     if (tool === "cursor") hideToolPreview(previewRef.current, placeMarkRef.current);
   }, [tool]);
   useEffect(() => {
     const node = svgRef.current;
     if (!node) return undefined;
+    const inner = width - PAD.l - PAD.r;
     function onWheel(event) {
       event.preventDefault();
-      const next = wheelPanSteps(event.deltaX, event.deltaY, wheelLeft.current);
-      wheelLeft.current = next.leftover;
-      if (next.steps && onPanRef.current) onPanRef.current(next.steps);
+      const horizontal = event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY);
+      if (horizontal) {
+        const next = wheelPanSteps(event.deltaX, event.shiftKey ? event.deltaY : 0, wheelLeft.current);
+        wheelLeft.current = next.leftover;
+        if (next.steps && onPanRef.current) onPanRef.current(next.steps);
+        return;
+      }
+      const mapped = clientToSvg(node, event.clientX, event.clientY, width, height);
+      const ratio = mapped ? (mapped.x - PAD.l) / Math.max(1, inner) : 0.5;
+      const next = wheelZoomSteps(event.deltaY, wheelZoomLeft.current);
+      wheelZoomLeft.current = next.leftover;
+      if (next.steps && onZoomRef.current) {
+        onZoomRef.current({
+          direction: -next.steps,
+          anchorRatio: Math.min(1, Math.max(0, ratio)),
+        });
+      }
     }
     node.addEventListener("wheel", onWheel, { passive: false });
     return () => node.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [height]);
 
   const candleW = candleBodyWidth({
     innerW,

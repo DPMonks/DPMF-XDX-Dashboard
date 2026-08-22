@@ -362,6 +362,40 @@ export function candleBodyBox({ width, height, hollow = false } = {}) {
   };
 }
 
+export const ZOOM_BAR_MIN = 24;
+export const ZOOM_BAR_MAX = 720;
+export const ZOOM_BAR_STEP = 1.22;
+
+export function clampVisibleBars(count, fallback = CHART_VISIBLE_BARS) {
+  const seed = Number.isFinite(Number(count)) && Number(count) > 0 ? Number(count) : Number(fallback) || CHART_VISIBLE_BARS;
+  return Math.min(ZOOM_BAR_MAX, Math.max(ZOOM_BAR_MIN, Math.round(seed)));
+}
+
+export function zoomVisibleBars(current, direction, fallback = CHART_VISIBLE_BARS) {
+  const from = clampVisibleBars(current, fallback);
+  const next = Number(direction) > 0 ? from / ZOOM_BAR_STEP : from * ZOOM_BAR_STEP;
+  return clampVisibleBars(next, fallback);
+}
+
+export function panAfterZoom({
+  total,
+  oldVisible,
+  newVisible,
+  oldPan = 0,
+  anchorRatio = 1,
+} = {}) {
+  const size = Array.isArray(total) ? total.length : Math.max(0, Math.trunc(Number(total) || 0));
+  const oldV = Math.max(1, Math.trunc(Number(oldVisible) || 1));
+  const newV = Math.max(1, Math.trunc(Number(newVisible) || 1));
+  const oldP = clampPanOffset(oldPan, size, oldV);
+  const ratio = Math.min(1, Math.max(0, Number(anchorRatio)));
+  const right = size - oldP;
+  const left = right - oldV;
+  const anchorIndex = left + ratio * oldV;
+  const nextPan = size - newV - (anchorIndex - ratio * newV);
+  return clampPanOffset(nextPan, size, newV);
+}
+
 export function clampPanOffset(offset, total, visible) {
   const count = Math.max(1, Math.trunc(Number(visible) || 1));
   const size = Array.isArray(total) ? total.length : Math.max(0, Math.trunc(Number(total) || 0));
@@ -386,6 +420,13 @@ export function wheelPanSteps(deltaX, deltaY, leftover = 0, threshold = 36) {
   const raw = Math.abs(Number(deltaX)) >= Math.abs(Number(deltaY)) ? Number(deltaX) : Number(deltaY);
   const total = Number(leftover) + (Number.isFinite(raw) ? raw : 0);
   const step = Math.max(8, Number(threshold) || 36);
+  const steps = Math.trunc(total / step);
+  return { steps, leftover: total - steps * step };
+}
+
+export function wheelZoomSteps(deltaY, leftover = 0, threshold = 56) {
+  const total = Number(leftover) + (Number.isFinite(Number(deltaY)) ? Number(deltaY) : 0);
+  const step = Math.max(16, Number(threshold) || 56);
   const steps = Math.trunc(total / step);
   return { steps, leftover: total - steps * step };
 }

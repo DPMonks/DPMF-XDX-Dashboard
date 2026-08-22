@@ -19,9 +19,13 @@ import {
   candlesFromMarketData,
   expandDailyToInterval,
   clampPanOffset,
+  clampVisibleBars,
+  panAfterZoom,
   wheelPanSteps,
+  wheelZoomSteps,
   windowBars,
   windowLastBars,
+  zoomVisibleBars,
 } from "../src/chart/candles.js";
 import { bucketTime, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
@@ -37,6 +41,7 @@ import {
   fibBands,
   fibExtent,
   fibExtensionBands,
+  fibLabelPlacement,
   fibPrice,
   PLACE_OFFSET,
   hitDrawingHandle,
@@ -317,6 +322,27 @@ test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail"
   assert.equal(clampPanOffset(80, expanded.length, 2), 4);
   assert.equal(wheelPanSteps(40, 0, 0, 36).steps, 1);
   assert.equal(wheelPanSteps(0, -40, 0, 36).steps, -1);
+  assert.equal(wheelZoomSteps(80, 0, 56).steps, 1);
+  assert.equal(wheelZoomSteps(-80, 0, 56).steps, -1);
+  assert.ok(zoomVisibleBars(280, 1) < 280);
+  assert.ok(zoomVisibleBars(280, -1) > 280);
+  assert.equal(clampVisibleBars(8), 24);
+  const kept = panAfterZoom({
+    total: 400,
+    oldVisible: 100,
+    newVisible: 200,
+    oldPan: 0,
+    anchorRatio: 1,
+  });
+  assert.equal(kept, 0);
+  const centered = panAfterZoom({
+    total: 400,
+    oldVisible: 100,
+    newVisible: 50,
+    oldPan: 50,
+    anchorRatio: 0.5,
+  });
+  assert.equal(centered, 75);
   const slots = barSlots(expanded, { left: 0, width: 600 });
   assert.ok(Math.abs(slots.x(expanded[1].t) - slots.x(expanded[0].t) - slots.slot) < 1e-6);
 });
@@ -633,6 +659,9 @@ test("draw style and extra City Index tools stay available from one toolbox", ()
   const ext = fibExtensionBands(a, b, c);
   assert.equal(ext.find((row) => row.level === 1).price, 22);
   assert.ok(ext.some((row) => row.level === 1.618));
+  const extLabel = fibLabelPlacement(220, { side: "left", minX: 88 });
+  assert.equal(extLabel.textAnchor, "end");
+  assert.ok(extLabel.x < 220);
   const fork = pitchforkRays(a, b, c, 0, 20);
   assert.equal(fork.length, 3);
   const triangle = nextDrawingState({

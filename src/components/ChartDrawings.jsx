@@ -1,4 +1,4 @@
-import { channelOffset, dashForStyle, drawingHandles, extendSegment, fibBands, fibExtent, fibExtensionBands, pitchforkRays, rangeColor, raySegment, rangeStats } from "../chart/drawings";
+import { channelOffset, dashForStyle, drawingHandles, extendSegment, fibBands, fibExtent, fibExtensionBands, fibLabelPlacement, pitchforkRays, rangeColor, raySegment, rangeStats } from "../chart/drawings";
 import { formatAxisPrice, formatPriceLabel } from "../chart/axis";
 
 function stroke(row) {
@@ -271,6 +271,7 @@ export default function ChartDrawings({
           const bands = fibExtensionBands(row.a, row.b, row.c);
           const x0 = scale.x(row.c.t);
           const x1 = width - pad.r;
+          const label = fibLabelPlacement(x0, { side: "left", minX: (pad?.l ?? 16) + 4 });
           return (
             <g key={key} className={dashed ? "hybrid-fib is-preview" : "hybrid-fib"}>
               {bands.map((band) => (
@@ -286,8 +287,9 @@ export default function ChartDrawings({
                   />
                   <text
                     className="hybrid-draw-label hybrid-fib-label"
-                    x={x0 + 6}
+                    x={label.x}
                     y={scale.y(band.price) + 3}
+                    textAnchor={label.textAnchor}
                     style={{ fill: band.color }}
                   >
                     {band.label} ({formatAxisPrice(band.price)})

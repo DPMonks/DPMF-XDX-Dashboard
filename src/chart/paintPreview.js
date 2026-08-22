@@ -6,6 +6,7 @@ import {
   fibBands,
   fibExtent,
   fibExtensionBands,
+  fibLabelPlacement,
   pitchforkRays,
   previewDrawing,
   rangeColor,
@@ -204,8 +205,18 @@ export function paintToolPreview(group, {
     const bands = fibExtensionBands(ghost.a, ghost.b, ghost.c);
     const x0 = scale.x(ghost.c.t);
     const x1 = width - pad.r;
+    const label = fibLabelPlacement(x0, { side: "left", minX: (pad?.l ?? 16) + 4 });
     for (const band of bands) {
       line(group, x0, scale.y(band.price), x1, scale.y(band.price), band.color, { className: "hybrid-fib-line", ...ink });
+      const node = svg("text", {
+        class: "hybrid-draw-label hybrid-fib-label",
+        x: label.x,
+        y: scale.y(band.price) + 3,
+        "text-anchor": label.textAnchor,
+        style: `fill:${band.color}`,
+      });
+      node.textContent = `${band.label} (${formatAxisPrice(band.price)})`;
+      group.appendChild(node);
     }
     line(group, scale.x(ghost.a.t), scale.y(ghost.a.price), scale.x(ghost.b.t), scale.y(ghost.b.price), "#787B86", ink);
     return;

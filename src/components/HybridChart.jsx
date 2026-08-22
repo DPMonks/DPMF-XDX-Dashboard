@@ -2,7 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getAmm, getOrderbooks, getPrices, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
 import { CHART_MA_PAD, CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, visibleBarsForInterval } from "../chart/intervals";
-import { averagesForWindow, clampPanOffset, MA_PERIODS, MA_TYPES, windowBars } from "../chart/candles";
+import {
+  averagesForWindow,
+  clampPanOffset,
+  clampVisibleBars,
+  MA_PERIODS,
+  MA_TYPES,
+  panAfterZoom,
+  windowBars,
+  ZOOM_BAR_MAX,
+  ZOOM_BAR_MIN,
+  zoomVisibleBars,
+} from "../chart/candles";
 import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../chart/indicators";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { quotePerXdx } from "../chart/pairQuote";
@@ -117,6 +128,7 @@ export default function HybridChart() {
   const [ghost, setGhost] = useState(null);
   const [now, setNow] = useState(0);
   const [panOffset, setPanOffset] = useState(0);
+  const [barZoom, setBarZoom] = useState(null);
   const [loadedBars, setLoadedBars] = useState(() => visibleBarsForInterval(DEFAULT_INTERVAL) + CHART_MA_PAD);
   const [seriesLen, setSeriesLen] = useState(0);
   const windowKey = `${pair}:${timeframe}`;
@@ -180,12 +192,14 @@ export default function HybridChart() {
       }),
     [pair, timeframe, sparkline, trades, prices, livePrice, now, loadedBars]
   );
-  const visibleCount = visibleBarsForInterval(timeframe);
+  const baseVisible = visibleBarsForInterval(timeframe);
+  const visibleCount = clampVisibleBars(barZoom ?? baseVisible, baseVisible);
   if (activeWindow !== windowKey) {
     setActiveWindow(windowKey);
     setSeriesLen(0);
     setPanOffset(0);
-    setLoadedBars(visibleCount + CHART_MA_PAD);
+    setBarZoom(null);
+    setLoadedBars(baseVisible + CHART_MA_PAD);
   }
   const wantLoaded = visibleCount + panOffset + CHART_MA_PAD + 32;
   if (wantLoaded > loadedBars) setLoadedBars(wantLoaded);
@@ -290,6 +304,32 @@ export default function HybridChart() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  function applyZoom(directionOrEvent, maybeRatio) {
+    const fromEvent = directionOrEvent && typeof directionOrEvent === "object";
+    const direction = fromEvent ? directionOrEvent.direction : directionOrEvent;
+    const anchorRatio = fromEvent
+      ? directionOrEvent.anchorRatio
+      : Number.isFinite(maybeRatio)
+        ? maybeRatio
+        : panOffset === 0
+          ? 1
+          : 0.5;
+    if (!direction) return;
+    const from = visibleCount;
+    const next = zoomVisibleBars(from, direction, baseVisible);
+    if (next === from) return;
+    setBarZoom(next);
+    setPanOffset((pan) =>
+      panAfterZoom({
+        total: series.length,
+        oldVisible: from,
+        newVisible: next,
+        oldPan: pan,
+        anchorRatio,
+      })
+    );
+  }
+
   function runSim(side) {
     setGhost(
       ammImpact({
@@ -388,6 +428,24 @@ export default function HybridChart() {
             </>
           ) : null}
         </div>
+        <div className="hybrid-zoom" role="group" aria-label={t.chartZoom}>
+          <button
+            type="button"
+            aria-label={t.chartZoomOut}
+            disabled={visibleCount >= ZOOM_BAR_MAX}
+            onClick={() => applyZoom(-1)}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            aria-label={t.chartZoomIn}
+            disabled={visibleCount <= ZOOM_BAR_MIN}
+            onClick={() => applyZoom(1)}
+          >
+            +
+          </button>
+        </div>
       </div>
 
       <div className="hybrid-body">
@@ -471,6 +529,7 @@ export default function HybridChart() {
               if (!steps) return;
               setPanOffset((current) => current + steps);
             }}
+            onZoom={applyZoom}
           />
 
           <div className="hybrid-ranges" role="tablist" aria-label={t.chartTimeframes || "Candle size"}>

@@ -413,6 +413,37 @@
   gap: 8px;
 }
 
+.hybrid-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.hybrid-zoom button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 234, 255, 0.28);
+  background: #0a0a0c;
+  color: #d1d4dc;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.hybrid-zoom button:hover:not(:disabled),
+.hybrid-zoom button:focus-visible {
+  border-color: rgba(0, 234, 255, 0.6);
+  color: #ffffff;
+}
+
+.hybrid-zoom button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .hybrid-ma-label {
   color: #c9c4e8;
   font-size: 12px;
@@ -595,6 +626,11 @@
   fill: none;
   shape-rendering: geometricPrecision;
   pointer-events: none;
+}
+
+.hybrid-svg.is-placing .hybrid-crosshair line {
+  stroke: rgba(209, 212, 220, 0.34);
+  stroke-dasharray: 5 5;
 }
 
 .hybrid-draw.is-preview {
