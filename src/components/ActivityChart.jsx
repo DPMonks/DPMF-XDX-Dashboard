@@ -251,7 +251,7 @@ export default function ActivityChart() {
               <p className="empty-message">{t.noRangeData}</p>
             ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart key={`${metric}-${range}`} data={chartRows}>
+              <LineChart data={chartRows}>
                 <XAxis
                   type="number"
                   dataKey="ts"
@@ -300,6 +300,7 @@ export default function ActivityChart() {
                   ]}
                 />
                 <Line
+                  key={`${metric}-${range}`}
                   type="monotone"
                   dataKey="plot"
                   stroke="#00ff6a"
@@ -307,7 +308,9 @@ export default function ActivityChart() {
                   dot={false}
                   activeDot={{ r: 5, fill: "#00ff6a", stroke: "#c770ff", strokeWidth: 2 }}
                   connectNulls
-                  isAnimationActive={false}
+                  isAnimationActive
+                  animationDuration={900}
+                  animationEasing="ease-in-out"
                   className="activity-line"
                 />
               </LineChart>
