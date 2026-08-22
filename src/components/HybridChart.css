@@ -363,7 +363,7 @@
 }
 
 .hybrid-fib-label {
-  fill: #ffffff;
+  font-variant-numeric: tabular-nums;
 }
 
 .hybrid-pending {

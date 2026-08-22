@@ -412,17 +412,17 @@ export default function HybridPlot({
             </g>
           ) : null}
 
-          <ChartDrawings
-            drawings={drawings}
-            preview={preview}
-            pending={pending}
-            scale={scale}
-            pad={PAD}
-            width={width}
-            plotBottom={plotBottom}
-            activeHandle={drag}
-          />
         </g>
+        <ChartDrawings
+          drawings={drawings}
+          preview={preview}
+          pending={pending}
+          scale={scale}
+          pad={PAD}
+          width={width}
+          plotBottom={plotBottom}
+          activeHandle={drag}
+        />
 
         {volH > 0 ? (
           <g className="hybrid-volume" clipPath={`url(#${volClipId})`}>

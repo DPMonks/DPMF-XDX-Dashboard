@@ -25,13 +25,15 @@ function Line({ a, b, scale, color, dashed, marker }) {
   );
 }
 
-function FibRetracement({ row, scale, dashed }) {
+function FibRetracement({ row, scale, pad, plotBottom, dashed }) {
   const span = fibExtent(row.a, row.b);
   if (!span) return null;
   const x0 = scale.x(span.t0);
   const x1 = scale.x(span.t1);
   const width = Math.max(1, x1 - x0);
   const bands = fibBands(row.a, row.b);
+  const topBound = (pad?.t ?? 16) + 10;
+  const bottomBound = (plotBottom ?? 364) - 4;
   return (
     <g className={dashed ? "hybrid-fib is-preview" : "hybrid-fib"}>
       <Line a={row.a} b={row.b} scale={scale} color="#787B86" dashed={dashed} />
@@ -40,8 +42,9 @@ function FibRetracement({ row, scale, dashed }) {
         const nextY = band.nextPrice != null ? scale.y(band.nextPrice) : y;
         const top = Math.min(y, nextY);
         const height = Math.abs(nextY - y);
+        const yLabel = Math.min(bottomBound, Math.max(topBound, y));
         return (
-          <g key={band.level}>
+          <g key={band.label || band.level}>
             {band.nextPrice != null && height > 0.25 ? (
               <rect
                 className="hybrid-fib-fill"
@@ -61,8 +64,14 @@ function FibRetracement({ row, scale, dashed }) {
               style={paint(band.color)}
               vectorEffect="non-scaling-stroke"
             />
-            <text className="hybrid-draw-label hybrid-fib-label" x={x0 - 6} y={y + 3} textAnchor="end">
-              {band.level} ({formatAxisPrice(band.price)})
+            <text
+              className="hybrid-draw-label hybrid-fib-label"
+              x={x0 - 6}
+              y={yLabel + 3}
+              textAnchor="end"
+              style={{ fill: band.color }}
+            >
+              {band.label} ({formatAxisPrice(band.price)})
             </text>
           </g>
         );
@@ -198,7 +207,16 @@ export default function ChartDrawings({
           );
         }
         if (row.kind === "fib" && row.a && row.b) {
-          return <FibRetracement key={key} row={row} scale={scale} dashed={dashed} />;
+          return (
+            <FibRetracement
+              key={key}
+              row={row}
+              scale={scale}
+              pad={pad}
+              plotBottom={plotBottom}
+              dashed={dashed}
+            />
+          );
         }
         if (row.kind === "text" && row.t && Number.isFinite(Number(row.price))) {
           return (

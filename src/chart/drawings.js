@@ -72,12 +72,21 @@ export function fibPrice(a, b, level) {
   return Number(b.price) + (Number(a.price) - Number(b.price)) * Number(level);
 }
 
+export function formatFibLevel(level) {
+  const n = Number(level);
+  if (!Number.isFinite(n)) return "";
+  if (Math.abs(n - 1.618) < 1e-9) return "1.618";
+  if (Number.isInteger(n)) return String(n);
+  return String(n);
+}
+
 export function fibBands(a, b) {
   return FIB_LEVELS.map((row, index) => {
     const next = FIB_LEVELS[index + 1];
     return {
       level: row.level,
       color: row.color,
+      label: formatFibLevel(row.level),
       price: fibPrice(a, b, row.level),
       nextPrice: next ? fibPrice(a, b, next.level) : null,
     };
