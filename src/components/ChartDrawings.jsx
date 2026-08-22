@@ -25,55 +25,76 @@ function Line({ a, b, scale, color, dashed, marker }) {
   );
 }
 
-function FibRetracement({ row, scale, pad, plotBottom, dashed }) {
+function FibRetracement({ row, scale, pad, plotBottom, clipId, dashed }) {
   const span = fibExtent(row.a, row.b);
   if (!span) return null;
   const x0 = scale.x(span.t0);
   const x1 = scale.x(span.t1);
   const width = Math.max(1, x1 - x0);
   const bands = fibBands(row.a, row.b);
-  const topBound = (pad?.t ?? 16) + 10;
+  const topBound = (pad?.t ?? 16) + 8;
   const bottomBound = (plotBottom ?? 364) - 4;
+  const clip = clipId ? `url(#${clipId})` : undefined;
+  const zero = bands.find((band) => band.level === 0);
+  const one = bands.find((band) => band.level === 1);
   return (
     <g className={dashed ? "hybrid-fib is-preview" : "hybrid-fib"}>
-      <Line a={row.a} b={row.b} scale={scale} color="#787B86" dashed={dashed} />
+      <g clipPath={clip}>
+        {zero && one ? (
+          <rect
+            className="hybrid-fib-frame"
+            x={x0}
+            y={Math.min(scale.y(zero.price), scale.y(one.price))}
+            width={width}
+            height={Math.max(1, Math.abs(scale.y(one.price) - scale.y(zero.price)))}
+          />
+        ) : null}
+        {bands.map((band) => {
+          const y = scale.y(band.price);
+          const nextY = band.nextPrice != null ? scale.y(band.nextPrice) : y;
+          const top = Math.min(y, nextY);
+          const height = Math.abs(nextY - y);
+          return (
+            <g key={`band-${band.level}`}>
+              {band.nextPrice != null && height > 0.25 ? (
+                <rect
+                  className="hybrid-fib-fill"
+                  x={x0}
+                  y={top}
+                  width={width}
+                  height={height}
+                  style={{ fill: band.color, fillOpacity: 0.28 }}
+                />
+              ) : null}
+              <line
+                className="hybrid-fib-line"
+                x1={x0}
+                x2={x1}
+                y1={y}
+                y2={y}
+                style={paint(band.color)}
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          );
+        })}
+        <Line a={row.a} b={row.b} scale={scale} color="#787B86" dashed={false} />
+      </g>
       {bands.map((band) => {
         const y = scale.y(band.price);
-        const nextY = band.nextPrice != null ? scale.y(band.nextPrice) : y;
-        const top = Math.min(y, nextY);
-        const height = Math.abs(nextY - y);
+        if (y < topBound - 20 || y > bottomBound + 20) return null;
         const yLabel = Math.min(bottomBound, Math.max(topBound, y));
         return (
-          <g key={band.label || band.level}>
-            {band.nextPrice != null && height > 0.25 ? (
-              <rect
-                className="hybrid-fib-fill"
-                x={x0}
-                y={top}
-                width={width}
-                height={height}
-                style={{ fill: band.color, fillOpacity: 0.28 }}
-              />
-            ) : null}
-            <line
-              className="hybrid-fib-line"
-              x1={x0}
-              x2={x1}
-              y1={y}
-              y2={y}
-              style={paint(band.color)}
-              vectorEffect="non-scaling-stroke"
-            />
-            <text
-              className="hybrid-draw-label hybrid-fib-label"
-              x={x0 - 6}
-              y={yLabel + 3}
-              textAnchor="end"
-              style={{ fill: band.color }}
-            >
-              {band.label} ({formatAxisPrice(band.price)})
-            </text>
-          </g>
+          <text
+            key={`label-${band.level}`}
+            className="hybrid-draw-label hybrid-fib-label"
+            x={x0 + 6}
+            y={yLabel + 3}
+            textAnchor="start"
+            style={{ fill: band.color }}
+          >
+            {band.label} ({formatAxisPrice(band.price)})
+          </text>
         );
       })}
     </g>
@@ -100,6 +121,7 @@ export default function ChartDrawings({
   pad,
   width,
   plotBottom,
+  clipId,
   activeHandle,
 }) {
   const tMin = scale.start;
@@ -176,8 +198,9 @@ export default function ChartDrawings({
           const h = Math.max(1, Math.abs(scale.y(row.b.price) - scale.y(row.a.price)));
           const stats = rangeStats(row.a, row.b);
           const tone = row.kind === "range" ? rangeColor(row.a, row.b) : color;
+          const clip = clipId ? `url(#${clipId})` : undefined;
           return (
-            <g key={key}>
+            <g key={key} clipPath={row.kind === "range" ? clip : undefined}>
               <rect
                 className={dashed ? "hybrid-shape is-preview" : "hybrid-shape"}
                 x={x}
@@ -215,6 +238,7 @@ export default function ChartDrawings({
               scale={scale}
               pad={pad}
               plotBottom={plotBottom}
+              clipId={clipId}
               dashed={dashed}
             />
           );

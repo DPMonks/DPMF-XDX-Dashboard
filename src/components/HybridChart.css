@@ -415,11 +415,21 @@
   pointer-events: none;
 }
 
-.hybrid-draw.is-preview,
-.hybrid-fib.is-preview,
-.hybrid-shape.is-preview {
+.hybrid-draw.is-preview {
   stroke-dasharray: 4 3;
   opacity: 0.9;
+}
+
+.hybrid-fib.is-preview,
+.hybrid-shape.is-preview {
+  opacity: 0.92;
+}
+
+.hybrid-fib-frame {
+  fill: none;
+  stroke: #787B86;
+  stroke-width: 1;
+  pointer-events: none;
 }
 
 .hybrid-fib-fill {

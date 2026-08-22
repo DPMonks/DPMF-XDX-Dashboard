@@ -529,6 +529,17 @@ test("fib retracement uses TradingView level colors and click order", () => {
   assert.equal(span.t0, 1);
   assert.equal(span.t1, 5);
   assert.ok(span.t1 - span.t0 < 10);
+  const rangeGhost = previewDrawing({
+    tool: "range",
+    color: "#3d8bff",
+    pending: { tool: "range", color: "#3d8bff", points: [a] },
+    hover: b,
+  });
+  assert.equal(rangeGhost.kind, "range");
+  assert.equal(rangeGhost.a.t, a.t);
+  assert.equal(rangeGhost.b.t, b.t);
+  assert.equal(fibExtent(rangeGhost.a, rangeGhost.b).t0, span.t0);
+  assert.equal(fibExtent(rangeGhost.a, rangeGhost.b).t1, span.t1);
 });
 
 test("snapPoint locks to the nearest candle open high low or close", () => {

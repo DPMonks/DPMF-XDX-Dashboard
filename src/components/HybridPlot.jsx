@@ -193,6 +193,10 @@ export default function HybridPlot({
 
   function queueHover(next) {
     hoverRef.current = next;
+    if (pending) {
+      setHover(next);
+      return;
+    }
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;
@@ -511,6 +515,7 @@ export default function HybridPlot({
           pad={PAD}
           width={width}
           plotBottom={plotBottom}
+          clipId={clipId}
           activeHandle={drag}
         />
 
