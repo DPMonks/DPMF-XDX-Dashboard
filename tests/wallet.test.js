@@ -90,6 +90,56 @@ test("lpPositionFromPool estimates withdraw from pool share", () => {
   assert.equal(row.withdraw_estimate_quote, 0.2);
 });
 
+test("lpPositionFromPool keeps a known share when catalog supply is missing", () => {
+  const row = lpPositionFromPool(2840.23, {
+    pool_name: "XDX/USDC",
+    quote: "USDC",
+    lp_share_percent: 1.25,
+    withdraw_estimate_xdx: 4000,
+    withdraw_estimate_quote: 12.5,
+  });
+  assert.equal(row.pool, "XDX/USDC");
+  assert.equal(row.lp_share_percent, 1.25);
+  assert.equal(row.withdraw_estimate_xdx, 4000);
+  assert.equal(row.withdraw_estimate_quote, 12.5);
+});
+
+test("composeWalletSnapshot fills non-XRP LP share and does not drop it when AMM supply is blank", () => {
+  const computed = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 10, xdx: 1 },
+    token: { circulating: 10_000_000_000 },
+    pools: [
+      { pool_name: "XDX/USDC", quote: "USDC", lp_supply: 284_023, reserve_asset: 80_000, reserve_currency: 250 },
+    ],
+    lpRows: [{ pool_name: "XDX/USDC", lp_balance: 2840.23 }],
+  });
+  const usdc = computed.lp.find((row) => row.pool === "XDX/USDC");
+  assert.ok(usdc);
+  assert.ok(Math.abs(usdc.lp_share_percent - 1) < 1e-9);
+  assert.ok(Math.abs(usdc.withdraw_estimate_xdx - 800) < 1e-6);
+  assert.ok(Math.abs(usdc.withdraw_estimate_quote - 2.5) < 1e-6);
+
+  const kept = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 10, xdx: 1 },
+    token: { circulating: 10_000_000_000 },
+    pools: [{ pool_name: "XDX/USDC", quote: "USDC" }],
+    lpRows: [
+      {
+        pool_name: "XDX/USDC",
+        lp_balance: 2840.23,
+        lp_share_percent: 1.25,
+        withdraw_estimate_xdx: 4000,
+        withdraw_estimate_quote: 12.5,
+      },
+    ],
+  });
+  const keptUsdc = kept.lp.find((row) => row.pool === "XDX/USDC");
+  assert.equal(keptUsdc.lp_share_percent, 1.25);
+  assert.equal(keptUsdc.withdraw_estimate_xdx, 4000);
+});
+
 test("composeWalletSnapshot keeps every LP pair and the rich-list rank", () => {
   assert.equal(normalizeWalletPair("rlusd"), "XDX/RLUSD");
   const filled = composeWalletSnapshot({

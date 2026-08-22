@@ -109,25 +109,86 @@ export function xdxFiatValues(xdx, prices = {}) {
   };
 }
 
+export function indexPoolsByPair(pools = []) {
+  const map = new Map();
+  const set = (key, pool) => {
+    const name = String(key || "").trim();
+    if (!name || map.has(name)) return;
+    map.set(name, pool);
+  };
+  for (const pool of Array.isArray(pools) ? pools : []) {
+    set(normalizeWalletPair(pool.pool_name || pool.pool || pool.pair), pool);
+    set(normalizeWalletPair(pool.quote), pool);
+    set(String(pool.lp_currency || pool.lp_currency_hex || "").toUpperCase(), pool);
+    set(String(pool.amm_account || "").toLowerCase(), pool);
+  }
+  return map;
+}
+
+export function mergeLpPoolSource(row = {}, catalogPool = null) {
+  if (!catalogPool) return row;
+  const catalogSupply = num(catalogPool.lp_supply);
+  return {
+    ...row,
+    ...catalogPool,
+    quote: catalogPool.quote || row.quote,
+    lp_supply: catalogSupply > 0 ? catalogSupply : num(row.lp_supply),
+    reserve_asset:
+      num(catalogPool.reserve_asset ?? catalogPool.reserve_xdx) ||
+      num(row.reserve_asset ?? row.reserve_xdx),
+    reserve_currency:
+      num(catalogPool.reserve_currency ?? catalogPool.reserve_quote) ||
+      num(row.reserve_currency ?? row.reserve_quote),
+    lp_share_percent: catalogSupply > 0 ? undefined : row.lp_share_percent,
+    withdraw_estimate_xdx: catalogSupply > 0 ? undefined : row.withdraw_estimate_xdx,
+    withdraw_estimate_quote: catalogSupply > 0 ? undefined : row.withdraw_estimate_quote,
+    xdx_pct: num(catalogPool.xdx_pct ?? catalogPool.composition_xdx_percent) ?? num(row.xdx_pct),
+    quote_pct: num(catalogPool.quote_pct ?? catalogPool.composition_quote_percent) ?? num(row.quote_pct),
+  };
+}
+
+export function lookupLpPool(row, poolsByPair) {
+  const hex = String(row?.lp_currency || row?.lp_currency_hex || "").toUpperCase();
+  if (hex && poolsByPair.get(hex)) return poolsByPair.get(hex);
+  const name = normalizeWalletPair(row?.pool_name || row?.pool || row?.pair);
+  if (name && poolsByPair.get(name)) return poolsByPair.get(name);
+  const amm = String(row?.amm_account || "").toLowerCase();
+  if (amm && poolsByPair.get(amm)) return poolsByPair.get(amm);
+  return null;
+}
+
 export function lpPositionFromPool(lpBalance, pool = {}, pairHint = "") {
   const tokens = num(lpBalance);
   if (tokens == null || tokens <= 0) return null;
   const pair =
-    normalizeWalletPair(pairHint || pool.pool_name || pool.pool) || "XDX/XRP";
+    normalizeWalletPair(pairHint || pool.pool_name || pool.pool || pool.pair) || "XDX/XRP";
   const supply = num(pool.lp_supply);
-  const share = supply > 0 ? tokens / supply : 0;
+  const knownShare = num(pool.lp_share_percent);
+  const share = supply > 0 ? tokens / supply : knownShare != null ? knownShare / 100 : 0;
   const reserveXdx = num(pool.reserve_asset ?? pool.reserve_xdx) || 0;
   const reserveQuote = num(pool.reserve_currency ?? pool.reserve_quote) || 0;
+  const withdrawXdx =
+    share > 0 && reserveXdx > 0 ? share * reserveXdx : num(pool.withdraw_estimate_xdx);
+  const withdrawQuote =
+    share > 0 && reserveQuote > 0 ? share * reserveQuote : num(pool.withdraw_estimate_quote);
   return {
     pool: pair,
+    pool_name: pair,
     quote: pool.quote || pair.split("/")[1] || "XRP",
     lp_balance: tokens,
+    lp_supply: supply,
+    amm_account: pool.amm_account || null,
+    lp_currency: pool.lp_currency || pool.lp_currency_hex || null,
     lp_share_percent: share * 100,
-    withdraw_estimate_xdx: share * reserveXdx,
-    withdraw_estimate_quote: share * reserveQuote,
+    withdraw_estimate_xdx: withdrawXdx ?? share * reserveXdx,
+    withdraw_estimate_quote: withdrawQuote ?? share * reserveQuote,
     fees_earned: num(pool.fees_earned),
     composition_xdx_percent: num(pool.xdx_pct ?? pool.composition_xdx_percent),
     composition_quote_percent: num(pool.quote_pct ?? pool.composition_quote_percent),
+    xdx_pct: num(pool.xdx_pct ?? pool.composition_xdx_percent),
+    quote_pct: num(pool.quote_pct ?? pool.composition_quote_percent),
+    reserve_asset: reserveXdx,
+    reserve_currency: reserveQuote,
   };
 }
 
@@ -216,17 +277,13 @@ export function composeWalletSnapshot({
   const circulating = num(token.circulating);
   const shares = supplyShares(xdxBal, circulating, ammXdx);
 
-  const poolByName = new Map();
-  for (const pool of Array.isArray(pools) ? pools : []) {
-    const key = normalizeWalletPair(pool.pool_name || pool.pool);
-    if (key) poolByName.set(key, pool);
-  }
+  const poolByName = indexPoolsByPair(pools);
   const lpByPair = new Map();
   for (const row of Array.isArray(lpRows) ? lpRows : []) {
     const name = normalizeWalletPair(row.pool_name || row.pool || row.pair);
     const position = lpPositionFromPool(
       row.lp_balance ?? row.lp,
-      poolByName.get(name) || row,
+      mergeLpPoolSource(row, lookupLpPool(row, poolByName)),
       name
     );
     if (!position) continue;

@@ -49,6 +49,14 @@ import {
   blackholeAtFromTransactions,
   issuerBlackholeFromAccount,
 } from "../src/utils/blackhole.js";
+import { poolReservesFromAmmInfo } from "../src/utils/ammInfo.js";
+import {
+  indexPoolsByPair,
+  lookupLpPool,
+  lpPositionFromPool,
+  mergeLpPoolSource,
+  normalizeWalletPair,
+} from "../src/wallet/composeWallet.js";
 
 let pool = null;
 
@@ -1259,56 +1267,110 @@ async function loadWalletAccount(address) {
 }
 
 function normalizeWalletPairName(value) {
-  const raw = String(value || "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "")
-    .replace(/-/g, "/");
-  if (!raw) return "";
-  if (raw === "XRP" || raw === "XRP/XDX") return "XDX/XRP";
-  if (raw.startsWith("XDX/")) return raw;
-  return `XDX/${raw}`;
+  return normalizeWalletPair(value);
 }
 
 function mergeWalletLpRows(rows, catalog) {
-  const byName = new Map();
-  const byCurrency = new Map();
-  for (const pool of catalog.pools || []) {
-    const name = normalizeWalletPairName(pool.pool_name || pool.pool);
-    if (name) byName.set(name, pool);
-    const hex = String(pool.lp_currency || pool.lp_currency_hex || "").toUpperCase();
-    if (hex) byCurrency.set(hex, pool);
-  }
-
+  const byPair = indexPoolsByPair(catalog.pools || []);
   const positions = new Map();
   for (const row of rows) {
-    const tokens = Number(row.lp_balance || 0);
+    const tokens = Number(row.lp_balance || row.lp || 0);
     if (!(tokens > 0)) continue;
-    const hex = String(row.lp_currency || row.lp_currency_hex || "").toUpperCase();
-    const fromHex = hex ? byCurrency.get(hex) : null;
-    const name =
-      normalizeWalletPairName(row.pool_name || row.pool || fromHex?.pool_name || fromHex?.pool) ||
-      "XDX/XRP";
-    const pool = byName.get(name) || fromHex || {};
-    const supply = Number(pool.lp_supply || 0);
-    const share = supply > 0 ? tokens / supply : 0;
-    const current = {
-      pool: name,
-      pool_name: name,
-      quote: pool.quote || name.split("/")[1] || "XRP",
-      lp_balance: tokens,
-      lp_supply: supply || null,
-      reserve_asset: Number(pool.reserve_xdx || pool.reserve_asset || 0),
-      reserve_currency: Number(pool.reserve_currency || pool.reserve_quote || 0),
-      lp_share_percent: share * 100,
-      withdraw_estimate_xdx: share * Number(pool.reserve_xdx || pool.reserve_asset || 0),
-      withdraw_estimate_quote: share * Number(pool.reserve_currency || pool.reserve_quote || 0),
-      xdx_pct: Number(pool.xdx_pct || 0) || null,
-      quote_pct: Number(pool.quote_pct || 0) || null,
-    };
-    positions.set(name, current);
+    const catalogPool = lookupLpPool(row, byPair);
+    const position = lpPositionFromPool(
+      tokens,
+      mergeLpPoolSource(row, catalogPool),
+      row.pool_name || row.pool || row.pair || catalogPool?.pool_name
+    );
+    if (!position) continue;
+    const previous = positions.get(position.pool);
+    if (!previous || position.lp_balance > previous.lp_balance) {
+      positions.set(position.pool, position);
+    }
   }
   return [...positions.values()];
+}
+
+async function loadLpSupplyByPool(db) {
+  const latest = await tryQuery(
+    db,
+    `SELECT COALESCE(NULLIF(TRIM(pool_name), ''), 'XDX/XRP') AS pool_name,
+            SUM(ABS(lp_balance::numeric)) AS lp_supply
+     FROM lp_holders_latest
+     WHERE ABS(lp_balance::numeric) > 0
+     GROUP BY 1`
+  );
+  const history = await tryQuery(
+    db,
+    `WITH latest_ts AS (
+       SELECT COALESCE(NULLIF(TRIM(pool_name), ''), 'XDX/XRP') AS pool_name,
+              MAX(timestamp) AS ts
+       FROM lp_holders_history
+       GROUP BY 1
+     )
+     SELECT t.pool_name, SUM(ABS(h.lp_balance::numeric)) AS lp_supply
+     FROM lp_holders_history h
+     JOIN latest_ts t
+       ON COALESCE(NULLIF(TRIM(h.pool_name), ''), 'XDX/XRP') = t.pool_name
+      AND h.timestamp = t.ts
+     WHERE ABS(h.lp_balance::numeric) > 0
+     GROUP BY t.pool_name`
+  );
+  const map = new Map();
+  for (const row of [...(history.rows || []), ...(latest.rows || [])]) {
+    const name = normalizeWalletPairName(row.pool_name);
+    const supply = Number(row.lp_supply || 0);
+    if (name && supply > 0) map.set(name, supply);
+  }
+  return map;
+}
+
+const ammInfoCache = new Map();
+const AMM_INFO_MS = 60_000;
+
+async function loadAmmReserves(ammAccount) {
+  const key = String(ammAccount || "").trim();
+  if (!key) return null;
+  const hit = ammInfoCache.get(key);
+  if (hit && Date.now() - hit.at < AMM_INFO_MS) return hit.body;
+  try {
+    const result = await xrplRpc("amm_info", {
+      amm_account: key,
+      ledger_index: "validated",
+    });
+    const body = poolReservesFromAmmInfo(result);
+    ammInfoCache.set(key, { at: Date.now(), body });
+    return body;
+  } catch {
+    ammInfoCache.set(key, { at: Date.now(), body: null });
+    return null;
+  }
+}
+
+async function fillWalletLpFromLedger(positions) {
+  return Promise.all(
+    (positions || []).map(async (row) => {
+      const needsSupply = !(Number(row.lp_supply) > 0);
+      const needsReserves =
+        !(Number(row.reserve_asset) > 0) || !(Number(row.reserve_currency) > 0);
+      if (!row.amm_account || (!needsSupply && !needsReserves)) return row;
+      const live = await loadAmmReserves(row.amm_account);
+      if (!live) return row;
+      return (
+        lpPositionFromPool(
+          row.lp_balance,
+          {
+            ...row,
+            lp_supply: Number(row.lp_supply) > 0 ? row.lp_supply : live.lp_supply,
+            reserve_asset: Number(row.reserve_asset) > 0 ? row.reserve_asset : live.reserve_asset,
+            reserve_currency:
+              Number(row.reserve_currency) > 0 ? row.reserve_currency : live.reserve_currency,
+          },
+          row.pool
+        ) || row
+      );
+    })
+  );
 }
 
 async function loadWalletLp(db, address) {
@@ -1330,9 +1392,8 @@ async function loadWalletLp(db, address) {
     [address]
   );
   const catalog = await loadXdxLpPools(db);
-  const positions = mergeWalletLpRows(
-    [...(history.rows || []), ...(latest.rows || [])],
-    catalog
+  const positions = await fillWalletLpFromLedger(
+    mergeWalletLpRows([...(history.rows || []), ...(latest.rows || [])], catalog)
   );
   return { account: address, positions, source: "db" };
 }
@@ -1410,6 +1471,7 @@ async function loadXdxLpPools(db) {
   }
 
   const reserves = await loadAmmReserveIndex(db);
+  const holderSupply = await loadLpSupplyByPool(db);
   const quote = await loadXrpQuote(db);
   const xrpUsd = Number(quote.usd || 0);
   const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
@@ -1428,7 +1490,11 @@ async function loadXdxLpPools(db) {
       const measuredQuote =
         Number(optional.quote || 0) || Number(extra.reserve_currency || 0) || 0;
       const quoteUsd = quoteUsdFromMap(row.quote, quotePrices);
-      const lpSupply = extra.lp_supply || optional.lp_supply || null;
+      const lpSupply =
+        extra.lp_supply ||
+        optional.lp_supply ||
+        holderSupply.get(normalizeWalletPairName(row.pool_name || row.quote)) ||
+        null;
       const reserveQuote =
         measuredQuote ||
         inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) ||
