@@ -436,7 +436,7 @@ export const api = {
   },
   lpPools: () => getJson(endpoint("lpPools") || "/lp-pools"),
   tvlHistory: () => getJson(endpoint("tvlHistory")),
-  holdersHistory: () => getJson(endpoint("holdersHistory")),
+  holdersHistory: (extra = {}) => getJson(endpoint("holdersHistory"), extra),
   lpHoldersHistory: () => getJson(endpoint("lpHoldersHistory")),
   lpTrustlinesHistory: (extra = {}) => {
     const path = endpoint("lpTrustlinesHistory") || "/charts/lp-trustlines";

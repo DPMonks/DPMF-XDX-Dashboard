@@ -1,31 +1,30 @@
-import { XDX_XRPL_TO_MD5 } from "../src/constants/ledger.js";
-import { rowsFromXrplToGraph } from "../src/activityHistory.js";
+import { mergeActivityRows, rowsFromXrplToGraph, xrplToHolderGraphUrl } from "../src/activityHistory.js";
 
 const CACHE_MS = 60 * 60_000;
 let cache = { at: 0, rows: [] };
 
-export async function loadIssuedHolderHistory() {
-  if (Date.now() - cache.at < CACHE_MS && cache.rows.length) {
+async function fetchGraph(range, fetchImpl = fetch) {
+  const response = await fetchImpl(xrplToHolderGraphUrl(range), {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) return [];
+  return rowsFromXrplToGraph(await response.json());
+}
+
+export async function loadIssuedHolderHistory(fetchImpl = fetch) {
+  if (Date.now() - cache.at < CACHE_MS && cache.rows.length >= 50) {
     return cache.rows;
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch(
-      `https://api.xrpl.to/v1/holders/graph/${XDX_XRPL_TO_MD5}?range=5Y`,
-      {
-        headers: { Accept: "application/json" },
-        signal: controller.signal,
-      }
-    );
-    if (!response.ok) return cache.rows;
-    const rows = rowsFromXrplToGraph(await response.json());
+    const all = await fetchGraph("ALL", fetchImpl);
+    const long = all.length ? all : await fetchGraph("5Y", fetchImpl);
+    const recent = await fetchGraph("24H", fetchImpl).catch(() => []);
+    const rows = mergeActivityRows(long, recent);
     if (rows.length) cache = { at: Date.now(), rows };
     return rows;
   } catch {
     return cache.rows;
-  } finally {
-    clearTimeout(timer);
   }
 }

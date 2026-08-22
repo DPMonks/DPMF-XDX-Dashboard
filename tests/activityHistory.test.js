@@ -5,6 +5,8 @@ import {
   downsampleSeries,
   issuedActivitySeries,
   mergeActivityRows,
+  metricNumber,
+  needsFullIssuanceHistory,
   rowsFromXrplToGraph,
 } from "../src/activityHistory.js";
 import { XDX_ISSUED_AT } from "../src/constants/ledger.js";
@@ -62,6 +64,34 @@ test("downsampleSeries keeps first and last points", () => {
   assert.ok(slim.length <= 41);
   assert.equal(slim[0], rows[0]);
   assert.equal(slim[slim.length - 1], rows[999]);
+});
+
+test("needsFullIssuanceHistory is true until the series starts at XDX issuance", () => {
+  assert.equal(needsFullIssuanceHistory([]), true);
+  assert.equal(
+    needsFullIssuanceHistory(
+      Array.from({ length: 60 }, (_, i) => ({
+        timestamp: new Date(Date.parse("2026-05-01T00:00:00Z") + i * 86400000).toISOString(),
+        holders: 15000 + i,
+      }))
+    ),
+    true
+  );
+  assert.equal(
+    needsFullIssuanceHistory(
+      Array.from({ length: 60 }, (_, i) => ({
+        timestamp: new Date(Date.parse(XDX_ISSUED_AT) + i * 86400000).toISOString(),
+        holders: 1 + i,
+      }))
+    ),
+    false
+  );
+});
+
+test("metricNumber keeps a missing side empty instead of plotting zero", () => {
+  assert.equal(metricNumber({ holders: 15945 }, "holders"), 15945);
+  assert.equal(metricNumber({ holders: 15945 }, "trustlines"), null);
+  assert.equal(metricNumber({ active24H: 0, traders: 0 }, "traders"), 0);
 });
 
 test("dailyLastPoints keeps one row per UTC day", () => {

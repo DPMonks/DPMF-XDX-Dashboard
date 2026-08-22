@@ -8,7 +8,7 @@ import {
   YAxis,
 } from "recharts";
 import { getChartHistory, getXdxFlows } from "../api/indexer";
-import { dailyLastPoints, downsampleSeries } from "../activityHistory";
+import { dailyLastPoints, downsampleSeries, metricNumber } from "../activityHistory";
 import { XDX_ISSUED_AT } from "../constants/ledger";
 import { formatDay, formatNumber, formatWhen, shortAddress } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
@@ -47,8 +47,8 @@ function windowedSeries(rows, range, now, metric) {
 
   let lastKnown = null;
   const filled = all.map((row) => {
-    const value = Number(metricValue(row, metric));
-    if (Number.isFinite(value)) lastKnown = value;
+    const value = metricNumber(row, metric);
+    if (value != null) lastKnown = value;
     return { ...row, plot: lastKnown };
   });
 
@@ -95,8 +95,7 @@ function isIntraday(range) {
 }
 
 function metricValue(row, metric) {
-  if (metric === "traders") return row.traders ?? row.trades;
-  return row[metric];
+  return metricNumber(row, metric);
 }
 
 function HistoryPager({ rows, renderHead, renderRow }) {
@@ -148,7 +147,7 @@ export default function ActivityChart() {
   const [data, setData] = useState([]);
   const [trades, setTrades] = useState([]);
   const [metric, setMetric] = useState("holders");
-  const [range, setRange] = useState("24H");
+  const [range, setRange] = useState("Max");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [now, setNow] = useState(0);
@@ -207,14 +206,14 @@ export default function ActivityChart() {
       .map(withTs)
       .filter((row) => {
         if (!row || row.ts < start) return false;
-        return Number.isFinite(Number(metricValue(row, metric)));
+        return metricValue(row, metric) != null;
       });
     const visible = dailyLastPoints(scoped)
       .sort((a, b) => b.ts - a.ts)
       .map((row, index, list) => {
         const previous = list[index + 1];
-        const value = Number(metricValue(row, metric));
-        const prior = previous ? Number(metricValue(previous, metric)) : null;
+        const value = metricValue(row, metric);
+        const prior = previous ? metricValue(previous, metric) : null;
         const change = prior != null && Number.isFinite(prior) ? value - prior : null;
         return { ...row, value, previous: prior, change };
       });
@@ -275,7 +274,7 @@ export default function ActivityChart() {
               <p className="empty-message">{t.noRangeData}</p>
             ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartRows}>
+              <LineChart key={`${metric}-${range}`} data={chartRows}>
                 <XAxis
                   type="number"
                   dataKey="ts"
@@ -331,9 +330,7 @@ export default function ActivityChart() {
                   dot={false}
                   activeDot={{ r: 5, fill: "#00ff6a", stroke: "#c770ff", strokeWidth: 2 }}
                   connectNulls
-                  isAnimationActive
-                  animationDuration={900}
-                  animationEasing="ease-in-out"
+                  isAnimationActive={false}
                   className="activity-line"
                 />
               </LineChart>

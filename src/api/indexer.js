@@ -1,5 +1,12 @@
 import { api, INDEXER_ORIGIN } from "../api";
 import { pairFromRow } from "../constants/ledger";
+import {
+  issuedActivitySeries,
+  mergeActivityRows,
+  needsFullIssuanceHistory,
+  rowsFromXrplToGraph,
+  xrplToHolderGraphUrl,
+} from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
 import { quoteUsdFromMap, resolvePoolSplit } from "../utils/poolSplit";
 import {
@@ -434,119 +441,54 @@ export async function getTokenDetails(onPartial) {
   });
 }
 
-function mergeChartRow(target, row) {
-  const timestamp = rowTimestamp(row);
-  if (!timestamp) return;
-  const current = target.get(timestamp) || { timestamp };
-  const next = {
-    ...current,
-    tvl: numberOrNull(row.tvl ?? row.total_value_locked) ?? current.tvl,
-    holders:
-      numberOrNull(row.holders ?? row.holder_count ?? row.xdxHolders) ??
-      current.holders,
-    lpHolders:
-      numberOrNull(row.lpHolders ?? row.lp_holders ?? row.lp_holder_count) ??
-      current.lpHolders,
-    trustlines:
-      numberOrNull(row.trustlines ?? row.trustline_count) ?? current.trustlines,
-    traders: numberOrNull(row.traders ?? row.trader_count) ?? current.traders,
-    trades: numberOrNull(row.trades ?? row.trade_count) ?? current.trades,
-    price: numberOrNull(row.price ?? row.xdxUsd ?? row.xdx_usd) ?? current.price,
-    volume:
-      numberOrNull(row.volume ?? row.volume24h ?? row.volume_24h) ?? current.volume,
-    marketcap:
-      numberOrNull(row.marketcap ?? row.market_cap ?? row.xrplMarketCap) ??
-      current.marketcap,
-  };
-  target.set(timestamp, next);
-}
-
-function sparklineRows(payload, key) {
-  const list = chartArray(payload);
-  const now = Date.now();
-  return list
-    .map((item, index) => {
-      if (item != null && typeof item !== "object") {
-        return {
-          timestamp: new Date(now - (list.length - 1 - index) * 86400000).toISOString(),
-          [key]: numberOrNull(item),
-        };
+async function fetchXrplToIssued() {
+  const graphs = await Promise.all(
+    ["ALL", "24H"].map(async (range) => {
+      try {
+        const response = await fetch(xrplToHolderGraphUrl(range), {
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (!response.ok) return [];
+        return rowsFromXrplToGraph(await response.json());
+      } catch {
+        return [];
       }
-      const timestamp =
-        rowTimestamp(item) ||
-        new Date(now - (list.length - 1 - index) * 86400000).toISOString();
-      return {
-        timestamp,
-        [key]: numberOrNull(
-          item?.price_usd ?? item?.value ?? item?.price ?? item?.[key] ?? item?.close ?? item?.y
-        ),
-      };
     })
-    .filter((row) => row[key] != null);
+  );
+  return mergeActivityRows(...graphs);
 }
 
 export async function getChartHistory() {
-  const merged = new Map();
   const errors = [];
-
-  async function absorb(loaders) {
-    let added = 0;
-    for (const load of loaders) {
-      try {
-        const rows = chartArray(await load());
-        for (const row of rows) mergeChartRow(merged, row);
-        added += rows.length;
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-    return added;
+  let issued = [];
+  try {
+    issued = chartArray(
+      await api.holdersHistory({ queue: false, retries: 1 })
+    );
+  } catch (error) {
+    errors.push(error);
   }
 
-  await Promise.all([
-    absorb([() => api.holdersHistory()]),
-    absorb([() => api.trustlinesHistory()]),
-  ]);
-
-  await Promise.race([
-    Promise.all([
-      absorb([() => api.activityHistory()]),
-      absorb([() => api.tradersHistory()]),
-    ]),
-    sleep(4000),
-  ]);
-
-  if (!merged.size) {
-    for (const asset of ["XDX", "XRP", "LP"]) {
-      try {
-        const rows = sparklineRows(await api.sparkline(asset), "price");
-        for (const row of rows) mergeChartRow(merged, row);
-        if (merged.size) break;
-      } catch (error) {
-        errors.push(error);
-      }
-    }
+  if (needsFullIssuanceHistory(issued)) {
+    const remote = await fetchXrplToIssued();
+    issued = mergeActivityRows(issued, remote);
   }
 
   const live = await api.overview().catch(() => null);
-  if (live && (live.tvl != null || live.holder_count != null || live.xdxUsd != null)) {
-    const lastTraders = [...merged.values()]
-      .reverse()
-      .find((row) => numberOrNull(row.traders ?? row.trader_count) != null);
-    mergeChartRow(merged, {
-      timestamp: new Date().toISOString(),
-      tvl: live.tvl_usd ?? live.tvl,
-      holders: live.holder_count ?? live.holders,
-      trustlines: live.trustline_count ?? live.trustlines,
-      traders: lastTraders?.traders ?? lastTraders?.trader_count,
-      price: live.xdxUsd ?? live.price,
-      volume: live.volume24h,
-      marketcap: live.xrplMarketCap,
-    });
-  }
-
-  const rows = [...merged.values()].sort(
-    (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+  const lastTraders = [...issued]
+    .reverse()
+    .find((row) => numberOrNull(row.traders ?? row.trader_count) != null);
+  const rows = issuedActivitySeries(
+    issued,
+    live && (live.holder_count != null || live.trustline_count != null)
+      ? {
+          timestamp: new Date().toISOString(),
+          holders: live.holder_count ?? live.holders,
+          trustlines: live.trustline_count ?? live.trustlines,
+          traders: lastTraders?.traders ?? lastTraders?.trader_count,
+        }
+      : null
   );
   if (!rows.length && errors.length) {
     throw errors[0];

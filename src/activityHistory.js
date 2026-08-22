@@ -1,5 +1,31 @@
+import { XDX_ISSUED_AT, XDX_XRPL_TO_MD5 } from "./constants/ledger.js";
+
 export const ACTIVITY_PLOT_POINTS = 400;
 export const RECENT_SCAN_DAYS = 14;
+
+export function xrplToHolderGraphUrl(range = "ALL") {
+  const suffix = range ? `?range=${encodeURIComponent(range)}` : "";
+  return `https://api.xrpl.to/v1/holders/graph/${XDX_XRPL_TO_MD5}${suffix}`;
+}
+
+export function needsFullIssuanceHistory(rows) {
+  if (!Array.isArray(rows) || rows.length < 50) return true;
+  const first = new Date(rows[0]?.timestamp || rows[0]?.ts || 0).getTime();
+  const issued = new Date(XDX_ISSUED_AT).getTime();
+  return !Number.isFinite(first) || first > issued + 14 * 86400000;
+}
+
+export function metricNumber(row, metric) {
+  const raw =
+    metric === "traders"
+      ? row?.traders ?? row?.trader_count ?? row?.trades
+      : metric === "trustlines"
+        ? row?.trustlines ?? row?.trustline_count
+        : row?.holders ?? row?.holder_count;
+  if (raw == null || raw === "") return null;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : null;
+}
 
 export function utcDayKey(value) {
   const date = new Date(value);
