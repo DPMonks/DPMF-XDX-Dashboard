@@ -48,6 +48,8 @@ import {
   moveDrawingHandle,
   nextDrawingState,
   pitchforkRays,
+  plotX,
+  plotY,
   previewDrawing,
   raySegment,
   RANGE_DOWN,
@@ -345,6 +347,12 @@ test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail"
   assert.equal(centered, 75);
   const slots = barSlots(expanded, { left: 0, width: 600 });
   assert.ok(Math.abs(slots.x(expanded[1].t) - slots.x(expanded[0].t) - slots.slot) < 1e-6);
+  for (const x of [30, 150, 300, 570]) {
+    assert.ok(Math.abs(slots.x(slots.tAt(x)) - x) < 1e-6);
+  }
+  const scale = { x: () => 40, y: () => 80 };
+  assert.equal(plotX({ t: 1, x: 220 }, scale), 220);
+  assert.equal(plotY({ price: 2, y: 90 }, scale), 90);
 });
 
 test("XDX/RLUSD backdate is XDX/XRP times that day's XRP/USD", () => {

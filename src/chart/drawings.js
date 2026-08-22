@@ -271,8 +271,13 @@ export function rangeColor(a, b) {
   return "#787B86";
 }
 
-export function shapeFromPoints(kind, points = [], color) {
-  const [a, b, c] = points;
+function seedPoint(point) {
+  if (!point) return point;
+  return { t: Number(point.t), price: Number(point.price) };
+}
+
+export function shapeFromPoints(kind, points = [], color, { keepPlot = false } = {}) {
+  const [a, b, c] = keepPlot ? points : points.map(seedPoint);
   if (kind === "hline" || kind === "hray" || kind === "crossline") {
     return { kind, color, t: (b || a)?.t, price: (b || a)?.price };
   }
@@ -298,7 +303,10 @@ export function nextDrawingState({ tool, color, pending, point, strokeWidth, lin
   if (!meta || meta.clicks < 1 || !isUsablePoint(point)) {
     return { pending: pending || null, drawing: null };
   }
-  const points = [...(pending?.points || []), { t: Number(point.t), price: Number(point.price) }];
+  const nextPoint = { t: Number(point.t), price: Number(point.price) };
+  if (Number.isFinite(Number(point.x))) nextPoint.x = Number(point.x);
+  if (Number.isFinite(Number(point.y))) nextPoint.y = Number(point.y);
+  const points = [...(pending?.points || []), nextPoint];
   if (points.length < meta.clicks) {
     return { pending: { tool, color, points, ...style }, drawing: null };
   }
@@ -359,13 +367,26 @@ export function hitDrawingHandle(drawings = [], scale, x, y, radius = HANDLE_HIT
   return null;
 }
 
+export function plotX(point, scale) {
+  if (Number.isFinite(Number(point?.x))) return Number(point.x);
+  return scale?.x?.(point?.t);
+}
+
+export function plotY(point, scale) {
+  if (Number.isFinite(Number(point?.y))) return Number(point.y);
+  return scale?.y?.(point?.price);
+}
+
 export function previewDrawing({ tool, color, pending, hover, strokeWidth, lineStyle } = {}) {
   const meta = toolMeta(tool);
   if (!meta || meta.clicks < 1 || !isUsablePoint(hover)) return null;
   if (!pending && meta.clicks > 1) return null;
-  const points = [...(pending?.points || []), { t: Number(hover.t), price: Number(hover.price) }];
+  const live = { t: Number(hover.t), price: Number(hover.price) };
+  if (Number.isFinite(Number(hover.x))) live.x = Number(hover.x);
+  if (Number.isFinite(Number(hover.y))) live.y = Number(hover.y);
+  const points = [...(pending?.points || []), live];
   return {
-    ...shapeFromPoints(tool, points, color),
+    ...shapeFromPoints(tool, points, color, { keepPlot: true }),
     ...drawingStyle({
       strokeWidth: strokeWidth ?? pending?.strokeWidth,
       lineStyle: lineStyle ?? pending?.lineStyle,

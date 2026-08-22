@@ -8,6 +8,8 @@ import {
   fibExtensionBands,
   fibLabelPlacement,
   pitchforkRays,
+  plotX,
+  plotY,
   previewDrawing,
   rangeColor,
   rangeStats,
@@ -78,8 +80,8 @@ export function paintToolPreview(group, {
     group.appendChild(
       svg("circle", {
         class: "hybrid-pending",
-        cx: scale.x(first.t),
-        cy: scale.y(first.price),
+        cx: plotX(first, scale),
+        cy: plotY(first, scale),
         r: 3.5,
         style: `fill:${pending.color || color}`,
       })
@@ -106,13 +108,13 @@ export function paintToolPreview(group, {
     return;
   }
   if ((ghost.kind === "trend" || ghost.kind === "arrow" || ghost.kind === "infoline") && ghost.a && ghost.b) {
-    line(group, scale.x(ghost.a.t), scale.y(ghost.a.price), scale.x(ghost.b.t), scale.y(ghost.b.price), tone, ink);
+    line(group, plotX(ghost.a, scale), plotY(ghost.a, scale), plotX(ghost.b, scale), plotY(ghost.b, scale), tone, ink);
     if (ghost.kind === "infoline") {
       const stats = rangeStats(ghost.a, ghost.b);
       const label = svg("text", {
         class: "hybrid-draw-label",
-        x: (scale.x(ghost.a.t) + scale.x(ghost.b.t)) / 2 + 6,
-        y: (scale.y(ghost.a.price) + scale.y(ghost.b.price)) / 2 - 6,
+        x: (plotX(ghost.a, scale) + plotX(ghost.b, scale)) / 2 + 6,
+        y: (plotY(ghost.a, scale) + plotY(ghost.b, scale)) / 2 - 6,
         style: `fill:${tone}`,
       });
       label.textContent = `${formatAxisPrice(stats.delta)} (${stats.pct.toFixed(2)}%)`;
@@ -131,10 +133,10 @@ export function paintToolPreview(group, {
     return;
   }
   if ((ghost.kind === "rect" || ghost.kind === "range") && ghost.a && ghost.b) {
-    const x = Math.min(scale.x(ghost.a.t), scale.x(ghost.b.t));
-    const y = Math.min(scale.y(ghost.a.price), scale.y(ghost.b.price));
-    const w = Math.max(1, Math.abs(scale.x(ghost.b.t) - scale.x(ghost.a.t)));
-    const h = Math.max(1, Math.abs(scale.y(ghost.b.price) - scale.y(ghost.a.price)));
+    const x = Math.min(plotX(ghost.a, scale), plotX(ghost.b, scale));
+    const y = Math.min(plotY(ghost.a, scale), plotY(ghost.b, scale));
+    const w = Math.max(1, Math.abs(plotX(ghost.b, scale) - plotX(ghost.a, scale)));
+    const h = Math.max(1, Math.abs(plotY(ghost.b, scale) - plotY(ghost.a, scale)));
     const shade = ghost.kind === "range" ? rangeColor(ghost.a, ghost.b) : tone;
     group.appendChild(
       svg("rect", {
@@ -229,10 +231,10 @@ export function paintToolPreview(group, {
     return;
   }
   if ((ghost.kind === "ellipse" || ghost.kind === "circle") && ghost.a && ghost.b) {
-    const x1 = scale.x(ghost.a.t);
-    const y1 = scale.y(ghost.a.price);
-    const x2 = scale.x(ghost.b.t);
-    const y2 = scale.y(ghost.b.price);
+    const x1 = plotX(ghost.a, scale);
+    const y1 = plotY(ghost.a, scale);
+    const x2 = plotX(ghost.b, scale);
+    const y2 = plotY(ghost.b, scale);
     const cx = ghost.kind === "circle" ? x1 : (x1 + x2) / 2;
     const cy = ghost.kind === "circle" ? y1 : (y1 + y2) / 2;
     const rx = ghost.kind === "circle" ? Math.hypot(x2 - x1, y2 - y1) : Math.max(1, Math.abs(x2 - x1) / 2);
@@ -250,7 +252,7 @@ export function paintToolPreview(group, {
     return;
   }
   if (ghost.kind === "triangle" && ghost.a && ghost.b && ghost.c) {
-    const points = [ghost.a, ghost.b, ghost.c].map((point) => `${scale.x(point.t)},${scale.y(point.price)}`).join(" ");
+    const points = [ghost.a, ghost.b, ghost.c].map((point) => `${plotX(point, scale)},${plotY(point, scale)}`).join(" ");
     group.appendChild(
       svg("polygon", {
         class: "hybrid-shape",

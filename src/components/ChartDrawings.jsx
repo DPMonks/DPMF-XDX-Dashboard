@@ -1,4 +1,4 @@
-import { channelOffset, dashForStyle, drawingHandles, extendSegment, fibBands, fibExtent, fibExtensionBands, fibLabelPlacement, pitchforkRays, rangeColor, raySegment, rangeStats } from "../chart/drawings";
+import { channelOffset, dashForStyle, drawingHandles, extendSegment, fibBands, fibExtent, fibExtensionBands, fibLabelPlacement, pitchforkRays, plotX, plotY, rangeColor, raySegment, rangeStats } from "../chart/drawings";
 import { formatAxisPrice, formatPriceLabel } from "../chart/axis";
 
 function stroke(row) {
@@ -19,10 +19,10 @@ function Line({ a, b, scale, color, dashed, marker, row }) {
   return (
     <line
       className={dashed ? "hybrid-draw is-preview" : "hybrid-draw"}
-      x1={scale.x(a.t)}
-      y1={scale.y(a.price)}
-      x2={scale.x(b.t)}
-      y2={scale.y(b.price)}
+      x1={plotX(a, scale)}
+      y1={plotY(a, scale)}
+      x2={plotX(b, scale)}
+      y2={plotY(b, scale)}
       style={paint(color, row)}
       markerEnd={marker}
       vectorEffect="non-scaling-stroke"
@@ -216,10 +216,10 @@ export default function ChartDrawings({
           return <Line key={key} a={a} b={b} scale={scale} color={color} dashed={dashed} row={row} />;
         }
         if ((row.kind === "rect" || row.kind === "range") && row.a && row.b) {
-          const x = Math.min(scale.x(row.a.t), scale.x(row.b.t));
-          const y = Math.min(scale.y(row.a.price), scale.y(row.b.price));
-          const w = Math.max(1, Math.abs(scale.x(row.b.t) - scale.x(row.a.t)));
-          const h = Math.max(1, Math.abs(scale.y(row.b.price) - scale.y(row.a.price)));
+          const x = Math.min(plotX(row.a, scale), plotX(row.b, scale));
+          const y = Math.min(plotY(row.a, scale), plotY(row.b, scale));
+          const w = Math.max(1, Math.abs(plotX(row.b, scale) - plotX(row.a, scale)));
+          const h = Math.max(1, Math.abs(plotY(row.b, scale) - plotY(row.a, scale)));
           const stats = rangeStats(row.a, row.b);
           const tone = row.kind === "range" ? rangeColor(row.a, row.b) : color;
           const clip = clipId ? `url(#${clipId})` : undefined;
@@ -311,10 +311,10 @@ export default function ChartDrawings({
           );
         }
         if ((row.kind === "ellipse" || row.kind === "circle") && row.a && row.b) {
-          const x1 = scale.x(row.a.t);
-          const y1 = scale.y(row.a.price);
-          const x2 = scale.x(row.b.t);
-          const y2 = scale.y(row.b.price);
+          const x1 = plotX(row.a, scale);
+          const y1 = plotY(row.a, scale);
+          const x2 = plotX(row.b, scale);
+          const y2 = plotY(row.b, scale);
           const cx = row.kind === "circle" ? x1 : (x1 + x2) / 2;
           const cy = row.kind === "circle" ? y1 : (y1 + y2) / 2;
           const rx = row.kind === "circle" ? Math.hypot(x2 - x1, y2 - y1) : Math.max(1, Math.abs(x2 - x1) / 2);
@@ -332,7 +332,7 @@ export default function ChartDrawings({
           );
         }
         if (row.kind === "triangle" && row.a && row.b && row.c) {
-          const points = [row.a, row.b, row.c].map((point) => `${scale.x(point.t)},${scale.y(point.price)}`).join(" ");
+          const points = [row.a, row.b, row.c].map((point) => `${plotX(point, scale)},${plotY(point, scale)}`).join(" ");
           return (
             <polygon
               key={key}

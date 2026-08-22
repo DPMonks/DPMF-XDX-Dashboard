@@ -81,27 +81,50 @@ export function barSlots(candles = [], { left = 0, width = 0 } = {}) {
   const n = Math.max(1, rows.length);
   const slot = (Number(width) || 0) / n;
   const times = rows.map((row) => Number(row.t));
+
+  function timeAtIndex(index) {
+    if (!times.length) return 0;
+    if (n === 1) return times[0];
+    if (index <= 0) {
+      const span = times[1] - times[0] || 1;
+      return times[0] + index * span;
+    }
+    if (index >= n - 1) {
+      const span = times[n - 1] - times[n - 2] || 1;
+      return times[n - 1] + (index - (n - 1)) * span;
+    }
+    const i = Math.floor(index);
+    const f = index - i;
+    return times[i] + f * (times[i + 1] - times[i]);
+  }
+
+  function indexAtTime(time) {
+    if (!times.length) return 0;
+    if (n === 1) return 0;
+    if (time <= times[0]) {
+      const span = times[1] - times[0] || 1;
+      return (time - times[0]) / span;
+    }
+    if (time >= times[n - 1]) {
+      const span = times[n - 1] - times[n - 2] || 1;
+      return n - 1 + (time - times[n - 1]) / span;
+    }
+    let i = 0;
+    while (i < n - 1 && times[i + 1] < time) i += 1;
+    const span = times[i + 1] - times[i] || 1;
+    return i + (time - times[i]) / span;
+  }
+
   return {
     n,
     slot,
     x(t) {
       if (!times.length) return left;
-      const time = Number(t);
-      if (time <= times[0]) return left + slot * 0.5;
-      if (time >= times[n - 1]) return left + (n - 0.5) * slot;
-      let i = 0;
-      while (i < n - 1 && times[i + 1] < time) i += 1;
-      const span = times[i + 1] - times[i] || 1;
-      return left + (i + (time - times[i]) / span + 0.5) * slot;
+      return left + (indexAtTime(Number(t)) + 0.5) * slot;
     },
     tAt(x) {
-      if (!times.length) return 0;
-      const raw = (Number(x) - left) / Math.max(slot, 1e-9) - 0.5;
-      const i = Math.max(0, Math.min(n - 2, Math.floor(raw)));
-      const f = Math.max(0, Math.min(1, raw - i));
-      const a = times[i];
-      const b = times[Math.min(n - 1, i + 1)];
-      return a + f * ((b ?? a) - a);
+      const index = (Number(x) - left) / Math.max(slot, 1e-9) - 0.5;
+      return timeAtIndex(index);
     },
     ticks(count = 6) {
       if (!times.length) return [];
