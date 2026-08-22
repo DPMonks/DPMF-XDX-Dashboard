@@ -50,35 +50,36 @@ test("inferQuoteReserve fills the missing AMM quote side from equal USD value", 
   assert.ok(quote > 30 && quote < 31);
 });
 
-test("resolvePoolSplit only needs XDX in the LP and works out the opposing side", () => {
-  const inferred = resolvePoolSplit({
-    reserveXdx: 1_000_000,
-    xdxUsd: 0.00004,
-    quoteUsd: 2,
+test("resolvePoolSplit is XDX versus LP tokens, not an inferred 50/50", () => {
+  const xrp = resolvePoolSplit({
+    reserveXdx: 63_105_563.3193,
+    reserveQuote: 1846.778,
+    lpSupply: 218_594_863.12,
   });
-  assert.ok(inferred);
-  assert.equal(inferred.xdxPct, 50);
-  assert.equal(inferred.quotePct, 50);
-  assert.equal(inferred.inferred, true);
-  assert.equal(inferred.reserveQuote, 20);
+  assert.ok(xrp);
+  assert.equal(xrp.xdxPct, 22.4);
+  assert.equal(xrp.quotePct, 77.6);
+  assert.equal(xrp.lead, "quote");
 
-  const measured = resolvePoolSplit({
+  const moreXdx = resolvePoolSplit({
+    reserveXdx: 800,
+    lpSupply: 200,
+  });
+  assert.deepEqual(
+    { xdxPct: moreXdx.xdxPct, quotePct: moreXdx.quotePct, lead: moreXdx.lead },
+    { xdxPct: 80, quotePct: 20, lead: "xdx" }
+  );
+
+  const noLp = resolvePoolSplit({
     reserveXdx: 40,
     reserveQuote: 60,
-    xdxUsd: 1,
-    quoteUsd: 1,
   });
   assert.deepEqual(
-    { xdxPct: measured.xdxPct, quotePct: measured.quotePct, lead: measured.lead },
+    { xdxPct: noLp.xdxPct, quotePct: noLp.quotePct, lead: noLp.lead },
     { xdxPct: 40, quotePct: 60, lead: "quote" }
   );
-  assert.equal(measured.inferred, false);
 
-  const xdxOnly = resolvePoolSplit({ reserveXdx: 63_105_563.3193 });
-  assert.deepEqual(
-    { xdxPct: xdxOnly.xdxPct, quotePct: xdxOnly.quotePct, lead: xdxOnly.lead },
-    { xdxPct: 50, quotePct: 50, lead: "xdx" }
-  );
+  assert.equal(resolvePoolSplit({ reserveXdx: 63_105_563.3193 }), null);
 });
 
 test("quoteUsdFromMap uses recorded prices and treats RLUSD as one dollar", () => {

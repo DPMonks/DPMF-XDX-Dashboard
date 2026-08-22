@@ -1,5 +1,6 @@
-// Value share of an XDX AMM. Do not use raw unit counts — 63M XDX vs 1.8k XRP
-// is not "99% XDX". Needs both reserves and a USD price for each side.
+// XDX share of the LP vs the rest. Do not infer an equal-value quote —
+// that forces every bar to 50/50. Prefer XDX compared to LP token supply
+// (the LP total); if that is missing, compare XDX to the opposing reserve.
 
 export function poolAssetSplit({
   reserveXdx,
@@ -47,44 +48,27 @@ export function inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) {
   return (xdx * xdxPrice) / quotePrice;
 }
 
-// One XDX reserve is enough. The opposing quote is the other AMM side:
-// measured quote if Node 3 stored it, otherwise equal USD value from price.
 export function resolvePoolSplit({
   reserveXdx,
   reserveQuote,
-  xdxUsd,
-  quoteUsd,
+  lpSupply,
 } = {}) {
   const xdx = Number(reserveXdx);
   if (!(xdx > 0)) return null;
 
-  const xdxPrice = Number(xdxUsd);
-  const quotePrice = Number(quoteUsd);
-  let quote = Number(reserveQuote);
-  let inferred = !(quote > 0);
+  const lp = Number(lpSupply);
+  const quote = Number(reserveQuote);
+  const other = lp > 0 ? lp : quote > 0 ? quote : 0;
+  if (!(other > 0)) return null;
 
-  if (!(quote > 0) && xdxPrice > 0 && quotePrice > 0) {
-    quote = inferQuoteReserve(xdx, xdxPrice, quotePrice);
-  }
-
-  if (quote > 0 && xdxPrice > 0 && quotePrice > 0) {
-    const split = poolAssetSplit({
-      reserveXdx: xdx,
-      reserveQuote: quote,
-      xdxUsd: xdxPrice,
-      quoteUsd: quotePrice,
-    });
-    if (split) {
-      return { ...split, reserveQuote: quote, inferred };
-    }
-  }
-
+  const xdxPct = roundPoolPct((xdx / (xdx + other)) * 100);
+  const quotePct = roundPoolPct(100 - xdxPct);
   return {
-    xdxPct: 50,
-    quotePct: 50,
-    lead: "xdx",
+    xdxPct,
+    quotePct,
+    lead: xdxPct >= quotePct ? "xdx" : "quote",
     reserveQuote: quote > 0 ? quote : null,
-    inferred: true,
+    inferred: false,
   };
 }
 

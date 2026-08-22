@@ -1095,17 +1095,15 @@ async function loadXdxLpPools(db) {
         Number(extra.reserve_currency || 0) ||
         0;
       const quoteUsd = quoteUsdFromMap(row.quote, quotePrices);
+      const reserveQuote =
+        measuredQuote ||
+        inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) ||
+        null;
       const split = resolvePoolSplit({
         reserveXdx,
         reserveQuote: measuredQuote,
-        xdxUsd,
-        quoteUsd,
+        lpSupply: extra.lp_supply,
       });
-      const reserveQuote =
-        measuredQuote ||
-        split?.reserveQuote ||
-        inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) ||
-        null;
       return {
         pool_name: row.pool_name,
         pool: row.pool_name,

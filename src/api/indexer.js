@@ -211,17 +211,16 @@ function withPoolSplit(row, fallbackXdxUsd, fallbackXrpUsd) {
   const split = resolvePoolSplit({
     reserveXdx: row.reserve_asset,
     reserveQuote: row.reserve_currency,
-    xdxUsd: row.xdxUsd || fallbackXdxUsd,
-    quoteUsd,
+    lpSupply: row.lp_supply,
   });
   return {
     ...row,
     reserve_currency: row.reserve_currency || split?.reserveQuote || null,
     xdxUsd: row.xdxUsd || fallbackXdxUsd || null,
     quote_usd: quoteUsd || row.quote_usd || null,
-    xdx_pct: row.xdx_pct ?? split?.xdxPct ?? null,
-    quote_pct: row.quote_pct ?? split?.quotePct ?? null,
-    lead: row.lead || split?.lead || null,
+    xdx_pct: split?.xdxPct ?? null,
+    quote_pct: split?.quotePct ?? null,
+    lead: split?.lead || null,
   };
 }
 
