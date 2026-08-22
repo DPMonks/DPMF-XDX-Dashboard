@@ -80,6 +80,15 @@ export function sortOrderbookPairs(pairs) {
   return out;
 }
 
+export function collectPairOptions(pairs = []) {
+  return sortOrderbookPairs(pairs);
+}
+
+export function sameOrderbookPair(rowPair, selected) {
+  if (!selected || selected === "all") return true;
+  return normalizeOrderbookPair(rowPair) === normalizeOrderbookPair(selected);
+}
+
 export function filterOrderbookPairs(pairs, query) {
   const q = String(query || "")
     .trim()

@@ -215,6 +215,8 @@ export default function App() {
               valueKey="lp_balance"
               unit="LP"
               showPair
+              defaultPair="XDX/XRP"
+              pairOptions={ammData.map((row) => row.pool_name || row.pool).filter(Boolean)}
               emptyLabel={t.emptyLp}
               searchPlaceholder={t.searchLp}
               freshness={lpFreshness}

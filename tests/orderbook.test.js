@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   asOrderbookPayload,
   bookHeader,
+  collectPairOptions,
   combineOrderbookSide,
   composeAmmBook,
   emptyOrderbook,
@@ -14,6 +15,7 @@ import {
   orderBookRowStamp,
   padOrderbookLevels,
   pickNativeBookRow,
+  sameOrderbookPair,
   sortOrderbookPairs,
   topDexLevels,
 } from "../src/orderbook.js";
@@ -37,6 +39,23 @@ test("sortOrderbookPairs keeps XRP, RLUSD, XIO, XSQUAD first", () => {
     "XDX/XSQUAD",
     "XDX/SOLO",
   ]);
+});
+
+test("collectPairOptions pins XDX/XRP and featured AMMs at the top", () => {
+  assert.deepEqual(collectPairOptions(["XDX/SOLO", "XDX/XRP", "XDX/AiCat"]), [
+    "XDX/XRP",
+    "XDX/RLUSD",
+    "XDX/XIO",
+    "XDX/XSQUAD",
+    "XDX/SOLO",
+    "XDX/AiCat",
+  ]);
+});
+
+test("sameOrderbookPair matches XDX-XRP spellings and treats all as open", () => {
+  assert.equal(sameOrderbookPair("XDX-XRP", "XDX/XRP"), true);
+  assert.equal(sameOrderbookPair("XDX/RLUSD", "XDX/XRP"), false);
+  assert.equal(sameOrderbookPair("XDX/SOLO", "all"), true);
 });
 
 test("filterOrderbookPairs matches quote search without requiring the XDX/ prefix", () => {

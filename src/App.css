@@ -224,6 +224,35 @@ body {
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
   min-width: 0;
+  align-items: stretch;
+}
+
+.lists-row > .dashboard-card {
+  display: flex;
+  flex-direction: column;
+  height: 640px;
+  min-height: 640px;
+  max-height: 640px;
+}
+
+.lists-row .card-title,
+.lists-row .rich-list-toolbar,
+.lists-row .rich-freshness,
+.lists-row .pagination {
+  flex: 0 0 auto;
+}
+
+.lists-row .rich-list,
+.lists-row .scroll-area {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.lists-row .scroll-area,
+.lists-row .rich-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
 }
 
 .dashboard-card {
@@ -521,13 +550,69 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
 }
 
 .rich-list-toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px 12px;
   align-items: center;
+  flex: 0 0 auto;
+}
+
+.pair-select {
+  position: relative;
+  flex: 0 1 168px;
+  min-width: 132px;
+}
+
+.pair-select-input {
+  width: 100%;
+  background: var(--dpmf-bg-elevated);
+  border: 1px solid var(--dpmf-border-soft);
+  color: var(--dpmf-text-main);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.pair-select-list {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 180px;
+  max-height: 240px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: 12px;
+  border: 1px solid var(--dpmf-border-soft);
+  background: #0b0f1a;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.pair-select-list button {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--dpmf-text-main);
+  cursor: pointer;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.pair-select-list button:hover,
+.pair-select-list button.is-active {
+  background: rgba(199, 112, 255, 0.18);
 }
 
 .rich-search {
@@ -666,6 +751,7 @@ body {
   gap: 12px;
   color: var(--dpmf-text-muted);
   font-size: 13px;
+  flex: 0 0 auto;
 }
 
 .pagination button:disabled {

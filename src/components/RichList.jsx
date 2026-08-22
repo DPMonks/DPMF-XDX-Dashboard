@@ -1,5 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { copyToClipboard } from "../utils/copy";
+import {
+  collectPairOptions,
+  filterOrderbookPairs,
+  normalizeOrderbookPair,
+  sameOrderbookPair,
+} from "../orderbook";
 import {
   formatPercent,
   formatToken,
@@ -12,6 +18,83 @@ import Skeleton from "./Skeleton";
 
 const PAGE_SIZE = 100;
 
+function PairSelect({ pairs, value, onChange, t }) {
+  const boxRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const matches = useMemo(() => filterOrderbookPairs(pairs, query), [pairs, query]);
+  const label = value === "all" ? t.allPairs : value;
+
+  useEffect(() => {
+    function onDoc(event) {
+      if (!boxRef.current?.contains(event.target)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  function select(next) {
+    onChange(next);
+    setQuery("");
+    setOpen(false);
+  }
+
+  return (
+    <div className="pair-select" ref={boxRef}>
+      <input
+        className="pair-select-input"
+        type="search"
+        value={open ? query : label}
+        placeholder={t.searchPair}
+        aria-label={t.searchPair}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        onFocus={() => setOpen(true)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+            setQuery("");
+          }
+          if (event.key === "Enter" && matches[0]) select(matches[0]);
+        }}
+      />
+      {open ? (
+        <ul className="pair-select-list" role="listbox">
+          {!query.trim() ? (
+            <li>
+              <button
+                type="button"
+                className={value === "all" ? "is-active" : ""}
+                onClick={() => select("all")}
+              >
+                {t.allPairs}
+              </button>
+            </li>
+          ) : null}
+          {matches.map((pair) => (
+            <li key={pair}>
+              <button
+                type="button"
+                className={value === pair ? "is-active" : ""}
+                onClick={() => select(pair)}
+              >
+                {pair}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export default function RichList({
   rows,
   loading,
@@ -19,6 +102,8 @@ export default function RichList({
   valueKey,
   emptyLabel,
   showPair = false,
+  defaultPair = "XDX/XRP",
+  pairOptions = [],
   unit = "XDX",
   searchPlaceholder,
   freshness = null,
@@ -26,24 +111,21 @@ export default function RichList({
 }) {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
-  const [pairFilter, setPairFilter] = useState("all");
+  const [pairFilter, setPairFilter] = useState(showPair ? defaultPair : "all");
   const [page, setPage] = useState(1);
   const [copied, setCopied] = useState(null);
 
   const pairs = useMemo(() => {
-    const unique = [...new Set(rows.map((row) => row.pair).filter(Boolean))];
-    return unique.sort();
-  }, [rows]);
+    const fromRows = rows.map((row) => row.pair).filter(Boolean);
+    return collectPairOptions([...pairOptions, ...fromRows]);
+  }, [rows, pairOptions]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return rows.filter((row) => {
-      if (showPair && pairFilter !== "all" && row.pair !== pairFilter) return false;
+      if (showPair && !sameOrderbookPair(row.pair, pairFilter)) return false;
       if (!needle) return true;
-      return (
-        String(row.account || "").toLowerCase().includes(needle) ||
-        String(row.pair || "").toLowerCase().includes(needle)
-      );
+      return String(row.account || "").toLowerCase().includes(needle);
     });
   }, [rows, query, pairFilter, showPair]);
 
@@ -57,10 +139,12 @@ export default function RichList({
       : listedTotal;
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const pageRows = filtered.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
+  const pageRows = filtered
+    .slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+    .map((row, index) => ({
+      ...row,
+      rank: showPair ? (currentPage - 1) * PAGE_SIZE + index + 1 : row.rank,
+    }));
 
   const copy = async (address) => {
     await copyToClipboard(address);
@@ -113,6 +197,17 @@ export default function RichList({
   return (
     <div className="rich-list">
       <div className="rich-list-toolbar">
+        {showPair ? (
+          <PairSelect
+            pairs={pairs}
+            value={pairFilter}
+            onChange={(next) => {
+              setPairFilter(next === "all" ? "all" : normalizeOrderbookPair(next));
+              setPage(1);
+            }}
+            t={t}
+          />
+        ) : null}
         <input
           className="rich-search"
           type="search"
@@ -123,33 +218,6 @@ export default function RichList({
           }}
           placeholder={searchPlaceholder}
         />
-        {showPair && pairs.length > 1 && (
-          <div className="pair-filters">
-            <button
-              type="button"
-              className={pairFilter === "all" ? "pair-chip active" : "pair-chip"}
-              onClick={() => {
-                setPairFilter("all");
-                setPage(1);
-              }}
-            >
-              {t.pair}
-            </button>
-            {pairs.map((pair) => (
-              <button
-                key={pair}
-                type="button"
-                className={pairFilter === pair ? "pair-chip active" : "pair-chip"}
-                onClick={() => {
-                  setPairFilter(pair);
-                  setPage(1);
-                }}
-              >
-                {pair}
-              </button>
-            ))}
-          </div>
-        )}
         <p className="rich-meta">
           {t.showing} {filtered.length.toLocaleString(locale)} {t.addresses}
         </p>
@@ -157,57 +225,63 @@ export default function RichList({
       {freshnessLine}
 
       <div className="rich-table-wrap">
-        <table className="rich-table">
-          <thead>
-            <tr>
-              <th>{t.rank}</th>
-              <th>{t.address}</th>
-              {showPair && <th>{t.pair}</th>}
-              <th>{t.balance}</th>
-              <th>{t.share}</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map((row) => (
-              <tr key={`${row.account}-${row.pair || "xdx"}-${row.rank}`}>
-                <td className="col-rank">{row.rank}</td>
-                <td className="col-address">
-                  <button
-                    type="button"
-                    className="account-link"
-                    title={row.account}
-                    onClick={() => copy(row.account)}
-                  >
-                    <span className="address-full">{row.account}</span>
-                    <span className="address-short">{shortAddress(row.account)}</span>
-                  </button>
-                  {row.frozen && <span className="frozen-badge">{t.frozen}</span>}
-                </td>
-                {showPair && (
-                  <td>
-                    <span className="pair-badge">{row.pair || "XDX/XRP"}</span>
-                  </td>
-                )}
-                <td className="col-num col-balance">
-                  {formatToken(row[valueKey], locale, 8)} {unit}
-                </td>
-                <td className="col-num">
-                  {formatPercent(shareOf(row[valueKey], total), locale)}
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="copy-btn"
-                    onClick={() => copy(row.account)}
-                  >
-                    {copied === row.account ? t.copied : t.copy}
-                  </button>
-                </td>
+        {filtered.length ? (
+          <table className="rich-table">
+            <thead>
+              <tr>
+                <th>{t.rank}</th>
+                <th>{t.address}</th>
+                {showPair && <th>{t.pair}</th>}
+                <th>{t.balance}</th>
+                <th>{t.share}</th>
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {pageRows.map((row) => (
+                <tr key={`${row.account}-${row.pair || "xdx"}-${row.rank}`}>
+                  <td className="col-rank">{row.rank}</td>
+                  <td className="col-address">
+                    <button
+                      type="button"
+                      className="account-link"
+                      title={row.account}
+                      onClick={() => copy(row.account)}
+                    >
+                      <span className="address-full">{row.account}</span>
+                      <span className="address-short">{shortAddress(row.account)}</span>
+                    </button>
+                    {row.frozen && <span className="frozen-badge">{t.frozen}</span>}
+                  </td>
+                  {showPair && (
+                    <td>
+                      <span className="pair-badge">
+                        {normalizeOrderbookPair(row.pair || "XDX/XRP")}
+                      </span>
+                    </td>
+                  )}
+                  <td className="col-num col-balance">
+                    {formatToken(row[valueKey], locale, 8)} {unit}
+                  </td>
+                  <td className="col-num">
+                    {formatPercent(shareOf(row[valueKey], total), locale)}
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="copy-btn"
+                      onClick={() => copy(row.account)}
+                    >
+                      {copied === row.account ? t.copied : t.copy}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="empty-message">{showPair ? t.emptyLpPair : emptyLabel}</p>
+        )}
       </div>
 
       {totalPages > 1 && (
