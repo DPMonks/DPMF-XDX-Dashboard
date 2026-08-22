@@ -246,6 +246,30 @@ test("drawing tools trail from the first drop to the hover point", () => {
   assert.equal(done.drawing.b.price, 5);
 });
 
+test("selected draw color stays on the H-line and ray", () => {
+  const hline = nextDrawingState({
+    tool: "hline",
+    color: "#ff9a3c",
+    pending: null,
+    point: { t: 10, price: 0.4 },
+  });
+  assert.equal(hline.drawing.color, "#ff9a3c");
+  const start = nextDrawingState({
+    tool: "ray",
+    color: "#ff9a3c",
+    pending: null,
+    point: { t: 10, price: 1 },
+  });
+  const ray = nextDrawingState({
+    tool: "ray",
+    color: "#ff9a3c",
+    pending: start.pending,
+    point: { t: 40, price: 2 },
+  });
+  assert.equal(ray.drawing.kind, "ray");
+  assert.equal(ray.drawing.color, "#ff9a3c");
+});
+
 test("horizontal line trails under the cursor and drops on one click", () => {
   const ghost = previewDrawing({ tool: "hline", color: "#98f050", pending: null, hover: { t: 10, price: 0.4 } });
   assert.equal(ghost.kind, "hline");

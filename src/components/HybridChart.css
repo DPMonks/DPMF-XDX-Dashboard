@@ -234,7 +234,11 @@
 }
 
 .hybrid-draw,
-.hybrid-fib-line,
+.hybrid-fib-line {
+  stroke-width: 1.35;
+  fill: none;
+}
+
 .hybrid-crosshair line {
   stroke: #d1d4dc;
   stroke-width: 1;
@@ -264,7 +268,7 @@
 }
 
 .hybrid-pending {
-  fill: #00eaff;
+  stroke: none;
 }
 
 .hybrid-grid {

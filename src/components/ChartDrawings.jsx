@@ -5,6 +5,10 @@ function stroke(row) {
   return row?.color || "#d1d4dc";
 }
 
+function paint(color) {
+  return { stroke: color, color };
+}
+
 function Line({ a, b, scale, color, dashed, marker }) {
   if (!a || !b) return null;
   return (
@@ -14,7 +18,7 @@ function Line({ a, b, scale, color, dashed, marker }) {
       y1={scale.y(a.price)}
       x2={scale.x(b.t)}
       y2={scale.y(b.price)}
-      stroke={color}
+      style={paint(color)}
       markerEnd={marker}
       vectorEffect="non-scaling-stroke"
     />
@@ -53,10 +57,10 @@ function FibRetracement({ row, scale, pad, width, dashed }) {
               x2={xRight}
               y1={y}
               y2={y}
-              stroke={band.color}
+              style={paint(band.color)}
               vectorEffect="non-scaling-stroke"
             />
-            <text className="hybrid-draw-label" x={xRight - 2} y={y - 3} textAnchor="end" fill={band.color}>
+            <text className="hybrid-draw-label" x={xRight - 2} y={y - 3} textAnchor="end" style={{ fill: band.color }}>
               {band.level} ({formatAxisPrice(band.price)})
             </text>
           </g>
@@ -83,7 +87,7 @@ export default function ChartDrawings({
   return (
     <g className="hybrid-drawings">
       {first ? (
-        <circle className="hybrid-pending" cx={scale.x(first.t)} cy={scale.y(first.price)} r="3" fill={pending.color} />
+        <circle className="hybrid-pending" cx={scale.x(first.t)} cy={scale.y(first.price)} r="3.5" style={{ fill: pending.color || "#ff9a3c" }} />
       ) : null}
       {items.map((row, index) => {
         const color = stroke(row);
@@ -99,7 +103,7 @@ export default function ChartDrawings({
               x2={width - pad.r}
               y1={scale.y(row.price)}
               y2={scale.y(row.price)}
-              stroke={color}
+              style={paint(color)}
               vectorEffect="non-scaling-stroke"
             />
           );
@@ -113,7 +117,7 @@ export default function ChartDrawings({
               x2={scale.x(row.t)}
               y1={pad.t}
               y2={plotBottom}
-              stroke={color}
+              style={paint(color)}
               vectorEffect="non-scaling-stroke"
             />
           );
@@ -156,10 +160,10 @@ export default function ChartDrawings({
                 y={y}
                 width={w}
                 height={h}
-                stroke={color}
+                style={paint(color)}
               />
               {row.kind === "range" ? (
-                <text className="hybrid-draw-label" x={x + 6} y={y + 12} fill={color}>
+                <text className="hybrid-draw-label" x={x + 6} y={y + 12} style={{ fill: color }}>
                   {formatAxisPrice(stats.delta)} ({stats.pct.toFixed(2)}%)
                 </text>
               ) : null}
@@ -184,7 +188,7 @@ export default function ChartDrawings({
         }
         if (row.kind === "text" && row.t && Number.isFinite(Number(row.price))) {
           return (
-            <text key={key} className="hybrid-draw-label is-note" x={scale.x(row.t)} y={scale.y(row.price)} fill={color}>
+            <text key={key} className="hybrid-draw-label is-note" x={scale.x(row.t)} y={scale.y(row.price)} style={{ fill: color }}>
               {row.text || "Note"}
             </text>
           );
@@ -198,10 +202,10 @@ export default function ChartDrawings({
                 x2={width - pad.r}
                 y1={scale.y(row.price)}
                 y2={scale.y(row.price)}
-                stroke={color}
+                style={paint(color)}
                 vectorEffect="non-scaling-stroke"
               />
-              <text className="hybrid-draw-label" x={width - pad.r - 4} y={scale.y(row.price) - 4} textAnchor="end" fill={color}>
+              <text className="hybrid-draw-label" x={width - pad.r - 4} y={scale.y(row.price) - 4} textAnchor="end" style={{ fill: color }}>
                 {formatAxisPrice(row.price)}
               </text>
             </g>
