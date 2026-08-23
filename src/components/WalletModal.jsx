@@ -1,5 +1,5 @@
 import xamanLogo from "../assets/XAMAN.jpg";
-import { isPhoneDevice, xamanAppUrl, xamanSignUrl } from "../xaman/xamanClient";
+import { isPhoneDevice, launchXamanSign, xamanAppUrl, xamanSignUrl } from "../xaman/xamanClient";
 import { useI18n } from "../i18n/useI18n";
 
 export default function WalletModal({
@@ -38,7 +38,8 @@ export default function WalletModal({
   function openXamanApp(event) {
     event.preventDefault();
     event.stopPropagation();
-    if (appHref) window.location.href = appHref;
+    if (!uuid && !appHref && !webHref) return;
+    launchXamanSign(uuid);
   }
 
   function openXamanWeb(event) {

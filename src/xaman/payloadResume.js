@@ -53,7 +53,11 @@ function writePendingTo(store, record) {
 export function rememberPendingPayload(uuid, extra = {}) {
   const id = String(uuid || "").trim();
   if (!isPayloadUuid(id)) return null;
-  const record = { uuid: id, at: Date.now(), ...extra };
+  const current = peekPendingPayload();
+  const record =
+    current?.uuid === id
+      ? { ...current, ...extra, uuid: id, at: Date.now() }
+      : { uuid: id, at: Date.now(), ...extra };
   writePendingTo(storeOf("sessionStorage"), record);
   writePendingTo(storeOf("localStorage"), record);
   return record;
@@ -118,14 +122,26 @@ export function markXamanReturn(uuid, extra = {}) {
 export function peekXamanUuid(
   search = typeof window !== "undefined" ? window.location.search : ""
 ) {
-  return readXamanReturnUuid(search) || peekPendingPayload()?.uuid || null;
+  const fromUrl = readXamanReturnUuid(search);
+  const fromStore = peekPendingPayload()?.uuid || null;
+  if (fromUrl && fromStore && fromUrl !== fromStore) return fromStore;
+  return fromUrl || fromStore || null;
+}
+
+export function canClaimExecutedTrade(uuid, record = peekPendingPayload()) {
+  const id = String(uuid || "").trim();
+  if (!isPayloadUuid(id) || !record?.watchTrade) return false;
+  return record.uuid === id;
 }
 
 export function takeXamanReturnUuid(
   search = typeof window !== "undefined" ? window.location.search : ""
 ) {
+  const pending = peekPendingPayload();
   const id = peekXamanUuid(search);
-  if (id) rememberPendingPayload(id);
+  if (!id) return null;
+  if (pending?.uuid === id) return id;
+  rememberPendingPayload(id, pending || {});
   return id;
 }
 

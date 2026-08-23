@@ -44,6 +44,41 @@ export function xamanAppUrl(uuid) {
   return id ? `xumm://xumm.app/sign/${encodeURIComponent(id)}` : "";
 }
 
+export function launchXamanSign(
+  uuid,
+  {
+    openWindow = typeof window !== "undefined" ? window.open.bind(window) : null,
+    createFrame = typeof document !== "undefined" ? () => document.createElement("iframe") : null,
+    appendNode = typeof document !== "undefined" ? (node) => document.body.appendChild(node) : null,
+    removeNode = (node) => node?.remove?.(),
+  } = {}
+) {
+  const id = String(uuid || "").trim();
+  const web = xamanSignUrl(id);
+  const app = xamanAppUrl(id);
+  if (!id) return { opened: false, web, app };
+  if (appendNode && createFrame && app) {
+    const iframe = createFrame();
+    iframe.src = app;
+    iframe.setAttribute("hidden", "true");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.cssText = "position:fixed;width:0;height:0;border:0;overflow:hidden";
+    appendNode(iframe);
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => removeNode(iframe), 2000);
+    }
+  }
+  let opened = false;
+  if (openWindow && web) {
+    try {
+      opened = Boolean(openWindow(web, "_blank", "noopener,noreferrer"));
+    } catch {
+      opened = false;
+    }
+  }
+  return { opened, web, app };
+}
+
 export function isPhoneDevice(
   userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "",
   extras = typeof navigator !== "undefined" ? navigator : {}

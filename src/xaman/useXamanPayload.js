@@ -87,7 +87,7 @@ export function useXamanPayload() {
     };
   }, []);
 
-  async function start({ body = {}, onSigned, onExecuted, onFailed, errorMessage, resumeUuid } = {}) {
+  async function start({ body = {}, onSigned, onExecuted, onFailed, errorMessage, resumeUuid, trade } = {}) {
     if (busyRef.current) return;
     busyRef.current = true;
     const session = nextPayloadSession(sessionRef.current);
@@ -101,6 +101,7 @@ export function useXamanPayload() {
     let latestSocket = null;
     let latestLedger = null;
     let payloadUuid = resumeUuid || null;
+    if (!resumeUuid) clearXamanReturn();
 
     const announce = (detection) => {
       if (announced) return false;
@@ -144,9 +145,16 @@ export function useXamanPayload() {
             websocket: xamanWebsocketUrl(resumeUuid),
           }
         : await createPayload(body);
-      if (!payloadSessionOpen(session, sessionRef.current)) return;
+      if (!payloadSessionOpen(session, sessionRef.current)) {
+        busyRef.current = false;
+        return;
+      }
       payloadUuid = payload.uuid;
-      markXamanReturn(payload.uuid, { watchTrade, txjson: body?.txjson || null });
+      markXamanReturn(payload.uuid, {
+        watchTrade,
+        txjson: body?.txjson || null,
+        trade: trade || null,
+      });
       setQr(payload.qr);
       setMobileUrl(payload.mobileUrl);
       setUuid(payload.uuid);
@@ -263,7 +271,10 @@ export function useXamanPayload() {
 
       await settle();
     } catch (err) {
-      if (!payloadSessionOpen(session, sessionRef.current)) return;
+      if (!payloadSessionOpen(session, sessionRef.current)) {
+        busyRef.current = false;
+        return;
+      }
       console.error("Xaman payload error:", err);
       setError(err.message || errorMessage);
       reset();
