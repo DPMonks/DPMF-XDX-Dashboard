@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[420],{2420:(e,t,s)=>{s.r(t),s.d(t,{default:()=>i});var a=s(1041),r=s(7716),n=s(579);function i(){return(0,n.jsxs)(n.Fragment,{children:[(0,n.jsx)(a.A,{}),(0,n.jsx)("div",{className:"gradientBg createNewNFT",align:"center",children:(0,n.jsx)("iframe",{src:"https://ramp-beta.stably.io",height:"680",width:"420",className:"mt-3 mb-3",title:"myFrame"})}),(0,n.jsx)(r.A,{})]})}}}]);
+//# sourceMappingURL=420.e0f06b04.chunk.js.map
