@@ -13,7 +13,14 @@ import {
   pushActivity
 } from "./market.js";
 import { signedMark, xrplMemos } from "./tradeMarker.js";
-import { accountInfo, accountLines } from "./xrpl.js";
+import {
+  extractTxHash,
+  settleDecision,
+  shouldRetryXaman,
+  statusHttp as settleHttp
+} from "./xamanSettle.js";
+import { validateSignedIntent, xamanUserError } from "./xamanPrepare.js";
+import { accountInfo, accountLines, txByHash } from "./xrpl.js";
 
 export const XUMM_API = "https://xumm.app/api/v1/platform";
 export const SIGN_URL = "https://xumm.app/sign";
@@ -114,6 +121,12 @@ export function xummHeaders() {
     "X-API-Key": xamanKey(),
     "X-API-Secret": xamanSecret()
   };
+}
+
+export function fuzionReturnUrl() {
+  const base = String(process.env.XAMAN_RETURN_URL || "http://127.0.0.1:5174").replace(/\/$/, "");
+  if (base.includes("{id}")) return base;
+  return `${base}/?xaman={id}`;
 }
 
 export function toHex(text) {
@@ -249,25 +262,17 @@ export function shapeCreated(created = {}) {
     qr_url: qr,
     next_url: next,
     next,
+    websocket: created.refs?.websocket_status || "",
     pushed: Boolean(created.pushed)
   };
 }
 
-export function payloadState(payload) {
-  const meta = payload?.meta || {};
-  if (meta.signed === true) return "signed";
-  if (meta.cancelled === true) return "cancelled";
-  if (meta.expired === true) return "expired";
-  if (payload?.response?.dispatched_result === "tec" || meta.resolved === true && meta.signed === false) {
-    return "rejected";
-  }
-  return "pending";
+export function payloadState(payload, kind = "") {
+  return settleDecision(kind, payload).status;
 }
 
 export function statusHttp(state) {
-  if (state === "signed" || state === "completed") return 200;
-  if (state === "pending") return 202;
-  return 400;
+  return settleHttp(state);
 }
 
 export function rememberPayload(store, record) {
@@ -308,6 +313,17 @@ export function ensureFreeProfile(store, address, extra = {}) {
 }
 
 export function applySignedIntent(store, record = {}, signed = {}) {
+  const existing = findPayload(store, record.uuid);
+  if (existing?.appliedAt) {
+    return {
+      ok: true,
+      kind: existing.kind || record.kind,
+      skipped: true,
+      already: true,
+      txid: existing.txid,
+      account: existing.account
+    };
+  }
   const account = signed.account || record.account || "";
   const txid = signed.txid || "";
   const nftId = record.nftId || record._id;
@@ -384,35 +400,50 @@ export function applySignedIntent(store, record = {}, signed = {}) {
   }
 
   const saved = findPayload(store, record.uuid);
+  if (saved?.appliedAt) {
+    return { ok: true, kind, skipped: true, already: true, txid: saved.txid, account: saved.account };
+  }
   if (saved) {
     saved.status = "signed";
     saved.signedAt = new Date().toISOString();
+    saved.appliedAt = new Date().toISOString();
     saved.txid = txid;
     saved.account = account;
   }
   return { ...applied, txid, account };
 }
 
-export async function xummRequest(path, { method = "GET", body, fetchImpl = fetch } = {}) {
+export async function xummRequest(path, { method = "GET", body, fetchImpl = fetch, retries = 3 } = {}) {
   if (!xamanConfigured()) {
     return { ok: false, configured: false, error: notConfigured().message };
   }
-  const res = await fetchImpl(`${XUMM_API}${path}`, {
-    method,
-    headers: xummHeaders(),
-    body: body == null ? undefined : JSON.stringify(body)
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.error || data.error_reference) {
-    return {
-      ok: false,
-      configured: true,
-      status: res.status,
-      error: data.error?.message || data.message || data.error || `Xaman ${res.status}`,
-      data
-    };
+  let last = { ok: false, configured: true, error: "Xaman request failed" };
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const res = await fetchImpl(`${XUMM_API}${path}`, {
+        method,
+        headers: xummHeaders(),
+        body: body == null ? undefined : JSON.stringify(body)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && !data.error && !data.error_reference) {
+        return { ok: true, configured: true, data };
+      }
+      last = {
+        ok: false,
+        configured: true,
+        status: res.status,
+        error: xamanUserError(data, data.error?.message || data.message || `Xaman ${res.status}`),
+        data
+      };
+      if (!shouldRetryXaman(res.status) || attempt === retries) return last;
+    } catch (error) {
+      last = { ok: false, configured: true, error: String(error.message || error) };
+      if (attempt === retries) return last;
+    }
+    await sleep(300 * 2 ** attempt);
   }
-  return { ok: true, configured: true, data };
+  return last;
 }
 
 export function xamanAppSummary(ping = {}) {
@@ -437,8 +468,8 @@ export async function createPayload(txjson, { options = {}, custom_meta, fetchIm
         submit: txjson?.TransactionType !== "SignIn",
         expire: 5,
         return_url: {
-          web: process.env.XAMAN_RETURN_URL || "",
-          app: process.env.XAMAN_RETURN_URL || ""
+          web: fuzionReturnUrl(),
+          app: fuzionReturnUrl()
         },
         ...options
       },
@@ -462,28 +493,60 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function waitForSigned(uuid, { timeoutMs = 50000, intervalMs = 2000, fetchImpl = fetch } = {}) {
+export async function confirmLedger(txid) {
+  if (!isTxHashSafe(txid)) return null;
+  const got = await txByHash(txid);
+  return got.ok ? got.result : got;
+}
+
+function isTxHashSafe(value) {
+  return /^[A-Fa-f0-9]{64}$/.test(String(value || "").trim());
+}
+
+export async function settlePayload(kind, payload, { confirm = true } = {}) {
+  const hash = extractTxHash(payload);
+  let ledger = null;
+  if (confirm && hash) {
+    ledger = await confirmLedger(hash);
+  }
+  return settleDecision(kind, payload, ledger);
+}
+
+export async function waitForSigned(uuid, { timeoutMs = 240000, intervalMs = 2000, fetchImpl = fetch, kind = "connect" } = {}) {
   const started = Date.now();
+  let lastError = "";
+  let lastState = "pending";
   while (Date.now() - started < timeoutMs) {
     const got = await getPayload(uuid, { fetchImpl });
-    if (!got.ok) return { ok: false, state: "error", error: got.error, payload: got.data };
-    const state = payloadState(got.data);
-    if (state === "signed") {
+    if (!got.ok) {
+      lastError = got.error;
+      lastState = "pending";
+      await sleep(intervalMs);
+      continue;
+    }
+    const settled = await settlePayload(kind, got.data);
+    lastState = settled.status || "pending";
+    if (settled.status === "completed") {
       return {
         ok: true,
-        state,
+        state: "signed",
+        status: "completed",
         payload: got.data,
-        account: got.data.response?.account || "",
-        txid: got.data.response?.txid || ""
+        account: settled.account || got.data.response?.account || "",
+        txid: settled.txid || "",
+        tesSuccess: settled.tesSuccess === true
       };
     }
-    if (state !== "pending") {
-      return { ok: false, state, payload: got.data };
+    if (settled.status === "pending" || settled.status === "confirming") {
+      await sleep(intervalMs);
+      continue;
     }
-    await sleep(intervalMs);
+    return { ok: false, state: settled.status, status: settled.status, payload: got.data, tesSuccess: false };
   }
-  return { ok: false, state: "timeout" };
+  return { ok: false, state: lastState === "confirming" ? "confirming" : "timeout", status: lastState, error: lastError };
 }
+
+export { validateSignedIntent, xamanUserError };
 
 export function linesToCurrency(info, lines) {
   const drops = Number(info?.result?.account_data?.Balance || 0);

@@ -31,24 +31,41 @@ export const walletConnect = async (data) => {
 //////////// QR CODE END///////
 //////////// ACCOUNT DETAIL STRAT///////
 export const accountDetail = async (data) => {
-  const uuidCofig = {
-    baseURL: config.LOCAL_API_URL,
-    headers: {
-      Authorization: `Basic ${token}`
-    },
-    data,
-    method: "post",
-    url: "xumm/accountDetail"
-  };
-
-  try {
-    const accountDetail = await axios(uuidCofig);
-    if (accountDetail.status === 200) {
-      return accountDetail;
+  const started = Date.now();
+  const maxMs = 4 * 60 * 1000;
+  while (Date.now() - started < maxMs) {
+    try {
+      const resp = await axios({
+        baseURL: config.LOCAL_API_URL,
+        headers: {
+          Authorization: `Basic ${token}`,
+          Accept: "application/json"
+        },
+        data,
+        method: "post",
+        url: "xumm/accountDetail",
+        validateStatus: () => true,
+        timeout: 30000
+      });
+      if (resp.status === 200 && (resp.data?.token || resp.data?.success)) {
+        return resp;
+      }
+      if (resp.status === 400 || resp.status === 409) {
+        return resp;
+      }
+    } catch {
+      // transient network — keep the QR open
     }
-  } catch (e) {
-    return e.response;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
+  return {
+    status: 202,
+    data: {
+      success: false,
+      status: "pending",
+      message: "Waiting for Xaman sign-in."
+    }
+  };
 };
 //////////// ACCOUNT DETAIL END///////
 

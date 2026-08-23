@@ -79,13 +79,15 @@ assert.equal(created.message, "https://xumm.app/sign/abc-123_q.png");
 assert.equal(created.forMobile, "abc-123");
 assert.equal(created.uuid, "abc-123");
 
-assert.equal(payloadState({ meta: { signed: true } }), "signed");
+assert.equal(payloadState({ meta: { signed: true }, response: { account: "rFuzionXioDemoOwner11111111111111" } }, "connect"), "completed");
 assert.equal(payloadState({ meta: { cancelled: true } }), "cancelled");
 assert.equal(payloadState({ meta: { expired: true } }), "expired");
 assert.equal(payloadState({ meta: {} }), "pending");
 assert.equal(statusHttp("pending"), 202);
-assert.equal(statusHttp("signed"), 200);
+assert.equal(statusHttp("confirming"), 202);
+assert.equal(statusHttp("completed"), 200);
 assert.equal(statusHttp("cancelled"), 400);
+assert.equal(statusHttp("failed"), 409);
 
 const store = demoSeed();
 rememberPayload(store, {

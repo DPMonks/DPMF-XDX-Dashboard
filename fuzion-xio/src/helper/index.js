@@ -1,6 +1,11 @@
 import axios from "axios";
 import config from "../config.json";
 import { actionTypes } from "../store/actionTypes/wallet";
+import {
+  onXamanWake,
+  rememberPendingPayload,
+  shouldFinishXamanPoll
+} from "./xamanResume";
 
 const token = localStorage.getItem("jwtToken");
 
@@ -33,7 +38,10 @@ const checkTransactionStatusHelper = (data, path) => {
   const startTime = Date.now();
 
   const pollState = { cancelled: false };
-  if (uuid) activePolling.set(uuid, pollState);
+  if (uuid) {
+    activePolling.set(uuid, pollState);
+    rememberPendingPayload(uuid, { kind: path });
+  }
 
   /* Always set QR URLs when uuid exists — API may omit qr_url (e.g. push-only); require dispatch */
   const effectiveQrUrl =
@@ -61,26 +69,31 @@ const checkTransactionStatusHelper = (data, path) => {
   return new Promise((resolve, reject) => {
     let pollInFlight = false;
     let intervalId = null;
+    let settled = false;
+
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      if (intervalId) clearInterval(intervalId);
+      stopWake();
+      hideQr();
+      activePolling.delete(uuid);
+      return fn(value);
+    };
 
     const tick = async () => {
-      if (pollInFlight) return;
+      if (pollInFlight || settled) return;
       pollInFlight = true;
       try {
         if (pollState.cancelled) {
-          if (intervalId) clearInterval(intervalId);
-          hideQr();
-          activePolling.delete(uuid);
-          return reject({
+          return finish(reject, {
             isCancelled: true,
             message: "Transaction cancelled by user"
           });
         }
 
         if (Date.now() - startTime >= maxDuration) {
-          if (intervalId) clearInterval(intervalId);
-          hideQr();
-          activePolling.delete(uuid);
-          return reject({
+          return finish(reject, {
             error: true,
             message: "You have exceeded the 10 minute time limit"
           });
@@ -94,26 +107,31 @@ const checkTransactionStatusHelper = (data, path) => {
           },
           data: requestData,
           method: "post",
-          url: path
+          url: path,
+          validateStatus: () => true
         });
 
-        if (resp?.data?.status === "completed" || resp?.status === 200) {
-          if (intervalId) clearInterval(intervalId);
-          hideQr();
-          activePolling.delete(uuid);
-          return resolve(resp);
+        const verdict = shouldFinishXamanPoll(resp);
+        if (verdict === "done") {
+          return finish(resolve, resp);
+        }
+        if (verdict === "fail") {
+          return finish(reject, {
+            response: resp,
+            message: resp?.data?.message || resp?.data?.status || "Xaman did not complete"
+          });
         }
       } catch (error) {
-        if (intervalId) clearInterval(intervalId);
-        hideQr();
-        activePolling.delete(uuid);
-        return reject(error);
+        if (error?.isCancelled) {
+          return finish(reject, error);
+        }
       } finally {
         pollInFlight = false;
       }
     };
 
     intervalId = setInterval(tick, pollInterval);
+    const stopWake = onXamanWake(tick);
     tick();
   });
 };

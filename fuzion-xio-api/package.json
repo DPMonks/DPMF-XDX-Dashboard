@@ -9,7 +9,8 @@
     "start": "node app.js",
     "dev": "node --watch app.js",
     "reset": "node scripts/reset.js",
-    "test": "node scripts/test-profile-nfts.js && node scripts/test-prepared.js && node scripts/test-fees-trustlines.js && node scripts/test-v2.js && node scripts/test-ledger-mints.js && node scripts/test-validation.js && node scripts/test-wallet-nfts.js && node scripts/test-xaman.js && node scripts/test-trade-marker.js"
+    "test": "node scripts/test-profile-nfts.js && node scripts/test-prepared.js && node scripts/test-fees-trustlines.js && node scripts/test-v2.js && node scripts/test-ledger-mints.js && node scripts/test-validation.js && node scripts/test-wallet-nfts.js && node scripts/test-xaman.js && node scripts/test-trade-marker.js && node scripts/test-xaman-settle.js",
+    "test:xaman-live": "node scripts/test-xaman-live.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

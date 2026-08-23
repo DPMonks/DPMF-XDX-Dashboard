@@ -682,9 +682,6 @@ function Nftdetail() {
       toast.error(offerNft.error.message, {
         toastId: "offerminterror" + Date.now()
       });
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
     }
   }, [offerNft.error]); // eslint-disable-line
 
@@ -702,9 +699,6 @@ function Nftdetail() {
       toast.error(mint.error.message, {
         toastId: "simint311" + Date.now()
       });
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
     }
   }, [mint.error]); // eslint-disable-line
 
@@ -722,9 +716,6 @@ function Nftdetail() {
       toast.error(burn.error.message, {
         toastId: "siburn311" + Date.now()
       });
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
     }
   }, [burn.error]); // eslint-disable-line
 
@@ -743,9 +734,6 @@ function Nftdetail() {
       toast.error(bid.error.message, {
         toastId: "sibid311" + Date.now()
       });
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
     }
   }, [bid.error]); // eslint-disable-line
 
@@ -764,9 +752,6 @@ function Nftdetail() {
       toast.error(bidCancel.error.message, {
         toastId: "sigbidCancel311" + Date.now()
       });
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
     }
   }, [bidCancel.error]); // eslint-disable-line
 
@@ -785,9 +770,6 @@ function Nftdetail() {
       toast.error(bidAndBurn.error.message, {
         toastId: "sigbidAndBurn311" + Date.now()
       });
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
     }
   }, [bidAndBurn.error]); // eslint-disable-line
 
@@ -1672,12 +1654,7 @@ function Nftdetail() {
       });
     } else if (placeMoreoffer.error !== null) {
       toast.error(placeMoreoffer.error.message, {
-        toastId: "placeMoreoffer2" + Date.now(),
-        onClose: () => {
-          setTimeout(() => {
-            window.location.reload();
-          }, 3000);
-        }
+        toastId: "placeMoreoffer2" + Date.now()
       });
     }
   }, [placeMoreoffer.error]); // eslint-disable-line
@@ -1743,12 +1720,7 @@ function Nftdetail() {
       });
     } else if (acceptPlacedoffersReducer.error !== null) {
       toast.error(acceptPlacedoffersReducer.error.message, {
-        toastId: "acceptMoreoffer2" + Date.now(),
-        onClose: () => {
-          setTimeout(() => {
-            window.location.reload();
-          }, 3000);
-        }
+        toastId: "acceptMoreoffer2" + Date.now()
       });
     }
   }, [acceptPlacedoffersReducer]); // eslint-disable-line

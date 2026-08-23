@@ -35,6 +35,12 @@ import {
 import { checkDeclinedNFTAction } from "../../store/actions/send";
 import { homeNftDetail } from "../../store/actions/homedetail";
 import MessageConst from "../../const/message.json";
+import {
+  clearPendingPayload,
+  onXamanWake,
+  peekXamanUuid,
+  rememberPendingPayload
+} from "../../helper/xamanResume";
 import Form from "react-bootstrap/Form";
 import SearchNft from "../nft/searchNft";
 // import HashLoader from "react-spinners/HashLoader";
@@ -322,17 +328,20 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
   //// REGISTRATION FEE STATUS END//////////////
   ////////////////////// ACCOUNT DEATIL START//////////
   useEffect(() => {
+    const pendingStatus = accountDetail.error?.status;
+    if (pendingStatus === "pending" || pendingStatus === "confirming") {
+      return;
+    }
     if (accountDetail.error) {
-      toast.error(accountDetail.error.message, {
-        toastId: "accountDetailerror" + Date.now(),
-        onClose: () => {
-          window.location.reload();
-        }
+      clearPendingPayload();
+      toast.error(accountDetail.error.message || "Xaman sign-in did not complete.", {
+        toastId: "accountDetailerror" + Date.now()
       });
-    } else if (accountDetail?.account !== null) {
-      // if (accountDetail?.account?.user_type === "secondTime" && isProfile !== "Profile") {
+      setShowModel(false);
+      setWalletEnable(false);
+    } else if (accountDetail?.account?.token) {
+      clearPendingPayload();
       localStorage.setItem("jwtToken", accountDetail.account.token);
-      // localStorage.setItem("isPaid", accountDetail.account.paid);
       window.location.reload();
     }
   }, [accountDetail, walletEnable]); // eslint-disable-line
@@ -375,6 +384,23 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
 
   ////////////////////// Balance END//////////
 
+  useEffect(() => {
+    if (token) return;
+    const resume = (uuid) => {
+      if (!uuid) return;
+      setQrCode(`https://xumm.app/sign/${uuid}_q.png`);
+      setForMobile(uuid);
+      setShowModel(true);
+      setWalletEnable(true);
+      dispatch(accountDetailAction({ data: { uuid }, loader: true }));
+    };
+    resume(peekXamanUuid());
+    return onXamanWake(() => {
+      if (localStorage.getItem("jwtToken")) return;
+      resume(peekXamanUuid());
+    });
+  }, [token, dispatch]);
+
   ////////////// XUMM CONNECT START///////////////////////
   useEffect(() => {
     if (walletConnectStatus?.wallet && walletEnable) {
@@ -385,10 +411,8 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
         let data = {
           uuid: walletConnectStatus?.wallet?.uuid
         };
+        rememberPendingPayload(data.uuid, { kind: "connect" });
         dispatch(accountDetailAction({ data, loader: true }));
-        setTimeout(() => {
-          window.location.reload();
-        }, 60000);
       } else {
         alert(MessageConst.alertTryAfterSometime);
       }

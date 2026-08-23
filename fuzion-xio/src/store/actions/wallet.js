@@ -36,15 +36,22 @@ export let connectWalletAction = (data) => async (dispatch) => {
 export let accountDetailAction = (data) => async (dispatch) => {
   dispatch({ type: actionTypes.ACCOUNT_DETAIL_REQUEST, loader: data.loader });
   const payload = await accountDetail(data.data);
-  const { status } = payload;
+  const status = payload?.status;
   if (status === 200) {
     dispatch({
       type: actionTypes.ACCOUNT_DETAIL_SUCCESS,
       payload: payload.data
     });
-  } else {
-    dispatch({ type: actionTypes.ACCOUNT_DETAIL_FAILURE, payload });
+    return;
   }
+  if (status === 202) {
+    // Still waiting for the wallet. Do not error — a reload here aborts sign-in.
+    return;
+  }
+  dispatch({
+    type: actionTypes.ACCOUNT_DETAIL_FAILURE,
+    payload: { data: payload?.data || payload || { message: "Xaman sign-in failed" } }
+  });
 };
 
 /////////////////// ACCOUNT DETAIL END////////////////

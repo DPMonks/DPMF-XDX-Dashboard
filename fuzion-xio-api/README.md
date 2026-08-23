@@ -60,4 +60,12 @@ Get the pair from [apps.xumm.dev](https://apps.xumm.dev). Add these origins on t
 
 The header already calls `POST /api/xumm/connect` (QR) then `POST /api/xumm/accountDetail` (waits for the signed SignIn and returns a JWT with `ac`). Mint/buy/sell still open a Xaman payload; after the wallet signs, the desk records the fill.
 
+Xaman reliability (ported from the indexer/dashboard settle work):
+
+- Return URL is `/?xaman={id}` so a phone can resume after Xaman reopens the app.
+- Status polls return **202** while pending/confirming and **200 only after tesSUCCESS** (SignIn completes on signed + account). A bare HTTP 200 is not treated as done.
+- Connect never times out into a page reload. `accountDetail` returns 202 until the wallet signs; the header persists the uuid and resumes from `?xaman=` / storage.
+- Ledger txs are pre-checked (64-hex `NFTokenID`, amount, destination) so demo paper ids never hit Xaman (that used to 603).
+- Desk fills apply once (`appliedAt`) and only after `status === "completed"`.
+
 Every Fuzion trade is stamped `marker: FUZION-XIO` with `signed: true|false`. Xaman-signed ledger txs carry the same marker in `Memos`, so they cannot be mixed with paper fills or other XRPL marketplace traffic. Filter the tape with `GET /api/market/activity?signed=true`.

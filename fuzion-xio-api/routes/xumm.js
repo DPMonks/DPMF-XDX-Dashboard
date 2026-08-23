@@ -7,6 +7,8 @@ import {
   accountFromAuth,
   applySignedIntent,
   balancesForAccount,
+  cancelPayload,
+  confirmLedger,
   createPayload,
   decodeSession,
   ensureFreeProfile,
@@ -14,17 +16,19 @@ import {
   getPayload,
   nftTokenId,
   notConfigured,
-  payloadState,
   pingXaman,
   rememberPayload,
+  settlePayload,
   shapeCreated,
   signSession,
   statusHttp,
   txjsonFor,
+  validateSignedIntent,
   verifySession,
   waitForSigned,
   xamanAppSummary,
-  xamanConfigured
+  xamanConfigured,
+  xamanUserError
 } from "../lib/xaman.js";
 
 const router = Router();
@@ -65,13 +69,20 @@ async function createSignedPayload(kind, req, res, instruction) {
     return res.status(400).json({ success: false, message: "NFT id required" });
   }
   const txjson = txjsonFor(kind, intent, intent.account);
+  const prepared = validateSignedIntent(kind, intent, txjson);
+  if (!prepared.ok) {
+    return res.status(prepared.status || 400).json({
+      success: false,
+      message: prepared.message
+    });
+  }
   const created = await createPayload(txjson, {
     custom_meta: { instruction: instruction || `FUZION-XIO ${kind}` }
   });
   if (!created.ok) {
     return res.status(created.status || 502).json({
       success: false,
-      message: created.error || "Xaman payload failed"
+      message: xamanUserError(created.data, created.error || "Xaman payload failed")
     });
   }
   const shaped = shapeCreated(created.data);
@@ -92,25 +103,32 @@ async function payloadStatus(req, res) {
   }
   const got = await getPayload(uuid);
   if (!got.ok) {
-    return res.status(got.status || 502).json({
+    const retryable = !got.status || got.status >= 500 || got.status === 429;
+    return res.status(retryable ? 202 : got.status || 502).json({
       success: false,
-      status: "error",
-      message: got.error
-    });
-  }
-  const state = payloadState(got.data);
-  const code = statusHttp(state);
-  if (state !== "signed") {
-    return res.status(code).json({
-      success: state === "pending",
-      status: state,
+      status: retryable ? "pending" : "error",
+      message: got.error,
       uuid
     });
   }
-  const account = got.data.response?.account || "";
-  const txid = got.data.response?.txid || "";
+  const remembered = findPayload(readStore(), uuid);
+  const kind = remembered?.kind || req.body?.kind || "connect";
+  const settled = await settlePayload(kind, got.data);
+  const code = statusHttp(settled.status);
+  if (settled.status !== "completed") {
+    return res.status(code).json({
+      success: false,
+      status: settled.status,
+      uuid,
+      txid: settled.txid || "",
+      tesSuccess: settled.tesSuccess === true,
+      executed: false
+    });
+  }
+  const account = settled.account || got.data.response?.account || "";
+  const txid = settled.txid || "";
   const store = update((current) => {
-    const record = findPayload(current, uuid) || { uuid, kind: "connect", account };
+    const record = findPayload(current, uuid) || { uuid, kind, account };
     applySignedIntent(current, record, { account, txid });
     return current;
   });
@@ -118,11 +136,13 @@ async function payloadStatus(req, res) {
   return res.status(200).json({
     success: true,
     status: "completed",
+    executed: true,
     uuid,
     txid,
     account,
+    tesSuccess: settled.tesSuccess === true,
     token: account ? signSession(account) : undefined,
-    kind: record?.kind
+    kind: record?.kind || kind
   });
 }
 
@@ -162,13 +182,25 @@ router.post("/xumm/accountDetail", async (req, res) => {
   if (!uuid) {
     return res.status(400).json({ success: false, message: "uuid required" });
   }
-  const waited = await waitForSigned(uuid, { timeoutMs: 50000, intervalMs: 2000 });
+  const waited = await waitForSigned(uuid, {
+    timeoutMs: 18000,
+    intervalMs: 2000,
+    kind: "connect"
+  });
   if (!waited.ok) {
+    if (waited.state === "timeout" || waited.state === "pending" || waited.state === "confirming") {
+      return res.status(202).json({
+        success: false,
+        status: waited.state === "timeout" ? "pending" : waited.state,
+        uuid,
+        message: "Waiting for Xaman sign-in."
+      });
+    }
     const message =
-      waited.state === "timeout"
-        ? "Sign-in timed out. Scan the QR again."
-        : waited.state === "cancelled"
-          ? "Sign-in was cancelled in Xaman."
+      waited.state === "cancelled"
+        ? "Sign-in was cancelled in Xaman."
+        : waited.state === "expired"
+          ? "This sign-in QR expired. Open Connect again."
           : waited.error || "Xaman did not confirm this sign-in.";
     return res.status(400).json({ success: false, message, status: waited.state });
   }
@@ -213,7 +245,7 @@ router.post("/xumm/getBalance", async (req, res) => {
 router.post("/xumm/disConnect", async (req, res) => {
   const uuid = req.body?.uuid;
   if (uuid && xamanConfigured()) {
-    await getPayload(uuid).catch(() => null);
+    await cancelPayload(uuid).catch(() => null);
   }
   res.json({ success: true, message: "Wallet disconnected" });
 });
@@ -302,6 +334,19 @@ router.post("/xrpl/bidNft", (req, res) => {
 router.get("/nft/verify-payload/:uuid", async (req, res) => {
   req.body = { ...(req.body || {}), uuid: req.params.uuid };
   return payloadStatus(req, res);
+});
+
+router.get("/xumm/payload/:uuid", async (req, res) => {
+  req.body = { uuid: req.params.uuid };
+  return payloadStatus(req, res);
+});
+
+router.get("/xumm/tx/:hash", async (req, res) => {
+  const ledger = await confirmLedger(req.params.hash);
+  if (!ledger) {
+    return res.status(404).json({ success: false, message: "tx not found" });
+  }
+  res.json({ success: true, data: ledger });
 });
 
 router.get("/session", (req, res) => {
