@@ -12,13 +12,13 @@ export default function BrandSelect({
   const uid = useId().replace(/:/g, "");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const rows = Array.isArray(options) ? options : [];
-  const selected = rows.find((row) => row.id === value) || rows[0];
+  const selected = (Array.isArray(options) ? options : []).find((row) => row.id === value) || options[0];
   const matches = useMemo(() => {
+    const rows = Array.isArray(options) ? options : [];
     const q = query.trim().toUpperCase();
     if (!q) return rows;
     return rows.filter((row) => String(row.label || row.id || "").toUpperCase().includes(q));
-  }, [rows, query]);
+  }, [options, query]);
 
   useEffect(() => {
     function onDoc(event) {
