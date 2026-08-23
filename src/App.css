@@ -160,6 +160,25 @@ body {
   font-size: 13px;
 }
 
+.trade-lp-mode,
+.trade-lp-asset {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.trade-lp-mode .tab,
+.trade-lp-asset .tab {
+  flex: 1;
+  min-height: 32px;
+}
+
+.trade-lp-hint {
+  margin: -2px 0 10px;
+  font-size: 12px;
+}
+
 .trade-field {
   display: flex;
   flex-direction: column;

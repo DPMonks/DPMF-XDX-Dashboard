@@ -66,6 +66,9 @@ export function exchangeMemoText({ txjson = {}, trade = {} } = {}) {
     return memoLine(`Governance vote submitted: ${votePhrase(trade.voteType)}`);
   }
   if (type === "AMMDeposit" || action === "addLp") {
+    if (trade.lpMode === "single" || Number(txjson.Flags) === 524288) {
+      return memoLine(`Single-sided liquidity added to ${pool} pool`);
+    }
     return memoLine(`Liquidity added to ${pool} pool`);
   }
   if (type === "AMMWithdraw" || action === "removeLp") {

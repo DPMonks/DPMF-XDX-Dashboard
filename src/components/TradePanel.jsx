@@ -9,6 +9,7 @@ import {
   ammDepositTx,
   ammWithdrawTx,
   expectedLpTokens,
+  expectedSingleLpTokens,
   hasLpTrustline,
   hasQuoteTrustline,
   lpTrustSetTxjson,
@@ -85,6 +86,8 @@ export default function TradePanel({
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
   const [quoteId, setQuoteId] = useState(() => quoteIdFromPair(initialQuote || "XRP"));
   const [orderType, setOrderType] = useState("market");
+  const [lpMode, setLpMode] = useState("double");
+  const [singleAsset, setSingleAsset] = useState("xdx");
   const [amount, setAmount] = useState(() => (action === "addLp" || action === "removeLp" ? "" : "100000"));
   const [quoteQty, setQuoteQty] = useState("");
   const [editedSide, setEditedSide] = useState("xdx");
@@ -134,12 +137,14 @@ export default function TradePanel({
     isLp &&
     signedIn &&
     shouldAskLpTrustline({ loaded: walletReady, haveLine: haveLpLine, spec: lpSpec });
-  const needQuoteTrust = shouldAskQuoteTrustline({
-    loaded: walletReady,
-    haveLine: haveQuoteLine,
-    haveLp: isLp && haveLpLine,
-    quote,
-  });
+  const isSingleLp = action === "addLp" && lpMode === "single";
+  const needQuoteTrust =
+    shouldAskQuoteTrustline({
+      loaded: walletReady,
+      haveLine: haveQuoteLine,
+      haveLp: isLp && haveLpLine,
+      quote,
+    }) && !(isSingleLp && singleAsset === "xdx");
   const reserves = useMemo(() => poolReserves(pools, quote), [pools, quote]);
   const implied = poolPrice(reserves.base, reserves.quote);
   const markerPx = xdxQuoteSpot({ quoteId, prices, pool: reserves });
@@ -162,24 +167,43 @@ export default function TradePanel({
   });
   const shownAmount = linked.xdxInput;
   const shownQuoteQty = linked.quoteInput;
-  const lpHint = expectedLpTokens(linked.xdx || amount, reserves.base, reserves.lpSupply);
+  const typedXdx = Number(amount) || 0;
+  const typedQuote = Number(quoteQty) || 0;
+  const addXdx = isSingleLp ? (singleAsset === "xdx" ? typedXdx : 0) : linked.xdx || typedXdx;
+  const addQuote = isSingleLp
+    ? singleAsset === "quote"
+      ? typedQuote
+      : 0
+    : linked.quote || Number(shownQuoteQty) || Number(quoteHint) || 0;
+  const lpHint = isSingleLp
+    ? expectedSingleLpTokens(
+        singleAsset === "quote" ? addQuote : addXdx,
+        singleAsset === "quote" ? reserves.quote : reserves.base,
+        reserves.lpSupply
+      )
+    : expectedLpTokens(addXdx || amount, reserves.base, reserves.lpSupply);
   const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
   const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices, allowImplied: false });
   const withdraw = expectedWithdraw(lpAmount || amount, reserves.base, reserves.quote, reserves.lpSupply);
-  const typedXdx = Number(amount) || 0;
-  const typedQuote = Number(quoteQty) || 0;
-  const deposit = depositValueSplit({
-    xdxAmount: action === "removeLp" ? withdraw.base : typedXdx,
-    quoteAmount: action === "removeLp" ? withdraw.quote : typedQuote,
-    xdxUsd,
-    quoteUsd,
-  });
+  const deposit = isSingleLp
+    ? {
+        xdxPct: singleAsset === "xdx" ? 100 : 0,
+        quotePct: singleAsset === "quote" ? 100 : 0,
+        measured: (singleAsset === "xdx" ? typedXdx : typedQuote) > 0,
+        total: singleAsset === "xdx" ? typedXdx * xdxUsd : typedQuote * quoteUsd,
+      }
+    : depositValueSplit({
+        xdxAmount: action === "removeLp" ? withdraw.base : typedXdx,
+        quoteAmount: action === "removeLp" ? withdraw.quote : typedQuote,
+        xdxUsd,
+        quoteUsd,
+      });
   const splitReady = Boolean(deposit.measured);
   const lpHeld = lpHeldForPair(walletLp, quotePair, quoteId);
   const sides = tradeSides({
     action,
-    amount: linked.xdx || amount,
-    quoteQty: linked.quote || shownQuoteQty || quoteHint,
+    amount: action === "addLp" ? addXdx : linked.xdx || amount,
+    quoteQty: action === "addLp" ? addQuote : linked.quote || shownQuoteQty || quoteHint,
     quoteLabel: quote.label,
     total,
     lpAmount: lpAmount || amount,
@@ -273,8 +297,10 @@ export default function TradePanel({
       return ammDepositTx({
         account,
         quote,
-        xdx: linked.xdx || amount,
-        quoteQty: linked.quote || shownQuoteQty || quoteHint || total,
+        xdx: addXdx,
+        quoteQty: addQuote,
+        mode: lpMode,
+        singleAsset,
       });
     }
     return ammWithdrawTx({
@@ -292,6 +318,7 @@ export default function TradePanel({
       quoteIssuer: quote.issuer || null,
       quoteHex: quote.hex || null,
       pair: quote.pair || `XDX/${quoteId}`,
+      ...(action === "addLp" ? { lpMode, singleAsset: isSingleLp ? singleAsset : undefined } : {}),
     };
   }
 
@@ -350,17 +377,28 @@ export default function TradePanel({
       });
       return;
     }
-    const qty = Number(action === "removeLp" ? lpAmount || amount : linked.xdx || amount);
-    if (!(qty > 0)) {
+    const removeQty = Number(lpAmount || amount);
+    const tradeQty = Number(linked.xdx || amount);
+    if (action === "removeLp" && !(removeQty > 0)) {
+      setFormError(t.tradeNeedAmount);
+      return;
+    }
+    if (action === "addLp") {
+      const haveDeposit = isSingleLp
+        ? singleAsset === "quote"
+          ? addQuote > 0
+          : addXdx > 0
+        : addXdx > 0 && addQuote > 0;
+      if (!haveDeposit) {
+        setFormError(t.tradeNeedAmount);
+        return;
+      }
+    } else if (action !== "removeLp" && !(tradeQty > 0)) {
       setFormError(t.tradeNeedAmount);
       return;
     }
     if (action === "addLp" && quote.currency !== "XRP" && !quote.issuer) {
       setFormError(t.tradeNeedTrustline);
-      return;
-    }
-    if (action === "addLp" && !(linked.quote > 0)) {
-      setFormError(t.tradeNeedAmount);
       return;
     }
     if (!isLp && !(px > 0)) {
@@ -486,6 +524,65 @@ export default function TradePanel({
           />
         </label>
 
+        {action === "addLp" ? (
+          <>
+            <div className="tabs trade-lp-mode" role="tablist" aria-label={t.lpDepositMode}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={lpMode === "double"}
+                className={`tab${lpMode === "double" ? " active" : ""}`}
+                onClick={() => setLpMode("double")}
+              >
+                {t.lpDoubleSided}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={lpMode === "single"}
+                className={`tab${lpMode === "single" ? " active" : ""}`}
+                onClick={() => {
+                  setLpMode("single");
+                  setSingleAsset(editedSide === "quote" ? "quote" : "xdx");
+                }}
+              >
+                {t.lpSingleSided}
+              </button>
+            </div>
+            {isSingleLp ? (
+              <>
+                <div className="tabs trade-lp-asset" role="tablist" aria-label={t.lpSingleAsset}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={singleAsset === "xdx"}
+                    className={`tab${singleAsset === "xdx" ? " active" : ""}`}
+                    onClick={() => {
+                      setSingleAsset("xdx");
+                      setEditedSide("xdx");
+                    }}
+                  >
+                    XDX
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={singleAsset === "quote"}
+                    className={`tab${singleAsset === "quote" ? " active" : ""}`}
+                    onClick={() => {
+                      setSingleAsset("quote");
+                      setEditedSide("quote");
+                    }}
+                  >
+                    {quote.label}
+                  </button>
+                </div>
+                <p className="trade-panel-hint trade-lp-hint">{t.lpSingleHint}</p>
+              </>
+            ) : null}
+          </>
+        ) : null}
+
         {needLpLine ? null : !isLp ? (
           <label className="trade-field">
             {t.tradeOrderType}
@@ -524,7 +621,7 @@ export default function TradePanel({
               <span className="trade-lp-disconnected">{t.walletNotConnected}</span>
             )}
           </label>
-        ) : (
+        ) : isSingleLp && singleAsset === "quote" ? null : (
           <label className="trade-field">
             {t.xdxAmount}
             <input
@@ -600,7 +697,15 @@ export default function TradePanel({
             </div>
           </div>
         ) : null}
-        {action !== "removeLp" ? (
+        {action === "removeLp" ? (
+          <label className="trade-field">
+            {quote.label}
+            <input type="text" readOnly value={formatToken(withdraw.quote, locale, 6)} />
+            <span className="trade-field-usd">
+              {quoteUsd > 0 ? formatUsd(withdraw.quote * quoteUsd, locale) : "—"}
+            </span>
+          </label>
+        ) : isSingleLp && singleAsset === "xdx" ? null : (
           <label className="trade-field">
             {quote.label}
             <input
@@ -623,14 +728,6 @@ export default function TradePanel({
                 {quoteUsd > 0 && typedQuote > 0 ? formatUsd(typedQuote * quoteUsd, locale) : "—"}
               </span>
             ) : null}
-          </label>
-        ) : (
-          <label className="trade-field">
-            {quote.label}
-            <input type="text" readOnly value={formatToken(withdraw.quote, locale, 6)} />
-            <span className="trade-field-usd">
-              {quoteUsd > 0 ? formatUsd(withdraw.quote * quoteUsd, locale) : "—"}
-            </span>
           </label>
         )}
 

@@ -14,10 +14,12 @@ import {
   MARKET_SLIPPAGE,
   TF_LP_TOKEN,
   TF_PARTIAL_PAYMENT,
+  TF_SINGLE_ASSET,
   TF_TWO_ASSET,
   ammDepositTx,
   ammWithdrawTx,
   expectedLpTokens,
+  expectedSingleLpTokens,
   expectedWithdraw,
   executionBelongsToOpenTrade,
   executionClosesTradeAction,
@@ -135,6 +137,30 @@ test("AMM deposit and withdraw follow XRPL two-asset / LP token flags", () => {
   assert.equal(messy.Amount2, "10000");
   assert.equal(/[eE]/.test(messy.Amount.value), false);
   assert.equal(xrplIssuedValue(1.23e-7), "0.000000123");
+
+  const singleXdx = ammDepositTx({
+    account: "rLp",
+    quote: quoteAsset("XRP"),
+    xdx: "250",
+    mode: "single",
+    singleAsset: "xdx",
+  });
+  assert.equal(singleXdx.Flags, TF_SINGLE_ASSET);
+  assert.equal(singleXdx.Amount.value, "250");
+  assert.equal(singleXdx.Amount2, undefined);
+
+  const singleXrp = ammDepositTx({
+    account: "rLp",
+    quote: quoteAsset("XRP"),
+    quoteQty: "0.5",
+    mode: "single",
+    singleAsset: "quote",
+  });
+  assert.equal(singleXrp.Flags, TF_SINGLE_ASSET);
+  assert.equal(singleXrp.Amount, "500000");
+  assert.equal(singleXrp.Amount2, undefined);
+  assert.equal(expectedSingleLpTokens(100, 1000, 500), 500 * (Math.sqrt(1.1) - 1));
+  assert.equal(expectedSingleLpTokens(0, 1000, 500), 0);
 
   const take = ammWithdrawTx({
     account: "rLp",
@@ -344,6 +370,9 @@ test("trade windows show pay and receive from the selected pair", () => {
   assert.equal(add.pay[0].asset, "XDX");
   assert.equal(add.pay[1].asset, "XRP");
   assert.equal(add.receive[0].asset, "LP");
+  const singlePay = tradeSides({ action: "addLp", amount: 0, quoteQty: 2, quoteLabel: "XRP", lpOut: 4 });
+  assert.equal(singlePay.pay.length, 1);
+  assert.equal(singlePay.pay[0].asset, "XRP");
   assert.equal(xdxUnitUsd({ prices: { xdxUsd: 0.00003 } }), 0.00003);
   assert.equal(quoteUnitUsd({ quoteId: "XRP", prices: { xrpUsd: 2 } }), 2);
   assert.equal(

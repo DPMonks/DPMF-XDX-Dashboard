@@ -84,6 +84,7 @@ export const DROPS_PER_XRP = 1_000_000;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
 export const TF_PARTIAL_PAYMENT = 131072;
 export const TF_TWO_ASSET = 1_048_576;
+export const TF_SINGLE_ASSET = 524_288;
 export const TF_LP_TOKEN = 65_536;
 export const LEDGER_FEE_XRP = 0.000012;
 export const MARKET_SLIPPAGE = 0.15;
@@ -273,7 +274,7 @@ export function offerCreateSellXdx({ account, quote, xdx, proceeds, market = fal
   return txjson;
 }
 
-export function ammDepositTx({ account, quote, xdx, quoteQty } = {}) {
+export function ammDepositTx({ account, quote, xdx, quoteQty, mode = "double", singleAsset = "xdx" } = {}) {
   const txjson = {
     TransactionType: "AMMDeposit",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
@@ -281,10 +282,15 @@ export function ammDepositTx({ account, quote, xdx, quoteQty } = {}) {
       quote?.currency === "XRP" || !quote?.issuer
         ? { currency: "XRP" }
         : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
-    Amount: xdxAmount(xdx),
-    Amount2: quoteAmount(quote, quoteQty),
-    Flags: TF_TWO_ASSET,
   };
+  if (mode === "single") {
+    txjson.Flags = TF_SINGLE_ASSET;
+    txjson.Amount = singleAsset === "quote" ? quoteAmount(quote, quoteQty) : xdxAmount(xdx);
+  } else {
+    txjson.Flags = TF_TWO_ASSET;
+    txjson.Amount = xdxAmount(xdx);
+    txjson.Amount2 = quoteAmount(quote, quoteQty);
+  }
   if (account) txjson.Account = account;
   return txjson;
 }
@@ -559,6 +565,14 @@ export function expectedLpTokens(xdxAmount, reserveBase, lpSupply) {
   return (qty / base) * supply;
 }
 
+export function expectedSingleLpTokens(deposit, reserve, lpSupply) {
+  const qty = Number(deposit);
+  const pool = Number(reserve);
+  const supply = Number(lpSupply);
+  if (!(qty > 0) || !(pool > 0) || !(supply > 0)) return 0;
+  return supply * (Math.sqrt(1 + qty / pool) - 1);
+}
+
 export function expectedWithdraw(lpAmount, reserveBase, reserveQuote, lpSupply) {
   const lp = Number(lpAmount);
   const supply = Number(lpSupply);
@@ -584,11 +598,12 @@ export function tradeSides({ action, amount, quoteQty, quoteLabel, total, lpAmou
     };
   }
   if (action === "addLp") {
+    const pay = [
+      { value: Number(amount) || 0, asset: "XDX" },
+      { value: Number(quoteQty) || 0, asset: label },
+    ].filter((row) => row.value > 0);
     return {
-      pay: [
-        { value: Number(amount) || 0, asset: "XDX" },
-        { value: Number(quoteQty) || 0, asset: label },
-      ],
+      pay: pay.length ? pay : [{ value: 0, asset: "XDX" }],
       receive: [{ value: Number(lpOut) || 0, asset: "LP" }],
     };
   }
