@@ -1120,6 +1120,8 @@ const Createnft = () => {
         category: formData.category,
         metaverse: formData.metaverse,
         tokentaxon: getTokenTaxon(),
+        royaltyBps: Number(royaltyPerc || 0) * 100,
+        royaltyRecipient: formData.royaltyRecipient || myDecodedToken?.ac,
         image: arrImg.length ? arrImg : urlArr,
         price: formData.price,
         description: formData.description,
@@ -1629,6 +1631,15 @@ const Createnft = () => {
                     </Row>
                     <Row className="mt-4">
                       <Col xs={12} md={12}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Royalty recipient</Form.Label>
+                          <Form.Control
+                            type="text"
+                            name="royaltyRecipient"
+                            onChange={handleChange}
+                            placeholder="r-address (defaults to your wallet)"
+                          />
+                        </Form.Group>
                         <label className="label-uppercase">
                           ADD ROYALTY 0-50%
                         </label>

@@ -51,6 +51,13 @@ const Rankings = React.lazy(() => import("./components/nft/rankings"));
 const AssetsBook = React.lazy(() => import("./components/nft/assetsBook"));
 const ProfilesDesk = React.lazy(() => import("./components/nft/profilesDesk"));
 const Yem = React.lazy(() => import("./components/nft/yem"));
+const Discover = React.lazy(() => import("./components/nft/discover"));
+const ProDesk = React.lazy(() => import("./components/nft/proDesk"));
+const Drops = React.lazy(() => import("./components/nft/drops"));
+const Governance = React.lazy(() => import("./components/nft/governance"));
+const Onboarding = React.lazy(() => import("./components/nft/onboarding"));
+const Moderation = React.lazy(() => import("./components/nft/moderation"));
+const CreatorDesk = React.lazy(() => import("./components/nft/creatorDesk"));
 
 function App() {
   useSuppressResizeObserverError();
@@ -90,6 +97,16 @@ function App() {
           <Route path="/Xiodashboard" element={<XioDashboard />} />
           <Route path="/yem" element={<Yem />} />
           <Route path="/Yem" element={<Yem />} />
+          <Route path="/discover" element={<Discover />} />
+          <Route path="/pro" element={<ProDesk />} />
+          <Route path="/pro/:slug" element={<ProDesk />} />
+          <Route path="/drops" element={<Drops />} />
+          <Route path="/drops/:slug" element={<Drops />} />
+          <Route path="/governance" element={<Governance />} />
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/moderation" element={<Moderation />} />
+          <Route path="/creator/:address" element={<CreatorDesk />} />
+          <Route path="/portfolio/:address" element={<CreatorDesk />} />
 
           <Route element={<PrivateRoute />}>
             <Route path="/Createnft" element={<Createnft />} />

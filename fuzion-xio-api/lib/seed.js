@@ -1,7 +1,7 @@
 import { DEMO_GLB, XDX_CURRENCY, XDX_ISSUER, XIO_CURRENCY, XIO_ISSUER } from "./constants.js";
 import { PLATFORM_FEE_BPS } from "./fees.js";
 
-export const STORE_VERSION = 8;
+export const STORE_VERSION = 10;
 
 export const DEMO_ISSUER = "rFuzionXioDemoIssuer1111111111111";
 export const DEMO_OWNER = "rFuzionXioDemoOwner11111111111111";
@@ -54,6 +54,10 @@ export function demoSeed() {
       usdzUrl: null,
       issuer: DEMO_ISSUER,
       owner: DEMO_OWNER,
+      verified: true,
+      banner: images[4],
+      royaltyBps: 500,
+      royaltyRecipient: DEMO_ISSUER,
       createdAt: now
     }
   ];
@@ -73,6 +77,8 @@ export function demoSeed() {
       status: "sale",
       likes: 3,
       royaltyBps: 500,
+      royaltyRecipient: DEMO_ISSUER,
+      fileHash: "demo-lilly-hash",
       platformFeeBps: PLATFORM_FEE_BPS
     }),
     nft({
@@ -438,6 +444,35 @@ export function demoSeed() {
         currency: "XRP",
         from: DEMO_BIDDER,
         createdAt: now
+      },
+      {
+        _id: "act-mint-3d",
+        type: "mint",
+        nftId: "seed-fuzion-3d-hero",
+        name: "FUZION 3D #1",
+        collectionName: "FUZION 3D",
+        collectionSlug: "fuzion-3d",
+        from: DEMO_ISSUER,
+        createdAt: now
+      },
+      {
+        _id: "act-validation-owner",
+        type: "validation",
+        name: "FUZION Demo",
+        from: DEMO_BIDDER,
+        to: DEMO_OWNER,
+        createdAt: now
+      },
+      {
+        _id: "act-drop-horizon",
+        type: "drop",
+        name: "FUZION 3D Horizon",
+        collectionName: "FUZION 3D",
+        collectionSlug: "fuzion-3d",
+        amount: "1",
+        currency: XIO_CURRENCY,
+        from: DEMO_ISSUER,
+        createdAt: now
       }
     ],
     watchlist: [],
@@ -461,6 +496,85 @@ export function demoSeed() {
         accountNumber: DEMO_OWNER,
         balance: { value: "12.4", currency: XIO_CURRENCY }
       }
-    ]
+    ],
+    verifications: [
+      {
+        slug: "fuzion-3d",
+        name: "FUZION 3D",
+        status: "verified",
+        method: "manual+issuer"
+      }
+    ],
+    editorPicks: ["seed-lilly-1", "seed-fuzion-3d-hero"],
+    drops: [
+      {
+        _id: "drop-fuzion-3d",
+        slug: "fuzion-3d-horizon",
+        name: "FUZION 3D Horizon",
+        collectionName: "FUZION 3D",
+        description: "Scheduled 3D drop on the local desk.",
+        startsAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+        endsAt: new Date(Date.now() + 7 * 86400 * 1000).toISOString(),
+        preMintStartsAt: now,
+        publicStartsAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+        price: "1",
+        currency: XIO_CURRENCY,
+        allowlist: [DEMO_OWNER, DEMO_ISSUER],
+        status: "scheduled"
+      }
+    ],
+    launches: [],
+    follows: [],
+    comments: [
+      {
+        _id: "cmt-lilly",
+        nftId: "seed-lilly-1",
+        from: DEMO_BIDDER,
+        text: "Clean listing. Multi-asset offer incoming.",
+        createdAt: now
+      }
+    ],
+    reports: [],
+    proposals: [
+      {
+        _id: "gov-fee-split",
+        title: "Keep 0.1% desk fee, publish collector later",
+        kind: "fee",
+        body: "XIO-weighted vote on fee transparency while the collector address is pending.",
+        status: "open",
+        yes: 128.5,
+        no: 0,
+        createdAt: now
+      },
+      {
+        _id: "gov-3d-curation",
+        title: "Feature 3D collections in Editor’s picks",
+        kind: "curation",
+        body: "Keep generic marketplace 3D first-class. AVA / MegaBits / RWA stay separate.",
+        status: "closed",
+        yes: 140,
+        no: 2,
+        createdAt: now
+      }
+    ],
+    votes: [
+      {
+        key: "gov-fee-split:" + DEMO_ISSUER,
+        proposalId: "gov-fee-split",
+        address: DEMO_ISSUER,
+        support: true,
+        weight: 128.5
+      }
+    ],
+    fileHashes: [
+      { nftId: "seed-lilly-1", hash: "demo-lilly-hash" }
+    ],
+    aggregator: {
+      sources: [
+        { id: "desk", name: "FUZION desk", chain: "xrpl" },
+        { id: "xrpl-offers", name: "XRPL nft_buy_offers / nft_sell_offers", chain: "xrpl" }
+      ],
+      listings: []
+    }
   };
 }

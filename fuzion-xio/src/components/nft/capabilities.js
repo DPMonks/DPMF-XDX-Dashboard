@@ -53,6 +53,16 @@ function Capabilities() {
               <a href="/rankings">Rankings</a>
               {" · "}
               <a href="/yem">Y.E.M.</a>
+              {" · "}
+              <a href="/discover">Discover</a>
+              {" · "}
+              <a href="/pro">Pro view</a>
+              {" · "}
+              <a href="/drops">Drops</a>
+              {" · "}
+              <a href="/governance">Governance</a>
+              {" · "}
+              <a href="/onboarding">First time here?</a>
             </p>
 
             <div className="dpmf-grid">

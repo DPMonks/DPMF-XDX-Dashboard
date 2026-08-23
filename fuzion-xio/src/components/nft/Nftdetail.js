@@ -27,6 +27,7 @@ import bithomp from "../../assets/bitomp.svg";
 import { useDispatch, useSelector } from "react-redux";
 import { forceVisible } from "react-lazyload";
 import Like from "./like/like";
+import NftMarketplacePanel from "./NftMarketplacePanel";
 import {
   nftDetailAction,
   tradeHistoryAction,
@@ -2157,9 +2158,13 @@ function Nftdetail() {
                           {nft?.description}
                         </p>
                         <Accordion
-                          defaultActiveKey={["0", "1", "2", "3"]}
+                          defaultActiveKey={["0", "1", "2", "3", "v2-desk"]}
                           alwaysOpen
                         >
+                          <NftMarketplacePanel
+                            nft={nft}
+                            address={decodedToken?.ac}
+                          />
                           <Accordion.Item eventKey="0">
                             <Accordion.Header>ABOUT</Accordion.Header>
                             <Accordion.Body>

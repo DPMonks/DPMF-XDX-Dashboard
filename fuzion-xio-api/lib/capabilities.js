@@ -119,6 +119,46 @@ export function capabilityMap() {
           `${fee.label} fee, auto trustlines, multi-asset settlement`,
           "Collector address will be added later"
         ]
+      },
+      {
+        id: 12,
+        title: "Marketplace V2 — discovery",
+        status: "live",
+        points: [
+          "Global search across NFTs, collections, creators, and assets",
+          "Trending, 24h/7d volume, new drops, editor’s picks",
+          "Verified badges and unverified/suspicious warnings"
+        ]
+      },
+      {
+        id: 13,
+        title: "Marketplace V2 — analytics",
+        status: "live",
+        points: [
+          "Floor per currency, floor history, rarity ranks, trait filters",
+          "Collection volume, holders, whales, creator royalty periods",
+          "Wallet portfolio value, P&L, collection breakdown"
+        ]
+      },
+      {
+        id: 14,
+        title: "Marketplace V2 — pro trading",
+        status: "live",
+        points: [
+          "Standard / Pro view toggle",
+          "Trader desk: live floor, bid depth, listings, batch list, sweep",
+          "Aggregator ingest ready for later XRPL marketplace sources"
+        ]
+      },
+      {
+        id: 15,
+        title: "Marketplace V2 — drops + social + governance",
+        status: "live",
+        points: [
+          "Scheduled drops, launchpad review, allowlist-gated pre-mint",
+          "Likes, follows, comments, reports, moderation queue",
+          "XIO-weighted proposals and voting history"
+        ]
       }
     ],
     peers: {
@@ -172,6 +212,20 @@ export function capabilityMap() {
       platformFee: true,
       autoTrustlines: true,
       yemPage: true,
+      discover: true,
+      verifiedCollections: true,
+      rarityRanks: true,
+      floorHistory: true,
+      proView: true,
+      batchList: true,
+      collectionBids: true,
+      drops: true,
+      allowlists: true,
+      commentsFollows: true,
+      reports: true,
+      governanceVotes: true,
+      fiatRampSlot: true,
+      onboarding: true,
       zeroPlatformFee: false
     },
     fee,

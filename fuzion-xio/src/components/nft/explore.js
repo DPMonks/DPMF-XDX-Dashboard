@@ -35,7 +35,14 @@ function Explore() {
                   to={`/explore/${row.slug}`}
                   className="dpmf-card dpmf-card-link"
                 >
-                  <h3>{row.name}</h3>
+                  <h3>
+                    {row.name}
+                    {row.verified ? (
+                      <span className="dpmf-badge">Verified</span>
+                    ) : (
+                      <span className="dpmf-badge dpmf-badge-warn">Unverified</span>
+                    )}
+                  </h3>
                   <p>
                     Floor {row.floor ?? "—"} {row.currency} · {row.listed} listed
                     · {row.size.toLocaleString()} supply

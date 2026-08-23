@@ -408,3 +408,51 @@ a:hover {
   border: 2px solid var(--dpmf-neon-cyan);
   background: #101018;
 }
+
+.dpmf-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #050507;
+  background: var(--dpmf-neon-lime);
+  vertical-align: middle;
+}
+
+.dpmf-badge-warn {
+  background: #ffb020;
+}
+
+.dpmf-market button,
+.dpmf-card button,
+.dpmf-market .lgOut11 {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+@media (max-width: 767px) {
+  .dpmf-market {
+    padding: 20px 12px 48px;
+  }
+
+  .dpmf-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dpmf-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dpmf-market input,
+  .dpmf-market select,
+  .dpmf-card input,
+  .dpmf-card select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}

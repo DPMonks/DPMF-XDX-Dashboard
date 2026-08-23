@@ -16,6 +16,7 @@ import {
   markCreated
 } from "../lib/prepared.js";
 import { ensureTrustline } from "../lib/wallet.js";
+import { allowlistOk, fileHash } from "../lib/v2.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.resolve(root, "..", "data", "uploads");
@@ -127,8 +128,10 @@ function insertCreatedNfts(store, body, items) {
       contentType: item.ctype || item.kind || item.ftype,
       status: body.status || "created",
       likes: 0,
-      royaltyBps: 500,
-        platformFeeBps: PLATFORM_FEE_BPS,
+      royaltyBps: Number(body.royaltyBps) || 500,
+      royaltyRecipient: body.royaltyRecipient || body.issuer || body.accountNumber || "",
+      fileHash: fileHash(item.url),
+      platformFeeBps: PLATFORM_FEE_BPS,
       preparedPackId: body.packId || null,
       createdAt: new Date().toISOString()
     });
@@ -141,6 +144,13 @@ router.post("/nft/createNft", (req, res) => {
   const items = asItems(body);
   if (!items.length) {
     return res.status(400).json({ success: false, message: "image/file required" });
+  }
+  const gate = allowlistOk(readStore(), {
+    collectionName: body.collectionName,
+    address: body.accountNumber || body.issuer
+  });
+  if (!gate.ok) {
+    return res.status(403).json({ success: false, message: gate.error });
   }
   let Ids = [];
   update((current) => {

@@ -29,7 +29,18 @@ const empty = () => ({
   profileNfts: [],
   preparedPacks: [],
   wallets: [],
-  fees: []
+  fees: [],
+  verifications: [],
+  drops: [],
+  launches: [],
+  follows: [],
+  comments: [],
+  reports: [],
+  proposals: [],
+  votes: [],
+  fileHashes: [],
+  editorPicks: [],
+  aggregator: { sources: [], listings: [] }
 });
 
 function ensure() {

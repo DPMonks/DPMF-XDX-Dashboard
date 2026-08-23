@@ -22,6 +22,7 @@ function CollectionDesk() {
   const [extraLegs, setExtraLegs] = useState([]);
   const [catalog, setCatalog] = useState([]);
   const [note, setNote] = useState("");
+  const [insight, setInsight] = useState(null);
 
   const query = useMemo(() => {
     const params = new URLSearchParams({ sort, filter: "sale" });
@@ -41,6 +42,13 @@ function CollectionDesk() {
   useEffect(() => {
     load();
   }, [slug, query]);
+
+  useEffect(() => {
+    fetch(`${configData.LOCAL_API_URL}v2/collections/${slug}`)
+      .then((res) => res.json())
+      .then((body) => setInsight(body.data || null))
+      .catch(() => setInsight(null));
+  }, [slug]);
 
   useEffect(() => {
     fetch(`${configData.LOCAL_API_URL}assets/catalog`)
@@ -112,18 +120,68 @@ function CollectionDesk() {
         <div className="gradientBg py-4">
           <Container className="dpmf-market">
             <p className="dpmf-kicker">Collection desk</p>
-            <h1>{stats.name || slug}</h1>
+            {insight?.banner && (
+              <div
+                className="dpmf-profile-banner"
+                style={{ backgroundImage: `url(${insight.banner})` }}
+              />
+            )}
+            <h1>
+              {stats.name || slug}
+              {insight?.verification?.verified ? " ✓ Verified" : ""}
+            </h1>
+            {insight?.verification?.warning && (
+              <p className="dpmf-muted">{insight.verification.warning}</p>
+            )}
+            <p className="dpmf-muted">{insight?.description}</p>
             <p className="dpmf-muted">
               Floor {stats.floor ?? "—"} {stats.currency} · {stats.listed} listed
-              · volume {stats.volume} · best offer {stats.bestOffer ?? "—"} ·
+              · volume {stats.volume} · holders {insight?.holders ?? "—"} · best
+              bid {insight?.bidDepth?.best?.amount ?? stats.bestOffer ?? "—"} ·
               royalty {((stats.royaltyBps || 0) / 100).toFixed(1)}% · platform{" "}
               {((stats.platformFeeBps || 0) / 100).toFixed(1)}%
             </p>
             <p>
               <Link to="/explore">All collections</Link>
               {" · "}
+              <Link to={`/pro/${slug}`}>Pro view</Link>
+              {" · "}
               <Link to="/activity">Activity</Link>
+              {insight?.issuer || insight?.owner ? (
+                <>
+                  {" · "}
+                  <Link to={`/creator/${insight.issuer || insight.owner}`}>
+                    Creator
+                  </Link>
+                </>
+              ) : null}
             </p>
+            {insight?.floorsByCurrency && (
+              <p className="dpmf-muted">
+                Floors:{" "}
+                {Object.entries(insight.floorsByCurrency)
+                  .map(([currency, floor]) => `${floor} ${currency}`)
+                  .join(" · ") || "—"}
+              </p>
+            )}
+            {insight?.floorHistory?.points && (
+              <p className="dpmf-muted">
+                Floor 7d:{" "}
+                {insight.floorHistory.points
+                  .filter((_, index) => index % 2 === 0)
+                  .map((point) => point.floor)
+                  .join(" → ")}
+              </p>
+            )}
+            {insight?.topHolders?.length > 0 && (
+              <p className="dpmf-muted">
+                Top holders:{" "}
+                {insight.topHolders
+                  .slice(0, 3)
+                  .map((row) => `${String(row.address).slice(0, 8)}… (${row.count})`)
+                  .join(" · ")}
+              </p>
+            )}
 
             <div className="dpmf-grid">
               <label className="dpmf-card">
@@ -168,6 +226,7 @@ function CollectionDesk() {
                   <option value="price_asc">Price low</option>
                   <option value="price_desc">Price high</option>
                   <option value="likes">Most liked</option>
+                  <option value="rarity">Rarity rank</option>
                 </select>
               </label>
             </div>
@@ -270,6 +329,7 @@ function CollectionDesk() {
                 <tr>
                   <th>Item</th>
                   <th>Price</th>
+                  <th>Rank</th>
                   <th>Traits</th>
                   <th>Status</th>
                 </tr>
@@ -283,6 +343,7 @@ function CollectionDesk() {
                     <td>
                       {nft.amount} {nft.currency}
                     </td>
+                    <td>#{nft.rarityRank || "—"}</td>
                     <td>
                       {(nft.traits || [])
                         .filter((trait) => trait.trait_type !== "Collection")
@@ -297,6 +358,31 @@ function CollectionDesk() {
             <p className="dpmf-muted">
               {data.total} matches · page {data.page} of {data.totalPages}
             </p>
+            {(insight?.activity || []).length > 0 && (
+              <>
+                <h3>Collection activity</h3>
+                <table className="dpmf-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Item</th>
+                      <th>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {insight.activity.map((row) => (
+                      <tr key={row._id}>
+                        <td>{row.type}</td>
+                        <td>{row.name || row.collectionName}</td>
+                        <td>
+                          {row.amount || "—"} {row.currency || ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </Container>
         </div>
       )}

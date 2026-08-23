@@ -49,6 +49,7 @@ import WalletConnect from "../../assets/walletconnect.png";
 import FUSIONXIO from "../../assets/fusion-x-logo.jpg";
 import FUSIONLOGO from "../../assets/fusion-logo.png";
 import BACKGROUNDIMG from "../../assets/registration.jpg";
+import { getViewMode, setViewMode } from "../../helper/viewMode";
 
 const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
   const { pathname } = useLocation();
@@ -76,6 +77,7 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
   const [buyOfferByNftOwner, setBuyOfferByNftOwner] = useState(null);
   const [totalCount, setTotalCount] = useState(null);
   const [modalView, setModalView] = useState(false);
+  const [viewMode, setView] = useState(getViewMode());
 
   const override = {
     position: "absolute",
@@ -588,7 +590,12 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
                   Create NFT
                 </Dropdown.Item>
                 <Dropdown.Item href="/market">Market</Dropdown.Item>
+                <Dropdown.Item href="/discover">Discover</Dropdown.Item>
                 <Dropdown.Item href="/explore">Explore</Dropdown.Item>
+                <Dropdown.Item href="/pro">Pro view</Dropdown.Item>
+                <Dropdown.Item href="/drops">Drops</Dropdown.Item>
+                <Dropdown.Item href="/governance">Governance</Dropdown.Item>
+                <Dropdown.Item href="/onboarding">First time here?</Dropdown.Item>
                 <Dropdown.Item href="/activity">Activity</Dropdown.Item>
                 <Dropdown.Item href="/assets">Assets</Dropdown.Item>
                 <Dropdown.Item href="/rankings">Rankings</Dropdown.Item>
@@ -598,6 +605,17 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
                   Verified Profiles
                 </Dropdown.Item>
                 <Dropdown.Item href="/ramp">Ramp</Dropdown.Item>
+                <Dropdown.Item href="/moderation">Moderation</Dropdown.Item>
+                <Dropdown.Item
+                  onClick={() => {
+                    const next = viewMode === "pro" ? "standard" : "pro";
+                    setViewMode(next);
+                    setView(next);
+                    if (next === "pro") navigate("/pro");
+                  }}
+                >
+                  {viewMode === "pro" ? "Standard view" : "Pro view"}
+                </Dropdown.Item>
                 <Dropdown.Item
                   href="https://www.spatial.io/s/XION-Gallery-64b8c3ba9d0c210a1e8c4d28"
                   target="_blank"
@@ -612,8 +630,14 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
               <Link to="/" className="home-class">
                 Home
               </Link>
+              <Link to="/discover" className="home-class">
+                Discover
+              </Link>
               <Link to="/explore" className="home-class">
                 Explore
+              </Link>
+              <Link to="/drops" className="home-class">
+                Drops
               </Link>
               <Link to="/activity" className="home-class">
                 Activity
@@ -632,6 +656,12 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
               </Link>
               <Link to="/yem" className="home-class">
                 Y.E.M.
+              </Link>
+              <Link to="/governance" className="home-class">
+                Governance
+              </Link>
+              <Link to="/onboarding" className="home-class">
+                First time here?
               </Link>
             </>
           )}

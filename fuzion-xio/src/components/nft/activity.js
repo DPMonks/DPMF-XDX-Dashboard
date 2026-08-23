@@ -60,6 +60,9 @@ function Activity() {
               <option value="bid">Bids</option>
               <option value="auction">Auctions</option>
               <option value="sweep">Sweeps</option>
+              <option value="mint">Mints</option>
+              <option value="validation">Validations</option>
+              <option value="drop">Drops</option>
             </select>
             <table className="dpmf-table">
               <thead>

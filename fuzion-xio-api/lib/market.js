@@ -54,7 +54,7 @@ function matchesTraits(nft, traits = {}) {
   );
 }
 
-function listedItems(store, template) {
+export function listedItems(store, template) {
   const rows = [];
   for (let index = 1; index <= template.size; index += 1) {
     const nft = materialize(template, index, store);
@@ -122,7 +122,8 @@ export function collectionStats(store, template) {
     bestOffer: bestOffer ?? null,
     owners: new Set(listed.map((nft) => nft.accountNumber)).size,
     royaltyBps: template.royaltyBps || DEFAULT_ROYALTY_BPS,
-    platformFeeBps: PLATFORM_FEE_BPS
+    platformFeeBps: PLATFORM_FEE_BPS,
+    verified: template.verified === true
   };
 }
 
@@ -134,6 +135,24 @@ export function browseCollection(store, name, query = {}) {
   const min = query.minPrice != null ? Number(query.minPrice) : null;
   const max = query.maxPrice != null ? Number(query.maxPrice) : null;
   const sort = query.sort || "price_asc";
+  const facets = traitFacets(store, template);
+  const rarityLookup = {};
+  for (const facet of facets) {
+    for (const value of facet.values) {
+      rarityLookup[`${facet.trait_type}:${value.value}`] = value.rarity;
+    }
+  }
+  const rarityScoreOf = (nft) => {
+    const listed = (nft.traits || []).filter((trait) => trait.trait_type !== "Collection");
+    if (!listed.length) return 0;
+    return (
+      listed.reduce(
+        (sum, trait) =>
+          sum + (1 - (rarityLookup[`${trait.trait_type}:${trait.value}`] || 1)),
+        0
+      ) / listed.length
+    );
+  };
   const rows = [];
   for (let index = 1; index <= template.size; index += 1) {
     const nft = materialize(template, index, store);
@@ -142,24 +161,34 @@ export function browseCollection(store, name, query = {}) {
     const price = priceOf(nft);
     if (min != null && price < min) continue;
     if (max != null && price > max) continue;
-    rows.push(nft);
+    rows.push({
+      ...nft,
+      rarityScore: +rarityScoreOf(nft).toFixed(4)
+    });
   }
+  const rarityOrder = [...rows].sort((a, b) => b.rarityScore - a.rarityScore);
+  const rarityRank = new Map(rarityOrder.map((nft, index) => [nft._id, index + 1]));
   rows.sort((a, b) => {
     if (sort === "price_desc") return priceOf(b) - priceOf(a);
     if (sort === "recent") return String(b.createdAt).localeCompare(String(a.createdAt));
     if (sort === "likes") return (b.likes || 0) - (a.likes || 0);
+    if (sort === "rarity") return b.rarityScore - a.rarityScore || a.name.localeCompare(b.name);
     return priceOf(a) - priceOf(b);
   });
   const page = Number(query.page || 1);
   const size = Number(query.size || 12);
   const start = (page - 1) * size;
+  const docs = rows.slice(start, start + size).map((nft) => ({
+    ...nft,
+    rarityRank: rarityRank.get(nft._id)
+  }));
   return {
-    ...pageShape(rows.slice(start, start + size), page, size, rows.length),
+    ...pageShape(docs, page, size, rows.length),
     collectionName: template.collectionName,
     slug: template.slug,
     fileType: template.fileType,
     stats: collectionStats(store, template),
-    facets: traitFacets(store, template)
+    facets
   };
 }
 
