@@ -141,31 +141,45 @@ export function isClassicAddress(value) {
 }
 
 export function extractSignedAccount(result) {
-  const seen = new Set();
-  const queue = [result];
-  for (let depth = 0; queue.length && depth < 40; depth += 1) {
-    const node = queue.shift();
-    if (!node || typeof node !== "object" || seen.has(node)) continue;
-    seen.add(node);
-    for (const key of ["account", "signer", "signer_account", "address"]) {
-      const text = String(node[key] || "").trim();
-      if (isClassicAddress(text)) return text;
-    }
-    for (const child of [node.response, node.payload, node.meta, node.data]) {
-      if (child && typeof child === "object") queue.push(child);
-    }
+  const account = String(
+    result?.response?.account ||
+      result?.response?.signer ||
+      result?.payload?.response?.account ||
+      result?.payload?.response?.signer ||
+      ""
+  ).trim();
+  return isClassicAddress(account) ? account : null;
+}
+
+export function payloadResolvedAtMs(result) {
+  const raw = result?.response?.resolved_at || result?.meta?.resolved_at || result?.meta?.signed_at || "";
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+export function isReusableUnsignedPayload(result) {
+  if (!result || typeof result !== "object") return false;
+  const meta = result.meta && typeof result.meta === "object" ? result.meta : {};
+  if (meta.signed === true || meta.resolved === true || meta.cancelled === true || meta.expired === true) {
+    return false;
   }
-  return null;
+  return !payloadLooksSigned(result);
 }
 
 export function payloadLooksSigned(result) {
   if (!result || typeof result !== "object") return false;
-  if (extractSignedAccount(result)) return true;
-  if (result.meta?.signed === true || result.signed === true) return true;
-  if (result.meta?.resolved === true && result.meta?.cancelled !== true) {
-    return Boolean(result.response?.hex || result.response?.account);
-  }
-  return false;
+  const meta = result.meta && typeof result.meta === "object" ? result.meta : {};
+  if (meta.cancelled === true || meta.expired === true) return false;
+  if (meta.signed === true || result.signed === true) return true;
+  const signed = extractSignedAccount(result);
+  return Boolean(signed && (result.response?.hex || result.response?.txid || result.response?.dispatched_result));
+}
+
+export function payloadSignedThisSession(result, startedAt) {
+  if (!payloadLooksSigned(result)) return false;
+  const resolved = payloadResolvedAtMs(result);
+  if (resolved != null && Number(startedAt) > 0 && resolved + 2500 < Number(startedAt)) return false;
+  return true;
 }
 
 export async function getLedgerTx(hash) {

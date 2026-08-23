@@ -21,7 +21,9 @@ import {
   extractSignedAccount,
   getLedgerTx,
   getPayloadResult,
+  isReusableUnsignedPayload,
   payloadLooksSigned,
+  payloadSignedThisSession,
   xamanSignUrl,
 } from "./xamanClient";
 import { nextPayloadSession, payloadSessionOpen } from "./payloadSession";
@@ -108,10 +110,11 @@ export function useXamanPayload() {
     let latestPayload = null;
     let latestSocket = null;
     let latestLedger = null;
+    const startedAt = Date.now();
     let payloadUuid = resumeUuid || null;
     if (resumeUuid && isConsumedUuid(resumeUuid)) {
-      busyRef.current = false;
-      return;
+      resumeUuid = "";
+      payloadUuid = null;
     }
     if (!resumeUuid) clearXamanReturn();
 
@@ -168,17 +171,25 @@ export function useXamanPayload() {
       setError(null);
       setStatus("loading");
 
-      const payload = resumeUuid
-        ? {
+      let payload = null;
+      if (resumeUuid) {
+        const existing = await getPayloadResult(resumeUuid).catch(() => null);
+        if (isReusableUnsignedPayload(existing)) {
+          payload = {
             uuid: resumeUuid,
             qr: null,
             mobileUrl: xamanSignUrl(resumeUuid),
             websocket: xamanWebsocketUrl(resumeUuid),
-          }
-        : await createPayload({
-            ...request,
-            options: { ...request.options, signMarker },
-          });
+          };
+        }
+      }
+      if (!payload) {
+        if (resumeUuid) clearXamanReturn();
+        payload = await createPayload({
+          ...request,
+          options: { ...request.options, signMarker },
+        });
+      }
       if (!payloadSessionOpen(session, sessionRef.current)) {
         busyRef.current = false;
         return;
@@ -226,11 +237,9 @@ export function useXamanPayload() {
         }
         const detection = await inspect();
         const looksSigned =
-          detection.signed ||
-          payloadLooksSigned(result) ||
-          payloadLooksSigned(latestPayload) ||
-          Boolean(signedAccount);
-        if (looksSigned || detection.executed) {
+          payloadSignedThisSession(result, startedAt) ||
+          payloadSignedThisSession(latestPayload, startedAt);
+        if (looksSigned) {
           if (payloadUuid && !detection.executed) {
             rememberPendingPayload(payloadUuid, { signState: "signed", signMarker });
           }
@@ -239,7 +248,7 @@ export function useXamanPayload() {
           setMobileUrl(null);
           setStatus(detection.executed ? "signed" : "confirming");
         }
-        if (watchConfirm) {
+        if (watchConfirm && looksSigned) {
           if (announce(detection)) {
             reset();
             setStatus(detection.executed ? "signed" : "failed");
@@ -282,13 +291,16 @@ export function useXamanPayload() {
           reset();
           return;
         }
+        const leftover =
+          detection.executed &&
+          !payloadSignedThisSession(result, startedAt) &&
+          !payloadSignedThisSession(latestPayload, startedAt);
+        if (leftover) return;
         if (
-          detection.signed ||
-          detection.executed ||
-          payloadLooksSigned(result) ||
-          extractSignedAccount(result)
+          payloadSignedThisSession(result, startedAt) ||
+          payloadSignedThisSession(latestPayload, startedAt)
         ) {
-          await finish(extractSignedAccount(result), result);
+          await finish(extractSignedAccount(result) || extractSignedAccount(latestPayload), result);
         }
       };
       settleRef.current = settle;
@@ -313,6 +325,9 @@ export function useXamanPayload() {
           if (!data.signed) return;
           const result = await getPayloadResult(payload.uuid);
           if (result) latestPayload = result;
+          if (!payloadSignedThisSession(result, startedAt) && !payloadSignedThisSession(latestPayload, startedAt)) {
+            return;
+          }
           await finish(extractSignedAccount(result) || data.account, result);
         };
       }
