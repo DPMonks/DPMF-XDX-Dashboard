@@ -86,8 +86,10 @@ export const TF_PARTIAL_PAYMENT = 131072;
 export const TF_TWO_ASSET = 1_048_576;
 export const TF_SINGLE_ASSET = 524_288;
 export const TF_LP_TOKEN = 65_536;
-export const TF_ONE_ASSET_LP_TOKEN = 262_144;
-export const LP_SINGLE_WITHDRAW_SLIPPAGE = 0.03;
+// AMMWithdraw only. 262144 is tfOneAssetWithdrawAll (Amount, no LPTokenIn)
+// and is temMALFORMED if LPTokenIn is also present.
+export const TF_ONE_ASSET_LP_TOKEN = 2_097_152;
+export const TF_ONE_ASSET_WITHDRAW_ALL = 262_144;
 export const LEDGER_FEE_XRP = 0.000012;
 export const MARKET_SLIPPAGE = 0.15;
 
@@ -376,15 +378,16 @@ export function ammWithdrawTx({
     LPTokenIn: {
       currency: pool.lpCurrency,
       issuer: pool.amm,
-      value: String(lpAmount),
+      value: xrplIssuedValue(lpAmount),
     },
     Flags: TF_LP_TOKEN,
   };
   if (mode === "single") {
-    txjson.Flags = TF_ONE_ASSET_LP_TOKEN;
-    const minOut = singleWithdrawMin(amountOut);
-    if (minOut > 0) {
-      txjson.Amount = singleAsset === "quote" ? quoteAmount(quote, minOut) : xdxAmount(minOut);
+    const maxOut = Number(amountOut);
+    if (maxOut > 0) {
+      // tfOneAssetLPToken: Amount is a maximum of one asset, plus LPTokenIn.
+      txjson.Flags = TF_ONE_ASSET_LP_TOKEN;
+      txjson.Amount = singleAsset === "quote" ? quoteAmount(quote, maxOut) : xdxAmount(maxOut);
     }
   }
   if (account) txjson.Account = account;
@@ -607,12 +610,6 @@ export function expectedSingleWithdraw(lpAmount, reserve, lpSupply) {
   if (!(lp > 0) || !(pool > 0) || !(supply > 0) || lp > supply) return 0;
   const remain = 1 - lp / supply;
   return pool * (1 - remain * remain);
-}
-
-export function singleWithdrawMin(amount) {
-  const n = Number(amount);
-  if (!(n > 0)) return 0;
-  return n * (1 - LP_SINGLE_WITHDRAW_SLIPPAGE);
 }
 
 export function tradeSides({

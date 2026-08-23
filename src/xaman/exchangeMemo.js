@@ -72,7 +72,7 @@ export function exchangeMemoText({ txjson = {}, trade = {} } = {}) {
     return memoLine(`Liquidity added to ${pool} pool`);
   }
   if (type === "AMMWithdraw" || action === "removeLp") {
-    if (trade.lpMode === "single" || Number(txjson.Flags) === 262144) {
+    if (trade.lpMode === "single" || Number(txjson.Flags) === 2_097_152) {
       return memoLine(`Single-sided liquidity removed from ${pool} pool`);
     }
     return memoLine(`Liquidity removed from ${pool} pool`);
