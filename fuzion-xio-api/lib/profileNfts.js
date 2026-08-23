@@ -180,8 +180,10 @@ export async function profileNftDesk(store, address) {
 
   const map = new Map();
   for (const row of [...found, ...pinned, ...ledger]) {
-    const key = row._id || row.NFTokenID;
-    if (!key || hidden.has(row._id) || hidden.has(row.NFTokenID)) continue;
+    const key = row.NFTokenID || row._id;
+    if (!key || hidden.has(row._id) || hidden.has(row.NFTokenID) || hidden.has(key)) {
+      continue;
+    }
     map.set(key, { ...map.get(key), ...row, onProfile: true });
   }
   return {
