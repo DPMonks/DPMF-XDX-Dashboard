@@ -38,6 +38,7 @@ import { extendMaPoints, maCurvePoints, maPath, maRevealState, rsi, rsiForWindow
 import {
   applyPlaceOffset,
   canMoveHandle,
+  clickIsPan,
   drawingHandles,
   drawingStyle,
   elliottTools,
@@ -61,7 +62,9 @@ import {
   RANGE_UP,
   rangeColor,
   rangeStats,
+  shouldFollowCrosshair,
   snapPoint,
+  toggleInspect,
   toggleTool,
   toolAfterDrawing,
   TOOL_GROUPS,
@@ -691,6 +694,14 @@ test("draw style and extra City Index tools stay available from one toolbox", ()
   assert.equal(TOOL_GROUPS.find((group) => group.id === "shapes").labelKey, "chartPatterns");
   assert.equal(canMoveHandle("trend"), false);
   assert.equal(canMoveHandle("cursor"), true);
+  assert.equal(shouldFollowCrosshair({ tool: "cursor", dragging: false, overHandle: false }), false);
+  assert.equal(shouldFollowCrosshair({ tool: "cursor", dragging: false, overHandle: true }), true);
+  assert.equal(shouldFollowCrosshair({ tool: "cursor", dragging: true, overHandle: false }), true);
+  assert.equal(clickIsPan(100, 102), false);
+  assert.equal(clickIsPan(100, 108), true);
+  const pinned = toggleInspect(null, { t: 10, candle: { t: 10 } });
+  assert.equal(pinned.t, 10);
+  assert.equal(toggleInspect(pinned, { t: 10, candle: { t: 10 } }), null);
   assert.equal(toolAfterDrawing(true, "elliottimpulse"), "elliottimpulse");
   assert.equal(toolAfterDrawing(false, "elliottimpulse"), "elliottimpulse");
   assert.equal(toolAfterDrawing(false, "cursor"), "cursor");

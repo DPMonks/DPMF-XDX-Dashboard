@@ -126,6 +126,24 @@ export function canMoveHandle(tool) {
   return tool === "cursor";
 }
 
+export const INSPECT_PAN_PX = 5;
+
+export function clickIsPan(startClientX, currentClientX, threshold = INSPECT_PAN_PX) {
+  return Math.abs(Number(currentClientX) - Number(startClientX)) >= threshold;
+}
+
+export function shouldFollowCrosshair({ tool, dragging, overHandle } = {}) {
+  return Boolean(dragging || (tool === "cursor" && overHandle));
+}
+
+export function toggleInspect(current, next) {
+  if (!next) return null;
+  const currentT = Number(current?.candle?.t ?? current?.t);
+  const nextT = Number(next.candle?.t ?? next.t);
+  if (Number.isFinite(currentT) && currentT === nextT) return null;
+  return next;
+}
+
 export function toolAfterDrawing(_stay, tool) {
   return tool && tool !== "cursor" ? tool : "cursor";
 }

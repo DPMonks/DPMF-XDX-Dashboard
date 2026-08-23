@@ -4,7 +4,7 @@ import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, form
 import { candleBodyBox, candleBodyWidth, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
-import { applyPlaceOffset, canMoveHandle, hitDrawingHandle, snapPoint } from "../chart/drawings";
+import { applyPlaceOffset, canMoveHandle, clickIsPan, hitDrawingHandle, shouldFollowCrosshair, snapPoint, toggleInspect } from "../chart/drawings";
 import { hideToolPreview, paintPlaceMark, paintToolPreview } from "../chart/paintPreview";
 import ChartDrawings from "./ChartDrawings";
 
@@ -60,10 +60,13 @@ export default function HybridPlot({
   const priceTagRef = useRef(null);
   const priceTextRef = useRef(null);
   const hoverRef = useRef(null);
+  const inspectRef = useRef(null);
+  const clickRef = useRef(null);
   const rafRef = useRef(0);
   const placeMarkRef = useRef(null);
   const previewRef = useRef(null);
   const [hover, setHover] = useState(null);
+  const [inspect, setInspect] = useState(null);
   const [drag, setDrag] = useState(null);
   const [panDrag, setPanDrag] = useState(null);
   const [enterTs, setEnterTs] = useState([]);
@@ -139,6 +142,12 @@ export default function HybridPlot({
   useEffect(() => {
     if (tool === "cursor") hideToolPreview(previewRef.current, placeMarkRef.current);
   }, [tool]);
+  useEffect(() => {
+    inspectRef.current = inspect;
+  }, [inspect]);
+  if (tool !== "cursor" && inspect) {
+    setInspect(null);
+  }
   useEffect(() => {
     const node = svgRef.current;
     if (!node) return undefined;
@@ -304,23 +313,35 @@ export default function HybridPlot({
   }
 
   function onMove(event) {
-    if (panDrag) {
+    let livePan = panDrag;
+    if (clickRef.current && !panDrag && !drag && tool === "cursor" && clickIsPan(clickRef.current.clientX, event.clientX)) {
+      livePan = { x: clickRef.current.clientX };
+      setPanDrag(livePan);
+      clickRef.current = null;
+    }
+    if (livePan) {
       const slot = Math.max(
         4,
         ((svgRef.current?.getBoundingClientRect?.().width || width) / width) * (innerW / Math.max(1, candles.length))
       );
-      const moved = event.clientX - panDrag.x;
+      const moved = event.clientX - livePan.x;
       const steps = Math.trunc(moved / slot);
       if (steps && onPanRef.current) {
         onPanRef.current(steps);
-        setPanDrag((current) => (current ? { ...current, x: current.x + steps * slot } : current));
+        setPanDrag((current) => (current ? { ...current, x: current.x + steps * slot } : { ...livePan, x: livePan.x + steps * slot }));
       }
       return;
     }
     const pointer = locate(event);
-    const next = tool === "cursor" || drag ? pointer : locate(event, { place: true });
-    paintCursor(next);
-    paintPlacement(tool === "cursor" || drag ? null : next);
+    const placing = tool !== "cursor";
+    const next = placing && !drag ? locate(event, { place: true }) : pointer;
+    const overHandle = Boolean(canMoveHandle(tool) && pointer && hitDrawingHandle(drawings, scale, pointer.x, pointer.y));
+    if (shouldFollowCrosshair({ tool, dragging: Boolean(drag), overHandle })) {
+      paintCursor(pointer);
+    } else {
+      paintCursor(null);
+    }
+    paintPlacement(placing && !drag ? next : null);
     queueHover(pointer);
     if (drag && pointer && Number.isFinite(pointer.t) && Number.isFinite(pointer.price) && onMoveHandle) {
       onMoveHandle(drag.index, drag.key, pointer);
@@ -334,30 +355,54 @@ export default function HybridPlot({
     if (hit) {
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
+      clickRef.current = null;
       setDrag(hit);
+      paintCursor(pointer);
       if (onMoveHandle) onMoveHandle(hit.index, hit.key, pointer);
       return;
     }
-    if (event.button === 1 || (event.button === 0 && tool === "cursor" && pointer.inPrice)) {
+    if (event.button === 1) {
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
+      clickRef.current = null;
       setPanDrag({ x: event.clientX });
       return;
     }
     if (event.button !== 0) return;
-    const next = tool === "cursor" ? pointer : locate(event, { place: true });
-    if (!next?.inPrice) return;
-    if (tool === "cursor" || !onDraw) return;
+    if (tool === "cursor") {
+      if (!pointer.inPrice) return;
+      event.preventDefault();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      clickRef.current = { clientX: event.clientX, pointer };
+      return;
+    }
+    const next = locate(event, { place: true });
+    if (!next?.inPrice || !onDraw) return;
     event.preventDefault();
     onDraw(next);
   }
 
   function onPointerUp() {
+    if (clickRef.current && tool === "cursor") {
+      const next = toggleInspect(inspectRef.current, clickRef.current.pointer);
+      inspectRef.current = next;
+      setInspect(next);
+    }
+    clickRef.current = null;
     setDrag(null);
     setPanDrag(null);
+    if (!shouldFollowCrosshair({ tool, dragging: false, overHandle: false }) && !inspectRef.current) {
+      paintCursor(null);
+    }
   }
 
-  const hoverCandle = hover?.candle;
+  const overHandle = Boolean(
+    canMoveHandle(tool) && hover && hitDrawingHandle(drawings, scale, hover.x, hover.y)
+  );
+  const liveHair = shouldFollowCrosshair({ tool, dragging: Boolean(drag), overHandle });
+  const inspectX = inspect ? Math.min(width - PAD.r, Math.max(PAD.l, scale.x(inspect.t))) : null;
+  const inspectY = inspect ? Math.min(plotBottom - 1, Math.max(PAD.t + 1, scale.y(inspect.price))) : null;
+  const hoverCandle = inspect?.candle;
   const clipId = `hybrid-plot-${uid}`;
   const volClipId = `hybrid-vol-${uid}`;
   const rsiClipId = `hybrid-rsi-${uid}`;
@@ -381,7 +426,7 @@ export default function HybridPlot({
     ? rsiValues[candles.findIndex((row) => row.t === hoverCandle.t)]
     : null;
   const rsiTagY =
-    hover?.inRsi && Number.isFinite(hoverRsi)
+    inspect && Number.isFinite(hoverRsi)
       ? Math.min(rsiBottom - 1, Math.max(rsiTop + 1, rsiY(hoverRsi)))
       : null;
 
@@ -390,7 +435,7 @@ export default function HybridPlot({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${drag ? " is-grabbing" : canMoveHandle(tool) && hover && hitDrawingHandle(drawings, scale, hover.x, hover.y) ? " is-grab" : ""}`}
+        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${drag ? " is-grabbing" : overHandle ? " is-grab" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => {
           if (drag) return;
@@ -727,7 +772,7 @@ export default function HybridPlot({
           </g>
         ) : null}
 
-        <g className={`hybrid-crosshair${tool !== "cursor" ? " is-place" : ""}`} pointerEvents="none">
+        <g className={`hybrid-crosshair is-live${tool !== "cursor" ? " is-place" : ""}`} pointerEvents="none">
           <line ref={hairVRef} visibility="hidden" x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={height - PAD.b} />
           <line ref={hairHRef} visibility="hidden" x1={PAD.l} x2={width - PAD.r} y1={PAD.t} y2={PAD.t} />
           <g ref={timeTagRef} className="hybrid-cursor-tag is-time" visibility="hidden">
@@ -738,15 +783,33 @@ export default function HybridPlot({
             <rect x="2" y="0" width={PAD.l - 6} height="18" rx="3" />
             <text ref={priceTextRef} x={PAD.l - 8} y="13" textAnchor="end" />
           </g>
-          {rsiTagY != null ? (
-            <g className="hybrid-cursor-tag is-price">
-              <rect x={2} y={rsiTagY - 9} width={PAD.l - 6} height={18} rx="3" />
-              <text x={PAD.l - 8} y={rsiTagY + 4} textAnchor="end">
-                {Number(hoverRsi).toFixed(1)}
+        </g>
+        {inspect && !liveHair && Number.isFinite(inspectX) && Number.isFinite(inspectY) ? (
+          <g className="hybrid-crosshair is-pinned" pointerEvents="none">
+            <line x1={inspectX} x2={inspectX} y1={PAD.t} y2={height - PAD.b} />
+            <line x1={PAD.l} x2={width - PAD.r} y1={inspectY} y2={inspectY} />
+            <g className="hybrid-cursor-tag is-time" transform={`translate(${Math.min(width - PAD.r - 54, Math.max(PAD.l, inspectX - 54))} ${height - PAD.b + 4})`}>
+              <rect x="0" y="0" width="108" height="18" rx="3" />
+              <text x="54" y="13" textAnchor="middle">
+                {formatCursorWhen(inspect.t, locale)}
               </text>
             </g>
-          ) : null}
-        </g>
+            <g className="hybrid-cursor-tag is-price" transform={`translate(0 ${inspectY - 9})`}>
+              <rect x="2" y="0" width={PAD.l - 6} height="18" rx="3" />
+              <text x={PAD.l - 8} y="13" textAnchor="end">
+                {formatAxisPrice(inspect.price)}
+              </text>
+            </g>
+            {rsiTagY != null ? (
+              <g className="hybrid-cursor-tag is-price">
+                <rect x={2} y={rsiTagY - 9} width={PAD.l - 6} height={18} rx="3" />
+                <text x={PAD.l - 8} y={rsiTagY + 4} textAnchor="end">
+                  {Number(hoverRsi).toFixed(1)}
+                </text>
+              </g>
+            ) : null}
+          </g>
+        ) : null}
       </svg>
 
       {hoverCandle ? (

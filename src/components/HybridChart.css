@@ -286,12 +286,15 @@
   width: 100%;
   height: auto;
   display: block;
-  cursor: crosshair;
+  cursor: default;
   background: #000000;
   touch-action: none;
 }
 
-.hybrid-svg.is-pan,
+.hybrid-svg.is-pan {
+  cursor: default;
+}
+
 .hybrid-svg.is-grab {
   cursor: grab;
 }
@@ -710,17 +713,24 @@
 }
 
 .hybrid-crosshair line {
-  stroke: #d1d4dc;
+  stroke: rgba(209, 212, 220, 0.55);
   stroke-width: 1;
   fill: none;
   shape-rendering: geometricPrecision;
   pointer-events: none;
 }
 
+.hybrid-crosshair.is-live line,
 .hybrid-svg.is-placing .hybrid-crosshair line,
 .hybrid-crosshair.is-place line {
   stroke: rgba(209, 212, 220, 0.28);
   stroke-dasharray: 4 6;
+}
+
+.hybrid-crosshair.is-pinned line {
+  stroke: rgba(209, 212, 220, 0.5);
+  stroke-width: 1;
+  stroke-dasharray: none;
 }
 
 .hybrid-draw.is-preview {
@@ -841,7 +851,14 @@
   left: 86px;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px 10px;
+  max-width: min(420px, calc(100% - 100px));
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(7, 7, 8, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  color: #ffffff;
   pointer-events: none;
 }
 
