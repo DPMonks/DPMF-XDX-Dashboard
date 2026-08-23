@@ -37,14 +37,37 @@ export function is3dType(fileType) {
   return THREE_D_TYPES.includes(String(fileType || "").toLowerCase());
 }
 
-export function materialize(template, index) {
+const FINISHES = ["Matte", "Gloss", "Chrome"];
+const PALETTES = ["Violet", "Cyan", "Lime"];
+
+export function virtualAmount(template, index) {
+  const base = Number(template.amount) || 1;
+  return String(+(base * (1 + ((index * 13) % 19) * 0.04)).toFixed(4));
+}
+
+export function editionBand(index) {
+  if (index <= 100) return "Genesis";
+  if (index <= 500) return "Core";
+  return "Horizon";
+}
+
+export function hydrate(store, nft) {
+  if (!nft) return nft;
+  const over = (store?.listingOverrides || {})[nft._id];
+  return over ? { ...nft, ...over, traits: nft.traits } : nft;
+}
+
+export function materialize(template, index, store) {
   const status = itemStatus(index);
   const padded = String(index).padStart(4, "0");
   const slugKey = String(template.slug || "col")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
     .slice(0, 10);
-  return {
+  const finish = FINISHES[index % FINISHES.length];
+  const palette = PALETTES[index % PALETTES.length];
+  const band = editionBand(index);
+  const nft = {
     _id: virtualId(template.slug, index),
     name: `${template.collectionName} #${index}`,
     collectionName: template.collectionName,
@@ -57,7 +80,7 @@ export function materialize(template, index) {
     metaverse: template.metaverse,
     usdzUrl: template.usdzUrl || null,
     currency: template.currency,
-    amount: template.amount,
+    amount: virtualAmount(template, index),
     issuer: template.issuer,
     Issuer: template.issuer,
     IssuerAddr: template.issuer,
@@ -69,12 +92,14 @@ export function materialize(template, index) {
     likes: (index * 7) % 23,
     isPurchased: status === "created" ? 0 : 1,
     isMinted: status !== "created",
+    royaltyBps: 500,
+    platformFeeBps: 0,
     traits: [
       { trait_type: "Collection", value: template.collectionName },
-      { trait_type: "Edition", value: String(index) },
-      { trait_type: "Supply", value: String(template.size) },
+      { trait_type: "Band", value: band },
+      { trait_type: "Finish", value: finish },
+      { trait_type: "Palette", value: palette },
       { trait_type: "File", value: template.fileType },
-      { trait_type: "Program", value: template.program || "XD-1" },
       { trait_type: "Dimension", value: is3dType(template.fileType) ? "3D" : "2D" }
     ],
     createdAt: template.createdAt,
@@ -82,9 +107,10 @@ export function materialize(template, index) {
     collectionSize: template.size,
     program: template.program || "XD-1"
   };
+  return hydrate(store, nft);
 }
 
-export function paginate(template, { page = 1, size = 12, filter = "all" } = {}) {
+export function paginate(template, { page = 1, size = 12, filter = "all", store } = {}) {
   const indexes = [];
   for (let i = 1; i <= template.size; i += 1) {
     if (filter === "all" || itemStatus(i) === filter) indexes.push(i);
@@ -94,7 +120,7 @@ export function paginate(template, { page = 1, size = 12, filter = "all" } = {})
   const current = Math.min(Math.max(1, Number(page) || 1), totalPages);
   const docs = indexes
     .slice((current - 1) * size, current * size)
-    .map((index) => materialize(template, index));
+    .map((index) => materialize(template, index, store));
   return {
     docs,
     page: current,
@@ -115,14 +141,14 @@ export function paginate(template, { page = 1, size = 12, filter = "all" } = {})
 export function featuredFromTemplates(store, perCollection = 1) {
   return templates(store).flatMap((template) =>
     Array.from({ length: perCollection }, (_, offset) =>
-      materialize(template, offset + 1)
+      materialize(template, offset + 1, store)
     )
   );
 }
 
 export function templateCards(store) {
   return templates(store).map((template) => ({
-    ...materialize(template, 1),
+    ...materialize(template, 1, store),
     _id: `tpl:${template.slug}`,
     isPurchased: 0,
     contentType: template.contentType || template.fileType,
@@ -137,7 +163,7 @@ export function resolveNft(store, id) {
   if (parsed) {
     const template = findTemplate(store, parsed.slug);
     if (template && parsed.index >= 1 && parsed.index <= template.size) {
-      return materialize(template, parsed.index);
+      return materialize(template, parsed.index, store);
     }
   }
 
@@ -151,7 +177,7 @@ export function resolveNft(store, id) {
     const template = findTemplate(store, named[1].trim());
     if (template) {
       const index = Number(named[2]);
-      if (index >= 1 && index <= template.size) return materialize(template, index);
+      if (index >= 1 && index <= template.size) return materialize(template, index, store);
     }
   }
 

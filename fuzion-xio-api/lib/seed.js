@@ -1,9 +1,10 @@
 import { DEMO_GLB, XDX_CURRENCY, XIO_CURRENCY } from "./constants.js";
 
-export const STORE_VERSION = 3;
+export const STORE_VERSION = 4;
 
 export const DEMO_ISSUER = "rFuzionXioDemoIssuer1111111111111";
 export const DEMO_OWNER = "rFuzionXioDemoOwner11111111111111";
+export const DEMO_BIDDER = "rFuzionXioDemoBidder1111111111111";
 
 const images = [
   "https://ipfs.io/ipfs/QmZTPCpAPFzVd66CBfhmZoGV3cM9BvEPiHkABE2D1ET6qs",
@@ -69,7 +70,9 @@ export function demoSeed() {
       NFTokenID: "00080000FUZIONXIODEMO0000000000000000000000000000000001",
       fileType: "image",
       status: "sale",
-      likes: 3
+      likes: 3,
+      royaltyBps: 500,
+      platformFeeBps: 0
     }),
     nft({
       _id: "seed-anchor-2",
@@ -156,19 +159,150 @@ export function demoSeed() {
         isActive: true,
         vPoint: 10050,
         bio: "Governance issuer profile. Master Validator when XIO ≥ 100."
+      },
+      {
+        _id: "seed-profile-bidder",
+        wAddress: DEMO_BIDDER,
+        pName: "Desk Bidder",
+        pImage: images[2],
+        isActive: true,
+        vPoint: 240,
+        bio: "Makes collection offers and auction bids on the local desk."
       }
     ],
     likes: [],
-    offers: [],
+    offers: [
+      {
+        _id: "off-lilly",
+        kind: "item",
+        nftId: "seed-lilly-1",
+        name: "Lilly #1",
+        amount: "10",
+        currency: "XRP",
+        from: DEMO_BIDDER,
+        status: "open",
+        createdAt: now
+      },
+      {
+        _id: "off-col-3d",
+        kind: "collection",
+        nftId: null,
+        name: "FUZION 3D",
+        collectionName: "FUZION 3D",
+        collectionSlug: "fuzion-3d",
+        amount: "0.8",
+        currency: XIO_CURRENCY,
+        from: DEMO_BIDDER,
+        status: "open",
+        createdAt: now
+      }
+    ],
     mints: [],
-    bids: [],
+    bids: [
+      {
+        _id: "bid-signal-1",
+        auctionId: "auc-signal",
+        nftId: "seed-signal-4",
+        from: DEMO_BIDDER,
+        amount: "4.2",
+        createdAt: now
+      }
+    ],
     moreoffers: [],
     sends: [],
-    tradehistories: [],
+    tradehistories: [
+      {
+        nftID: "seed-orbit-3",
+        NFTokenID: "00080000FUZIONXIODEMO0000000000000000000000000000000003",
+        amount: "22",
+        currency: XDX_CURRENCY,
+        from: DEMO_ISSUER,
+        to: DEMO_OWNER,
+        createdAt: now,
+        type: "sale"
+      }
+    ],
+    auctions: [
+      {
+        _id: "auc-signal",
+        nftId: "seed-signal-4",
+        name: "Signal Mark",
+        collectionName: null,
+        minBid: "3.5",
+        reserve: "5",
+        currency: "XRP",
+        seller: DEMO_OWNER,
+        endsAt: new Date(Date.now() + 36 * 3600 * 1000).toISOString(),
+        bids: [
+          { _id: "bid-signal-1", from: DEMO_BIDDER, amount: "4.2", createdAt: now }
+        ],
+        status: "live",
+        createdAt: now
+      }
+    ],
+    activity: [
+      {
+        _id: "act-sale-orbit",
+        type: "sale",
+        nftId: "seed-orbit-3",
+        name: "Orbit Gate",
+        amount: "22",
+        currency: XDX_CURRENCY,
+        from: DEMO_ISSUER,
+        to: DEMO_OWNER,
+        createdAt: now,
+        royaltyBps: 500,
+        platformFeeBps: 0
+      },
+      {
+        _id: "act-list-lilly",
+        type: "list",
+        nftId: "seed-lilly-1",
+        name: "Lilly #1",
+        amount: "12",
+        currency: "XRP",
+        from: DEMO_OWNER,
+        createdAt: now
+      },
+      {
+        _id: "act-offer-3d",
+        type: "collection_offer",
+        name: "FUZION 3D",
+        collectionName: "FUZION 3D",
+        collectionSlug: "fuzion-3d",
+        amount: "0.8",
+        currency: XIO_CURRENCY,
+        from: DEMO_BIDDER,
+        createdAt: now
+      },
+      {
+        _id: "act-auction",
+        type: "auction",
+        nftId: "seed-signal-4",
+        name: "Signal Mark",
+        amount: "3.5",
+        currency: "XRP",
+        from: DEMO_OWNER,
+        createdAt: now
+      },
+      {
+        _id: "act-bid",
+        type: "bid",
+        nftId: "seed-signal-4",
+        name: "Signal Mark",
+        amount: "4.2",
+        currency: "XRP",
+        from: DEMO_BIDDER,
+        createdAt: now
+      }
+    ],
+    watchlist: [],
+    listingOverrides: {},
     xumms: [],
     leaderboards: [
       { wAddress: DEMO_ISSUER, totalVPoint: 10050, pName: "XIO Issuer" },
-      { wAddress: DEMO_OWNER, totalVPoint: 120, pName: "FUZION Demo" }
+      { wAddress: DEMO_OWNER, totalVPoint: 120, pName: "FUZION Demo" },
+      { wAddress: DEMO_BIDDER, totalVPoint: 240, pName: "Desk Bidder" }
     ],
     xioHolders: [
       {

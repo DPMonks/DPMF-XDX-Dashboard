@@ -20,7 +20,11 @@ const empty = () => ({
   leaderboards: [],
   collections: [],
   collectionTemplates: [],
-  xioHolders: []
+  xioHolders: [],
+  auctions: [],
+  activity: [],
+  watchlist: [],
+  listingOverrides: {}
 });
 
 function ensure() {

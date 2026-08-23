@@ -4,9 +4,7 @@ import { capabilityMap } from "../lib/capabilities.js";
 import {
   collectionCount,
   featuredFromTemplates,
-  findTemplate,
   pageShape,
-  paginate,
   resolveNft,
   templateCards
 } from "../lib/collections.js";
@@ -18,6 +16,7 @@ import {
   xioDashboardRows
 } from "../lib/profile.js";
 import { accountLines, accountNfts, nftInfo, serverInfo } from "../lib/xrpl.js";
+import { browseCollection, activityFeed, openOffers } from "../lib/market.js";
 
 const router = Router();
 
@@ -195,9 +194,16 @@ router.post("/nft/getCollectionsByName", (req, res) => {
   const page = Number(req.body?.page || 1);
   const filter = req.body?.activeFilter || "all";
   const name = req.body?.collectionName;
-  const template = findTemplate(store, name);
-  if (template) {
-    return res.json({ success: true, data: paginate(template, { page, size: 12, filter }) });
+  const browsed = browseCollection(store, name, {
+    page,
+    filter,
+    sort: req.body?.sort,
+    traits: req.body?.traits,
+    minPrice: req.body?.minPrice,
+    maxPrice: req.body?.maxPrice
+  });
+  if (browsed) {
+    return res.json({ success: true, data: browsed });
   }
   const rows = (store.nfts || []).filter((nft) => {
     const match =
@@ -219,7 +225,8 @@ router.post("/nft/getTradeHistory/:id", (req, res) => {
   const rows = (store.tradehistories || []).filter(
     (row) => row.nftID === req.params.id || row.NFTokenID === req.params.id
   );
-  res.json({ success: true, data: rows });
+  const tape = activityFeed(store, { nftId: req.params.id, size: 50 }).docs;
+  res.json({ success: true, data: rows.length ? rows : tape });
 });
 
 router.post("/nft/like", (req, res) => {
@@ -505,6 +512,14 @@ router.get("/assets", async (req, res) => {
 
 router.post("/logs", (_req, res) => {
   res.json({ success: true });
+});
+
+router.post("/xrpl/getAllOffers", (req, res) => {
+  res.json({ success: true, data: openOffers(readStore(), req.body || {}) });
+});
+
+router.post("/nft/totalTradeHistory", (_req, res) => {
+  res.json({ success: true, data: readStore().activity || [] });
 });
 
 const stubPosts = [

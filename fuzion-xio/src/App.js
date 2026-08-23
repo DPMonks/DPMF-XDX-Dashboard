@@ -42,6 +42,12 @@ const VscoreDashboard = React.lazy(() =>
 const Collections = React.lazy(() => import("./components/nft/collections"));
 const XioDashboard = React.lazy(() => import("./components/nft/xioDashboard"));
 const Capabilities = React.lazy(() => import("./components/nft/capabilities"));
+const Explore = React.lazy(() => import("./components/nft/explore"));
+const CollectionDesk = React.lazy(() =>
+  import("./components/nft/collectionDesk")
+);
+const Activity = React.lazy(() => import("./components/nft/activity"));
+const Rankings = React.lazy(() => import("./components/nft/rankings"));
 
 function App() {
   useSuppressResizeObserverError();
@@ -72,6 +78,10 @@ function App() {
           <Route path="/Profile/:id" element={<Profile />} />
           <Route path="/collections" element={<Collections />} />
           <Route path="/market" element={<Capabilities />} />
+          <Route path="/explore" element={<Explore />} />
+          <Route path="/explore/:slug" element={<CollectionDesk />} />
+          <Route path="/activity" element={<Activity />} />
+          <Route path="/rankings" element={<Rankings />} />
           <Route path="/Xiodashboard" element={<XioDashboard />} />
 
           <Route element={<PrivateRoute />}>

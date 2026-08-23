@@ -8,13 +8,16 @@ Live product facts come from [dpmf.technology](https://www.dpmf.technology/) (XD
 
 | Capability | OpenSea | Blur / Tensor | Magic Eden | SuperRare | xrp.cafe | FUZION now |
 | --- | --- | --- | --- | --- | --- | --- |
-| Browse / trait filter / collection pages | Yes | Pro tools | Yes | Curated | Featured + drops | Home, list, search, virtual collections |
+| Browse / trait filter / collection pages | Yes | Pro tools | Yes | Curated | Featured + drops | Explore desk + trait facets + floor tape |
 | Fixed price + offers | Yes | Collection bids | Yes | Primary + secondary | Buy / sell / auction | Sale, bid, more-offers, send (signing next) |
 | Royalties | Policy / on-chain | Often optional | Varies | Enforced | L1 transfer fee | 100% to issuer |
 | Fees | 0.5–2.5% | 0%–2% | ~2% | High gallery | **1.589%** + launch fees | **0% trade fee** |
 | Multi-currency pay | Rare (ETH/SOL) | Native gas | Native | ETH | XRP + tokens | **Any XRPL asset** + indexer picker |
 | 3D / GLB / FBX / USDZ / AR | Limited | Rare | Limited | Art-first | Image / video / audio | **Native 3D + AR path** |
 | Batch collections (1k+) | Yes | Yes | Yes | No | Bulk mint scripts | Template + virtual pages to 10k |
+| Activity tape | Yes | Yes | Yes | Yes | Recent | `/activity` + `/api/market/activity` |
+| Collection offers / sweep | Rare | Yes | Partial | No | Rare | Collection offer + cheapest-N sweep, 0% fee |
+| Auctions | Rare | Rare | Partial | Yes | Yes | Reserve + live bids on the desk |
 | Profiles / social | Thin | Thin | Medium | Artist bios | Wallet | **Profiles + validation + checkmarks** |
 | Governance | Token optional | BLUR / TNSR | ME | No | No | **XIO ranks + vScore** |
 | Ledger-native NFTs | EVM/SOL | EVM/SOL | Multi | EVM | **XLS-20** | **XLS-20** + `nft_info` / `account_nfts` |

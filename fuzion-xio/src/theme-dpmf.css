@@ -280,6 +280,27 @@ a:hover {
   letter-spacing: 0.06em;
 }
 
+.dpmf-card-link {
+  text-decoration: none;
+  display: block;
+}
+
+.dpmf-card select,
+.dpmf-card input,
+.dpmf-market select,
+.dpmf-market input[type="number"],
+.dpmf-market input[type="text"] {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  margin-bottom: 10px;
+  background: #101018;
+  color: var(--dpmf-text-main);
+  border: 1px solid var(--dpmf-border-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
 .navbar-toggler {
   border-color: var(--dpmf-neon-violet) !important;
 }

@@ -34,8 +34,15 @@ function Capabilities() {
             <p className="dpmf-muted">
               Built to outrun OpenSea-class discovery, Blur-class trading, and
               xrp.cafe on XRPL rails: 0% platform fee, any issued asset as
-              payment, first-class 3D/AR files, XIO governance, and collections
-              of thousands.
+              payment, first-class 3D/AR files, XIO governance, traits, floor
+              tape, collection offers, auctions, and sweep.
+            </p>
+            <p>
+              <a href="/explore">Explore</a>
+              {" · "}
+              <a href="/activity">Activity</a>
+              {" · "}
+              <a href="/rankings">Rankings</a>
             </p>
 
             <div className="dpmf-grid">

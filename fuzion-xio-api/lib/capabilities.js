@@ -45,12 +45,21 @@ export function capabilityMap() {
       multiCurrency: true,
       indexerTokens: true,
       xrplAccountNfts: true,
-      xrplNftInfo: true
+      xrplNftInfo: true,
+      traitFilters: true,
+      floorTape: true,
+      activity: true,
+      rankings: true,
+      itemOffers: true,
+      collectionOffers: true,
+      auctions: true,
+      sweep: true,
+      watchlist: true,
+      multiCurrency: true,
+      zeroPlatformFee: true
     },
     next: {
       xamanSigning: false,
-      collectionWideBids: false,
-      traitFloorTape: false,
       dNftUriUpdate: false
     },
     threeD: {

@@ -27,6 +27,7 @@ npm run reset
 - Home catalog, list, detail, like
 - Profiles, vScore board, XIO validator board and ranks
 - Virtual marketplace collections (generic FUZION 3D × 1,000). AVA, MegaBits, and RWA sculpture are separate projects and are not seeded here.
+- Market desk: floor/traits, item + collection offers, auctions, sweep, activity, rankings (`/api/market/*`)
 - First-class 3D file types (`glb` / `gltf` / `fbx` / `usdz`)
 - XDX indexer token catalog / prices / wallet balances (cached; static fallback on 429)
 - XRPL `account_nfts`, `nft_info`, `account_lines`
