@@ -203,13 +203,26 @@ export function visibleQuoteQty(quoteQty, hint) {
   return Number(hint) > 0 ? String(hint) : "";
 }
 
+export const MAX_TRADE_QTY = 1_000_000_000_000;
+
 export function formatLinkedQty(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return "";
-  if (n >= 1_000_000) return String(Math.round(n));
-  const text = n.toPrecision(8);
-  if (/[eE]/.test(text)) return String(n);
+  const capped = Math.min(n, MAX_TRADE_QTY);
+  if (capped >= 1_000_000) return String(Math.round(capped));
+  const text = capped.toPrecision(8);
+  if (/[eE]/.test(text)) return capped.toFixed(8).replace(/\.?0+$/, "");
   return String(Number(text));
+}
+
+export function sanitizeQtyInput(raw) {
+  const text = String(raw ?? "").replace(/,/g, "").trim();
+  if (text === "" || text === "." || text === "0.") return text;
+  if (!/^\d*\.?\d*$/.test(text)) return null;
+  const clipped = text.length > 18 ? text.slice(0, 18) : text;
+  const n = Number(clipped);
+  if (Number.isFinite(n) && n > MAX_TRADE_QTY) return String(MAX_TRADE_QTY);
+  return clipped;
 }
 
 export function linkedDepositAmounts({
@@ -264,7 +277,7 @@ export function xdxUnitUsd({ pool, prices } = {}) {
   return fromPrices > 0 ? fromPrices : 0;
 }
 
-export function quoteUnitUsd({ quoteId, pool, prices } = {}) {
+export function quoteUnitUsd({ quoteId, pool, prices, allowImplied = true } = {}) {
   return detectQuoteUsd({
     quoteId,
     pool: {
@@ -272,6 +285,7 @@ export function quoteUnitUsd({ quoteId, pool, prices } = {}) {
       xdxUsd: xdxUnitUsd({ pool, prices }) || pool?.xdxUsd,
     },
     prices,
+    allowImplied,
   });
 }
 
@@ -280,7 +294,7 @@ export function depositValueSplit({ xdxAmount, quoteAmount, xdxUsd, quoteUsd } =
   const quoteValue = Math.max(0, Number(quoteAmount) * Number(quoteUsd) || 0);
   const total = xdxValue + quoteValue;
   if (!(total > 0)) {
-    return { xdxValue: 0, quoteValue: 0, total: 0, xdxPct: 50, quotePct: 50 };
+    return { xdxValue: 0, quoteValue: 0, total: 0, xdxPct: 50, quotePct: 50, measured: false };
   }
   const xdxPct = (xdxValue / total) * 100;
   return {
@@ -289,6 +303,7 @@ export function depositValueSplit({ xdxAmount, quoteAmount, xdxUsd, quoteUsd } =
     total,
     xdxPct,
     quotePct: 100 - xdxPct,
+    measured: Number(xdxUsd) > 0 && Number(quoteUsd) > 0,
   };
 }
 

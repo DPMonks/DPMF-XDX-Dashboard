@@ -9,7 +9,7 @@ import {
   xrplToHolderGraphUrl,
 } from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
-import { detectQuoteUsd, resolvePoolSplit } from "../utils/poolSplit";
+import { detectQuoteUsd, preferUsdPoolSplit } from "../utils/poolSplit";
 import { LIST_PAGE_SIZE, shouldFetchMoreRows } from "../utils/pagination";
 import {
   composeAmmBook,
@@ -219,24 +219,26 @@ function mapPool(row) {
 function withPoolSplit(row, fallbackXdxUsd, fallbackXrpUsd, prices = {}) {
   if (!row) return row;
   const xdxUsd = row.xdxUsd || fallbackXdxUsd;
-  const quoteUsd = detectQuoteUsd({
+  const priceBook = { ...prices, xrpUsd: fallbackXrpUsd, XRP: fallbackXrpUsd || prices.xrpUsd };
+  const marketQuoteUsd = detectQuoteUsd({
     quoteId: row.quote,
     pool: { ...row, xdxUsd },
-    prices: { ...prices, xrpUsd: fallbackXrpUsd, XRP: fallbackXrpUsd || prices.xrpUsd },
+    prices: priceBook,
+    allowImplied: false,
   });
-  const split = resolvePoolSplit({
+  const split = preferUsdPoolSplit({
     reserveXdx: row.reserve_asset,
     reserveQuote: row.reserve_currency,
     lpSupply: row.lp_supply,
     price: row.price,
     xdxUsd,
-    quoteUsd,
+    quoteUsd: marketQuoteUsd,
   });
   return {
     ...row,
     reserve_currency: row.reserve_currency || split?.reserveQuote || null,
     xdxUsd: xdxUsd || null,
-    quote_usd: quoteUsd || null,
+    quote_usd: marketQuoteUsd || null,
     xdx_pct: split?.xdxPct ?? null,
     quote_pct: split?.quotePct ?? null,
     lead: split?.lead || null,

@@ -7,8 +7,12 @@ import {
   poolAssetSplit,
   detectQuoteUsd,
   impliedQuoteUsd,
+  normalizePriceBook,
+  preferUsdPoolSplit,
+  priceBookFromPools,
   quoteUsdFromMap,
   quoteUsdFromXrpRate,
+  quoteUsdLooksImplied,
   resolvePoolSplit,
   usableMarketQuoteUsd,
 } from "../src/utils/poolSplit.js";
@@ -152,4 +156,46 @@ test("detectQuoteUsd prefers live USD then XDX pool implied for any quote", () =
     }),
     26.4
   );
+  const book = normalizePriceBook({ quotes: { PLX: 0.012 }, xdxUsd: 0.00004, xrpUsd: 2.8 });
+  assert.equal(book.quotes.PLX, 0.012);
+  assert.equal(
+    detectQuoteUsd({
+      quoteId: "PLX",
+      pool: { reserve_xdx: 1000, reserve_currency: 4_000_000, xdxUsd: 0.00004 },
+      prices: book,
+      allowImplied: false,
+    }),
+    0.012
+  );
+  assert.equal(
+    detectQuoteUsd({
+      quoteId: "PLX",
+      pool: { reserve_xdx: 1000, reserve_currency: 4, xdxUsd: 0.00004 },
+      prices: {},
+      allowImplied: false,
+    }),
+    0
+  );
+  assert.equal(quoteUsdLooksImplied(0.01, { reserve_xdx: 1000, reserve_currency: 4, xdxUsd: 0.00004 }, 0.00004), true);
+  const usdBar = preferUsdPoolSplit({
+    reserveXdx: 1_000_000,
+    reserveQuote: 50,
+    xdxUsd: 0.00004,
+    quoteUsd: 1,
+  });
+  assert.equal(usdBar.basis, "usd");
+  assert.ok(usdBar.xdxPct < 50);
+  assert.ok(usdBar.quotePct > 50);
+  const seeded = priceBookFromPools(
+    [{ quote: "PLX", quote_usd: 0.012, xdxUsd: 0.00004, reserve_xdx: 1000, reserve_currency: 4_000_000 }],
+    {}
+  );
+  assert.equal(seeded.quotes.PLX, 0.012);
+  const fromUsd = poolAssetSplit({
+    reserveXdx: 115.07,
+    reserveQuote: 0.1,
+    xdxUsd: 0.00004,
+    quoteUsd: 24,
+  });
+  assert.ok(fromUsd.quotePct > 90);
 });

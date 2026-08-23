@@ -172,21 +172,97 @@ export function quoteUsdFromMap(quote, prices = {}) {
   return quoteUsdFromPrices(quote, prices);
 }
 
-export function detectQuoteUsd({ quoteId, pool, prices } = {}) {
+export function quoteUsdLooksImplied(quoteUsd, pool = {}, xdxUsd) {
+  const implied = impliedQuoteUsd({
+    reserveXdx: pool?.reserve_xdx ?? pool?.reserve_asset ?? pool?.base,
+    reserveQuote: pool?.reserve_currency ?? pool?.quoteReserve,
+    xdxUsd: xdxUsd || pool?.xdxUsd,
+  });
+  const n = Number(quoteUsd);
+  if (!(n > 0) || !(implied > 0)) return false;
+  return Math.abs(n - implied) / implied < 0.05;
+}
+
+export function normalizePriceBook(prices = {}) {
+  const src = prices && typeof prices === "object" && !Array.isArray(prices) ? prices : {};
+  const xrpUsd = Number(src.xrpUsd || src.XRP || 0);
+  const xdxUsd = Number(src.xdxUsd || src.recorded_price || 0);
+  const quotes = { ...(src.quotes && typeof src.quotes === "object" ? src.quotes : {}) };
+  if (xrpUsd > 0) quotes.XRP = xrpUsd;
+  for (const id of STABLE_QUOTES) {
+    if (!(Number(quotes[id]) > 0)) quotes[id] = 1;
+  }
+  for (const [key, value] of Object.entries(src)) {
+    if (["quotes", "xdxUsd", "recorded_price", "xdxGbp", "xrpGbp", "source"].includes(key)) continue;
+    let id = "";
+    let usd = 0;
+    if (/^[A-Z0-9]{2,8}$/.test(key) && key !== "XDX") {
+      id = key;
+      usd = usableMarketQuoteUsd(value, { xdxUsd, xrpUsd });
+    } else if (/^([A-Za-z]{2,8})(_usd|Usd|USD)$/.test(key)) {
+      id = key.replace(/(_usd|Usd|USD)$/g, "").toUpperCase();
+      usd = usableMarketQuoteUsd(value, { xdxUsd, xrpUsd });
+    } else if (/^([A-Za-z]{2,8})(_xrp|Xrp|XRP)$/.test(key) && xrpUsd > 0) {
+      id = key.replace(/(_xrp|Xrp|XRP)$/g, "").toUpperCase();
+      usd = usableMarketQuoteUsd(Number(value) * xrpUsd, { xdxUsd, xrpUsd });
+    }
+    if (id && id !== "XDX" && usd > 0 && !(Number(quotes[id]) > 0)) quotes[id] = usd;
+  }
+  return { ...src, xrpUsd, xdxUsd, quotes };
+}
+
+export function priceBookFromPools(pools = [], prices = {}) {
+  const quotes = {};
+  let xdxUsd = Number(prices.xdxUsd || prices.recorded_price || 0);
+  let xrpUsd = Number(prices.xrpUsd || prices.XRP || 0);
+  for (const row of Array.isArray(pools) ? pools : []) {
+    if (Number(row?.xdxUsd) > 0) xdxUsd = Number(row.xdxUsd);
+    const id = String(row?.quote || String(row?.pool || "").split("/")[1] || "").toUpperCase();
+    const listed = Number(row?.quote_usd);
+    if (id && listed > 0 && !quoteUsdLooksImplied(listed, row, xdxUsd || row?.xdxUsd)) {
+      quotes[id] = listed;
+    }
+  }
+  return normalizePriceBook({ ...prices, xdxUsd, xrpUsd, quotes: { ...quotes, ...(prices.quotes || {}) } });
+}
+
+export function preferUsdPoolSplit({
+  reserveXdx,
+  reserveQuote,
+  lpSupply,
+  price,
+  xdxUsd,
+  quoteUsd,
+} = {}) {
+  const usd = poolAssetSplit({ reserveXdx, reserveQuote, xdxUsd, quoteUsd });
+  if (usd) return { ...usd, basis: "usd", reserveQuote: Number(reserveQuote) || null };
+  const units = resolvePoolSplit({
+    reserveXdx,
+    reserveQuote,
+    lpSupply,
+    price,
+    xdxUsd,
+    quoteUsd,
+  });
+  return units ? { ...units, basis: units.inferred ? "inferred" : "units" } : null;
+}
+
+export function detectQuoteUsd({ quoteId, pool, prices, allowImplied = true } = {}) {
+  const book = normalizePriceBook(prices);
   const id = String(quoteId || pool?.quoteName || pool?.quote || "").toUpperCase();
-  const xdxUsd = Number(pool?.xdxUsd || prices?.xdxUsd || prices?.recorded_price || 0);
-  const xrpUsd = Number(prices?.xrpUsd || prices?.XRP || 0);
+  const xdxUsd = Number(pool?.xdxUsd || book.xdxUsd || 0);
+  const xrpUsd = Number(book.xrpUsd || 0);
   const implied = impliedQuoteUsd({
     reserveXdx: pool?.reserve_xdx ?? pool?.reserve_asset ?? pool?.base,
     reserveQuote: pool?.reserve_currency ?? pool?.quoteReserve,
     xdxUsd,
   });
-  const market = usableMarketQuoteUsd(quoteUsdFromPrices(id, prices), { xdxUsd, xrpUsd });
-  const fromXrp = usableMarketQuoteUsd(quoteUsdFromXrpRate(id, prices, xrpUsd), { xdxUsd, xrpUsd });
+  const market = usableMarketQuoteUsd(quoteUsdFromPrices(id, { ...book, ...book.quotes }), { xdxUsd, xrpUsd });
+  const fromXrp = usableMarketQuoteUsd(quoteUsdFromXrpRate(id, book, xrpUsd), { xdxUsd, xrpUsd });
   const listed = usableMarketQuoteUsd(pool?.quote_usd ?? pool?.quoteUsd, { xdxUsd, xrpUsd });
   if (market > 0 && (market >= DUST_QUOTE_USD || !(implied > market * 5))) return market;
   if (fromXrp > 0) return fromXrp;
-  if (listed > 0) return listed;
-  if (implied > 0) return implied;
+  if (listed > 0 && !quoteUsdLooksImplied(listed, pool, xdxUsd)) return listed;
+  if (allowImplied && implied > 0) return implied;
   return 0;
 }

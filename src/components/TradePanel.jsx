@@ -23,11 +23,12 @@ import {
   quoteUnitUsd,
   depositValueSplit,
   linkedDepositAmounts,
+  sanitizeQtyInput,
   tradeSides,
   tradeTotal,
   xdxUnitUsd,
 } from "../xaman/tradeTx";
-import { formatPoolPct } from "../utils/poolSplit";
+import { formatPoolPct, normalizePriceBook, priceBookFromPools } from "../utils/poolSplit";
 import { formatToken, formatUsd } from "../utils/format";
 import { shortAddress } from "../utils/format";
 import BrandSelect from "./BrandSelect";
@@ -82,7 +83,7 @@ export default function TradePanel({
   const [lineHint, setLineHint] = useState("");
   const [formError, setFormError] = useState("");
   const [liveSpot, setLiveSpot] = useState(spotPrice);
-  const [prices, setPrices] = useState({});
+  const [prices, setPrices] = useState(() => priceBookFromPools(initialPools));
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
   const quote = useMemo(
@@ -123,16 +124,17 @@ export default function TradePanel({
   const shownQuoteQty = linked.quoteInput;
   const lpHint = expectedLpTokens(linked.xdx || amount, reserves.base, reserves.lpSupply);
   const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
-  const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices });
+  const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices, allowImplied: false });
   const withdraw = expectedWithdraw(lpAmount || amount, reserves.base, reserves.quote, reserves.lpSupply);
-  const lpXdx = action === "removeLp" ? withdraw.base : linked.xdx;
-  const lpQuote = action === "removeLp" ? withdraw.quote : linked.quote;
+  const typedXdx = Number(amount) || 0;
+  const typedQuote = Number(quoteQty) || 0;
   const deposit = depositValueSplit({
-    xdxAmount: lpXdx,
-    quoteAmount: lpQuote,
+    xdxAmount: action === "removeLp" ? withdraw.base : typedXdx,
+    quoteAmount: action === "removeLp" ? withdraw.quote : typedQuote,
     xdxUsd,
     quoteUsd,
   });
+  const splitReady = Boolean(deposit.measured);
   const sides = tradeSides({
     action,
     amount: linked.xdx || amount,
@@ -156,7 +158,7 @@ export default function TradePanel({
     getPrices()
       .then((nextPrices) => {
         if (cancelled) return;
-        setPrices(nextPrices || {});
+        setPrices((current) => priceBookFromPools([], { ...current, ...normalizePriceBook(nextPrices || {}) }));
         const next = Number(
           quoteId === "XRP"
             ? nextPrices.xdxXrp || nextPrices.xdxPerXrp
@@ -174,6 +176,7 @@ export default function TradePanel({
       ([nextPools, nextLp]) => {
         if (cancelled) return;
         setPools(Array.isArray(nextPools) ? nextPools : []);
+        setPrices((current) => priceBookFromPools(nextPools, current));
         if (action === "removeLp") {
           const pair = String(quotePair || `XDX/${quoteId}`).toUpperCase();
           const row = (Array.isArray(nextLp) ? nextLp : []).find(
@@ -363,18 +366,23 @@ export default function TradePanel({
           <label className="trade-field">
             {t.xdxAmount}
             <input
-              type="number"
+              type={isLp ? "text" : "number"}
+              inputMode="decimal"
+              autoComplete="off"
               min="0"
               step="any"
-              value={shownAmount}
+              value={isLp ? amount : shownAmount}
+              placeholder={isLp && !amount && linked.xdxInput ? linked.xdxInput : undefined}
               onChange={(event) => {
+                const next = isLp ? sanitizeQtyInput(event.target.value) : event.target.value;
+                if (next == null) return;
                 setEditedSide("xdx");
-                setAmount(event.target.value);
+                setAmount(next);
               }}
             />
             {action === "addLp" ? (
               <span className="trade-field-usd">
-                {xdxUsd > 0 ? formatUsd(linked.xdx * xdxUsd, locale) : "—"}
+                {xdxUsd > 0 && typedXdx > 0 ? formatUsd(typedXdx * xdxUsd, locale) : "—"}
               </span>
             ) : null}
           </label>
@@ -390,19 +398,25 @@ export default function TradePanel({
         ) : null}
         {isLp ? (
           <div
-            className={`pool-split trade-deposit-split ${deposit.xdxPct >= deposit.quotePct ? "is-xdx-lead" : "is-quote-lead"}`}
+            className={`pool-split trade-deposit-split ${
+              splitReady ? (deposit.xdxPct >= deposit.quotePct ? "is-xdx-lead" : "is-quote-lead") : "is-pending"
+            }`}
           >
             <div className="pool-split-labels">
               <span className="pool-split-xdx">
                 <i className="pool-split-swatch is-xdx" aria-hidden="true" />
-                <span className="pool-split-pct">{formatPoolPct(deposit.xdxPct)}%</span>
+                <span className="pool-split-pct">{splitReady ? `${formatPoolPct(deposit.xdxPct)}%` : "—"}</span>
                 <span className="pool-split-asset">XDX</span>
               </span>
               <span className="pool-split-ratio">
-                {`${formatPoolPct(deposit.xdxPct)} / ${formatPoolPct(deposit.quotePct)}`}
+                {splitReady
+                  ? `${formatPoolPct(deposit.xdxPct)} / ${formatPoolPct(deposit.quotePct)}`
+                  : quoteUsd > 0
+                    ? formatUsd(deposit.total, locale)
+                    : "—"}
               </span>
               <span className="pool-split-quote">
-                <span className="pool-split-pct">{formatPoolPct(deposit.quotePct)}%</span>
+                <span className="pool-split-pct">{splitReady ? `${formatPoolPct(deposit.quotePct)}%` : "—"}</span>
                 <span className="pool-split-asset">{quote.label}</span>
                 <i className="pool-split-swatch is-quote" aria-hidden="true" />
               </span>
@@ -428,18 +442,23 @@ export default function TradePanel({
           <label className="trade-field">
             {quote.label}
             <input
-              type="number"
+              type={isLp ? "text" : "number"}
+              inputMode="decimal"
+              autoComplete="off"
               min="0"
               step="any"
-              value={shownQuoteQty}
+              value={isLp ? quoteQty : shownQuoteQty}
+              placeholder={isLp && !quoteQty && linked.quoteInput ? linked.quoteInput : undefined}
               onChange={(event) => {
+                const next = isLp ? sanitizeQtyInput(event.target.value) : event.target.value;
+                if (next == null) return;
                 setEditedSide("quote");
-                setQuoteQty(event.target.value);
+                setQuoteQty(next);
               }}
             />
             {action === "addLp" ? (
               <span className="trade-field-usd">
-                {quoteUsd > 0 ? formatUsd(linked.quote * quoteUsd, locale) : "—"}
+                {quoteUsd > 0 && typedQuote > 0 ? formatUsd(typedQuote * quoteUsd, locale) : "—"}
               </span>
             ) : null}
           </label>

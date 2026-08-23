@@ -23,6 +23,7 @@ import {
   depositValueSplit,
   formatLinkedQty,
   linkedDepositAmounts,
+  sanitizeQtyInput,
   tradeSides,
   visibleQuoteQty,
   xdxUnitUsd,
@@ -126,6 +127,9 @@ test("trade windows show pay and receive from the selected pair", () => {
   assert.equal(visibleQuoteQty("2", 3.12), "2");
   assert.equal(predictedXdxFromQuote(5, 0, 1000, 50), 100);
   assert.equal(formatLinkedQty(115.072148123), "115.07215");
+  assert.equal(sanitizeQtyInput("4.52e+21"), null);
+  assert.equal(sanitizeQtyInput("12.5"), "12.5");
+  assert.equal(formatLinkedQty(4.52e21).includes("e"), false);
   const fromQuote = linkedDepositAmounts({
     editedSide: "quote",
     amount: "100000",

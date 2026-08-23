@@ -1953,12 +1953,18 @@ async function buildPrices(db) {
   const quote = await loadXrpQuote(db);
   const xrpUsd = Number(quote.usd || 0);
   const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
+  const quoteMap = await loadQuoteUsdMap(db, xrpUsd);
+  const quotes = { ...quoteMap, XRP: xrpUsd || Number(quoteMap.XRP) || 0 };
+  delete quotes.XDX;
+  delete quotes.xdx;
   return {
     xrpUsd,
     xrpGbp: Number(quote.gbp || 0),
     xdxUsd,
     recorded_price: xdxUsd,
     xdxGbp: xdxUsd > 0 && quote.gbp && xrpUsd > 0 ? xdxUsd * (quote.gbp / xrpUsd) : 0,
+    quotes,
+    ...quotes,
     source: "db",
   };
 }
