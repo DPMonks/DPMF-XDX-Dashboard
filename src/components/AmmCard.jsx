@@ -171,19 +171,19 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
             </dl>
             {onAddLiquidity || onRemoveLiquidity ? (
               <div className="pool-card-actions">
+                {onAddLiquidity ? (
+                  <WalletButton
+                    label={t.addLiquidity}
+                    title={`${t.addLiquidity} ${pool.pool}`}
+                    onClick={() => onAddLiquidity(pool)}
+                  />
+                ) : null}
                 {onRemoveLiquidity ? (
                   <WalletButton
                     className="is-remove-lp"
                     label={t.removeLiquidity}
                     title={`${t.removeLiquidity} ${pool.pool}`}
                     onClick={() => onRemoveLiquidity(pool)}
-                  />
-                ) : null}
-                {onAddLiquidity ? (
-                  <WalletButton
-                    label={t.addLiquidity}
-                    title={`${t.addLiquidity} ${pool.pool}`}
-                    onClick={() => onAddLiquidity(pool)}
                   />
                 ) : null}
               </div>
