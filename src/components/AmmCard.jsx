@@ -48,7 +48,7 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
   );
 }
 
-export default function AmmCard({ pools, loading, error, onAddLiquidity }) {
+export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemoveLiquidity }) {
   const { t, locale } = useI18n();
 
   if (loading && !pools.length) {
@@ -169,13 +169,23 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity }) {
                 </div>
               ) : null}
             </dl>
-            {onAddLiquidity ? (
+            {onAddLiquidity || onRemoveLiquidity ? (
               <div className="pool-card-actions">
-                <WalletButton
-                  label={t.addLiquidity}
-                  title={`${t.addLiquidity} ${pool.pool}`}
-                  onClick={() => onAddLiquidity(pool)}
-                />
+                {onRemoveLiquidity ? (
+                  <WalletButton
+                    className="is-remove-lp"
+                    label={t.removeLiquidity}
+                    title={`${t.removeLiquidity} ${pool.pool}`}
+                    onClick={() => onRemoveLiquidity(pool)}
+                  />
+                ) : null}
+                {onAddLiquidity ? (
+                  <WalletButton
+                    label={t.addLiquidity}
+                    title={`${t.addLiquidity} ${pool.pool}`}
+                    onClick={() => onAddLiquidity(pool)}
+                  />
+                ) : null}
               </div>
             ) : null}
           </article>

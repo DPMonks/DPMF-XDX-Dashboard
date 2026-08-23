@@ -1311,7 +1311,9 @@ body {
 
 .pool-card-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   margin-top: auto;
   padding-top: 14px;
 }
@@ -1320,6 +1322,15 @@ body {
   min-height: 36px;
   padding: 0 12px;
   font-size: 12px;
+}
+
+.pool-card-actions .connect-wallet-btn.is-remove-lp {
+  border-color: rgba(199, 112, 255, 0.7);
+  box-shadow: 0 0 12px rgba(199, 112, 255, 0.22);
+}
+
+.pool-card-actions .connect-wallet-btn.is-remove-lp:hover {
+  border-color: #c770ff;
 }
 
 .orderbook-wrap {

@@ -9,6 +9,7 @@ export default function WalletButton({
   address,
   label,
   title,
+  className,
 }) {
   const { t } = useI18n();
   const caption = label || (connected ? `${t.connected} ${address}` : t.connectWallet);
@@ -25,7 +26,9 @@ export default function WalletButton({
   return (
     <button
       type="button"
-      className={connected && !label ? "connect-wallet-btn is-connected" : "connect-wallet-btn"}
+      className={[connected && !label ? "connect-wallet-btn is-connected" : "connect-wallet-btn", className]
+        .filter(Boolean)
+        .join(" ")}
       onPointerDown={(event) => {
         if (event.button) return;
         fire(event);

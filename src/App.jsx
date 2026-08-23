@@ -259,6 +259,14 @@ export default function App() {
                 quote_hex: pool.quote_hex,
               })
             }
+            onRemoveLiquidity={(pool) =>
+              openTrade({
+                action: "removeLp",
+                pair: pool.pool || pool.pool_name,
+                quote_issuer: pool.quote_issuer,
+                quote_hex: pool.quote_hex,
+              })
+            }
           />
         </section>
       </div>
