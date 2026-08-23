@@ -10,6 +10,7 @@ import {
   XIO_ISSUER,
   XSQUAD_ISSUER,
 } from "../constants/ledger.js";
+import { detectQuoteUsd } from "../utils/poolSplit.js";
 
 export const DROPS_PER_XRP = 1_000_000;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
@@ -226,19 +227,14 @@ export function xdxUnitUsd({ pool, prices } = {}) {
 }
 
 export function quoteUnitUsd({ quoteId, pool, prices } = {}) {
-  const id = String(quoteId || pool?.quoteName || pool?.quote || "").toUpperCase();
-  const fromPool = Number(pool?.quote_usd ?? pool?.quoteUsd);
-  if (fromPool > 0) return fromPool;
-  if (id === "XRP") {
-    const xrp = Number(prices?.xrpUsd);
-    if (xrp > 0) return xrp;
-  }
-  if (id === "RLUSD") return 1;
-  const xdxUsd = xdxUnitUsd({ pool, prices });
-  const base = Number(pool?.reserve_xdx ?? pool?.reserve_asset ?? pool?.base);
-  const quote = Number(pool?.reserve_currency ?? pool?.quoteReserve ?? pool?.quote);
-  if (xdxUsd > 0 && base > 0 && quote > 0) return (base * xdxUsd) / quote;
-  return 0;
+  return detectQuoteUsd({
+    quoteId,
+    pool: {
+      ...pool,
+      xdxUsd: xdxUnitUsd({ pool, prices }) || pool?.xdxUsd,
+    },
+    prices,
+  });
 }
 
 export function depositValueSplit({ xdxAmount, quoteAmount, xdxUsd, quoteUsd } = {}) {

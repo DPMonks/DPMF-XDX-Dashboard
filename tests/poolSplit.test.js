@@ -5,6 +5,8 @@ import {
   formatPoolPct,
   inferQuoteReserve,
   poolAssetSplit,
+  detectQuoteUsd,
+  impliedQuoteUsd,
   quoteUsdFromMap,
   resolvePoolSplit,
 } from "../src/utils/poolSplit.js";
@@ -100,7 +102,33 @@ test("resolvePoolSplit is XDX versus LP tokens, not an inferred 50/50", () => {
 
 test("quoteUsdFromMap uses recorded prices and treats RLUSD as one dollar", () => {
   assert.equal(quoteUsdFromMap("XRP", { XRP: 1.41 }), 1.41);
+  assert.equal(quoteUsdFromMap("XRP", { xrpUsd: 2.8 }), 2.8);
   assert.equal(quoteUsdFromMap("RLUSD", {}), 1);
+  assert.equal(quoteUsdFromMap("USDC", {}), 1);
   assert.equal(quoteUsdFromMap("SOLO", {}), 0);
   assert.equal(quoteUsdFromMap("SOLO", { SOLO: 0.22 }), 0.22);
+});
+
+test("detectQuoteUsd prefers live USD then XDX pool implied for any quote", () => {
+  assert.equal(
+    detectQuoteUsd({
+      quoteId: "XRP",
+      pool: { quote_usd: 1.5, reserve_xdx: 100000, reserve_currency: 3.12, xdxUsd: 0.000047 },
+      prices: { xrpUsd: 2.8 },
+    }),
+    2.8
+  );
+  assert.equal(
+    impliedQuoteUsd({ reserveXdx: 1000, reserveQuote: 50, xdxUsd: 0.0001 }),
+    0.002
+  );
+  assert.equal(
+    detectQuoteUsd({
+      quoteId: "MAG",
+      pool: { reserve_xdx: 1000, reserve_currency: 50, xdxUsd: 0.0001, quote_usd: 0.0001 },
+      prices: {},
+    }),
+    0.002
+  );
+  assert.equal(detectQuoteUsd({ quoteId: "USDT", pool: {}, prices: {} }), 1);
 });

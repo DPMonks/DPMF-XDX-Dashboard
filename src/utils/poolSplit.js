@@ -106,11 +106,48 @@ export function resolvePoolSplit({
   };
 }
 
+export const STABLE_QUOTES = new Set(["RLUSD", "USD", "USDC", "USDT", "USDB", "USDX"]);
+
+export function impliedQuoteUsd({ reserveXdx, reserveQuote, xdxUsd } = {}) {
+  const base = Number(reserveXdx);
+  const quote = Number(reserveQuote);
+  const usd = Number(xdxUsd);
+  if (!(base > 0) || !(quote > 0) || !(usd > 0)) return 0;
+  return (base * usd) / quote;
+}
+
+export function quoteUsdFromPrices(quoteId, prices = {}) {
+  const id = String(quoteId || "").toUpperCase();
+  if (!id || !prices || typeof prices !== "object") return 0;
+  if (STABLE_QUOTES.has(id)) return 1;
+  const nested = prices.quotes && typeof prices.quotes === "object" ? prices.quotes : null;
+  const aliases =
+    id === "XRP"
+      ? ["xrpUsd", "xrp_usd", "XRP", "XRPUSD"]
+      : [id, `${id}Usd`, `${id}_usd`, `${id}USD`];
+  for (const key of aliases) {
+    const n = Number(prices[key] ?? nested?.[key] ?? nested?.[id]);
+    if (n > 0 && Number.isFinite(n)) return n;
+  }
+  return 0;
+}
+
 export function quoteUsdFromMap(quote, prices = {}) {
-  const key = String(quote || "").toUpperCase();
-  if (!key) return 0;
-  const direct = Number(prices[key]);
-  if (direct > 0) return direct;
-  if (key === "RLUSD" || key === "USD") return 1;
+  return quoteUsdFromPrices(quote, prices);
+}
+
+export function detectQuoteUsd({ quoteId, pool, prices } = {}) {
+  const id = String(quoteId || pool?.quoteName || pool?.quote || "").toUpperCase();
+  const xdxUsd = Number(pool?.xdxUsd || prices?.xdxUsd || prices?.recorded_price || 0);
+  const implied = impliedQuoteUsd({
+    reserveXdx: pool?.reserve_xdx ?? pool?.reserve_asset ?? pool?.base,
+    reserveQuote: pool?.reserve_currency ?? pool?.quoteReserve,
+    xdxUsd,
+  });
+  const market = quoteUsdFromPrices(id, prices);
+  if (market > 0) return market;
+  if (implied > 0) return implied;
+  const listed = Number(pool?.quote_usd ?? pool?.quoteUsd);
+  if (listed > 0 && listed !== xdxUsd) return listed;
   return 0;
 }

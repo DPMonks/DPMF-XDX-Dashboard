@@ -115,9 +115,12 @@ export default function TradePanel({
   const lpHint = expectedLpTokens(amount, reserves.base, reserves.lpSupply);
   const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
   const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices });
+  const withdraw = expectedWithdraw(lpAmount || amount, reserves.base, reserves.quote, reserves.lpSupply);
+  const lpXdx = action === "removeLp" ? withdraw.base : Number(amount);
+  const lpQuote = action === "removeLp" ? withdraw.quote : Number(shownQuoteQty || quoteHint);
   const deposit = depositValueSplit({
-    xdxAmount: amount,
-    quoteAmount: shownQuoteQty || quoteHint,
+    xdxAmount: lpXdx,
+    quoteAmount: lpQuote,
     xdxUsd,
     quoteUsd,
   });
@@ -129,7 +132,7 @@ export default function TradePanel({
     total,
     lpAmount: lpAmount || amount,
     lpOut: lpHint,
-    withdraw: expectedWithdraw(lpAmount || amount, reserves.base, reserves.quote, reserves.lpSupply),
+    withdraw,
   });
   const titles = {
     buy: t.buyXdx,
@@ -368,7 +371,16 @@ export default function TradePanel({
             ) : null}
           </label>
         )}
-        {action === "addLp" ? (
+        {action === "removeLp" ? (
+          <label className="trade-field">
+            {t.xdxAmount}
+            <input type="text" readOnly value={formatToken(withdraw.base, locale, 6)} />
+            <span className="trade-field-usd">
+              {xdxUsd > 0 ? formatUsd(withdraw.base * xdxUsd, locale) : "—"}
+            </span>
+          </label>
+        ) : null}
+        {isLp ? (
           <div
             className={`pool-split trade-deposit-split ${deposit.xdxPct >= deposit.quotePct ? "is-xdx-lead" : "is-quote-lead"}`}
           >
@@ -425,7 +437,15 @@ export default function TradePanel({
               </span>
             ) : null}
           </label>
-        ) : null}
+        ) : (
+          <label className="trade-field">
+            {quote.label}
+            <input type="text" readOnly value={formatToken(withdraw.quote, locale, 6)} />
+            <span className="trade-field-usd">
+              {quoteUsd > 0 ? formatUsd(withdraw.quote * quoteUsd, locale) : "—"}
+            </span>
+          </label>
+        )}
 
         {!isLp && orderType === "limit" ? (
           <label className="trade-field">
