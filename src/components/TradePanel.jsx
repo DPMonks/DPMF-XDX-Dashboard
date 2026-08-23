@@ -31,6 +31,7 @@ import {
 import { formatPoolPct } from "../utils/poolSplit";
 import { formatToken, formatUsd } from "../utils/format";
 import { shortAddress } from "../utils/format";
+import BrandSelect from "./BrandSelect";
 import WalletModal from "./WalletModal";
 
 function poolRowForQuote(pools, quote) {
@@ -306,28 +307,31 @@ export default function TradePanel({
 
         <label className="trade-field">
           {t.tradePair}
-          <select
+          <BrandSelect
             value={quoteId}
-            onChange={(event) => {
-              setQuoteId(event.target.value);
+            options={quoteChoices(pools).map((id) => ({ id, label: `XDX / ${id}` }))}
+            onChange={(id) => {
+              setQuoteId(id);
               setQuoteQty("");
             }}
-          >
-            {quoteChoices(pools).map((id) => (
-              <option key={id} value={id}>
-                XDX / {id}
-              </option>
-            ))}
-          </select>
+            ariaLabel={t.tradePair}
+            searchable
+            placeholder={t.searchPair || t.tradePair}
+          />
         </label>
 
         {!isLp ? (
           <label className="trade-field">
             {t.tradeOrderType}
-            <select value={orderType} onChange={(event) => setOrderType(event.target.value)}>
-              <option value="market">{t.tradeMarket}</option>
-              <option value="limit">{t.tradeLimit}</option>
-            </select>
+            <BrandSelect
+              value={orderType}
+              options={[
+                { id: "market", label: t.tradeMarket },
+                { id: "limit", label: t.tradeLimit },
+              ]}
+              onChange={setOrderType}
+              ariaLabel={t.tradeOrderType}
+            />
           </label>
         ) : null}
 

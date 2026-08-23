@@ -151,6 +151,39 @@ body {
   border: 1px solid rgba(0, 234, 255, 0.35);
   background: rgba(0, 0, 0, 0.45);
   color: #fff;
+  color-scheme: dark;
+}
+
+.trade-panel .brand-select,
+.trade-panel .pair-select {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.trade-panel .pair-select-control {
+  min-height: 36px;
+  background: #050508;
+  border-color: var(--dpmf-neon-cyan);
+  box-shadow: 0 0 12px rgba(0, 234, 255, 0.22);
+}
+
+.trade-panel .pair-select-list {
+  z-index: 20;
+  max-height: 220px;
+  background: #07070c;
+  border: 1px solid var(--dpmf-neon-cyan);
+  box-shadow:
+    0 0 18px rgba(0, 234, 255, 0.2),
+    0 16px 36px rgba(0, 0, 0, 0.55);
+  scrollbar-color: #c770ff #101018;
+  scrollbar-width: thin;
+}
+
+.trade-panel .pair-select-list button:hover,
+.trade-panel .pair-select-list button.is-active {
+  background: linear-gradient(90deg, rgba(0, 234, 255, 0.16), rgba(199, 112, 255, 0.22));
+  color: #fff;
 }
 
 .trade-field-usd {
