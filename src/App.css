@@ -1907,6 +1907,14 @@ body {
   min-width: 0;
 }
 
+.wallet-hero-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 2px;
+}
+
 .wallet-hero-label,
 .wallet-panel-title,
 .wallet-lp h3,
@@ -1957,14 +1965,14 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: 4px;
   text-align: end;
 }
 
 .wallet-fees-label {
   margin: 0;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--dpmf-text-muted);
 }
@@ -1992,11 +2000,10 @@ body {
   align-items: baseline;
   justify-content: flex-end;
   gap: 6px;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.1;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
   color: var(--dpmf-neon-lime);
-  text-shadow: 0 0 10px var(--dpmf-neon-lime-soft);
 }
 
 .wallet-fees-pct-range {
@@ -2012,41 +2019,41 @@ body {
 .wallet-fees.is-empty .wallet-fees-pct {
   opacity: 0.35;
   color: var(--dpmf-text-muted);
-  text-shadow: none;
 }
 
 .wallet-hero-usd {
-  margin: 0;
-  font-size: 28px;
+  margin: 2px 0 0;
+  font-size: 26px;
   font-weight: 700;
+  line-height: 1.15;
   color: var(--dpmf-neon-cyan);
   text-shadow: 0 0 16px rgba(0, 234, 255, 0.35);
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
 .wallet-hero-qty {
-  margin-left: 6px;
+  margin: 0;
+  font-size: 13px;
   letter-spacing: 0.02em;
-  color: var(--dpmf-neon-cyan);
+  color: var(--dpmf-text-main);
   font-variant-numeric: tabular-nums;
+}
+
+.wallet-hero-fx {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
 }
 
 .wallet-hero-gbp,
 .wallet-hero-eur,
 .wallet-hero-jpy {
-  margin: 2px 0 0;
-  font-size: 16px;
+  margin: 0;
+  font-size: 13px;
   color: var(--dpmf-neon-violet);
+  font-variant-numeric: tabular-nums;
   transition: opacity 0.4s ease;
-}
-
-.wallet-hero-eur {
-  font-size: 14px;
-  color: var(--dpmf-neon-cyan);
-}
-
-.wallet-hero-jpy {
-  font-size: 14px;
 }
 
 .wallet-hero-hint {
@@ -2547,6 +2554,74 @@ body {
   .pool-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .wallet-hero {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 14px;
+  }
+
+  .wallet-hero-brand,
+  .wallet-hero-copy {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .wallet-hero-copy {
+    width: 100%;
+    gap: 4px;
+  }
+
+  .wallet-hero-label {
+    margin: 0;
+  }
+
+  .wallet-hero-qty {
+    font-size: 14px;
+  }
+
+  .wallet-hero-usd {
+    margin: 4px 0 0;
+    font-size: 22px;
+  }
+
+  .wallet-hero-fx {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 10px;
+    width: min(360px, 100%);
+    margin-top: 8px;
+  }
+
+  .wallet-hero-gbp,
+  .wallet-hero-eur,
+  .wallet-hero-jpy {
+    text-align: center;
+  }
+
+  .wallet-hero-account {
+    align-items: center;
+    text-align: center;
+    width: 100%;
+    max-width: 360px;
+    padding-top: 12px;
+    border-top: 1px solid var(--dpmf-border-soft);
+    gap: 6px;
+  }
+
+  .wallet-fees {
+    align-items: center;
+    text-align: center;
+    width: 100%;
+    margin: 4px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--dpmf-border-soft);
+  }
+
+  .wallet-fees-pct {
+    justify-content: center;
+  }
 }
 
 @media (max-width: 1100px) {
@@ -2585,18 +2660,6 @@ body {
   .wallet-token-row,
   .wallet-infographics {
     grid-template-columns: 1fr;
-  }
-
-  .wallet-hero {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 10px;
-  }
-
-  .wallet-hero-brand {
-    flex-direction: column;
-    align-items: center;
   }
 
   .lists-row > .dashboard-card {
@@ -2645,20 +2708,6 @@ body {
   }
 
   .header-brand {
-    justify-content: center;
-  }
-
-  .wallet-hero-account {
-    align-items: center;
-    text-align: center;
-  }
-
-  .wallet-fees {
-    align-items: center;
-    text-align: center;
-  }
-
-  .wallet-fees-pct {
     justify-content: center;
   }
 
@@ -2713,6 +2762,14 @@ body {
 }
 
 @media (max-width: 700px) {
+  .wallet-hero-usd {
+    font-size: 20px;
+  }
+
+  .wallet-hero-fx {
+    width: min(320px, 100%);
+  }
+
   .dashboard-container {
     padding: calc(14px + var(--header-safe)) 10px max(24px, env(safe-area-inset-bottom, 0px));
     padding-left: max(10px, env(safe-area-inset-left, 0px));
