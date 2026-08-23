@@ -805,7 +805,7 @@ export default function HybridChart() {
                 className={timeframe === row.id ? "range active" : "range"}
                 onClick={() => setTimeframe(row.id)}
               >
-                {row.label}
+                <span className="range-label">{row.label}</span>
               </button>
             ))}
           </div>
