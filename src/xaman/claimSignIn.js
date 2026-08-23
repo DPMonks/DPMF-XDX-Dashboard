@@ -1,6 +1,13 @@
 import { detectTradeExecution } from "./detectExecution.js";
 import { extractSignedAccount, getPayloadResult } from "./xamanClient.js";
-import { canClaimExecutedTrade, isPayloadUuid, peekPendingPayload } from "./payloadResume.js";
+import {
+  canClaimExecutedTrade,
+  isConsumedUuid,
+  isPayloadUuid,
+  payloadMatchesPendingTrade,
+  payloadTxType,
+  peekPendingPayload,
+} from "./payloadResume.js";
 import { notifyTradeExecuted, notifyTradeFailed } from "./tradeTx.js";
 
 export async function claimSignedWallet(
@@ -27,7 +34,7 @@ export async function claimExecutedTrade(
   { fetchResult = getPayloadResult, tries = 10, waitMs = 500 } = {}
 ) {
   const id = String(uuid || "").trim();
-  if (!isPayloadUuid(id)) return null;
+  if (!isPayloadUuid(id) || isConsumedUuid(id)) return null;
   const pending = peekPendingPayload();
   if (pending?.uuid && pending.uuid !== id) return null;
   if (pending && !canClaimExecutedTrade(id, pending)) return null;
@@ -36,11 +43,14 @@ export async function claimExecutedTrade(
   for (let attempt = 0; attempt < tries; attempt += 1) {
     const result = await fetchResult(id).catch(() => null);
     if (result?.meta?.cancelled === true || result?.meta?.expired === true) return null;
+    const txType = payloadTxType(result) || txjson?.TransactionType || "";
+    if (txType === "SignIn" || txType === "TrustSet") return null;
+    if (pending && result && !payloadMatchesPendingTrade(pending, result)) return null;
     const detection = detectTradeExecution({ payload: result });
     if (detection.failed) {
       const account = extractSignedAccount(result) || detection.account || null;
-      notifyTradeFailed({ ...detection, uuid: id, account, txjson });
-      return { ...detection, executed: false, account, result };
+      notifyTradeFailed({ ...detection, uuid: id, account, txjson, txType });
+      return { ...detection, executed: false, account, result, txType };
     }
     if (detection.rejected) return null;
     if (detection.executed) {
@@ -51,8 +61,10 @@ export async function claimExecutedTrade(
         uuid: id,
         account,
         txjson,
+        txType,
+        signMarker: pending?.signMarker || null,
       });
-      return { ...detection, executed: true, account, result };
+      return { ...detection, executed: true, account, result, txType };
     }
     if (attempt < tries - 1) {
       await new Promise((resolve) => setTimeout(resolve, waitMs));

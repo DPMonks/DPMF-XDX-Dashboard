@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { detectTradeExecution, isTradeTxjson } from "./detectExecution";
 import {
   clearXamanReturn,
+  isConsumedUuid,
   markXamanReturn,
+  rememberPendingPayload,
   xamanWebsocketUrl,
 } from "./payloadResume";
+import { extractTradeMarkerFromPayload, stampTradeTxjson } from "./signMarker";
 import {
   notifyFunctionConfirmed,
   notifyTradeExecuted,
@@ -92,8 +95,11 @@ export function useXamanPayload() {
     busyRef.current = true;
     const session = nextPayloadSession(sessionRef.current);
     sessionRef.current = session;
-    const txType = String(body?.txjson?.TransactionType || "");
-    const watchTrade = isTradeTxjson(body?.txjson) || txType === "AMMVote";
+    const stamped = stampTradeTxjson(body?.txjson);
+    const request = body?.txjson ? { ...body, txjson: stamped.txjson } : body;
+    const signMarker = stamped.marker || "";
+    const txType = String(request?.txjson?.TransactionType || "");
+    const watchTrade = isTradeTxjson(request?.txjson) || txType === "AMMVote";
     const watchConfirm = watchTrade || txType === "TrustSet";
     let announced = false;
     let finishing = false;
@@ -101,22 +107,45 @@ export function useXamanPayload() {
     let latestSocket = null;
     let latestLedger = null;
     let payloadUuid = resumeUuid || null;
+    if (resumeUuid && isConsumedUuid(resumeUuid)) {
+      busyRef.current = false;
+      return;
+    }
     if (!resumeUuid) clearXamanReturn();
+
+    const markerAllows = (payload) => {
+      if (!signMarker || !payload) return true;
+      const sent =
+        payload?.payload?.request_json ||
+        payload?.payload?.txjson ||
+        payload?.txjson ||
+        payload?.request_json;
+      if (!sent) return true;
+      return extractTradeMarkerFromPayload(payload) === signMarker;
+    };
 
     const announce = (detection) => {
       if (announced) return false;
       if (detection?.failed) {
         announced = true;
         onFailed?.(detection);
-        if (watchTrade) notifyTradeFailed({ ...detection, uuid: payloadUuid, txjson: body?.txjson });
+        if (watchTrade) notifyTradeFailed({ ...detection, uuid: payloadUuid, txjson: request?.txjson, signMarker });
         return true;
       }
       if (!detection?.executed) return false;
+      if (!markerAllows(latestPayload)) return false;
       announced = true;
+      if (payloadUuid) rememberPendingPayload(payloadUuid, { signState: "executed", signMarker });
       onExecuted?.(detection);
-      if (watchTrade) notifyTradeExecuted({ ...detection, uuid: payloadUuid, txjson: body?.txjson });
-      else if (txType === "TrustSet") {
-        notifyFunctionConfirmed({ ...detection, uuid: payloadUuid, txjson: body?.txjson });
+      if (watchTrade) {
+        notifyTradeExecuted({
+          ...detection,
+          uuid: payloadUuid,
+          txjson: request?.txjson,
+          signMarker,
+        });
+      } else if (txType === "TrustSet") {
+        notifyFunctionConfirmed({ ...detection, uuid: payloadUuid, txjson: request?.txjson, signMarker });
       }
       return true;
     };
@@ -144,7 +173,7 @@ export function useXamanPayload() {
             mobileUrl: xamanSignUrl(resumeUuid),
             websocket: xamanWebsocketUrl(resumeUuid),
           }
-        : await createPayload(body);
+        : await createPayload(request);
       if (!payloadSessionOpen(session, sessionRef.current)) {
         busyRef.current = false;
         return;
@@ -152,8 +181,10 @@ export function useXamanPayload() {
       payloadUuid = payload.uuid;
       markXamanReturn(payload.uuid, {
         watchTrade,
-        txjson: body?.txjson || null,
+        txjson: request?.txjson || null,
         trade: trade || null,
+        signMarker: signMarker || null,
+        signState: "unsigned",
       });
       setQr(payload.qr);
       setMobileUrl(payload.mobileUrl);
@@ -161,7 +192,7 @@ export function useXamanPayload() {
       setStatus("waiting");
 
       timeoutRef.current = setTimeout(() => {
-        if (payloadSessionOpen(session, sessionRef.current)) reset({ keepPending: true });
+        if (payloadSessionOpen(session, sessionRef.current)) reset();
       }, 300000);
 
       const finish = async (account, result) => {
@@ -187,6 +218,9 @@ export function useXamanPayload() {
           payloadLooksSigned(latestPayload) ||
           Boolean(signedAccount);
         if (looksSigned || detection.executed) {
+          if (payloadUuid && !detection.executed) {
+            rememberPendingPayload(payloadUuid, { signState: "signed", signMarker });
+          }
           onSigned?.(signedAccount, latestPayload || result);
           setQr(null);
           setMobileUrl(null);
@@ -214,13 +248,14 @@ export function useXamanPayload() {
             notifyTradeUnconfirmed({
               ...detection,
               uuid: payloadUuid,
-              txjson: body?.txjson,
+              txjson: request?.txjson,
+              signMarker,
               account: signedAccount,
             });
           }
         }
         reset({
-          keepPending: !signedAccount && (detection.signed || payloadLooksSigned(result)),
+          keepPending: watchConfirm && looksSigned && !announced,
         });
         setStatus(looksSigned ? "signed" : "idle");
       };

@@ -19,6 +19,7 @@ import {
   ammWithdrawTx,
   expectedLpTokens,
   expectedWithdraw,
+  executionClosesTradeAction,
   gateUnsignedTrade,
   hasLpTrustline,
   hasQuoteTrustline,
@@ -358,4 +359,15 @@ test("trade windows show pay and receive from the selected pair", () => {
   assert.equal(split.xdxValue, 10);
   assert.equal(split.quoteValue, 5);
   assert.ok(Math.abs(split.xdxPct - 66.666) < 0.02);
+});
+
+test("only a matching ledger tx closes the open trade panel", () => {
+  assert.equal(executionClosesTradeAction("buy", { txjson: { TransactionType: "Payment" } }), true);
+  assert.equal(executionClosesTradeAction("buy", { txjson: { TransactionType: "OfferCreate" } }), true);
+  assert.equal(executionClosesTradeAction("addLp", { txType: "AMMDeposit" }), true);
+  assert.equal(executionClosesTradeAction("removeLp", { txType: "AMMWithdraw" }), true);
+  assert.equal(executionClosesTradeAction("addLp", { txjson: { TransactionType: "Payment" } }), false);
+  assert.equal(executionClosesTradeAction("buy", { txType: "AMMDeposit" }), false);
+  assert.equal(executionClosesTradeAction("buy", { txjson: { TransactionType: "TrustSet" } }), false);
+  assert.equal(executionClosesTradeAction("addLp", { txType: "SignIn" }), false);
 });

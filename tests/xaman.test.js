@@ -31,12 +31,18 @@ import {
 } from "../src/xaman/xamanClient.js";
 import {
   canClaimExecutedTrade,
+  clearConsumedUuids,
   clearPendingPayload,
+  discardStalePendingTrade,
+  isConsumedUuid,
   isPayloadUuid,
+  payloadMatchesPendingTrade,
   peekPendingPayload,
   peekXamanUuid,
   readXamanReturnUuid,
+  rememberConsumedUuid,
   rememberPendingPayload,
+  shouldAutoClaimPendingTrade,
   takeXamanReturnUuid,
   xamanWebsocketUrl,
 } from "../src/xaman/payloadResume.js";
@@ -336,6 +342,147 @@ test("a stale Xaman return uuid does not claim a newer pending trade", async () 
     assert.equal(fetched, 0);
   } finally {
     clearPendingPayload();
+    clearConsumedUuids();
+    if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
+    else globalThis.sessionStorage = previous.sessionStorage;
+    if (previous.localStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous.localStorage;
+  }
+});
+
+test("a leftover tesSUCCESS trade is not auto-claimed without a Xaman return", async () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const previous = {
+    sessionStorage: globalThis.sessionStorage,
+    localStorage: globalThis.localStorage,
+  };
+  globalThis.sessionStorage = memoryStore();
+  globalThis.localStorage = memoryStore();
+  try {
+    rememberPendingPayload(uuid, {
+      watchTrade: true,
+      txjson: { TransactionType: "Payment" },
+      trade: { action: "buy", quote: "XRP" },
+    });
+    assert.equal(shouldAutoClaimPendingTrade(""), false);
+    assert.equal(shouldAutoClaimPendingTrade(`?xaman=${uuid}`), true);
+
+    rememberConsumedUuid(uuid);
+    assert.equal(isConsumedUuid(uuid), true);
+    assert.equal(canClaimExecutedTrade(uuid), false);
+    assert.equal(shouldAutoClaimPendingTrade(`?xaman=${uuid}`), false);
+    const consumed = await claimExecutedTrade(uuid, {
+      waitMs: 0,
+      tries: 1,
+      fetchResult: async () => ({
+        payload: { tx_type: "Payment" },
+        meta: { signed: true, submitted: true, resolved_at: new Date().toISOString() },
+        response: { dispatched_result: "tesSUCCESS", txid: "C".repeat(64), account: "rA" },
+      }),
+    });
+    assert.equal(consumed, null);
+  } finally {
+    clearPendingPayload();
+    clearConsumedUuids();
+    if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
+    else globalThis.sessionStorage = previous.sessionStorage;
+    if (previous.localStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous.localStorage;
+  }
+});
+
+test("claimExecutedTrade rejects leftover SignIn and older resolved payloads", async () => {
+  const uuid = "11111111-2222-4333-a444-555555555555";
+  const previous = {
+    sessionStorage: globalThis.sessionStorage,
+    localStorage: globalThis.localStorage,
+  };
+  globalThis.sessionStorage = memoryStore();
+  globalThis.localStorage = memoryStore();
+  try {
+    const started = Date.now();
+    rememberPendingPayload(uuid, {
+      watchTrade: true,
+      txjson: { TransactionType: "AMMDeposit" },
+      trade: { action: "addLp", quote: "XRP" },
+    });
+    const record = peekPendingPayload();
+    assert.equal(
+      payloadMatchesPendingTrade(record, {
+        payload: { tx_type: "SignIn" },
+        meta: { signed: true, submitted: true, resolved_at: new Date(started + 1000).toISOString() },
+        response: { dispatched_result: "tesSUCCESS", account: "rA" },
+      }),
+      false
+    );
+    assert.equal(
+      payloadMatchesPendingTrade(record, {
+        payload: { tx_type: "Payment" },
+        meta: { signed: true, submitted: true, resolved_at: new Date(started + 1000).toISOString() },
+        response: { dispatched_result: "tesSUCCESS", account: "rA" },
+      }),
+      false
+    );
+    assert.equal(
+      payloadMatchesPendingTrade(record, {
+        payload: { tx_type: "AMMDeposit" },
+        meta: { signed: true, submitted: true, resolved_at: new Date(started - 60_000).toISOString() },
+        response: { dispatched_result: "tesSUCCESS", account: "rA" },
+      }),
+      false
+    );
+
+    const signIn = await claimExecutedTrade(uuid, {
+      waitMs: 0,
+      tries: 1,
+      fetchResult: async () => ({
+        payload: { tx_type: "SignIn" },
+        meta: { signed: true, submitted: true, resolved_at: new Date(started + 1000).toISOString() },
+        response: { dispatched_result: "tesSUCCESS", txid: "D".repeat(64), account: "rA" },
+      }),
+    });
+    assert.equal(signIn, null);
+
+    const stale = await claimExecutedTrade(uuid, {
+      waitMs: 0,
+      tries: 1,
+      fetchResult: async () => ({
+        payload: { tx_type: "AMMDeposit" },
+        meta: { signed: true, submitted: true, resolved_at: new Date(started - 60_000).toISOString() },
+        response: { dispatched_result: "tesSUCCESS", txid: "E".repeat(64), account: "rA" },
+      }),
+    });
+    assert.equal(stale, null);
+  } finally {
+    clearPendingPayload();
+    clearConsumedUuids();
+    if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
+    else globalThis.sessionStorage = previous.sessionStorage;
+    if (previous.localStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous.localStorage;
+  }
+});
+
+test("opening a new trade discards a leftover watchTrade payload", () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const previous = {
+    sessionStorage: globalThis.sessionStorage,
+    localStorage: globalThis.localStorage,
+  };
+  globalThis.sessionStorage = memoryStore();
+  globalThis.localStorage = memoryStore();
+  try {
+    rememberPendingPayload(uuid, {
+      watchTrade: true,
+      txjson: { TransactionType: "Payment" },
+      trade: { action: "buy", quote: "XRP" },
+    });
+    assert.equal(discardStalePendingTrade({ force: true }), true);
+    assert.equal(peekPendingPayload(), null);
+    assert.equal(shouldAutoClaimPendingTrade(`?xaman=${uuid}`), false);
+  } finally {
+    clearPendingPayload();
+    clearConsumedUuids();
     if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
     else globalThis.sessionStorage = previous.sessionStorage;
     if (previous.localStorage === undefined) delete globalThis.localStorage;

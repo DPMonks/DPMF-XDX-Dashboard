@@ -22,8 +22,18 @@ import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 import { useWallet } from "./context/useWallet";
 import { liveWalletAddress } from "./wallet/walletStorage";
 import { claimExecutedTrade } from "./xaman/claimSignIn";
-import { clearXamanReturn, peekPendingPayload, peekXamanUuid } from "./xaman/payloadResume";
-import { WALLET_EVENTS, gateUnsignedTrade, normalizeTradeRequest } from "./xaman/tradeTx";
+import {
+  clearXamanReturn,
+  discardStalePendingTrade,
+  peekPendingPayload,
+  shouldAutoClaimPendingTrade,
+} from "./xaman/payloadResume";
+import {
+  WALLET_EVENTS,
+  executionClosesTradeAction,
+  gateUnsignedTrade,
+  normalizeTradeRequest,
+} from "./xaman/tradeTx";
 
 const TradingChart = lazy(() => import("./components/TradingChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
@@ -190,6 +200,7 @@ export default function App() {
       return;
     }
     pendingTradeRef.current = null;
+    discardStalePendingTrade({ force: true });
     setTradeAction({ ...gated.trade, openId: Date.now() });
   }, [walletAddress]);
 
@@ -206,8 +217,12 @@ export default function App() {
       pendingTradeRef.current = null;
     }
     function onTradeExecuted(event) {
-      if (event?.detail?.txjson?.TransactionType === "TrustSet") return;
-      setTradeAction(null);
+      const detail = event?.detail || {};
+      setTradeAction((current) => {
+        if (!current) return null;
+        if (!executionClosesTradeAction(current.action, detail)) return current;
+        return null;
+      });
       refreshLists();
     }
     window.addEventListener("dpmf-open-trade", onOpen);
@@ -225,9 +240,10 @@ export default function App() {
   useEffect(() => {
     let busy = false;
     async function claimPendingTrade() {
+      if (busy || !shouldAutoClaimPendingTrade()) return;
       const record = peekPendingPayload();
-      const uuid = peekXamanUuid();
-      if (!uuid || !record?.watchTrade || record.uuid !== uuid || busy) return;
+      const uuid = record?.uuid;
+      if (!uuid) return;
       const trade = normalizeTradeRequest(record.trade);
       if (trade) {
         setTradeAction((current) =>
