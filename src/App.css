@@ -2091,8 +2091,8 @@ body {
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--dpmf-neon-lime);
-  opacity: 0.78;
+  color: #fff;
+  opacity: 0.92;
 }
 
 .wallet-earn-row {
@@ -2101,7 +2101,6 @@ body {
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  color: var(--dpmf-neon-lime);
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
@@ -2111,7 +2110,8 @@ body {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  opacity: 0.68;
+  color: #fff;
+  opacity: 0.72;
 }
 
 .wallet-earn-value {
@@ -2119,10 +2119,12 @@ body {
   font-weight: 700;
   text-align: right;
   min-width: 0;
+  color: #39ff14;
 }
 
 .wallet-earn-cell.is-empty .wallet-earn-value,
-.wallet-earn-cell.is-empty .wallet-earn-label {
+.wallet-earn-cell.is-empty .wallet-earn-label,
+.wallet-earn-cell.is-empty .wallet-earn-range {
   opacity: 0.4;
 }
 
