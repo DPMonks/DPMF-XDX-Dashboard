@@ -72,42 +72,71 @@ export function quotesFromWalletLines(raw) {
     if (/^03[A-F0-9]{38}$/i.test(currency)) continue;
     const known = QUOTE_ASSETS.find(
       (item) =>
-        item.issuer === issuer ||
-        (item.hex && item.hex.toUpperCase() === currency) ||
-        item.id === currency
+        item.issuer &&
+        item.issuer === issuer &&
+        (item.hex?.toUpperCase() === currency ||
+          item.id === currency ||
+          item.id === String(row.ticker || "").toUpperCase())
     );
-    const id = known?.id || (/^[A-Z0-9]{3}$/.test(currency) ? currency : hexCurrencyLabel(currency));
+    const ticker =
+      known?.id ||
+      String(row.ticker || "").toUpperCase() ||
+      (/^[A-Z0-9]{3}$/.test(currency) ? currency : hexCurrencyLabel(currency));
     extra.push({
-      id,
-      currency: known?.currency || (/^[A-Z0-9]{3}$/.test(currency) ? currency : id),
+      id: ticker,
+      ticker,
+      currency: known?.currency || (/^[A-Z0-9]{3}$/.test(currency) ? currency : ticker),
       issuer: known?.issuer || issuer,
       hex: known?.hex || (/^[A-F0-9]{40}$/.test(currency) ? currency : row.hex || null),
-      label: known?.label || id,
+      label: known?.label || ticker,
+      balance: row.balance ?? row.value ?? row.amount ?? null,
     });
   }
   return extra;
 }
 
+function shortIssuer(address) {
+  const text = String(address || "");
+  if (text.length <= 11) return text;
+  return `${text.slice(0, 4)}…${text.slice(-4)}`;
+}
+
+function optionKey(ticker, issuer) {
+  return issuer ? `${ticker}:${String(issuer).toUpperCase()}` : ticker;
+}
+
 export function createQuoteOptions(pools = [], raw = null) {
-  const seen = new Set();
-  const rows = [];
+  const collected = [];
   function add(row) {
-    const id = String(row.id || row.currency || "").toUpperCase();
-    if (!id || id === "XDX" || seen.has(id)) return;
-    seen.add(id);
-    const exists = Boolean(existingPoolForQuote(pools, id));
-    rows.push({
-      id,
-      label: exists ? `XDX / ${id} · exists` : `XDX / ${id}`,
-      exists,
-      currency: row.currency || id,
-      issuer: row.issuer || null,
+    const ticker = String(row.ticker || row.id || row.currency || "").toUpperCase();
+    if (!ticker || ticker === "XDX") return;
+    const issuer = row.issuer || null;
+    const key = optionKey(ticker, issuer);
+    if (collected.some((item) => item.key === key)) return;
+    collected.push({
+      key,
+      ticker,
+      issuer,
+      currency: row.currency || ticker,
       hex: row.hex || null,
     });
   }
-  add({ id: "XRP", currency: "XRP" });
+  add({ id: "XRP", ticker: "XRP", currency: "XRP" });
   for (const row of quotesFromWalletLines(raw)) add(row);
-  return rows;
+  const counts = new Map();
+  for (const row of collected) counts.set(row.ticker, (counts.get(row.ticker) || 0) + 1);
+  return collected.map((row) => {
+    const collided = (counts.get(row.ticker) || 0) > 1 && row.issuer;
+    return {
+      id: collided ? `${row.ticker}:${row.issuer}` : row.ticker,
+      ticker: row.ticker,
+      label: collided ? `${row.ticker} · ${shortIssuer(row.issuer)}` : row.ticker,
+      exists: Boolean(existingPoolForQuote(pools, row.ticker)),
+      currency: row.currency,
+      issuer: row.issuer,
+      hex: row.hex,
+    };
+  });
 }
 
 export function defaultCreateQuoteId(pools, raw) {
@@ -228,9 +257,13 @@ export function createPoolBlocker({
 }
 
 export function resolveCreateQuote(id, extra = {}) {
-  const resolved = resolveQuote(quoteIdFromPair(id || extra.quote || extra.id), extra);
+  const ticker = extra.ticker || extra.currency || String(id || extra.quote || extra.id || "").split(":")[0];
+  const resolved = resolveQuote(quoteIdFromPair(ticker || id || extra.quote || extra.id), extra);
   return {
     ...resolved,
+    id: extra.ticker || resolved.id || ticker,
+    label: extra.label || resolved.label || ticker,
+    currency: resolved.currency || extra.currency || ticker,
     issuer: extra.issuer || extra.quote_issuer || extra.quoteIssuer || resolved.issuer || null,
     hex: extra.hex || extra.quote_hex || extra.quoteHex || resolved.hex || null,
   };

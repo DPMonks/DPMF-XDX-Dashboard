@@ -58,7 +58,7 @@ import {
   mergeLpPoolSource,
   normalizeWalletPair,
 } from "../src/wallet/composeWallet.js";
-import { loadWalletActivity, loadWalletOffers } from "./walletLedger.js";
+import { loadWalletActivity, loadWalletLines, loadWalletOffers } from "./walletLedger.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
 
 let pool = null;
@@ -99,6 +99,7 @@ const CATALOG = {
     walletBalances: "/api/wallet/balances/:address",
     walletAccount: "/api/wallet/account/:address",
     walletOffers: "/api/wallet/offers/:address",
+    walletLines: "/api/wallet/lines/:address",
     walletActivity: "/api/wallet/activity/:address",
     walletVotes: "/api/wallet/votes/:address",
     ammGovernance: "/api/amm/governance",
@@ -2129,6 +2130,10 @@ function walletLedgerResult(suffix, search = "") {
   if (offers) {
     return loadWalletOffers(decodeURIComponent(offers[1])).then((body) => ok(body));
   }
+  const lines = String(suffix || "").match(/^wallet\/lines\/([^/]+)$/);
+  if (lines) {
+    return loadWalletLines(decodeURIComponent(lines[1])).then((body) => ok(body));
+  }
   const activity = String(suffix || "").match(/^wallet\/activity\/([^/]+)$/);
   if (activity) {
     return loadWalletActivity(decodeURIComponent(activity[1])).then((body) => ok(body));
@@ -2431,6 +2436,11 @@ export async function readIndexerDb(suffix, search = "") {
     const walletOffers = suffix.match(/^wallet\/offers\/([^/]+)$/);
     if (walletOffers) {
       return ok(await loadWalletOffers(decodeURIComponent(walletOffers[1])));
+    }
+
+    const walletLines = suffix.match(/^wallet\/lines\/([^/]+)$/);
+    if (walletLines) {
+      return ok(await loadWalletLines(decodeURIComponent(walletLines[1])));
     }
 
     const walletActivity = suffix.match(/^wallet\/activity\/([^/]+)$/);
