@@ -1,10 +1,8 @@
 # FUZION-XIO local API
 
-Fresh Express API for the recovered Radical-X / FUZION-XIO frontend.
+Express API for the recovered Radical-X / FUZION-XIO frontend.
 
-The Mongo dumps that were uploaded were **index metadata only** (`DPMonksFinance-BLCH-cansultant` and `DPMonksFinance_NEWPROD`). Those databases are not imported. The store starts empty and is seeded with four demo listings.
-
-Radical-X `portal` used Express + Mongoose + `xumm-sdk` + `xrpl`. This step keeps Express and a clearable JSON store so the marketplace can run without Mongo or Xaman keys. Signing routes return a “not wired yet” payload.
+Mongo dumps that were uploaded were **index metadata only** and are not imported. The JSON store seeds demo listings plus **virtual 3D collections** (template + index, not 10k fat documents).
 
 ## Run
 
@@ -15,9 +13,10 @@ npm start
 ```
 
 Health: `GET http://127.0.0.1:8080/api/health`  
+Capabilities: `GET http://127.0.0.1:8080/api/capabilities`  
 Home catalog: `GET http://127.0.0.1:8080/api/nft/home`
 
-Reset demo data:
+Reset:
 
 ```bash
 npm run reset
@@ -26,10 +25,14 @@ npm run reset
 ## Working now
 
 - Home catalog, list, detail, like
-- Profiles and vScore/XIO boards
+- Profiles, vScore board, XIO validator board and ranks
+- Virtual collections (AVA 1k, MegaBits 2.5k, RWA twins 1k, Quantum Pass 500)
+- First-class 3D file types (`glb` / `gltf` / `fbx` / `usdz`)
+- XDX indexer token catalog / prices / wallet balances (cached; static fallback on 429)
+- XRPL `account_nfts`, `nft_info`, `account_lines`
+- Image proxy `GET /api/assets?url=`
 - Frontend same-origin `/api` via the Vite proxy
 
-## Next
+## Signing (not wired)
 
-- Xaman connect / mint / buy / sell (`xumm-sdk`, `xrpl`)
-- Optional Mongo if you want the old collection names back
+Xaman connect / mint / buy / sell still return `{ implemented: false }` until `xumm-sdk` keys are added.

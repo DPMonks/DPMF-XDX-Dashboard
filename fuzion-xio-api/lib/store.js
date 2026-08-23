@@ -6,6 +6,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const dataFile = path.resolve(root, "..", "data", "store.json");
 
 const empty = () => ({
+  version: 0,
   nfts: [],
   profiles: [],
   likes: [],
@@ -17,7 +18,9 @@ const empty = () => ({
   tradehistories: [],
   xumms: [],
   leaderboards: [],
-  collections: []
+  collections: [],
+  collectionTemplates: [],
+  xioHolders: []
 });
 
 function ensure() {

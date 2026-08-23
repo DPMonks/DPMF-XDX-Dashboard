@@ -24,17 +24,14 @@ function XioDashboard() {
 
   // ===========Declined receive nft record======
   useEffect(() => {
-    if (!!token) {
-      dispatch(getProfileAction({ wAddress: "" })).then((pDetail) => {
-        setAllProfile(pDetail.data.allProfile);
-      });
-      dispatch(getXioDashboardAction({ token }))
-        .then((val) => {
-          //   console.log("vscoredashboard", val?.data?.xioDashboardData);
-          setXioDashboard(val?.data?.xioDashboardData);
-        })
-        .catch((e) => console.log("Error decline NFT", e));
-    }
+    dispatch(getProfileAction({ wAddress: "" })).then((pDetail) => {
+      setAllProfile(pDetail?.data?.allProfile);
+    });
+    dispatch(getXioDashboardAction({ token }))
+      .then((val) => {
+        setXioDashboard(val?.data?.xioDashboardData);
+      })
+      .catch((e) => console.log("Error XIO dashboard", e));
   }, [token]); // eslint-disable-line
 
   const rankFilter = (balance) => {

@@ -1,4 +1,5 @@
 import "./App.css";
+import "./theme-dpmf.css";
 import React, { Suspense } from "react";
 import {
   BrowserRouter as Router,
@@ -40,6 +41,7 @@ const VscoreDashboard = React.lazy(() =>
 );
 const Collections = React.lazy(() => import("./components/nft/collections"));
 const XioDashboard = React.lazy(() => import("./components/nft/xioDashboard"));
+const Capabilities = React.lazy(() => import("./components/nft/capabilities"));
 
 function App() {
   useSuppressResizeObserverError();
@@ -69,6 +71,8 @@ function App() {
           <Route path="/Searchnft" element={<Searchnft />} />
           <Route path="/Profile/:id" element={<Profile />} />
           <Route path="/collections" element={<Collections />} />
+          <Route path="/market" element={<Capabilities />} />
+          <Route path="/Xiodashboard" element={<XioDashboard />} />
 
           <Route element={<PrivateRoute />}>
             <Route path="/Createnft" element={<Createnft />} />
@@ -79,7 +83,6 @@ function App() {
             <Route path="/BuyOfferReceived" element={<BuyOfferReceived />} />
             <Route path="/Profile" element={<Profile />} />
             <Route path="/Vscoredashboard" element={<VscoreDashboard />} />
-            <Route path="/Xiodashboard" element={<XioDashboard />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" />} />

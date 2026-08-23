@@ -586,6 +586,7 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
                 >
                   Create NFT
                 </Dropdown.Item>
+                <Dropdown.Item href="/market">Market</Dropdown.Item>
                 <Dropdown.Item href="/Xiodashboard">Validators</Dropdown.Item>
                 <Dropdown.Item href="/Vscoredashboard">
                   Verified Profiles
@@ -603,6 +604,12 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
           ) : (
             <Link to="/" className="home-class">
               Home
+            </Link>
+            <Link to="/market" className="home-class">
+              Market
+            </Link>
+            <Link to="/Xiodashboard" className="home-class">
+              XIO
             </Link>
           )}
 
