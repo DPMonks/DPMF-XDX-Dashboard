@@ -20,10 +20,14 @@ import {
   poolPrice,
   predictedQuoteOut,
   predictedXdxFromQuote,
+  quoteUnitUsd,
+  depositValueSplit,
   tradeSides,
   tradeTotal,
+  xdxUnitUsd,
 } from "../xaman/tradeTx";
-import { formatToken } from "../utils/format";
+import { formatPoolPct } from "../utils/poolSplit";
+import { formatToken, formatUsd } from "../utils/format";
 import { shortAddress } from "../utils/format";
 import WalletModal from "./WalletModal";
 
@@ -44,6 +48,12 @@ function poolReserves(pools, quote) {
     lpSupply: Number(row?.lp_supply ?? 0),
     issuer: row?.quote_issuer || null,
     hex: row?.quote_hex || null,
+    xdxUsd: Number(row?.xdxUsd || 0),
+    quoteUsd: Number(row?.quote_usd || 0),
+    quoteName: row?.quote || pair.split("/")[1] || "XRP",
+    reserve_xdx: Number(row?.reserve_xdx ?? row?.reserve_asset ?? 0),
+    reserve_asset: Number(row?.reserve_xdx ?? row?.reserve_asset ?? 0),
+    reserve_currency: Number(row?.reserve_currency ?? 0),
   };
 }
 
@@ -68,6 +78,7 @@ export default function TradePanel({
   const [lineHint, setLineHint] = useState("");
   const [formError, setFormError] = useState("");
   const [liveSpot, setLiveSpot] = useState(spotPrice);
+  const [prices, setPrices] = useState({});
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
   const quote = resolveQuote(quoteId, {
@@ -93,6 +104,14 @@ export default function TradePanel({
     setQuoteQty(String(quoteHint));
   }
   const lpHint = expectedLpTokens(amount, reserves.base, reserves.lpSupply);
+  const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
+  const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices });
+  const deposit = depositValueSplit({
+    xdxAmount: amount,
+    quoteAmount: quoteQty || quoteHint,
+    xdxUsd,
+    quoteUsd,
+  });
   const sides = tradeSides({
     action,
     amount,
@@ -114,13 +133,14 @@ export default function TradePanel({
     if (!action) return undefined;
     let cancelled = false;
     getPrices()
-      .then((prices) => {
+      .then((nextPrices) => {
         if (cancelled) return;
+        setPrices(nextPrices || {});
         const next = Number(
           quoteId === "XRP"
-            ? prices.xdxXrp || prices.xdxPerXrp
+            ? nextPrices.xdxXrp || nextPrices.xdxPerXrp
             : quoteId === "RLUSD"
-              ? prices.xdxRlusd || prices.xdxUsd
+              ? nextPrices.xdxRlusd || nextPrices.xdxUsd
               : 0
         );
         if (next > 0) {
@@ -171,7 +191,7 @@ export default function TradePanel({
         account: walletAddress,
         quote,
         xdx: amount,
-        proceeds: total,
+        proceeds: quoteQty || total,
         market: orderType === "market",
       });
     }
@@ -316,8 +336,49 @@ export default function TradePanel({
                 if (hinted > 0) setQuoteQty(String(hinted));
               }}
             />
+            {action === "addLp" ? (
+              <span className="trade-field-usd">
+                {xdxUsd > 0 ? formatUsd(Number(amount) * xdxUsd, locale) : "—"}
+              </span>
+            ) : null}
           </label>
         )}
+        {action === "addLp" ? (
+          <div
+            className={`pool-split trade-deposit-split ${deposit.xdxPct >= deposit.quotePct ? "is-xdx-lead" : "is-quote-lead"}`}
+          >
+            <div className="pool-split-labels">
+              <span className="pool-split-xdx">
+                <i className="pool-split-swatch is-xdx" aria-hidden="true" />
+                <span className="pool-split-pct">{formatPoolPct(deposit.xdxPct)}%</span>
+                <span className="pool-split-asset">XDX</span>
+              </span>
+              <span className="pool-split-ratio">
+                {`${formatPoolPct(deposit.xdxPct)} / ${formatPoolPct(deposit.quotePct)}`}
+              </span>
+              <span className="pool-split-quote">
+                <span className="pool-split-pct">{formatPoolPct(deposit.quotePct)}%</span>
+                <span className="pool-split-asset">{quote.label}</span>
+                <i className="pool-split-swatch is-quote" aria-hidden="true" />
+              </span>
+            </div>
+            <div
+              className="pool-split-bar"
+              role="img"
+              aria-label={`${formatPoolPct(deposit.xdxPct)} percent XDX, ${formatPoolPct(deposit.quotePct)} percent ${quote.label}`}
+            >
+              <span
+                className="pool-split-bar-xdx"
+                style={{ flexGrow: Math.max(deposit.xdxPct, 0), flexShrink: 0, flexBasis: 0 }}
+              />
+              <span
+                className="pool-split-bar-quote"
+                style={{ flexGrow: Math.max(deposit.quotePct, 0), flexShrink: 0, flexBasis: 0 }}
+              />
+              <i className="pool-split-mid" aria-hidden="true" />
+            </div>
+          </div>
+        ) : null}
         {action !== "removeLp" ? (
           <label className="trade-field">
             {quote.label}
@@ -333,6 +394,11 @@ export default function TradePanel({
                 if (xdx > 0) setAmount(String(xdx));
               }}
             />
+            {action === "addLp" ? (
+              <span className="trade-field-usd">
+                {quoteUsd > 0 ? formatUsd(Number(quoteQty || quoteHint) * quoteUsd, locale) : "—"}
+              </span>
+            ) : null}
           </label>
         ) : null}
 

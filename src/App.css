@@ -153,6 +153,19 @@ body {
   color: #fff;
 }
 
+.trade-field-usd {
+  display: block;
+  margin-top: 4px;
+  color: #9aa0c8;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trade-deposit-split {
+  margin: 4px 0 12px;
+  padding: 8px 8px 10px;
+}
+
 .trade-summary {
   display: grid;
   gap: 6px;

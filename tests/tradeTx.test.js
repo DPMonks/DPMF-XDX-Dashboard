@@ -19,7 +19,10 @@ import {
   resolveQuote,
   predictedQuoteOut,
   predictedXdxFromQuote,
+  quoteUnitUsd,
+  depositValueSplit,
   tradeSides,
+  xdxUnitUsd,
   tradeTotal,
   xrpDrops,
 } from "../src/xaman/tradeTx.js";
@@ -121,4 +124,11 @@ test("trade windows show pay and receive from the selected pair", () => {
   assert.equal(add.pay[0].asset, "XDX");
   assert.equal(add.pay[1].asset, "XRP");
   assert.equal(add.receive[0].asset, "LP");
+  assert.equal(xdxUnitUsd({ prices: { xdxUsd: 0.00003 } }), 0.00003);
+  assert.equal(quoteUnitUsd({ quoteId: "XRP", prices: { xrpUsd: 2 } }), 2);
+  assert.equal(quoteUnitUsd({ quoteId: "XIO", pool: { reserve_xdx: 1000, reserve_currency: 50, xdxUsd: 0.0001 } }), 0.002);
+  const split = depositValueSplit({ xdxAmount: 1000, quoteAmount: 2, xdxUsd: 0.01, quoteUsd: 2.5 });
+  assert.equal(split.xdxValue, 10);
+  assert.equal(split.quoteValue, 5);
+  assert.ok(Math.abs(split.xdxPct - 66.666) < 0.02);
 });

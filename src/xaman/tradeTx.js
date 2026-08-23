@@ -213,6 +213,46 @@ export function predictedXdxFromQuote(quoteAmount, price, reserveBase, reserveQu
   return 0;
 }
 
+export function xdxUnitUsd({ pool, prices } = {}) {
+  const fromPool = Number(pool?.xdxUsd);
+  if (fromPool > 0) return fromPool;
+  const fromPrices = Number(prices?.xdxUsd ?? prices?.recorded_price);
+  return fromPrices > 0 ? fromPrices : 0;
+}
+
+export function quoteUnitUsd({ quoteId, pool, prices } = {}) {
+  const id = String(quoteId || pool?.quoteName || pool?.quote || "").toUpperCase();
+  const fromPool = Number(pool?.quote_usd ?? pool?.quoteUsd);
+  if (fromPool > 0) return fromPool;
+  if (id === "XRP") {
+    const xrp = Number(prices?.xrpUsd);
+    if (xrp > 0) return xrp;
+  }
+  if (id === "RLUSD") return 1;
+  const xdxUsd = xdxUnitUsd({ pool, prices });
+  const base = Number(pool?.reserve_xdx ?? pool?.reserve_asset ?? pool?.base);
+  const quote = Number(pool?.reserve_currency ?? pool?.quoteReserve ?? pool?.quote);
+  if (xdxUsd > 0 && base > 0 && quote > 0) return (base * xdxUsd) / quote;
+  return 0;
+}
+
+export function depositValueSplit({ xdxAmount, quoteAmount, xdxUsd, quoteUsd } = {}) {
+  const xdxValue = Math.max(0, Number(xdxAmount) * Number(xdxUsd) || 0);
+  const quoteValue = Math.max(0, Number(quoteAmount) * Number(quoteUsd) || 0);
+  const total = xdxValue + quoteValue;
+  if (!(total > 0)) {
+    return { xdxValue: 0, quoteValue: 0, total: 0, xdxPct: 50, quotePct: 50 };
+  }
+  const xdxPct = (xdxValue / total) * 100;
+  return {
+    xdxValue,
+    quoteValue,
+    total,
+    xdxPct,
+    quotePct: 100 - xdxPct,
+  };
+}
+
 export function recommendedQuote(xdxAmount, reserveBase, reserveQuote) {
   const base = Number(reserveBase);
   const quote = Number(reserveQuote);
