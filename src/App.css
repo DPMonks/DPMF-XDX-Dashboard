@@ -168,21 +168,71 @@ body {
   box-shadow: 0 0 12px rgba(0, 234, 255, 0.22);
 }
 
-.trade-panel .pair-select-list {
-  z-index: 20;
-  max-height: 220px;
-  background: #07070c;
-  border: 1px solid var(--dpmf-neon-cyan);
-  box-shadow:
-    0 0 18px rgba(0, 234, 255, 0.2),
-    0 16px 36px rgba(0, 0, 0, 0.55);
-  scrollbar-color: #c770ff #101018;
-  scrollbar-width: thin;
+.trade-panel .pair-select-input,
+.trade-panel .brand-select-value {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 34px;
+  color: #fff;
 }
 
-.trade-panel .pair-select-list button:hover,
-.trade-panel .pair-select-list button.is-active {
-  background: linear-gradient(90deg, rgba(0, 234, 255, 0.16), rgba(199, 112, 255, 0.22));
+.trade-panel .brand-select-value {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 8px 6px 8px 10px;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wallet-modal.trade-panel {
+  overflow: visible;
+}
+
+.brand-select-list.pair-select-list {
+  z-index: 10050;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: #050508;
+  border: 1px solid var(--dpmf-neon-cyan);
+  border-radius: 12px;
+  box-shadow:
+    0 0 18px rgba(0, 234, 255, 0.28),
+    0 16px 36px rgba(0, 0, 0, 0.6);
+  scrollbar-color: #c770ff #101018;
+  scrollbar-width: thin;
+  overflow-y: auto;
+}
+
+.brand-select-list button {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #0a0a12;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.brand-select-list button + button,
+.brand-select-list li + li {
+  margin-top: 4px;
+}
+
+.brand-select-list button:hover,
+.brand-select-list button.is-active {
+  background: linear-gradient(90deg, rgba(0, 234, 255, 0.22), rgba(199, 112, 255, 0.28));
+  border-color: rgba(0, 234, 255, 0.45);
   color: #fff;
 }
 

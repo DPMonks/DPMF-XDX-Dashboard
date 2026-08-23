@@ -1,4 +1,16 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+function menuBox(node) {
+  const box = node?.getBoundingClientRect?.();
+  if (!box) return null;
+  return {
+    top: box.bottom + 4,
+    left: box.left,
+    width: box.width,
+    maxHeight: Math.min(240, Math.max(120, window.innerHeight - box.bottom - 16)),
+  };
+}
 
 export default function BrandSelect({
   value,
@@ -9,9 +21,11 @@ export default function BrandSelect({
   placeholder = "",
 }) {
   const boxRef = useRef(null);
+  const listRef = useRef(null);
   const uid = useId().replace(/:/g, "");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [menu, setMenu] = useState(null);
   const selected = (Array.isArray(options) ? options : []).find((row) => row.id === value) || options[0];
   const matches = useMemo(() => {
     const rows = Array.isArray(options) ? options : [];
@@ -20,56 +34,120 @@ export default function BrandSelect({
     return rows.filter((row) => String(row.label || row.id || "").toUpperCase().includes(q));
   }, [options, query]);
 
+  function openMenu() {
+    setMenu(menuBox(boxRef.current));
+    setOpen(true);
+  }
+
+  function closeMenu() {
+    setOpen(false);
+    setQuery("");
+    setMenu(null);
+  }
+
   useEffect(() => {
     function onDoc(event) {
-      if (!boxRef.current?.contains(event.target)) {
-        setOpen(false);
-        setQuery("");
-      }
+      if (boxRef.current?.contains(event.target) || listRef.current?.contains(event.target)) return;
+      closeMenu();
     }
     document.addEventListener("pointerdown", onDoc);
     return () => document.removeEventListener("pointerdown", onDoc);
   }, []);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    function onMove() {
+      const next = menuBox(boxRef.current);
+      const list = listRef.current;
+      if (!next || !list) return;
+      list.style.top = `${next.top}px`;
+      list.style.left = `${next.left}px`;
+      list.style.width = `${next.width}px`;
+      list.style.maxHeight = `${next.maxHeight}px`;
+    }
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onMove, true);
+    return () => {
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove, true);
+    };
+  }, [open]);
+
   function select(id) {
     onChange?.(id);
-    setQuery("");
-    setOpen(false);
+    closeMenu();
   }
+
+  const list =
+    open && menu
+      ? createPortal(
+          <ul
+            ref={listRef}
+            className="pair-select-list brand-select-list"
+            role="listbox"
+            style={{
+              position: "fixed",
+              top: menu.top,
+              left: menu.left,
+              width: menu.width,
+              maxHeight: menu.maxHeight,
+            }}
+          >
+            {matches.map((row) => (
+              <li key={row.id}>
+                <button type="button" className={value === row.id ? "is-active" : ""} onClick={() => select(row.id)}>
+                  {row.label || row.id}
+                </button>
+              </li>
+            ))}
+          </ul>,
+          document.body
+        )
+      : null;
 
   return (
     <div className={`pair-select brand-select ${open ? "is-open" : ""}`} ref={boxRef}>
       <div className="pair-select-control">
-        <input
-          className="pair-select-input"
-          type={searchable ? "search" : "text"}
-          readOnly={!searchable}
-          value={open && searchable ? query : selected?.label || ""}
-          placeholder={placeholder || selected?.label || ""}
-          aria-label={ariaLabel}
-          aria-expanded={open}
-          aria-haspopup="listbox"
-          onFocus={() => setOpen(true)}
-          onChange={(event) => {
-            if (!searchable) return;
-            setQuery(event.target.value);
-            setOpen(true);
-          }}
-          onClick={() => setOpen(true)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              setOpen(false);
-              setQuery("");
-            }
-            if (event.key === "Enter" && matches[0]) select(matches[0].id);
-          }}
-        />
+        {searchable ? (
+          <input
+            className="pair-select-input"
+            type="search"
+            autoComplete="off"
+            spellCheck={false}
+            value={open ? query : selected?.label || ""}
+            placeholder={placeholder || selected?.label || ""}
+            aria-label={ariaLabel}
+            aria-expanded={open}
+            aria-haspopup="listbox"
+            onFocus={openMenu}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              openMenu();
+            }}
+            onClick={openMenu}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") closeMenu();
+              if (event.key === "Enter" && matches[0]) select(matches[0].id);
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="pair-select-input brand-select-value"
+            aria-label={ariaLabel}
+            aria-expanded={open}
+            aria-haspopup="listbox"
+            onClick={() => (open ? closeMenu() : openMenu())}
+          >
+            {selected?.label || placeholder}
+          </button>
+        )}
         <button
           type="button"
           className="pair-select-chevron"
           tabIndex={-1}
           aria-label={ariaLabel}
-          onClick={() => setOpen((current) => !current)}
+          onClick={() => (open ? closeMenu() : openMenu())}
         >
           <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
             <path
@@ -88,21 +166,7 @@ export default function BrandSelect({
           </svg>
         </button>
       </div>
-      {open ? (
-        <ul className="pair-select-list" role="listbox">
-          {matches.map((row) => (
-            <li key={row.id}>
-              <button
-                type="button"
-                className={value === row.id ? "is-active" : ""}
-                onClick={() => select(row.id)}
-              >
-                {row.label || row.id}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {list}
     </div>
   );
 }
