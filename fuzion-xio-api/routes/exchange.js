@@ -22,7 +22,8 @@ import {
   addPin,
   pinsForNft,
   profileNftDesk,
-  removePin
+  removePin,
+  snapshotFromBody
 } from "../lib/profileNfts.js";
 
 const router = Router();
@@ -418,7 +419,7 @@ router.post("/collection/create", (req, res) => {
   }
   let pinned = null;
   update((current) => {
-    const nft = resolveNft(current, nftId);
+    const nft = resolveNft(current, nftId) || snapshotFromBody(body);
     if (!nft) return current;
     pinned = addPin(current, address, nft);
     return current;

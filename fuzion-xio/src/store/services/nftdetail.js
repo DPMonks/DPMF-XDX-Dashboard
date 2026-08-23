@@ -112,7 +112,7 @@ export const deleteCollectionService = async (data) => {
       Authorization: `Basic ${token}`
     },
     method: "delete",
-    url: `collection/delete/${JSON.stringify(data)}`
+    url: `collection/delete/${encodeURIComponent(JSON.stringify(data))}`
   };
   try {
     const deleteCollectionInfo = await axios(deleteCollectionCofig);

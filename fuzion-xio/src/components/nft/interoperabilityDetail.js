@@ -716,12 +716,25 @@ function InteroperabilityDetail() {
 
   const handleCollection = () => {
     const Id = getParams.id;
-    dispatch(addCollection({ nftDetail: nft, Id, loader: true }));
+    dispatch(
+      addCollection({
+        nftDetail: nft,
+        Id,
+        wAddress: decodedToken?.ac,
+        loader: true
+      })
+    );
   };
 
   const handleDeleteCollection = (id) => {
     dispatch(
-      deleteCollection({ walletAddress: getParams.id, id, loader: true })
+      deleteCollection({
+        walletAddress: decodedToken?.ac,
+        wAddress: decodedToken?.ac,
+        id,
+        Id: nft?._id || id,
+        loader: true
+      })
     );
   };
 

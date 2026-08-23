@@ -1681,11 +1681,11 @@ const Profile = () => {
                                 md={3}
                                 sm={6}
                                 xs={4}
-                                key={item._id || item.NFTokenID}
+                                key={`${item._id || ""}-${item.NFTokenID || ""}-${item.name || ""}`}
                                 className="mb-4 collections-grid-col"
                               >
                                 <Link
-                                  to={`/Nftdetail/${item._id}`}
+                                  to={`/Nftdetail/${encodeURIComponent(item._id)}`}
                                   className="dpmf-card-link"
                                 >
                                   <div className="carousel-item-wrapper collection-tile-card">
@@ -1704,6 +1704,8 @@ const Profile = () => {
                                       {item.name || "NFT"}
                                     </p>
                                     <small className="dpmf-muted">
+                                      {(item.contentType || item.fileType || "NFT").toUpperCase()}
+                                      {" · "}
                                       {item.source === "xrpl"
                                         ? "XRP Ledger"
                                         : item.pinned

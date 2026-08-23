@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "node --watch app.js",
-    "reset": "node scripts/reset.js"
+    "reset": "node scripts/reset.js",
+    "test": "node scripts/test-profile-nfts.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
