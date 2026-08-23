@@ -58,6 +58,7 @@ import {
   mergeLpPoolSource,
   normalizeWalletPair,
 } from "../src/wallet/composeWallet.js";
+import { loadWalletActivity, loadWalletOffers } from "./walletLedger.js";
 
 let pool = null;
 
@@ -96,6 +97,8 @@ const CATALOG = {
     xdxFlows: "/api/xdx-flows",
     walletBalances: "/api/wallet/balances/:address",
     walletAccount: "/api/wallet/account/:address",
+    walletOffers: "/api/wallet/offers/:address",
+    walletActivity: "/api/wallet/activity/:address",
     walletLp: "/api/wallet/lp/:address",
     walletRank: "/api/wallet/rank/:address",
     prices: "/api/prices",
@@ -1916,6 +1919,7 @@ async function readAmmTrades(db) {
       xdx: Number(row.xdx || row.amount || 0),
       quote: Number(row.quote || 0),
       price: Number(row.price || 0),
+      account: row.account || null,
     }));
   }
 
@@ -2117,7 +2121,22 @@ async function buildSnapshot(db) {
   };
 }
 
+function walletLedgerResult(suffix) {
+  const offers = String(suffix || "").match(/^wallet\/offers\/([^/]+)$/);
+  if (offers) {
+    return loadWalletOffers(decodeURIComponent(offers[1])).then((body) => ok(body));
+  }
+  const activity = String(suffix || "").match(/^wallet\/activity\/([^/]+)$/);
+  if (activity) {
+    return loadWalletActivity(decodeURIComponent(activity[1])).then((body) => ok(body));
+  }
+  return null;
+}
+
 export async function readIndexerDb(suffix, search = "") {
+  const ledger = walletLedgerResult(suffix);
+  if (ledger) return ledger;
+
   const db = getPool();
   if (!db) return null;
 
@@ -2394,6 +2413,16 @@ export async function readIndexerDb(suffix, search = "") {
     if (walletAccount) {
       const address = decodeURIComponent(walletAccount[1]);
       return ok(await loadWalletAccount(address));
+    }
+
+    const walletOffers = suffix.match(/^wallet\/offers\/([^/]+)$/);
+    if (walletOffers) {
+      return ok(await loadWalletOffers(decodeURIComponent(walletOffers[1])));
+    }
+
+    const walletActivity = suffix.match(/^wallet\/activity\/([^/]+)$/);
+    if (walletActivity) {
+      return ok(await loadWalletActivity(decodeURIComponent(walletActivity[1])));
     }
 
     const walletLp = suffix.match(/^wallet\/lp\/([^/]+)$/);

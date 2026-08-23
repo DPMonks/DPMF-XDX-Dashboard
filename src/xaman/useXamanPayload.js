@@ -72,7 +72,7 @@ export function useXamanPayload() {
       if (announced || !detection?.executed) return false;
       announced = true;
       onExecuted?.(detection);
-      if (watchTrade) notifyTradeExecuted(detection);
+      if (watchTrade) notifyTradeExecuted({ ...detection, txjson: body?.txjson });
       return true;
     };
 

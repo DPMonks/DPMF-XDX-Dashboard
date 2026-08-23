@@ -187,6 +187,11 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
     console.error(dbHint);
   }
 
+  if (method === "GET" && /^wallet\/(offers|activity)\//.test(suffix)) {
+    const ledger = await readIndexerDb(suffix, search);
+    if (ledger && ledger.status < 400) return withSource(ledger, "xrpl");
+  }
+
   // Prefer the XDX tables when a connection string is present so Hikari 429
   // cannot hide history. Never starts or resets indexer workers.
   if (method === "GET" && hasIndexerDatabase()) {

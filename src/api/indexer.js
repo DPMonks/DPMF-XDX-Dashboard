@@ -700,11 +700,25 @@ export async function getPrices() {
   return api.prices();
 }
 
+export async function getWalletOffers(address) {
+  const name = String(address || "").trim();
+  if (!name) return [];
+  const body = await api.walletOffers(name);
+  return asArray(body?.orders || body);
+}
+
+export async function getWalletActivity(address) {
+  const name = String(address || "").trim();
+  if (!name) return [];
+  const body = await api.walletActivity(name);
+  return asArray(body?.activity || body);
+}
+
 export async function getConnectedWallet(address) {
   const name = String(address || "").trim();
   if (!name) return emptyWalletSnapshot(null);
 
-  const [balances, networth, account, lpRows, rank, prices, token, pools, books, flows] =
+  const [balances, networth, account, lpRows, rank, prices, token, pools, books, flows, offers, ledgerActivity] =
     await Promise.all([
       getWalletBalances(name).catch(() => ({})),
       getWalletNetworth(name).catch(() => ({})),
@@ -716,6 +730,8 @@ export async function getConnectedWallet(address) {
       getAmm().catch(() => []),
       getOrderbooks().catch(() => null),
       getXdxFlows().catch(() => []),
+      getWalletOffers(name).catch(() => []),
+      getWalletActivity(name).catch(() => []),
     ]);
 
   return composeWalletSnapshot({
@@ -730,5 +746,7 @@ export async function getConnectedWallet(address) {
     rank,
     books,
     flows,
+    offers,
+    ledgerActivity,
   });
 }

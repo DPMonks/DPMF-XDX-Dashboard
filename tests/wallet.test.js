@@ -275,6 +275,26 @@ test("composeWalletSnapshot totals LP fee earnings after sign-in", () => {
   assert.equal(emptyWalletSnapshot(null).fees.xdx, null);
 });
 
+test("composeWalletSnapshot keeps ledger offers and activity for the signed-in wallet", () => {
+  const snap = composeWalletSnapshot({
+    address: "rBuyer",
+    balances: { xrp: 20, xdx: 1000 },
+    offers: [{ account: "rBuyer", pair: "XDX/XRP", side: "bid", price: 0.03, amount: 1000 }],
+    ledgerActivity: [
+      {
+        account: "rBuyer",
+        side: "buy",
+        xdx: 1000,
+        price: 0.03,
+        timestamp: "2026-08-23T01:50:00.000Z",
+      },
+    ],
+  });
+  assert.equal(snap.orders[0].price, 0.03);
+  assert.equal(snap.activity[0].side, "buy");
+  assert.equal(snap.activity[0].xdx, 1000);
+});
+
 test("walletActivity only keeps the signed-in account", () => {
   const rows = walletActivity(
     [

@@ -22,6 +22,7 @@ import {
   xrpBarPercents,
 } from "../wallet/composeWallet";
 import { useMorph } from "../wallet/useMorph";
+import { mergeWalletActivity, mergeWalletOrders, pendingFromExecution } from "../wallet/ledgerOrders";
 
 function XrpColumn({ label, tone, percent, value, locale, empty }) {
   return (
@@ -229,10 +230,27 @@ export default function ConnectedWallet() {
       load();
     }
     window.addEventListener("dpmf-wallet-refresh", onRefresh);
+    function onTrade(event) {
+      const pending = pendingFromExecution(event.detail, walletAddress);
+      if (!pending) {
+        load();
+        return;
+      }
+      setSnap((current) => ({
+        ...current,
+        signedIn: true,
+        filled: true,
+        orders: mergeWalletOrders(pending.order ? [pending.order] : [], current.orders || []),
+        activity: mergeWalletActivity(pending.activity ? [pending.activity] : [], current.activity || []).slice(0, 3),
+      }));
+      load();
+    }
+    window.addEventListener("dpmf-trade-executed", onTrade);
     return () => {
       cancelled = true;
       clearInterval(id);
       window.removeEventListener("dpmf-wallet-refresh", onRefresh);
+      window.removeEventListener("dpmf-trade-executed", onTrade);
     };
   }, [walletAddress]);
 

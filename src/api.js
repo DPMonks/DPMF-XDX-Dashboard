@@ -463,6 +463,18 @@ export const api = {
     getJson(endpoint("walletRank", { address }) || `/wallet/rank/${encodeURIComponent(address)}`, {
       retries: 1,
     }),
+  walletOffers: (address) =>
+    getJson(`/wallet/offers/${encodeURIComponent(address)}`, {
+      retries: 1,
+      queue: false,
+      cache: false,
+    }),
+  walletActivity: (address) =>
+    getJson(`/wallet/activity/${encodeURIComponent(address)}`, {
+      retries: 1,
+      queue: false,
+      cache: false,
+    }),
   prices: () => getJson(endpoint("prices"), { queue: false }),
   change24h: () => getJson(endpoint("change24h"), { queue: false }),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),

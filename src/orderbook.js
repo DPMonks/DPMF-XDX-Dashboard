@@ -201,12 +201,14 @@ export function offerToDexRow(row) {
 
   const directPrice = Number(row.price ?? row.quality_price);
   const directSize = Number(row.base_size ?? row.amount ?? row.size);
+  const account = row.Account || row.account || null;
   if (directPrice > 0 && directSize > 0 && row.TakerGets == null && row.taker_gets == null) {
     return {
       price: directPrice,
       base_size: directSize,
       source: "dex",
       side: String(row.side || "").toLowerCase() === "ask" ? "ask" : "bid",
+      account,
     };
   }
 
@@ -221,6 +223,7 @@ export function offerToDexRow(row) {
         base_size: fundedGets && isXdxAmount(fundedGets) ? fundedGets.value : gets.value,
         source: "dex",
         side: "ask",
+        account,
       };
     }
     if (isXdxAmount(pays)) {
@@ -229,6 +232,7 @@ export function offerToDexRow(row) {
         base_size: fundedPays && isXdxAmount(fundedPays) ? fundedPays.value : pays.value,
         source: "dex",
         side: "bid",
+        account,
       };
     }
   }

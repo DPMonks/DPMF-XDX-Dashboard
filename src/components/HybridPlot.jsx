@@ -848,7 +848,7 @@ export default function HybridPlot({
             );
           })}
 
-          {showLedgerOrders
+          {showLedgerOrders || (wallet?.orders || []).length
             ? (wallet?.orders || []).map((row, index) => {
                 const y = scale.y(row.price);
                 const when = row.when ? formatCursorWhen(row.when, locale) : "";

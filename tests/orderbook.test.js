@@ -363,6 +363,15 @@ test("offerToDexRow reads XRPL TakerGets / TakerPays as native bids and asks", (
   assert.ok(Math.abs(ask.price - 0.0004 / 8000) < 1e-12);
 });
 
+test("offerToDexRow keeps the offer account so a wallet can find its own bid", () => {
+  const bid = offerToDexRow({
+    Account: "rBuyer",
+    TakerGets: "1500000",
+    TakerPays: { currency: "XDX", issuer: "rIssuer", value: "50000" },
+  });
+  assert.equal(bid.account, "rBuyer");
+});
+
 test("extractDexSides finds nested Worker 2 book.bids without treating AMM rungs as DEX", () => {
   const sides = extractDexSides({
     book: {

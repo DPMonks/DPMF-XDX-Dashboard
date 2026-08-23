@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getAmm, getOrderbooks, getPrices, getXdxFlows } from "../api/indexer";
+import { getAmm, getOrderbooks, getPrices, getWalletActivity, getWalletOffers, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
 import { CHART_MA_PAD, CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, visibleBarsForInterval } from "../chart/intervals";
 import {
@@ -35,6 +35,12 @@ import {
 import { walletChartMarks } from "../chart/walletMarks";
 import { bookHeader } from "../orderbook";
 import { walletOrdersFromBooks } from "../wallet/composeWallet";
+import {
+  mergeWalletActivity,
+  mergeWalletOrders,
+  pendingFor,
+  pendingFromExecution,
+} from "../wallet/ledgerOrders";
 import { useWallet } from "../context/useWallet";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
@@ -179,6 +185,8 @@ export default function HybridChart() {
   const [rsiOverbought, setRsiOverbought] = useState(70);
   const [rsiOversold, setRsiOversold] = useState(30);
   const [books, setBooks] = useState(null);
+  const [ledgerOrders, setLedgerOrders] = useState([]);
+  const [ledgerFills, setLedgerFills] = useState([]);
   const [pools, setPools] = useState([]);
   const [prices, setPrices] = useState({});
   const [trades, setTrades] = useState([]);
@@ -225,6 +233,49 @@ export default function HybridChart() {
       clearInterval(id);
     };
   }, []);
+
+  useEffect(() => {
+    if (!walletAddress) {
+      const clear = setTimeout(() => {
+        setLedgerOrders([]);
+        setLedgerFills([]);
+      }, 0);
+      return () => clearTimeout(clear);
+    }
+    let cancelled = false;
+    async function loadLedger() {
+      const [offers, activity] = await Promise.all([
+        getWalletOffers(walletAddress).catch(() => []),
+        getWalletActivity(walletAddress).catch(() => []),
+      ]);
+      if (cancelled) return;
+      setLedgerOrders(offers);
+      setLedgerFills(activity);
+    }
+    const start = setTimeout(loadLedger, 0);
+    const id = setInterval(loadLedger, 15000);
+    function onTrade(event) {
+      const pending = pendingFromExecution(event.detail, walletAddress);
+      if (pending?.order) {
+        setLedgerOrders((rows) => mergeWalletOrders([pending.order], rows));
+        if (pending.order.pair) setPair(pending.order.pair);
+      }
+      if (pending?.activity) {
+        setLedgerFills((rows) => mergeWalletActivity([pending.activity], rows));
+        if (pending.activity.pair) setPair(pending.activity.pair);
+      }
+      loadLedger();
+    }
+    window.addEventListener("dpmf-trade-executed", onTrade);
+    window.addEventListener("dpmf-wallet-refresh", loadLedger);
+    return () => {
+      cancelled = true;
+      clearTimeout(start);
+      clearInterval(id);
+      window.removeEventListener("dpmf-trade-executed", onTrade);
+      window.removeEventListener("dpmf-wallet-refresh", loadLedger);
+    };
+  }, [walletAddress]);
 
   const quote = pair.split("/")[1] || "RLUSD";
   const book = books?.books?.[pair] || {};
@@ -323,10 +374,15 @@ export default function HybridChart() {
   const trail = ammRebalanceTrail(
     candles.slice(-24).map((row) => ({ t: row.t, price: row.c, timestamp: row.t }))
   );
+  const walletPending = pendingFor(walletAddress, { offersKnown: ledgerOrders.length > 0 });
   const wallet = walletChartMarks({
     address: walletAddress,
-    orders: walletOrdersFromBooks(books, walletAddress),
-    fills: trades,
+    orders: mergeWalletOrders(
+      ledgerOrders,
+      walletOrdersFromBooks(books, walletAddress),
+      walletPending.orders
+    ),
+    fills: mergeWalletActivity(ledgerFills, trades, walletPending.activity),
     pair,
   });
   const events = microEvents({

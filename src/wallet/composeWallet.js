@@ -1,4 +1,5 @@
 import { XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
+import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
 
 export const DROPS = 1_000_000;
 export const DEFAULT_RESERVE_BASE_DROPS = 1_000_000;
@@ -329,6 +330,8 @@ export function composeWalletSnapshot({
   rank = null,
   books = null,
   flows = [],
+  offers = [],
+  ledgerActivity = [],
 } = {}) {
   if (!address) return emptyWalletSnapshot(null);
 
@@ -373,10 +376,17 @@ export function composeWalletSnapshot({
   const lp = [...lpByPair.values()];
 
   const xrpBook = books?.books?.["XDX/XRP"] || null;
+  const pending = pendingFor(address, { offersKnown: true });
+  const orders = mergeWalletOrders(offers, walletOrdersFromBooks(books, address), pending.orders);
+  const activity = mergeWalletActivity(
+    ledgerActivity,
+    walletActivity(flows, address),
+    pending.activity
+  ).slice(0, 3);
   return {
     address,
     signedIn: true,
-    filled: xdxBal != null || xrp.balance != null || lp.length > 0,
+    filled: xdxBal != null || xrp.balance != null || lp.length > 0 || orders.length > 0 || activity.length > 0,
     xrp,
     xdx: fiat,
     supply: {
@@ -399,7 +409,7 @@ export function composeWalletSnapshot({
           ammDepth: Number(xrpBook.asks?.[0]?.amm_opposing || xrpBook.bids?.[0]?.amm_opposing || 0),
         }
       : null,
-    orders: walletOrdersFromBooks(books, address),
-    activity: walletActivity(flows, address),
+    orders,
+    activity,
   };
 }
