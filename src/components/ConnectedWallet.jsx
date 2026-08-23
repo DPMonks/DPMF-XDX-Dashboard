@@ -220,9 +220,14 @@ export default function ConnectedWallet() {
 
     load();
     const id = setInterval(load, 30000);
+    function onRefresh() {
+      load();
+    }
+    window.addEventListener("dpmf-wallet-refresh", onRefresh);
     return () => {
       cancelled = true;
       clearInterval(id);
+      window.removeEventListener("dpmf-wallet-refresh", onRefresh);
     };
   }, [walletAddress]);
 

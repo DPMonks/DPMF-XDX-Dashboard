@@ -104,6 +104,78 @@ body {
   max-width: 100%;
 }
 
+.trade-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.trade-bar .connect-wallet-btn {
+  min-height: 42px;
+}
+
+.trade-panel {
+  max-width: 420px;
+  width: min(420px, calc(100vw - 32px));
+  align-items: stretch;
+  text-align: left;
+}
+
+.trade-panel-account,
+.trade-panel-hint {
+  margin: 0 0 8px;
+  color: #c9c4e8;
+  font-size: 13px;
+}
+
+.trade-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 12px;
+}
+
+.trade-field input,
+.trade-field select {
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 234, 255, 0.35);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+
+.trade-summary {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.trade-summary div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.trade-summary dt {
+  color: #9aa0c8;
+}
+
+.trade-summary dd {
+  margin: 0;
+  color: #fff;
+}
+
+.trade-panel-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .dashboard-title {
   font-size: clamp(1.45rem, 4vw, 2.4rem);
   font-weight: 700;

@@ -487,6 +487,13 @@
   gap: 2px;
 }
 
+.hybrid-ledger-toggle {
+  margin-right: 6px;
+  color: #d1d4dc;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .hybrid-topbar .hybrid-zoom {
   position: static;
   margin-left: auto;
@@ -681,23 +688,43 @@
   letter-spacing: 0.04em;
 }
 
-.hybrid-wallet-order.is-bid,
 .hybrid-heat.is-buy,
 .hybrid-wallet-fill.is-buy {
   stroke: #00eaff;
   fill: #00eaff;
 }
 
-.hybrid-wallet-order.is-ask,
 .hybrid-heat.is-sell,
 .hybrid-wallet-fill.is-sell {
   stroke: #c770ff;
   fill: #c770ff;
 }
 
-.hybrid-wallet-order {
+.hybrid-wallet-order.is-bid line {
+  stroke: #26a69a;
+}
+
+.hybrid-wallet-order.is-ask line {
+  stroke: #ef5350;
+}
+
+.hybrid-wallet-order line {
   stroke-dasharray: 5 4;
   stroke-width: 1.2;
+}
+
+.hybrid-wallet-order text {
+  fill: #d1d4dc;
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.hybrid-wallet-order.is-bid text {
+  fill: #26a69a;
+}
+
+.hybrid-wallet-order.is-ask text {
+  fill: #ef5350;
 }
 
 .hybrid-ghost rect {
@@ -874,6 +901,10 @@
 
 .hybrid-arb .is-hot {
   color: var(--dpmf-neon-cyan);
+}
+
+.hybrid-footer .trade-bar {
+  justify-content: flex-end;
 }
 
 .hybrid-sim {

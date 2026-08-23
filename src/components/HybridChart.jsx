@@ -19,7 +19,6 @@ import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../char
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { quotePerXdx } from "../chart/pairQuote";
 import {
-  ammImpact,
   ammRebalanceTrail,
   arbitrageWindow,
   bookBands,
@@ -38,6 +37,7 @@ import { useI18n } from "../i18n/useI18n";
 import { elliottTools, moveDrawingHandle, nextDrawingState, toolAfterDrawing } from "../chart/drawings";
 import ChartTools from "./ChartTools";
 import HybridPlot from "./HybridPlot";
+import TradeBar from "./TradeBar";
 import "./HybridChart.css";
 
 function MaTypeMenu({ value, t, onChange }) {
@@ -168,6 +168,7 @@ export default function HybridChart() {
   const [maType, setMaType] = useState("sma");
   const [maPeriods, setMaPeriods] = useState([50]);
   const [showVolume, setShowVolume] = useState(true);
+  const [showLedgerOrders, setShowLedgerOrders] = useState(false);
   const [showRsi, setShowRsi] = useState(true);
   const [rsiPeriod, setRsiPeriod] = useState(14);
   const [rsiOverbought, setRsiOverbought] = useState(70);
@@ -179,7 +180,6 @@ export default function HybridChart() {
   const [sparkline, setSparkline] = useState([]);
   const [drawings, setDrawings] = useState([]);
   const [pending, setPending] = useState(null);
-  const [simAmount, setSimAmount] = useState("100000");
   const [ghost, setGhost] = useState(null);
   const [now, setNow] = useState(0);
   const [panOffset, setPanOffset] = useState(0);
@@ -209,8 +209,10 @@ export default function HybridChart() {
     }
     const start = setTimeout(load, 0);
     const id = setInterval(load, 30000);
+    window.addEventListener("dpmf-wallet-refresh", load);
     return () => {
       cancelled = true;
+      window.removeEventListener("dpmf-wallet-refresh", load);
       clearTimeout(start);
       clearInterval(id);
     };
@@ -363,7 +365,9 @@ export default function HybridChart() {
       if (event.key === "Escape") setPending(null);
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
   }, []);
 
   function applyZoom(directionOrEvent, maybeRatio) {
@@ -388,17 +392,6 @@ export default function HybridChart() {
         newVisible: next,
         oldPan: pan,
         anchorRatio,
-      })
-    );
-  }
-
-  function runSim(side) {
-    setGhost(
-      ammImpact({
-        reserveBase,
-        reserveQuote,
-        amount: Number(simAmount),
-        side,
       })
     );
   }
@@ -559,6 +552,14 @@ export default function HybridChart() {
 
           <div className="hybrid-plot-wrap">
             <div className="hybrid-zoom" role="group" aria-label={t.chartZoom}>
+              <label className="hybrid-toggle hybrid-ledger-toggle">
+                <input
+                  type="checkbox"
+                  checked={showLedgerOrders}
+                  onChange={(event) => setShowLedgerOrders(event.target.checked)}
+                />
+                {t.showLedgerOrders}
+              </label>
               <button
                 type="button"
                 aria-label={t.chartZoomOut}
@@ -604,6 +605,7 @@ export default function HybridChart() {
             showVolume={showVolume}
             showRsi={showRsi}
             showArb={showArb}
+            showLedgerOrders={showLedgerOrders}
             locale={locale}
             onDraw={addDrawing}
             onMoveHandle={moveHandle}
@@ -634,34 +636,12 @@ export default function HybridChart() {
         <p className="hybrid-note">
           {historyReady ? t.chartLockedHistory : t.chartLiveUntilLock}
         </p>
-        <form
-          className="hybrid-sim"
-          onSubmit={(event) => {
-            event.preventDefault();
-            runSim("buy");
-          }}
-        >
-          <label>
-            {t.chartSimulate}
-            <input
-              type="number"
-              min="1"
-              step="any"
-              value={simAmount}
-              onChange={(event) => setSimAmount(event.target.value)}
-            />
-            XDX
-          </label>
-          <button type="button" onClick={() => runSim("buy")}>{t.buy}</button>
-          <button type="button" onClick={() => runSim("sell")}>{t.sell}</button>
-          <button type="button" onClick={() => runSim("addLp")}>{t.chartAddLp}</button>
-          <button type="button" onClick={() => runSim("removeLp")}>{t.chartRemoveLp}</button>
-          {ghost ? (
-            <span className="hybrid-ghost-readout">
-              {formatQuotePerBase(ghost.spot, locale, quote)} → {formatQuotePerBase(ghost.next, locale, quote)} ({formatPercent(ghost.impactPct, locale)})
-            </span>
-          ) : null}
-        </form>
+        <TradeBar />
+        {ghost ? (
+          <span className="hybrid-ghost-readout">
+            {formatQuotePerBase(ghost.spot, locale, quote)} → {formatQuotePerBase(ghost.next, locale, quote)} ({formatPercent(ghost.impactPct, locale)})
+          </span>
+        ) : null}
       </div>
     </div>
   );

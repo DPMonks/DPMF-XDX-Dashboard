@@ -26,6 +26,7 @@ export function walletChartMarks({ address, orders = [], fills = [], pair } = {}
         amount: Number(row.amount ?? row.base_size ?? 0),
         side: row.side === "ask" || row.side === "sell" ? "ask" : "bid",
         pair: row.pair || pair,
+        when: row.timestamp || row.created || row.t || null,
       })),
     fills: (Array.isArray(fills) ? fills : [])
       .filter((row) => sameWallet(row.account, who))

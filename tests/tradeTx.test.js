@@ -1,0 +1,87 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { RLUSD_ISSUER, XDX_ISSUER, XDX_XRP_AMM, XDX_XRP_LP_HEX } from "../src/constants/ledger.js";
+import {
+  TF_IMMEDIATE_OR_CANCEL,
+  TF_LP_TOKEN,
+  TF_TWO_ASSET,
+  ammDepositTx,
+  ammWithdrawTx,
+  expectedLpTokens,
+  offerCreateBuyXdx,
+  offerCreateSellXdx,
+  quoteAsset,
+  quoteTrustSetTxjson,
+  recommendedQuote,
+  tradeTotal,
+  xrpDrops,
+} from "../src/xaman/tradeTx.js";
+
+test("buy XDX spend XRP as TakerGets drops and receive XDX", () => {
+  const tx = offerCreateBuyXdx({
+    account: "rBuyer",
+    quote: quoteAsset("XRP"),
+    xdx: "1000",
+    cost: 2.5,
+    market: true,
+  });
+  assert.equal(tx.TransactionType, "OfferCreate");
+  assert.equal(tx.Account, "rBuyer");
+  assert.equal(tx.TakerPays.currency, "XDX");
+  assert.equal(tx.TakerPays.issuer, XDX_ISSUER);
+  assert.equal(tx.TakerPays.value, "1000");
+  assert.equal(tx.TakerGets, xrpDrops(2.5));
+  assert.equal(tx.Flags, TF_IMMEDIATE_OR_CANCEL);
+});
+
+test("sell XDX for RLUSD is a limit OfferCreate", () => {
+  const tx = offerCreateSellXdx({
+    account: "rSeller",
+    quote: quoteAsset("RLUSD"),
+    xdx: "500",
+    proceeds: 4,
+  });
+  assert.equal(tx.TakerGets.currency, "XDX");
+  assert.equal(tx.TakerPays.currency, "RLUSD");
+  assert.equal(tx.TakerPays.issuer, RLUSD_ISSUER);
+  assert.equal(tx.TakerPays.value, "4");
+  assert.equal(tx.Flags, undefined);
+});
+
+test("AMM deposit and withdraw follow XRPL two-asset / LP token flags", () => {
+  const add = ammDepositTx({
+    account: "rLp",
+    quote: quoteAsset("XRP"),
+    xdx: "10000",
+    quoteQty: 3,
+  });
+  assert.equal(add.TransactionType, "AMMDeposit");
+  assert.equal(add.Flags, TF_TWO_ASSET);
+  assert.deepEqual(add.Asset2, { currency: "XRP" });
+  assert.equal(add.Amount.value, "10000");
+  assert.equal(add.Amount2, "3000000");
+
+  const take = ammWithdrawTx({
+    account: "rLp",
+    quote: quoteAsset("XRP"),
+    lpAmount: "12.5",
+  });
+  assert.equal(take.TransactionType, "AMMWithdraw");
+  assert.equal(take.Flags, TF_LP_TOKEN);
+  assert.equal(take.LPTokenIn.issuer, XDX_XRP_AMM);
+  assert.equal(take.LPTokenIn.currency, XDX_XRP_LP_HEX);
+  assert.equal(take.LPTokenIn.value, "12.5");
+});
+
+test("RLUSD needs a trustline; XRP does not", () => {
+  assert.equal(quoteTrustSetTxjson("rA", quoteAsset("XRP")), null);
+  const line = quoteTrustSetTxjson("rA", quoteAsset("RLUSD"));
+  assert.equal(line.TransactionType, "TrustSet");
+  assert.equal(line.LimitAmount.issuer, RLUSD_ISSUER);
+});
+
+test("totals and LP hints stay simple numbers", () => {
+  assert.equal(tradeTotal("1000", "0.002"), 2);
+  assert.equal(recommendedQuote(100, 1000, 50), 5);
+  assert.equal(expectedLpTokens(100, 1000, 200), 20);
+});

@@ -45,6 +45,7 @@ export default function HybridPlot({
   showVolume = true,
   showRsi = true,
   showArb = false,
+  showLedgerOrders = false,
   locale,
   onDraw,
   onMoveHandle,
@@ -669,16 +670,23 @@ export default function HybridPlot({
             );
           })}
 
-          {(wallet?.orders || []).map((row, index) => (
-            <line
-              key={`order-${index}`}
-              className={`hybrid-wallet-order is-${row.side}`}
-              x1={PAD.l}
-              x2={width - PAD.r}
-              y1={scale.y(row.price)}
-              y2={scale.y(row.price)}
-            />
-          ))}
+          {showLedgerOrders
+            ? (wallet?.orders || []).map((row, index) => {
+                const y = scale.y(row.price);
+                const when = row.when ? formatCursorWhen(row.when, locale) : "";
+                const label = [when, formatQuotePerBase(row.price, locale, quote), formatToken(row.amount, locale, 2)]
+                  .filter(Boolean)
+                  .join(" · ");
+                return (
+                  <g key={`order-${index}`} className={`hybrid-wallet-order is-${row.side}`}>
+                    <line x1={PAD.l} x2={width - PAD.r} y1={y} y2={y} />
+                    <text x={PAD.l + 8} y={y - 4}>
+                      {label}
+                    </text>
+                  </g>
+                );
+              })
+            : null}
           {(wallet?.fills || []).map((row, index) =>
             Number(row.price) > 0 ? (
               <circle

@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
+import TradeBar from "./components/TradeBar";
+import TradePanel from "./components/TradePanel";
 import XdxTrustline from "./components/XdxTrustline";
 import { useI18n } from "./i18n/useI18n";
 import TokenDetails from "./components/TokenDetails";
@@ -31,6 +33,7 @@ export default function App() {
   const [ammLoading, setAmmLoading] = useState(true);
   const [errors, setErrors] = useState({});
   const [link, setLink] = useState({ status: "connecting" });
+  const [tradeAction, setTradeAction] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +142,14 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    function onOpen(event) {
+      if (event.detail) setTradeAction(event.detail);
+    }
+    window.addEventListener("dpmf-open-trade", onOpen);
+    return () => window.removeEventListener("dpmf-open-trade", onOpen);
+  }, []);
+
   const linkState = interfaceLinkState(link, t);
 
   return (
@@ -153,6 +164,7 @@ export default function App() {
             </div>
           </div>
           <div className="header-actions">
+            <TradeBar onAction={setTradeAction} />
             <XdxTrustline />
             <ConnectWallet />
           </div>
@@ -235,6 +247,7 @@ export default function App() {
       </div>
 
       <Footer />
+      {tradeAction ? <TradePanel action={tradeAction} onClose={() => setTradeAction(null)} /> : null}
     </div>
   );
 }
