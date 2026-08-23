@@ -23,7 +23,9 @@ Webpack chunk name is `frontend`. Routes include `/`, `/Createnft`, `/MyNFT`, `/
 
 The browser talks to `https://fuzion-xio.com/api/` (Xaman connect, mint, profile, NFT list). IPFS reads go through `https://radical-x.infura-ipfs.io/ipfs/`.
 
-`recovered-src/` is **not** a runnable CRA tree on its own: `package.json`, `public/`, env files, and some imported assets (`assets/tabsimages/*`, `BGIMAGE_URL`) were not in the maps.
+The runnable Vite app built from this recovery lives in `../fuzion-xio` (`npm install && npm run dev`).
+
+`recovered-src/` by itself is not a complete tree: `package.json` and some public assets were not in the maps.
 
 Infura project id/secret are read from `REACT_APP_INFURA_IPFS_*` at build time and are not stored here.
 

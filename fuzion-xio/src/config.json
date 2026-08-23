@@ -1,0 +1,9 @@
+{
+  "LOCAL_API_URL": "https://fuzion-xio.com/api/",
+  "ipfs_p": "https://radical-x.infura-ipfs.io/ipfs/",
+  "HOST_IPFS": "ipfs.infura.io",
+  "PORT_IPFS": 5001,
+  "PROTOCOL_IPFS": "https",
+  "baseURL": "https://fuzion-xio.com/",
+  "BGIMAGE_URL": "https://fuzion-xio.com/"
+}
