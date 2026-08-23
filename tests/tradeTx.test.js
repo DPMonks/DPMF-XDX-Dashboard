@@ -2,8 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { RLUSD_HEX, RLUSD_ISSUER, XDX_ISSUER, XDX_XRP_AMM, XDX_XRP_LP_HEX } from "../src/constants/ledger.js";
 import {
-  TF_IMMEDIATE_OR_CANCEL,
+  MARKET_SLIPPAGE,
   TF_LP_TOKEN,
+  TF_PARTIAL_PAYMENT,
   TF_TWO_ASSET,
   ammDepositTx,
   ammWithdrawTx,
@@ -34,7 +35,7 @@ import {
   xrplIssuedValue,
 } from "../src/xaman/tradeTx.js";
 
-test("buy XDX spend XRP as TakerGets drops and receive XDX", () => {
+test("market buy is a self Payment that spends SendMax XRP for XDX", () => {
   const tx = offerCreateBuyXdx({
     account: "rBuyer",
     quote: quoteAsset("XRP"),
@@ -42,13 +43,43 @@ test("buy XDX spend XRP as TakerGets drops and receive XDX", () => {
     cost: 2.5,
     market: true,
   });
-  assert.equal(tx.TransactionType, "OfferCreate");
+  assert.equal(tx.TransactionType, "Payment");
   assert.equal(tx.Account, "rBuyer");
-  assert.equal(tx.TakerPays.currency, "XDX");
-  assert.equal(tx.TakerPays.issuer, XDX_ISSUER);
+  assert.equal(tx.Destination, "rBuyer");
+  assert.equal(tx.Amount.currency, "XDX");
+  assert.equal(tx.Amount.issuer, XDX_ISSUER);
+  assert.equal(tx.Amount.value, "1000");
+  assert.equal(tx.SendMax, xrpDrops(2.5 * (1 + MARKET_SLIPPAGE)));
+  assert.equal(tx.Flags, TF_PARTIAL_PAYMENT);
+  assert.equal(tx.TakerPays, undefined);
+});
+
+test("limit buy XDX still rests an OfferCreate on the DEX book", () => {
+  const tx = offerCreateBuyXdx({
+    account: "rBuyer",
+    quote: quoteAsset("XRP"),
+    xdx: "1000",
+    cost: 2.5,
+  });
+  assert.equal(tx.TransactionType, "OfferCreate");
   assert.equal(tx.TakerPays.value, "1000");
   assert.equal(tx.TakerGets, xrpDrops(2.5));
-  assert.equal(tx.Flags, TF_IMMEDIATE_OR_CANCEL);
+  assert.equal(tx.Flags, undefined);
+});
+
+test("market sell is a self Payment that sends XDX for the quote", () => {
+  const tx = offerCreateSellXdx({
+    account: "rSeller",
+    quote: quoteAsset("XRP"),
+    xdx: "500",
+    proceeds: 1,
+    market: true,
+  });
+  assert.equal(tx.TransactionType, "Payment");
+  assert.equal(tx.SendMax.currency, "XDX");
+  assert.equal(tx.SendMax.value, "500");
+  assert.equal(tx.Amount, xrpDrops(1 * (1 - MARKET_SLIPPAGE)));
+  assert.equal(tx.Flags, TF_PARTIAL_PAYMENT);
 });
 
 test("sell XDX for RLUSD is a limit OfferCreate", () => {

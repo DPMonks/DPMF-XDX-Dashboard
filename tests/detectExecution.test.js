@@ -15,6 +15,8 @@ test("isTradeTxjson only treats signed ledger trades as trades", () => {
   assert.equal(isTradeTxjson({ TransactionType: "AMMDeposit" }), true);
   assert.equal(isTradeTxjson({ TransactionType: "AMMWithdraw" }), true);
   assert.equal(isTradeTxjson({ TransactionType: "AMMVote" }), true);
+  assert.equal(isTradeTxjson({ TransactionType: "Payment", SendMax: "1" }), true);
+  assert.equal(isTradeTxjson({ TransactionType: "Payment" }), false);
   assert.equal(isTradeTxjson({ TransactionType: "SignIn" }), false);
   assert.equal(isTradeTxjson({ TransactionType: "TrustSet" }), false);
 });

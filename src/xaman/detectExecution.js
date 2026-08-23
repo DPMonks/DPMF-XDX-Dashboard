@@ -1,7 +1,8 @@
 export const TRADE_TX_TYPES = new Set(["OfferCreate", "AMMDeposit", "AMMWithdraw", "AMMVote"]);
 
 export function isTradeTxjson(txjson) {
-  return TRADE_TX_TYPES.has(txjson?.TransactionType);
+  if (TRADE_TX_TYPES.has(txjson?.TransactionType)) return true;
+  return txjson?.TransactionType === "Payment" && txjson.SendMax != null;
 }
 
 export function extractTxHash(...sources) {

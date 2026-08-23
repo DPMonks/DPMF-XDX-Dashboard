@@ -119,6 +119,23 @@ test("pendingFromExecution paints the buy immediately and skips IOC as an open o
   );
   assert.equal(ioc.order, null);
   assert.equal(ioc.activity.status, "filled");
+  const swap = pendingFromExecution(
+    {
+      txjson: {
+        TransactionType: "Payment",
+        Account: "rBuyer",
+        Destination: "rBuyer",
+        Amount: { currency: "XDX", issuer: XDX_ISSUER, value: "10" },
+        SendMax: "313",
+        Flags: 131072,
+      },
+      txid: "E".repeat(64),
+    },
+    "rBuyer"
+  );
+  assert.equal(swap.order, null);
+  assert.equal(swap.activity.side, "buy");
+  assert.equal(swap.activity.status, "filled");
 });
 
 test("mergeWalletOrders and mergeWalletActivity keep the first copy", () => {
