@@ -43,7 +43,9 @@ function Capabilities() {
                 <h3>3D file NFTs</h3>
                 <p>
                   GLB, GLTF, FBX, USDZ plus image, video, audio, and PDF.
-                  AVA, MegaBits, and RWA twins are native 3D collections.
+                  Large 3D drops live as marketplace collections. AVA, MegaBits,
+                  and RWA sculpture are separate XD projects and are not built
+                  here.
                 </p>
               </div>
               <div className="dpmf-card">

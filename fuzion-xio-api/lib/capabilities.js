@@ -51,8 +51,7 @@ export function capabilityMap() {
       xamanSigning: false,
       collectionWideBids: false,
       traitFloorTape: false,
-      dNftUriUpdate: false,
-      rwaNfcProvenance: false
+      dNftUriUpdate: false
     },
     threeD: {
       types: THREE_D_TYPES,

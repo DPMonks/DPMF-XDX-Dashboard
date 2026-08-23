@@ -19,11 +19,11 @@ Live product facts come from [dpmf.technology](https://www.dpmf.technology/) (XD
 | Governance | Token optional | BLUR / TNSR | ME | No | No | **XIO ranks + vScore** |
 | Ledger-native NFTs | EVM/SOL | EVM/SOL | Multi | EVM | **XLS-20** | **XLS-20** + `nft_info` / `account_nfts` |
 | Dynamic NFT | Rare | Rare | Rare | No | XLS-46 on ledger | dNFT-ready (URI update next) |
-| RWA / phygital | Emerging | No | No | No | Rare | XD-6 NFC twins + fractional MPT |
+| RWA / phygital | Emerging | No | No | No | Rare | Not a FUZION page (XD-6 is separate) |
 
 ## Why FUZION can be the best XRPL NFT-Fi venue
 
-xrp.cafe is the strongest XRPL peer: non-custodial XLS-20, auctions, bulk mint, Arweave. FUZION differentiates on **0% fee**, **any issued asset as payment**, **3D/AR as a first-class mint type** (AVA, MegaBits, RWA twins), and **XIO governance + validated profiles**. OpenSea/Blur/Magic Eden win on liquidity and pro tools; they do not sit on XRPL multi-asset rails or XIO ranks.
+xrp.cafe is the strongest XRPL peer: non-custodial XLS-20, auctions, bulk mint, Arweave. FUZION differentiates on **0% fee**, **any issued asset as payment**, **3D/AR as a first-class mint type**, and **XIO governance + validated profiles**. AVA, MegaBits, and RWA sculpture are **separate XD projects** — they may list on this exchange later, but they are not built as FUZION pages. OpenSea/Blur/Magic Eden win on liquidity and pro tools; they do not sit on XRPL multi-asset rails or XIO ranks.
 
 ## FUZION / DPMF product facts
 
@@ -35,8 +35,7 @@ xrp.cafe is the strongest XRPL peer: non-custodial XLS-20, auctions, bulk mint, 
 - 0% trading fee, issuer royalties
 - Xaman signing (QR / push) — local API stubs until keys are added
 - XDX indexer for token holders, prices, AMM, wallet balances
-- XD-3 AVA 3D Game-Fi and XD-6 RWA sculpture twins launch on this exchange
-- Y.E.M. Quantum Pass boosts eligible XIO for weekly XDX soft-staking
+- AVA (XD-3), MegaBits, and RWA sculpture (XD-6) stay on their own projects — not FUZION routes or seeded collections
 
 ## Validator ranks (XIO balance)
 
@@ -54,16 +53,13 @@ vScore badges on NFTs: tick (0–99), blue (100–9999), gold (≥ 10000).
 
 ## Paramount: 3D file NFTs
 
-Accepted mint types already in the recovered app: `glb`, `gltf`, `fbx`, `usdz`, plus image/gif/video/audio/pdf. Viewers: `FbxViewer` + `@google/model-viewer`, USDZ on iOS. Seeded virtual collections:
+Accepted mint types already in the recovered app: `glb`, `gltf`, `fbx`, `usdz`, plus image/gif/video/audio/pdf. Viewers: `FbxViewer` + `@google/model-viewer`, USDZ on iOS. Seeded virtual collection is a generic marketplace drop only:
 
 | Collection | Size | Program | File |
 | --- | --- | --- | --- |
-| AVA Program | 1,000 | XD-3 Game-Fi | GLB |
-| XRP MegaBits | 2,500 | XD-3 | GLB |
-| RWA Sculpture Twins | 1,000 | XD-6 | GLB |
-| Quantum Pass | 500 | Y.E.M. | GLB |
+| FUZION 3D | 1,000 | XD-1 | GLB |
 
-Items are **template + virtual index**. Paged APIs materialise 12 rows at a time so we do not write 5,000 fat documents.
+Items are **template + virtual index**. Paged APIs materialise 12 rows at a time so we do not write thousands of fat documents.
 
 ## Indexer + XRPL
 

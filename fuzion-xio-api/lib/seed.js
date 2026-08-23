@@ -1,6 +1,6 @@
 import { DEMO_GLB, XDX_CURRENCY, XIO_CURRENCY } from "./constants.js";
 
-export const STORE_VERSION = 2;
+export const STORE_VERSION = 3;
 
 export const DEMO_ISSUER = "rFuzionXioDemoIssuer1111111111111";
 export const DEMO_OWNER = "rFuzionXioDemoOwner11111111111111";
@@ -10,10 +10,7 @@ const images = [
   "https://picsum.photos/seed/fuzion-xio-2/800/800",
   "https://picsum.photos/seed/fuzion-xio-3/800/800",
   "https://picsum.photos/seed/fuzion-xio-4/800/800",
-  "https://picsum.photos/seed/fuzion-ava/800/800",
-  "https://picsum.photos/seed/fuzion-megabits/800/800",
-  "https://picsum.photos/seed/fuzion-rwa/800/800",
-  "https://picsum.photos/seed/fuzion-quantum/800/800"
+  "https://picsum.photos/seed/fuzion-3d/800/800"
 ];
 
 function nft(partial) {
@@ -39,75 +36,18 @@ export function demoSeed() {
   const now = new Date().toISOString();
   const collectionTemplates = [
     {
-      slug: "ava-program",
-      collectionName: "AVA Program",
+      slug: "fuzion-3d",
+      collectionName: "FUZION 3D",
       size: 1000,
       fileType: "glb",
       contentType: "glb",
       category: "3D Art",
       currency: XIO_CURRENCY,
       amount: "1",
-      program: "XD-3",
+      program: "XD-1",
       description:
-        "On-chain 3D Game-Fi avatars with skeletal motion. Traits and progress travel with the NFT.",
+        "Marketplace 3D drop on FUZION-XIO. GLB / AR-ready files at collection scale.",
       image: images[4],
-      metaverse: DEMO_GLB,
-      usdzUrl: null,
-      issuer: DEMO_ISSUER,
-      owner: DEMO_OWNER,
-      createdAt: now
-    },
-    {
-      slug: "xrp-megabits",
-      collectionName: "XRP MegaBits",
-      size: 2500,
-      fileType: "glb",
-      contentType: "glb",
-      category: "Collectibles",
-      currency: XDX_CURRENCY,
-      amount: "25",
-      program: "XD-3",
-      description:
-        "3D/AR modules that evolve through specialised nodes. Trait mutation and fusion ready.",
-      image: images[5],
-      metaverse: DEMO_GLB,
-      usdzUrl: null,
-      issuer: DEMO_ISSUER,
-      owner: DEMO_OWNER,
-      createdAt: now
-    },
-    {
-      slug: "rwa-sculpture-twins",
-      collectionName: "RWA Sculpture Twins",
-      size: 1000,
-      fileType: "glb",
-      contentType: "glb",
-      category: "RWA",
-      currency: "XRP",
-      amount: "40",
-      program: "XD-6",
-      description:
-        "High-resolution 3D scans of physical sculpture. NFC-linked twins for provenance on FUZION.",
-      image: images[6],
-      metaverse: DEMO_GLB,
-      usdzUrl: null,
-      issuer: DEMO_ISSUER,
-      owner: DEMO_OWNER,
-      createdAt: now
-    },
-    {
-      slug: "quantum-pass",
-      collectionName: "Quantum Pass",
-      size: 500,
-      fileType: "glb",
-      contentType: "glb",
-      category: "Utility",
-      currency: XIO_CURRENCY,
-      amount: "0.1",
-      program: "Y.E.M.",
-      description:
-        "Yield Earning Mechanism utility NFT. Boosts eligible XIO inside weekly soft-staking.",
-      image: images[7],
       metaverse: DEMO_GLB,
       usdzUrl: null,
       issuer: DEMO_ISSUER,
@@ -172,76 +112,22 @@ export function demoSeed() {
       isPurchased: 1
     }),
     nft({
-      _id: "seed-ava-hero",
-      name: "AVA Program #1",
-      collectionName: "AVA Program",
+      _id: "seed-fuzion-3d-hero",
+      name: "FUZION 3D #1",
+      collectionName: "FUZION 3D",
       category: "3D Art",
-      description: "Hero 3D listing for the AVA Program collection.",
+      description: "Hero 3D listing for a generic FUZION marketplace collection.",
       image: DEMO_GLB,
       previewImage: images[4],
       metaverse: DEMO_GLB,
       currency: XIO_CURRENCY,
       amount: "1",
-      NFTokenID: "00080000FUZIONAVA0000000000000000000000000000000000001",
+      NFTokenID: "00080000FUZION3D00000000000000000000000000000000000001",
       fileType: "glb",
       contentType: "glb",
       status: "sale",
       likes: 18,
-      program: "XD-3"
-    }),
-    nft({
-      _id: "seed-megabits-hero",
-      name: "XRP MegaBits #1",
-      collectionName: "XRP MegaBits",
-      category: "Collectibles",
-      description: "Hero 3D module for XRP MegaBits.",
-      image: DEMO_GLB,
-      previewImage: images[5],
-      metaverse: DEMO_GLB,
-      currency: XDX_CURRENCY,
-      amount: "25",
-      NFTokenID: "00080000FUZIONMEGABITS00000000000000000000000000000001",
-      fileType: "glb",
-      contentType: "glb",
-      status: "sale",
-      likes: 11,
-      program: "XD-3"
-    }),
-    nft({
-      _id: "seed-rwa-hero",
-      name: "RWA Sculpture Twins #1",
-      collectionName: "RWA Sculpture Twins",
-      category: "RWA",
-      description: "Hero digital twin for the RWA sculpture program.",
-      image: DEMO_GLB,
-      previewImage: images[6],
-      metaverse: DEMO_GLB,
-      currency: "XRP",
-      amount: "40",
-      NFTokenID: "00080000FUZIONRWA0000000000000000000000000000000000001",
-      fileType: "glb",
-      contentType: "glb",
-      status: "sale",
-      likes: 9,
-      program: "XD-6"
-    }),
-    nft({
-      _id: "seed-quantum-hero",
-      name: "Quantum Pass #1",
-      collectionName: "Quantum Pass",
-      category: "Utility",
-      description: "Hero Y.E.M. utility pass.",
-      image: DEMO_GLB,
-      previewImage: images[7],
-      metaverse: DEMO_GLB,
-      currency: XIO_CURRENCY,
-      amount: "0.1",
-      NFTokenID: "00080000FUZIONQUANTUM00000000000000000000000000000001",
-      fileType: "glb",
-      contentType: "glb",
-      status: "sale",
-      likes: 22,
-      program: "Y.E.M."
+      program: "XD-1"
     })
   ];
 
