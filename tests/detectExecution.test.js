@@ -41,14 +41,15 @@ test("Xaman dispatch tesSUCCESS is an executed trade", () => {
   assert.ok(detection.detectors.includes("xaman-dispatch"));
 });
 
-test("websocket signed plus a txid is an executed trade", () => {
+test("a Xaman sign plus a txid is not executed until tesSUCCESS", () => {
   const detection = detectTradeExecution({
     socket: { signed: true },
     payload: { meta: { signed: true }, response: { txid: HASH } },
   });
-  assert.equal(detection.executed, true);
+  assert.equal(detection.executed, false);
+  assert.equal(detection.signed, true);
+  assert.equal(detection.pending, true);
   assert.ok(detection.detectors.includes("xaman-socket"));
-  assert.ok(detection.detectors.includes("xaman-txid"));
 });
 
 test("validated XRPL tesSUCCESS is an executed trade", () => {
@@ -74,16 +75,28 @@ test("a cancelled Xaman payload is not an executed trade", () => {
   assert.equal(payloadExecutionSignals({ meta: { cancelled: true } }).cancelled, true);
 });
 
-test("a signed AMM deposit is executed even before a txid arrives", () => {
-  const detection = detectTradeExecution({
+test("a signed payload is not executed until the ledger returns tesSUCCESS", () => {
+  const signedOnly = detectTradeExecution({
     payload: {
       meta: { signed: true, resolved: true, submitted: false },
       response: { hex: "1200" },
     },
   });
-  assert.equal(detection.executed, true);
-  assert.equal(detection.via, "xaman-resolved");
-  assert.equal(detectTradeExecution({ payload: { meta: { signed: true } } }).executed, true);
+  assert.equal(signedOnly.executed, false);
+  assert.equal(signedOnly.signed, true);
+  assert.equal(detectTradeExecution({ payload: { meta: { signed: true } } }).executed, false);
+});
+
+test("a tec result after signing is a failed trade, not executed", () => {
+  const detection = detectTradeExecution({
+    payload: {
+      meta: { signed: true, submitted: true },
+      response: { txid: HASH, dispatched_result: "tecUNFUNDED_AMM" },
+    },
+  });
+  assert.equal(detection.executed, false);
+  assert.equal(detection.failed, true);
+  assert.equal(detection.engineResult, "tecUNFUNDED_AMM");
 });
 
 test("ledger tx unwraps the rippled result envelope", () => {

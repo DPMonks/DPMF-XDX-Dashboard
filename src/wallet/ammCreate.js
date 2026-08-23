@@ -38,9 +38,18 @@ export function existingPoolForQuote(pools, quoteId) {
   );
 }
 
-export function defaultCreateQuoteId(pools) {
-  const ids = QUOTE_ASSETS.map((row) => row.id);
-  return ids.find((id) => !existingPoolForQuote(pools, id)) || ids[0];
+export function walletLineRows(raw) {
+  if (!raw || typeof raw !== "object") return [];
+  const rows = [];
+  for (const key of ["balances", "lines", "trustlines", "assets", "tokens"]) {
+    if (Array.isArray(raw[key])) rows.push(...raw[key]);
+  }
+  if (!rows.length && raw.balances && typeof raw.balances === "object" && !Array.isArray(raw.balances)) {
+    for (const [key, value] of Object.entries(raw.balances)) {
+      if (value && typeof value === "object") rows.push({ currency: key, ...value });
+    }
+  }
+  return rows;
 }
 
 export function hexCurrencyLabel(hex) {
@@ -55,24 +64,25 @@ export function hexCurrencyLabel(hex) {
 }
 
 export function quotesFromWalletLines(raw) {
-  const list = Array.isArray(raw?.balances)
-    ? raw.balances
-    : Array.isArray(raw?.lines)
-      ? raw.lines
-      : [];
   const extra = [];
-  for (const row of list) {
-    const currency = String(row.currency || row.code || "").toUpperCase();
-    const issuer = row.issuer || row.account || null;
+  for (const row of walletLineRows(raw)) {
+    const currency = String(row.currency || row.code || row.hex || "").toUpperCase();
+    const issuer = row.issuer || row.account || row.counterparty || null;
     if (!issuer || currency === "XRP" || currency === "XDX" || currency.startsWith("584458")) continue;
     if (/^03[A-F0-9]{38}$/i.test(currency)) continue;
-    const id = /^[A-Z0-9]{3}$/.test(currency) ? currency : hexCurrencyLabel(currency);
+    const known = QUOTE_ASSETS.find(
+      (item) =>
+        item.issuer === issuer ||
+        (item.hex && item.hex.toUpperCase() === currency) ||
+        item.id === currency
+    );
+    const id = known?.id || (/^[A-Z0-9]{3}$/.test(currency) ? currency : hexCurrencyLabel(currency));
     extra.push({
       id,
-      currency: /^[A-Z0-9]{3}$/.test(currency) ? currency : id,
-      issuer,
-      hex: /^[A-F0-9]{40}$/.test(currency) ? currency : row.hex || null,
-      label: id,
+      currency: known?.currency || (/^[A-Z0-9]{3}$/.test(currency) ? currency : id),
+      issuer: known?.issuer || issuer,
+      hex: known?.hex || (/^[A-F0-9]{40}$/.test(currency) ? currency : row.hex || null),
+      label: known?.label || id,
     });
   }
   return extra;
@@ -81,18 +91,28 @@ export function quotesFromWalletLines(raw) {
 export function createQuoteOptions(pools = [], raw = null) {
   const seen = new Set();
   const rows = [];
-  for (const row of [...QUOTE_ASSETS, ...quotesFromWalletLines(raw)]) {
+  function add(row) {
     const id = String(row.id || row.currency || "").toUpperCase();
-    if (!id || seen.has(id)) continue;
+    if (!id || id === "XDX" || seen.has(id)) return;
     seen.add(id);
     const exists = Boolean(existingPoolForQuote(pools, id));
     rows.push({
       id,
       label: exists ? `XDX / ${id} · exists` : `XDX / ${id}`,
       exists,
+      currency: row.currency || id,
+      issuer: row.issuer || null,
+      hex: row.hex || null,
     });
   }
+  add({ id: "XRP", currency: "XRP" });
+  for (const row of quotesFromWalletLines(raw)) add(row);
   return rows;
+}
+
+export function defaultCreateQuoteId(pools, raw) {
+  const options = createQuoteOptions(pools, raw);
+  return options.find((row) => !row.exists)?.id || options[0]?.id || "XRP";
 }
 
 export function depositRatio(xdx, quoteQty) {
@@ -187,6 +207,8 @@ export function createPoolBlocker({
 } = {}) {
   if (existing) return "exists";
   if (!signedIn) return "wallet";
+  const quoteId = String(quote?.id || quote?.currency || "").toUpperCase();
+  if (quoteId === "XDX") return "primary";
   if (!hasXdxLine(raw, xdxBalance)) return "xdx-line";
   if (quote?.issuer && !hasAssetLine(raw, quote, quoteBalance)) return "quote-line";
   const base = Number(xdx);
@@ -206,5 +228,10 @@ export function createPoolBlocker({
 }
 
 export function resolveCreateQuote(id, extra = {}) {
-  return resolveQuote(quoteIdFromPair(id || extra.quote), extra);
+  const resolved = resolveQuote(quoteIdFromPair(id || extra.quote || extra.id), extra);
+  return {
+    ...resolved,
+    issuer: extra.issuer || extra.quote_issuer || extra.quoteIssuer || resolved.issuer || null,
+    hex: extra.hex || extra.quote_hex || extra.quoteHex || resolved.hex || null,
+  };
 }

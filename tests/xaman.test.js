@@ -211,19 +211,24 @@ test("claimSignedWallet keeps polling until Xaman returns the signed account", a
   assert.equal(cancelled, null);
 });
 
-test("claimExecutedTrade treats a signed AMM deposit as executed", async () => {
+test("claimExecutedTrade only treats tesSUCCESS as executed", async () => {
   const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
-  let calls = 0;
+  const signedOnly = await claimExecutedTrade(uuid, {
+    waitMs: 0,
+    tries: 2,
+    fetchResult: async () => ({ meta: { signed: true, resolved: true } }),
+  });
+  assert.equal(signedOnly, null);
+
   const claimed = await claimExecutedTrade(uuid, {
     waitMs: 0,
-    fetchResult: async () => {
-      calls += 1;
-      if (calls < 2) return { meta: { signed: false } };
-      return { meta: { signed: true, resolved: true } };
-    },
+    fetchResult: async () => ({
+      meta: { signed: true, submitted: true },
+      response: { dispatched_result: "tesSUCCESS", txid: "A".repeat(64), account: "rA" },
+    }),
   });
   assert.equal(claimed.executed, true);
-  assert.equal(calls, 2);
+  assert.equal(claimed.engineResult, "tesSUCCESS");
 });
 
 function memoryStore() {

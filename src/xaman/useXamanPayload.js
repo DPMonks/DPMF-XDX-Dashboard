@@ -5,7 +5,7 @@ import {
   markXamanReturn,
   xamanWebsocketUrl,
 } from "./payloadResume";
-import { notifyTradeExecuted } from "./tradeTx";
+import { notifyTradeExecuted, notifyTradeFailed, notifyTradeUnconfirmed } from "./tradeTx";
 import {
   createPayload,
   extractSignedAccount,
@@ -82,7 +82,7 @@ export function useXamanPayload() {
     };
   }, []);
 
-  async function start({ body = {}, onSigned, onExecuted, errorMessage, resumeUuid } = {}) {
+  async function start({ body = {}, onSigned, onExecuted, onFailed, errorMessage, resumeUuid } = {}) {
     if (busyRef.current) return;
     busyRef.current = true;
     const session = nextPayloadSession(sessionRef.current);
@@ -96,7 +96,14 @@ export function useXamanPayload() {
     let payloadUuid = resumeUuid || null;
 
     const announce = (detection) => {
-      if (announced || !detection?.executed) return false;
+      if (announced) return false;
+      if (detection?.failed) {
+        announced = true;
+        onFailed?.(detection);
+        if (watchTrade) notifyTradeFailed({ ...detection, uuid: payloadUuid, txjson: body?.txjson });
+        return true;
+      }
+      if (!detection?.executed) return false;
       announced = true;
       onExecuted?.(detection);
       if (watchTrade) notifyTradeExecuted({ ...detection, uuid: payloadUuid, txjson: body?.txjson });
@@ -156,42 +163,48 @@ export function useXamanPayload() {
           }
         }
         const detection = await inspect();
-        const looksDone =
-          detection.executed ||
+        const looksSigned =
           detection.signed ||
           payloadLooksSigned(result) ||
           payloadLooksSigned(latestPayload) ||
           Boolean(signedAccount);
-        if (looksDone) {
+        if (looksSigned || detection.executed) {
           onSigned?.(signedAccount, latestPayload || result);
+          setQr(null);
+          setMobileUrl(null);
+          setStatus(detection.executed ? "signed" : "confirming");
         }
         if (watchTrade) {
-          setStatus("signed");
-          if (announce(detection.executed ? detection : looksDone ? { ...detection, executed: true, via: detection.via || "xaman-signed" } : detection)) {
+          if (announce(detection)) {
             reset();
-            setStatus("signed");
+            setStatus(detection.executed ? "signed" : "failed");
             return;
           }
           const started = Date.now();
-          while (payloadSessionOpen(session, sessionRef.current) && Date.now() - started < 20000) {
+          while (payloadSessionOpen(session, sessionRef.current) && Date.now() - started < 30000) {
             const next = await getPayloadResult(payload.uuid).catch(() => null);
             if (next) latestPayload = next;
             const again = await inspect();
-            if (announce(again.executed ? again : looksDone ? { ...again, executed: true, via: again.via || "xaman-signed" } : again)) {
+            if (announce(again)) {
               reset();
-              setStatus("signed");
+              setStatus(again.executed ? "signed" : "failed");
               return;
             }
             await new Promise((resolve) => setTimeout(resolve, 1500));
           }
-          if (looksDone) {
-            announce({ ...detection, executed: true, via: detection.via || "xaman-signed" });
+          if (looksSigned && !announced) {
+            notifyTradeUnconfirmed({
+              ...detection,
+              uuid: payloadUuid,
+              txjson: body?.txjson,
+              account: signedAccount,
+            });
           }
         }
         reset({
           keepPending: !signedAccount && (detection.signed || payloadLooksSigned(result)),
         });
-        setStatus("signed");
+        setStatus(looksSigned ? "signed" : "idle");
       };
 
       const settle = async () => {

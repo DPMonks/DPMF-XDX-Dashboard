@@ -464,12 +464,23 @@ const announcedTrades = new Set();
 
 export function notifyTradeExecuted(detail = {}) {
   if (typeof window === "undefined") return;
+  if (detail.executed === false || detail.failed || detail.rejected) return;
   const key = String(detail.uuid || detail.txid || "").trim().toLowerCase();
   if (key && announcedTrades.has(key)) return;
   if (key) announcedTrades.add(key);
   const account = detail.account || detail.txjson?.Account || null;
   const pending = pendingFromExecution(detail, account) || pendingVoteFromExecution(detail, account);
   if (pending) rememberPending(pending.activity.account, pending);
-  window.dispatchEvent(new CustomEvent("dpmf-trade-executed", { detail }));
+  window.dispatchEvent(new CustomEvent("dpmf-trade-executed", { detail: { ...detail, executed: true } }));
   notifyWalletRefresh();
+}
+
+export function notifyTradeFailed(detail = {}) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("dpmf-trade-failed", { detail }));
+}
+
+export function notifyTradeUnconfirmed(detail = {}) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("dpmf-trade-unconfirmed", { detail }));
 }

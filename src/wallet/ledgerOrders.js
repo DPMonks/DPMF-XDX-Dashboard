@@ -251,13 +251,34 @@ export function activityFromAmmCreateTx(row, address) {
   };
 }
 
+export function activityFromAmmLpTx(row, address) {
+  const { tx, meta, hash, timestamp } = unwrapAccountTx(row);
+  if (tx?.TransactionType !== "AMMDeposit" && tx?.TransactionType !== "AMMWithdraw") return null;
+  if (address && tx.Account && !sameWallet(tx.Account, address)) return null;
+  const result = meta.TransactionResult || row.TransactionResult || "";
+  if (result && result !== "tesSUCCESS") return null;
+  const pair = pairFromVoteAssets(tx.Asset, tx.Asset2);
+  const lp = Number(tx.LPTokenIn?.value ?? tx.lp);
+  return {
+    account: tx.Account || address,
+    side: tx.TransactionType === "AMMDeposit" ? "addLp" : "removeLp",
+    pair,
+    pool: pair,
+    lp: Number.isFinite(lp) && lp > 0 ? lp : null,
+    timestamp: timestamp || new Date().toISOString(),
+    txid: hash,
+    status: "filled",
+  };
+}
+
 export function activityFromAccountTx(transactions, address) {
   return (Array.isArray(transactions) ? transactions : [])
     .map(
       (row) =>
         activityFromOfferTx(row, address) ||
         activityFromAmmVoteTx(row, address) ||
-        activityFromAmmCreateTx(row, address)
+        activityFromAmmCreateTx(row, address) ||
+        activityFromAmmLpTx(row, address)
     )
     .filter(Boolean)
     .sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
@@ -356,6 +377,7 @@ export function pendingFromExecution(detail = {}, address = "") {
         ? pairFromVoteAssets(amountAsIssue(txjson.Amount), amountAsIssue(txjson.Amount2))
         : pairFromVoteAssets(txjson.Asset, txjson.Asset2);
     const side = type === "AMMCreate" ? "createPool" : type === "AMMDeposit" ? "addLp" : "removeLp";
+    const lp = Number(txjson.LPTokenIn?.value ?? txjson.lp ?? detail.lp);
     return {
       order: null,
       activity: {
@@ -363,6 +385,8 @@ export function pendingFromExecution(detail = {}, address = "") {
         side,
         pair,
         pool: pair,
+        lp: Number.isFinite(lp) && lp > 0 ? lp : null,
+        xdx: Number(txjson.Amount?.value) || null,
         timestamp: detail.timestamp || new Date().toISOString(),
         txid: detail.txid || null,
         status: "filled",
