@@ -258,6 +258,7 @@ export default function App() {
           <section className="dashboard-card neon-card">
             <h2 className="card-title">{t.lpHolders}</h2>
             <RichList
+              className="is-lp-holders"
               rows={lpHolders}
               loading={lpLoading}
               error={errors.lp}
