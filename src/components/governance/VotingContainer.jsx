@@ -126,6 +126,7 @@ export default function VotingContainer() {
           tradingFee: fee,
         }),
       },
+      trade: { action: "vote", pair, voteType: "trading_fee" },
       errorMessage: t.voteSignError,
       onExecuted: () => {
         setConfirming(false);
