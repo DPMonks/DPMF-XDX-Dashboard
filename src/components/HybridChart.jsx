@@ -333,9 +333,6 @@ export default function HybridChart() {
     walls,
     lastFill: trades[0],
   });
-  const locked = lockedSnapshot();
-  const historyReady = (locked.pairs?.[pair]?.candles || []).length > 0;
-
   function addDrawing(point) {
     const next = nextDrawingState({ tool, color: drawColor, pending, point, strokeWidth, lineStyle });
     setPending(next.pending);
@@ -705,9 +702,6 @@ export default function HybridChart() {
       </div>
 
       <div className="hybrid-footer">
-        <p className="hybrid-note">
-          {historyReady ? t.chartLockedHistory : t.chartLiveUntilLock}
-        </p>
         <TradeBar />
         {ghost ? (
           <span className="hybrid-ghost-readout">
