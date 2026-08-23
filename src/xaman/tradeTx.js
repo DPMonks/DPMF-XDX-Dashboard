@@ -21,9 +21,17 @@ import { liveWalletAddress } from "../wallet/walletStorage.js";
 
 export const DROPS_PER_XRP = 1_000_000;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
+export const TF_PARTIAL_PAYMENT = 131072;
 export const TF_TWO_ASSET = 1_048_576;
 export const TF_LP_TOKEN = 65_536;
 export const LEDGER_FEE_XRP = 0.000012;
+export const MARKET_SLIPPAGE = 0.15;
+
+export function withMarketSlippage(value, side = "buy") {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return side === "sell" ? n * (1 - MARKET_SLIPPAGE) : n * (1 + MARKET_SLIPPAGE);
+}
 
 export const QUOTE_ASSETS = [
   { id: "XRP", currency: "XRP", label: "XRP" },
@@ -146,25 +154,60 @@ export function xdxAmount(value) {
   return issuedAmount(XDX_CURRENCY, XDX_ISSUER, value);
 }
 
+/**
+ * Market buy/sell is a self Payment so rippled takes the pair's DEX book and
+ * AMM. OfferCreate + Immediate-or-Cancel only hits resting CLOB offers and
+ * returns tecKILLED when those are empty (ImmediateOfferKilled).
+ */
+export function marketBuyXdx({ account, quote, xdx, cost } = {}) {
+  const sendMax = withMarketSlippage(cost, "buy");
+  const txjson = {
+    TransactionType: "Payment",
+    Amount: xdxAmount(xdx),
+    SendMax: quoteAmount(quote, sendMax),
+    Flags: TF_PARTIAL_PAYMENT,
+  };
+  if (account) {
+    txjson.Account = account;
+    txjson.Destination = account;
+  }
+  return txjson;
+}
+
+export function marketSellXdx({ account, quote, xdx, proceeds } = {}) {
+  const deliver = withMarketSlippage(proceeds, "sell");
+  const txjson = {
+    TransactionType: "Payment",
+    Amount: quoteAmount(quote, deliver),
+    SendMax: xdxAmount(xdx),
+    Flags: TF_PARTIAL_PAYMENT,
+  };
+  if (account) {
+    txjson.Account = account;
+    txjson.Destination = account;
+  }
+  return txjson;
+}
+
 export function offerCreateBuyXdx({ account, quote, xdx, cost, market = false } = {}) {
+  if (market) return marketBuyXdx({ account, quote, xdx, cost });
   const txjson = {
     TransactionType: "OfferCreate",
     TakerPays: xdxAmount(xdx),
     TakerGets: quoteAmount(quote, cost),
   };
   if (account) txjson.Account = account;
-  if (market) txjson.Flags = TF_IMMEDIATE_OR_CANCEL;
   return txjson;
 }
 
 export function offerCreateSellXdx({ account, quote, xdx, proceeds, market = false } = {}) {
+  if (market) return marketSellXdx({ account, quote, xdx, proceeds });
   const txjson = {
     TransactionType: "OfferCreate",
     TakerGets: xdxAmount(xdx),
     TakerPays: quoteAmount(quote, proceeds),
   };
   if (account) txjson.Account = account;
-  if (market) txjson.Flags = TF_IMMEDIATE_OR_CANCEL;
   return txjson;
 }
 

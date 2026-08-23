@@ -113,7 +113,48 @@ export function orderFromOffer(offer = {}, address = "") {
   };
 }
 
+export function orderFromPayment(txjson, extra = {}) {
+  if (!txjson || txjson.TransactionType !== "Payment") return null;
+  const sendMax = readAmount(txjson.SendMax);
+  const delivered = readAmount(txjson.Amount);
+  if (!sendMax || !delivered) return null;
+  let side;
+  let amount;
+  let quote;
+  let cost;
+  if (isXdxAmount(delivered) && !isXdxAmount(sendMax)) {
+    side = "bid";
+    amount = delivered.value;
+    quote = sendMax.currency;
+    cost = sendMax.value;
+  } else if (isXdxAmount(sendMax) && !isXdxAmount(delivered)) {
+    side = "ask";
+    amount = sendMax.value;
+    quote = delivered.currency;
+    cost = delivered.value;
+  } else {
+    return null;
+  }
+  if (!(amount > 0) || !(cost > 0)) return null;
+  return {
+    account: extra.account || txjson.Account || null,
+    pair: `XDX/${quote === "XRP" ? "XRP" : quote}`,
+    side,
+    price: cost / amount,
+    amount,
+    quote,
+    seq: txjson.Sequence ?? extra.seq ?? null,
+    txid: extra.txid || txjson.hash || null,
+    timestamp: extra.timestamp || null,
+  };
+}
+
+export function isMarketSwap(txjson) {
+  return Boolean(txjson?.TransactionType === "Payment" && txjson.SendMax != null) || isImmediateOrCancel(txjson);
+}
+
 export function orderFromTxjson(txjson, extra = {}) {
+  if (txjson?.TransactionType === "Payment") return orderFromPayment(txjson, extra);
   if (!txjson || txjson.TransactionType !== "OfferCreate") return null;
   return orderFromOffer(
     {
@@ -295,10 +336,10 @@ export function pendingFromExecution(detail = {}, address = "") {
     price: order.price,
     timestamp: order.timestamp || new Date().toISOString(),
     txid: detail.txid || null,
-    status: isImmediateOrCancel(txjson) ? "filled" : "open",
+    status: isMarketSwap(txjson) ? "filled" : "open",
   };
   return {
-    order: isImmediateOrCancel(txjson) ? null : order,
+    order: isMarketSwap(txjson) ? null : order,
     activity,
   };
 }
