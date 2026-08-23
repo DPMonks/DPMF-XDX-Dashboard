@@ -295,25 +295,25 @@ export default function ConnectedWallet() {
       <header className="wallet-hero">
         <div className="wallet-hero-brand">
           <img src="/favicon.png" alt="" className="wallet-mark" />
-          <div>
-            <p className="wallet-hero-label">
-              {t.xdxValue}{" "}
-              <span className={`wallet-hero-qty${empty ? " is-empty" : " is-filled"}`}>
-                {empty ? "—" : `${formatToken(view.xdx.xdx, locale, 2)} ${t.xdx}`}
-              </span>
+          <div className="wallet-hero-copy">
+            <p className="wallet-hero-label">{t.xdxValue}</p>
+            <p className={`wallet-hero-qty${empty ? " is-empty" : " is-filled"}`}>
+              {empty ? "—" : `${formatToken(view.xdx.xdx, locale, 2)} ${t.xdx}`}
             </p>
             <p className={`wallet-hero-usd${empty ? " is-empty" : " is-filled"}`}>
               {empty ? "—" : formatUsd(view.xdx.usd, locale)}
             </p>
-            <p className={`wallet-hero-gbp${empty ? " is-empty" : " is-filled"}`}>
-              {empty ? "—" : formatGbp(view.xdx.gbp, locale)}
-            </p>
-            <p className={`wallet-hero-eur${empty ? " is-empty" : " is-filled"}`}>
-              {empty ? "—" : formatEur(view.xdx.eur, locale)}
-            </p>
-            <p className={`wallet-hero-jpy${empty ? " is-empty" : " is-filled"}`}>
-              {empty ? "—" : formatJpy(view.xdx.jpy, locale)}
-            </p>
+            <div className="wallet-hero-fx">
+              <p className={`wallet-hero-gbp${empty ? " is-empty" : " is-filled"}`}>
+                {empty ? "—" : formatGbp(view.xdx.gbp, locale)}
+              </p>
+              <p className={`wallet-hero-eur${empty ? " is-empty" : " is-filled"}`}>
+                {empty ? "—" : formatEur(view.xdx.eur, locale)}
+              </p>
+              <p className={`wallet-hero-jpy${empty ? " is-empty" : " is-filled"}`}>
+                {empty ? "—" : formatJpy(view.xdx.jpy, locale)}
+              </p>
+            </div>
           </div>
         </div>
         {walletAddress ? (
