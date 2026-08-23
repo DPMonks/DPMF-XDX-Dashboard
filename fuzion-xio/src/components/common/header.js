@@ -578,7 +578,8 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
                 <Dropdown.Item href="/" className="dropdown-item">
                   Home
                 </Dropdown.Item>
-                <Dropdown.Item href="/Profile">Profile</Dropdown.Item>
+                <Dropdown.Item href="/profiles">Profiles</Dropdown.Item>
+                <Dropdown.Item href="/Profile">My profile</Dropdown.Item>
                 <Dropdown.Item href="/MyNFT">My NFT's</Dropdown.Item>
                 <Dropdown.Item
                   style={{ cursor: "pointer" }}
@@ -618,6 +619,9 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
               </Link>
               <Link to="/assets" className="home-class">
                 Assets
+              </Link>
+              <Link to="/profiles" className="home-class">
+                Profiles
               </Link>
               <Link to="/market" className="home-class">
                 Market

@@ -180,7 +180,7 @@ function Footer() {
               <br />
                 <h4 className="footer-heading">Community</h4>
                 <p className="footer-subheading d-flex">
-                  <a href="/Profile">Profile</a>
+                  <a href="/profiles">Profiles</a>
                   {/* <span className="comInSoon">Coming Soon</span> */}
                 </p>
                 <p className="footer-subheading d-flex">

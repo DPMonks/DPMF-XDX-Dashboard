@@ -77,6 +77,7 @@ import {
   removeNftCollection
 } from "../../store/actions/nftdetail";
 import { convertToFile } from "../../helper/convertBase64";
+import { profileShareUrl, setProfileSocialMeta } from "../../helper/profileMedia";
 import {
   uniqueArray,
   replaceHost,
@@ -163,6 +164,9 @@ const Profile = () => {
   const [storeDBannerImg, setStoreDBannerImg] = useState(null);
   const [pName, setPName] = useState(null);
   const [bio, setBio] = useState(null);
+  const [tagline, setTagline] = useState("");
+  const [location, setLocation] = useState("");
+  const [website, setWebsite] = useState("");
   const [editProfileName, setEditProfileName] = useState(false);
   const [eidtBio, setEidtBio] = useState(false);
   const [pDetails, setPDetails] = useState(null);
@@ -762,6 +766,9 @@ const Profile = () => {
       formData.append("bio", bio);
       // obj.push({ bio });
     }
+    if (tagline) formData.append("tagline", tagline);
+    if (location) formData.append("location", location);
+    if (website) formData.append("website", website);
     if (!!myDecodedToken && myDecodedToken !== "") {
       formData.append("wAddress", myDecodedToken.ac);
       // obj.push({ wAddress: myDecodedToken.ac });
@@ -828,7 +835,13 @@ const Profile = () => {
         }
       }
 
-      if (data) setPDetails(data);
+      if (data) {
+        setPDetails(data);
+        setTagline(data.tagline || "");
+        setLocation(data.location || "");
+        setWebsite(data.website || "");
+        setProfileSocialMeta(data);
+      }
     } catch (err) {
       console.error("pdetails error", err);
     }
@@ -1281,11 +1294,11 @@ const Profile = () => {
                               toastId: "copy" + Date.now()
                             })
                           }
-                          text={
+                          text={profileShareUrl(
                             pathname.split("/").length === 3
-                              ? HOST
-                              : `${HOST}/${myDecodedToken?.ac}`
-                          }
+                              ? pathname.split("/").pop()
+                              : myDecodedToken?.ac
+                          )}
                         >
                           <div className="radicalProfile share-icn">
                             <h4>
@@ -1467,6 +1480,27 @@ const Profile = () => {
                       </div>
                       <p className="mb-0">{!!rdxBalance && rdxBalance.level}</p>
                     </div>
+                    {(pDetails?.tagline || tagline) && (
+                      <p className="dpmf-muted mt-3 mb-1">
+                        {tagline || pDetails?.tagline}
+                      </p>
+                    )}
+                    {(pDetails?.location || location) && (
+                      <p className="dpmf-muted mb-1">
+                        {location || pDetails?.location}
+                      </p>
+                    )}
+                    {(pDetails?.website || website) && (
+                      <p className="mb-0">
+                        <a
+                          href={website || pDetails?.website}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {website || pDetails?.website}
+                        </a>
+                      </p>
+                    )}
                     <div className="qr_codeimgwrp">
                       <img src={QrCodeImgTest} alt="QR Code" />
                     </div>
@@ -1516,6 +1550,28 @@ const Profile = () => {
                             )
                           ) : null}
                         </FloatingLabel>
+                        {checkValidProfile() && (
+                          <div className="mt-3">
+                            <Form.Control
+                              className="mb-2"
+                              placeholder="Tagline"
+                              value={tagline}
+                              onChange={(e) => setTagline(e.target.value)}
+                            />
+                            <Form.Control
+                              className="mb-2"
+                              placeholder="Location"
+                              value={location}
+                              onChange={(e) => setLocation(e.target.value)}
+                            />
+                            <Form.Control
+                              className="mb-2"
+                              placeholder="Website"
+                              value={website}
+                              onChange={(e) => setWebsite(e.target.value)}
+                            />
+                          </div>
+                        )}
                       </Col>
                       <Col md>
                         <FloatingLabel

@@ -308,3 +308,26 @@ a:hover {
 .navbar-toggler-icon {
   filter: invert(1);
 }
+
+.dpmf-profile-card {
+  overflow: hidden;
+  padding-top: 0;
+}
+
+.dpmf-profile-banner {
+  height: 88px;
+  margin: 0 -18px 36px;
+  background-size: cover;
+  background-position: center;
+  border-bottom: 1px solid var(--dpmf-border-soft);
+}
+
+.dpmf-profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-top: -68px;
+  border: 2px solid var(--dpmf-neon-cyan);
+  background: #101018;
+}

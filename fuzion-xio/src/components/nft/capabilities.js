@@ -44,6 +44,8 @@ function Capabilities() {
               {" · "}
               <a href="/assets">Assets</a>
               {" · "}
+              <a href="/profiles">Profiles</a>
+              {" · "}
               <a href="/rankings">Rankings</a>
             </p>
 

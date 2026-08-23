@@ -79,6 +79,27 @@ export function xioDashboardRows(store) {
   }));
 }
 
+export function listProfiles(store) {
+  return (store.profiles || []).map((profile) => {
+    const vScore = localVScore(store, profile.wAddress);
+    const xioBalance = localXioBalance(store, profile.wAddress);
+    return {
+      ...profile,
+      vScore,
+      badge: vScoreBadge(vScore),
+      rank:
+        profile.wAddress === XIO_ISSUER
+          ? "Master Validator"
+          : xioRank(xioBalance),
+      xioBalance
+    };
+  });
+}
+
+export function findProfile(store, address) {
+  return (store.profiles || []).find((row) => row.wAddress === address) || null;
+}
+
 export function vScoreDashboardRows(store) {
   return (store.leaderboards || []).map((row) => {
     const profile = (store.profiles || []).find((item) => item.wAddress === row.wAddress);

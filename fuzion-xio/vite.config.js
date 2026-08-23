@@ -49,13 +49,34 @@ export default defineConfig(({ mode }) => {
       port: 5174,
       proxy: {
         "/api": { target: apiOrigin, changeOrigin: true, secure: true },
+        "/share": { target: apiOrigin, changeOrigin: true, secure: true },
         "/convert-fbx": { target: apiOrigin, changeOrigin: true, secure: true },
-        "/proxy-ipfs": { target: apiOrigin, changeOrigin: true, secure: true }
+        "/proxy-ipfs": { target: apiOrigin, changeOrigin: true, secure: true },
+        "/Profile": {
+          target: apiOrigin,
+          changeOrigin: true,
+          secure: true,
+          bypass(req) {
+            const ua = req.headers["user-agent"] || "";
+            if (
+              /facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|LinkedInBot|WhatsApp|TelegramBot|Pinterest|Iframely|SkypeUriPreview/i.test(
+                ua
+              )
+            ) {
+              return;
+            }
+            return "/index.html";
+          }
+        }
       }
     },
     preview: {
       host: true,
-      port: 4174
+      port: 4174,
+      proxy: {
+        "/api": { target: apiOrigin, changeOrigin: true, secure: true },
+        "/share": { target: apiOrigin, changeOrigin: true, secure: true }
+      }
     }
   };
 });

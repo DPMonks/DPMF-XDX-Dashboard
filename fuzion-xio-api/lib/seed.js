@@ -1,6 +1,6 @@
 import { DEMO_GLB, XDX_CURRENCY, XDX_ISSUER, XIO_CURRENCY, XIO_ISSUER } from "./constants.js";
 
-export const STORE_VERSION = 6;
+export const STORE_VERSION = 7;
 
 export const DEMO_ISSUER = "rFuzionXioDemoIssuer1111111111111";
 export const DEMO_OWNER = "rFuzionXioDemoOwner11111111111111";
@@ -201,29 +201,45 @@ export function demoSeed() {
         wAddress: DEMO_OWNER,
         pName: "FUZION Demo",
         pImage: images[0],
-        pBanner: "",
-        dBanner: "",
+        pBanner: images[4],
+        dBanner: images[3],
         isActive: true,
         vPoint: 120,
-        bio: "Collector profile. Validation and XIO rank drive the checkmark."
+        tagline: "XRPL collector on XD-1",
+        location: "Ledger",
+        website: "https://fuzion-xio.com",
+        bio: "Collector profile. Validation and XIO rank drive the checkmark.",
+        createdAt: now
       },
       {
         _id: "seed-profile-issuer",
         wAddress: DEMO_ISSUER,
         pName: "XIO Issuer",
         pImage: images[1],
+        pBanner: images[0],
+        dBanner: images[4],
         isActive: true,
         vPoint: 10050,
-        bio: "Governance issuer profile. Master Validator when XIO ≥ 100."
+        tagline: "Governance issuer",
+        location: "FUZION-XIO",
+        website: "https://www.dpmf.technology/FUZION-XIO",
+        bio: "Governance issuer profile. Master Validator when XIO ≥ 100.",
+        createdAt: now
       },
       {
         _id: "seed-profile-bidder",
         wAddress: DEMO_BIDDER,
         pName: "Desk Bidder",
         pImage: images[2],
+        pBanner: images[3],
+        dBanner: images[1],
         isActive: true,
         vPoint: 240,
-        bio: "Makes collection offers and auction bids on the local desk."
+        tagline: "Multi-asset offers",
+        location: "Market desk",
+        website: "https://fuzion-xio.com/assets",
+        bio: "Makes collection offers and auction bids on the local desk.",
+        createdAt: now
       }
     ],
     likes: [],

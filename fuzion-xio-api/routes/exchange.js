@@ -369,24 +369,6 @@ router.post("/profile/getbalanceandlevel", async (req, res) => {
   });
 });
 
-router.post("/profile/createprofile", (req, res) => {
-  const body = req.body || {};
-  if (!body.wAddress) {
-    return res.status(400).json({ success: false, message: "wAddress required" });
-  }
-  const store = update((current) => {
-    const existing = current.profiles.find((profile) => profile.wAddress === body.wAddress);
-    if (existing) Object.assign(existing, body);
-    else current.profiles.push({ _id: `profile-${body.wAddress}`, ...body });
-    return current;
-  });
-  res.json({
-    success: true,
-    message: "Profile saved",
-    data: store.profiles.find((profile) => profile.wAddress === body.wAddress)
-  });
-});
-
 router.post("/profile/verifyprofile", (_req, res) => {
   res.status(200).json(notReady("profile/verifyprofile"));
 });

@@ -60,6 +60,8 @@ export function capabilityMap() {
       xrplNftOffers: true,
       xrplAccountTape: true,
       tradeCatalog: true,
+      personalProfiles: true,
+      profileOpenGraph: true,
       zeroPlatformFee: true
     },
     next: {

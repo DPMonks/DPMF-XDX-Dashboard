@@ -18,7 +18,7 @@ Live product facts come from [dpmf.technology](https://www.dpmf.technology/) (XD
 | Activity tape | Yes | Yes | Yes | Yes | Recent | `/activity` + `/api/market/activity` |
 | Collection offers / sweep | Rare | Yes | Partial | No | Rare | Collection offer + cheapest-N sweep, 0% fee |
 | Auctions | Rare | Rare | Partial | Yes | Yes | Reserve + live bids on the desk |
-| Profiles / social | Thin | Thin | Medium | Artist bios | Wallet | **Profiles + validation + checkmarks** |
+| Profiles / social | Thin | Thin | Medium | Artist bios | Wallet | **First-class profiles + avatar/banner + OG share image** |
 | Governance | Token optional | BLUR / TNSR | ME | No | No | **XIO ranks + vScore** |
 | Ledger-native NFTs | EVM/SOL | EVM/SOL | Multi | EVM | **XLS-20** | **XLS-20** + `nft_info` / `account_nfts` |
 | Dynamic NFT | Rare | Rare | Rare | No | XLS-46 on ledger | dNFT-ready (URI update next) |
@@ -31,7 +31,8 @@ xrp.cafe is the strongest XRPL peer: non-custodial XLS-20, auctions, bulk mint, 
 ## FUZION / DPMF product facts
 
 - Multi-currency NFT-Fi on XRPL (fixed price + P2P, thousands of issued assets)
-- Free profiles, decentralised validation, blue/gold checkmarks
+- Free profiles as their own option (`/profiles`), avatar + background banners, Open Graph image when a profile link is shared
+- Decentralised validation, blue/gold checkmarks
 - XIO (`rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU`) is the governance asset
 - XIO ranks: New → Beginner → Basic → Validator → Active → Trusted → Master
 - Mint: images, video, audio, PDF, **GLB / FBX / USDZ**, 3D + AR
