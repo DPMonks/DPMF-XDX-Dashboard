@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
-import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, plotViewKey, priceTicks } from "../chart/axis";
+import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, plotViewKey, priceTicks, timeTagOrigin, timeTagWidth } from "../chart/axis";
 import { candleBodyBox, candleBodyWidth, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
@@ -372,13 +372,12 @@ export default function HybridPlot({
     }
     if (timeTag && timeText && Number.isFinite(next.t)) {
       const label = formatCursorWhen(next.t, locale);
-      const tagW = Math.max(108, label.length * 6.1);
-      const tagX = Math.min(width - PAD.r - tagW / 2, Math.max(PAD.l + tagW / 2, x));
+      const box = timeTagOrigin(x, timeTagWidth(label), { left: PAD.l, right: width - PAD.r });
       timeTag.setAttribute("visibility", "visible");
-      timeTag.setAttribute("transform", `translate(${tagX - tagW / 2} ${height - PAD.b + 4})`);
+      timeTag.setAttribute("transform", `translate(${box.x} ${height - PAD.b + 4})`);
       const rect = timeTag.querySelector("rect");
-      if (rect) rect.setAttribute("width", String(tagW));
-      timeText.setAttribute("x", String(tagW / 2));
+      if (rect) rect.setAttribute("width", String(box.width));
+      timeText.setAttribute("x", String(box.textX));
       timeText.textContent = label;
     }
   }
@@ -579,6 +578,10 @@ export default function HybridPlot({
   const editAnchor = selected && tool === "cursor" ? drawingToolbarAnchor(selected, scale, { pad: PAD }) : null;
   const inspectX = inspect ? Math.min(width - PAD.r, Math.max(PAD.l, scale.x(inspect.t))) : null;
   const inspectY = inspect ? Math.min(plotBottom - 1, Math.max(PAD.t + 1, scale.y(inspect.price))) : null;
+  const inspectWhen = inspect ? formatCursorWhen(inspect.t, locale) : "";
+  const inspectTimeBox = inspect
+    ? timeTagOrigin(inspectX, timeTagWidth(inspectWhen), { left: PAD.l, right: width - PAD.r })
+    : null;
   const hoverCandle = inspect?.candle;
   const clipId = `hybrid-plot-${uid}`;
   const volClipId = `hybrid-vol-${uid}`;
@@ -705,9 +708,9 @@ export default function HybridPlot({
         ))}
         {xTicks.map((stamp) => {
           const x = scale.x(stamp);
-          const anchor = x < PAD.l + 28 ? "start" : x > width - PAD.r - 28 ? "end" : "middle";
+          const labelX = axisLabelX(x, { min: PAD.l + 20, max: width - 20 });
           return (
-            <text key={`xt-${stamp}`} className="hybrid-axis is-time" x={x} y={height - 10} textAnchor={anchor}>
+            <text key={`xt-${stamp}`} className="hybrid-axis is-time" x={labelX} y={height - 10} textAnchor="middle">
               {formatAxisTime(stamp, { spanMs: scale.spanT, intervalId: interval, locale })}
             </text>
           );
@@ -976,10 +979,10 @@ export default function HybridPlot({
           <g className="hybrid-crosshair is-pinned" pointerEvents="none">
             <line x1={inspectX} x2={inspectX} y1={PAD.t} y2={height - PAD.b} />
             <line x1={PAD.l} x2={width - PAD.r} y1={inspectY} y2={inspectY} />
-            <g className="hybrid-cursor-tag is-time" transform={`translate(${Math.min(width - PAD.r - 54, Math.max(PAD.l, inspectX - 54))} ${height - PAD.b + 4})`}>
-              <rect x="0" y="0" width="108" height="18" rx="3" />
-              <text x="54" y="13" textAnchor="middle">
-                {formatCursorWhen(inspect.t, locale)}
+            <g className="hybrid-cursor-tag is-time" transform={`translate(${inspectTimeBox.x} ${height - PAD.b + 4})`}>
+              <rect x="0" y="0" width={inspectTimeBox.width} height="18" rx="3" />
+              <text x={inspectTimeBox.textX} y="13" textAnchor="middle">
+                {inspectWhen}
               </text>
             </g>
             <g className="hybrid-cursor-tag is-price" transform={`translate(0 ${inspectY - 9})`}>

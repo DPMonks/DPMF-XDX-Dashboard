@@ -835,12 +835,20 @@ body {
 .pair-chip,
 .copy-btn,
 .pagination button {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   padding: 6px 12px;
+  margin: 0;
   border-radius: 999px;
   background: var(--dpmf-bg-elevated);
   border: 1px solid var(--dpmf-border-soft);
   color: var(--dpmf-text-muted);
   cursor: pointer;
+  line-height: 1;
 }
 
 .tab.active,
