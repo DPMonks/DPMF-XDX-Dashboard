@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useWallet } from "../context/useWallet";
 import { shortAddress } from "../utils/format";
 import { takeXamanReturnUuid } from "../xaman/payloadResume";
+import { resolveNeedSignIn } from "../wallet/walletStorage";
 import { WALLET_EVENTS } from "../xaman/tradeTx";
 import { useXamanPayload } from "../xaman/useXamanPayload";
 import { useI18n } from "../i18n/useI18n";
@@ -59,7 +60,14 @@ export default function ConnectWallet() {
 
   useEffect(() => {
     function onNeedSignIn() {
-      if (walletAddress) return;
+      const next = resolveNeedSignIn(walletAddress);
+      if (next.action === "already-signed-in") {
+        if (!walletAddress) connectWallet(next.account);
+        window.dispatchEvent(
+          new CustomEvent(WALLET_EVENTS.signedIn, { detail: { account: next.account } })
+        );
+        return;
+      }
       startRef.current({
         onSigned: finishSignIn,
         errorMessage: t.walletError,
@@ -67,7 +75,7 @@ export default function ConnectWallet() {
     }
     window.addEventListener(WALLET_EVENTS.needSignIn, onNeedSignIn);
     return () => window.removeEventListener(WALLET_EVENTS.needSignIn, onNeedSignIn);
-  }, [walletAddress, finishSignIn, t.walletError]);
+  }, [walletAddress, connectWallet, finishSignIn, t.walletError]);
 
   useEffect(() => {
     const boot = window.setTimeout(() => resumeSignIn(false), 0);

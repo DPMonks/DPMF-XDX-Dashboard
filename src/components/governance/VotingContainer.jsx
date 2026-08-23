@@ -3,6 +3,7 @@ import { getAmm, getPoolGovernance, getWalletLp, getWalletVotes } from "../../ap
 import { useWallet } from "../../context/useWallet";
 import { useI18n } from "../../i18n/useI18n";
 import { shortAddress } from "../../utils/format";
+import { liveWalletAddress } from "../../wallet/walletStorage";
 import { lpHeldForPair, resolveQuote, WALLET_EVENTS } from "../../xaman/tradeTx";
 import { useXamanPayload } from "../../xaman/useXamanPayload";
 import {
@@ -20,6 +21,7 @@ import VotePanel from "./VotePanel";
 export default function VotingContainer() {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
+  const signedAccount = liveWalletAddress(walletAddress);
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
   const [pools, setPools] = useState([]);
   const [lpRows, setLpRows] = useState([]);
@@ -98,7 +100,7 @@ export default function VotingContainer() {
   }, [pair, walletAddress]);
 
   function askConfirm() {
-    if (!walletAddress) {
+    if (!signedAccount) {
       window.dispatchEvent(new Event(WALLET_EVENTS.needSignIn));
       return;
     }
@@ -107,6 +109,11 @@ export default function VotingContainer() {
   }
 
   function signVote() {
+    const account = signedAccount;
+    if (!account) {
+      window.dispatchEvent(new Event(WALLET_EVENTS.needSignIn));
+      return;
+    }
     const quote = resolveQuote(pair.split("/")[1], {
       quote_issuer: pools.find((row) => String(row.pool || row.pool_name).toUpperCase() === pair)?.quote_issuer,
       quote_hex: pools.find((row) => String(row.pool || row.pool_name).toUpperCase() === pair)?.quote_hex,
@@ -114,7 +121,7 @@ export default function VotingContainer() {
     start({
       body: {
         txjson: ammVoteTxjson({
-          account: walletAddress,
+          account,
           quote,
           tradingFee: fee,
         }),
@@ -132,7 +139,7 @@ export default function VotingContainer() {
       <header className="governance-head">
         <div>
           <p className="governance-wallet">
-            {walletAddress ? shortAddress(walletAddress) : t.connectWalletHint}
+            {signedAccount ? shortAddress(signedAccount) : t.connectWalletHint}
           </p>
         </div>
         <p className={`governance-elig${eligible ? " is-yes" : " is-no"}`}>
@@ -151,7 +158,7 @@ export default function VotingContainer() {
         fee={fee}
         onFee={setFee}
         eligible={eligible}
-        signedIn={Boolean(walletAddress)}
+        signedIn={Boolean(signedAccount)}
         confirming={confirming}
         onAskConfirm={askConfirm}
         onCancelConfirm={() => setConfirming(false)}

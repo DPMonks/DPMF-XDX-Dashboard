@@ -138,6 +138,11 @@ test("unsigned trade clicks ask for sign-in before the trade window", () => {
   assert.equal(gateUnsignedTrade(null, null).action, "ignore");
 });
 
+test("a live Connect Wallet session opens add liquidity without a second sign-in", () => {
+  assert.equal(gateUnsignedTrade("addLp", "rN7n7suQDqawFkUvqhD56VwThRCFSStdz1").action, "open");
+  assert.equal(gateUnsignedTrade({ action: "removeLp", pair: "XDX/XRP" }, "rSignedIn").action, "open");
+});
+
 test("trade windows show pay and receive from the selected pair", () => {
   const buy = tradeSides({ action: "buy", amount: 1000, quoteQty: 4.632, quoteLabel: "XIO", total: 4.632 });
   assert.deepEqual(buy.pay, [{ value: 4.632, asset: "XIO" }]);

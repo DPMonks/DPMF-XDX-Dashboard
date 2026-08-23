@@ -1,4 +1,5 @@
 import { useContext } from "react";
+import { liveWalletAddress } from "../wallet/walletStorage";
 import { WalletContext } from "./walletContextInstance";
 
 export function useWallet() {
@@ -6,5 +7,8 @@ export function useWallet() {
   if (!context) {
     throw new Error("useWallet must be used within WalletProvider");
   }
-  return context;
+  return {
+    ...context,
+    walletAddress: liveWalletAddress(context.walletAddress),
+  };
 }

@@ -16,6 +16,7 @@ import {
 import { detectQuoteUsd } from "../utils/poolSplit.js";
 import { pendingFromExecution, rememberPending } from "../wallet/ledgerOrders.js";
 import { pendingVoteFromExecution } from "../wallet/ammVote.js";
+import { liveWalletAddress } from "../wallet/walletStorage.js";
 
 export const DROPS_PER_XRP = 1_000_000;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
@@ -76,7 +77,7 @@ export function normalizeTradeRequest(detail) {
 export function gateUnsignedTrade(detail, walletAddress) {
   const trade = normalizeTradeRequest(detail);
   if (!trade) return { action: "ignore" };
-  if (walletAddress) return { action: "open", trade };
+  if (liveWalletAddress(walletAddress)) return { action: "open", trade };
   return { action: "sign-in", trade };
 }
 

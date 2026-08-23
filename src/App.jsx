@@ -19,6 +19,7 @@ import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
 import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 import { useWallet } from "./context/useWallet";
+import { liveWalletAddress } from "./wallet/walletStorage";
 import { WALLET_EVENTS, gateUnsignedTrade } from "./xaman/tradeTx";
 
 const TradingChart = lazy(() => import("./components/TradingChart"));
@@ -148,7 +149,8 @@ export default function App() {
   }, []);
 
   const openTrade = useCallback((detail) => {
-    const gated = gateUnsignedTrade(detail, walletAddress);
+    const live = liveWalletAddress(walletAddress);
+    const gated = gateUnsignedTrade(detail, live);
     if (gated.action === "ignore") return;
     if (gated.action === "sign-in") {
       pendingTradeRef.current = gated.trade;

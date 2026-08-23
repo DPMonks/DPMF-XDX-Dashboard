@@ -32,6 +32,7 @@ import {
 import { formatPoolPct, normalizePriceBook, priceBookFromPools } from "../utils/poolSplit";
 import { formatToken, formatUsd } from "../utils/format";
 import { shortAddress } from "../utils/format";
+import { liveWalletAddress } from "../wallet/walletStorage";
 import BrandSelect from "./BrandSelect";
 import WalletModal from "./WalletModal";
 
@@ -101,7 +102,8 @@ export default function TradePanel({
   const quoteHex = quote.hex || "";
   const quotePair = quote.pair || "";
   const isLp = action === "addLp" || action === "removeLp";
-  const signedIn = Boolean(walletAddress);
+  const account = liveWalletAddress(walletAddress);
+  const signedIn = Boolean(account);
   const needTrust =
     Boolean(quote.issuer) &&
     !lineHint.includes(String(quote.currency || "").toUpperCase()) &&
@@ -175,7 +177,7 @@ export default function TradePanel({
         }
       })
       .catch(() => {});
-    Promise.all([getAmm().catch(() => []), walletAddress ? getWalletLp(walletAddress).catch(() => []) : []]).then(
+    Promise.all([getAmm().catch(() => []), account ? getWalletLp(account).catch(() => []) : []]).then(
       ([nextPools, nextLp]) => {
         if (cancelled) return;
         setPools(Array.isArray(nextPools) ? nextPools : []);
@@ -188,8 +190,8 @@ export default function TradePanel({
         }
       }
     );
-    if (walletAddress && quoteIssuer) {
-      getWalletBalances(walletAddress)
+    if (account && quoteIssuer) {
+      getWalletBalances(account)
         .then((balances) => {
           if (cancelled) return;
           setLineHint(JSON.stringify(balances.raw || {}).toUpperCase());
@@ -199,7 +201,7 @@ export default function TradePanel({
     return () => {
       cancelled = true;
     };
-  }, [action, quoteHex, quoteId, quoteIssuer, quotePair, walletAddress]);
+  }, [account, action, quoteHex, quoteId, quoteIssuer, quotePair]);
 
   function close() {
     reset();
@@ -216,7 +218,7 @@ export default function TradePanel({
   function buildTx() {
     if (action === "buy") {
       return offerCreateBuyXdx({
-        account: walletAddress,
+        account,
         quote,
         xdx: linked.xdx || amount,
         cost: linked.quote || shownQuoteQty || total,
@@ -225,7 +227,7 @@ export default function TradePanel({
     }
     if (action === "sell") {
       return offerCreateSellXdx({
-        account: walletAddress,
+        account,
         quote,
         xdx: linked.xdx || amount,
         proceeds: linked.quote || shownQuoteQty || total,
@@ -234,34 +236,39 @@ export default function TradePanel({
     }
     if (action === "addLp") {
       return ammDepositTx({
-        account: walletAddress,
+        account,
         quote,
         xdx: linked.xdx || amount,
         quoteQty: linked.quote || shownQuoteQty || quoteHint || total,
       });
     }
     return ammWithdrawTx({
-      account: walletAddress,
+      account,
       quote,
       lpAmount: lpAmount || amount,
     });
   }
 
   function signIn() {
+    const live = liveWalletAddress(walletAddress);
+    if (live) {
+      connectWallet(live);
+      return;
+    }
     start({
-      onSigned: (account) => connectWallet(account),
+      onSigned: (signedAccount) => connectWallet(signedAccount),
       errorMessage: t.walletError,
     });
   }
 
   function submit() {
     setFormError("");
-    if (!signedIn) {
+    if (!signedIn || !account) {
       signIn();
       return;
     }
     if (needTrust && quote.issuer) {
-      const line = quoteTrustSetTxjson(walletAddress, quote);
+      const line = quoteTrustSetTxjson(account, quote);
       start({
         body: { txjson: line },
         onSigned: () => {
@@ -319,7 +326,7 @@ export default function TradePanel({
           {titles[action] || t.tradeActions}
         </h2>
         {signedIn ? (
-          <p className="trade-panel-account">{shortAddress(walletAddress)}</p>
+          <p className="trade-panel-account">{shortAddress(account)}</p>
         ) : (
           <p className="trade-panel-hint">{t.signInToTrade}</p>
         )}
