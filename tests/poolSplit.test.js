@@ -8,7 +8,9 @@ import {
   detectQuoteUsd,
   impliedQuoteUsd,
   quoteUsdFromMap,
+  quoteUsdFromXrpRate,
   resolvePoolSplit,
+  usableMarketQuoteUsd,
 } from "../src/utils/poolSplit.js";
 
 test("poolAssetSplit is a USD value share, not a raw unit share", () => {
@@ -131,4 +133,23 @@ test("detectQuoteUsd prefers live USD then XDX pool implied for any quote", () =
     0.002
   );
   assert.equal(detectQuoteUsd({ quoteId: "USDT", pool: {}, prices: {} }), 1);
+  assert.equal(usableMarketQuoteUsd(0.000045, { xdxUsd: 0.000045, xrpUsd: 2.8 }), 0);
+  assert.equal(usableMarketQuoteUsd(2.8 * 0.000001, { xrpUsd: 2.8 }), 0);
+  assert.equal(quoteUsdFromXrpRate("XIO", { xioXrp: 26.4, xrpUsd: 1 }, 1), 26.4);
+  assert.equal(
+    detectQuoteUsd({
+      quoteId: "XIO",
+      pool: { reserve_xdx: 1150, reserve_currency: 1, xdxUsd: 0.000087 },
+      prices: { XIO: 0.0001, xrpUsd: 2.8 },
+    }),
+    impliedQuoteUsd({ reserveXdx: 1150, reserveQuote: 1, xdxUsd: 0.000087 })
+  );
+  assert.equal(
+    detectQuoteUsd({
+      quoteId: "XIO",
+      pool: { reserve_xdx: 1150, reserve_currency: 1, xdxUsd: 0.000087 },
+      prices: { xioXrp: 26.4, xrpUsd: 1 },
+    }),
+    26.4
+  );
 });

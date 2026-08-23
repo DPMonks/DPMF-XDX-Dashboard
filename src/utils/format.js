@@ -36,13 +36,25 @@ export function formatFiat(value, locale, currency = "USD") {
 }
 
 export function formatUsd(value, locale) {
+  return formatUsdAmount(value, locale);
+}
+
+export function formatUsdAmount(value, locale) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
+  const abs = Math.abs(num);
+  let minimumFractionDigits = 2;
+  let maximumFractionDigits = 2;
+  if (abs > 0 && abs < 0.01) {
+    maximumFractionDigits = 6;
+  } else if (abs > 0 && abs < 1) {
+    maximumFractionDigits = 4;
+  }
   return num.toLocaleString(localeOf(locale), {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits,
+    maximumFractionDigits,
   });
 }
 

@@ -20,12 +20,11 @@ import {
   expectedWithdraw,
   poolPrice,
   predictedQuoteOut,
-  predictedXdxFromQuote,
   quoteUnitUsd,
   depositValueSplit,
+  linkedDepositAmounts,
   tradeSides,
   tradeTotal,
-  visibleQuoteQty,
   xdxUnitUsd,
 } from "../xaman/tradeTx";
 import { formatPoolPct } from "../utils/poolSplit";
@@ -74,8 +73,9 @@ export default function TradePanel({
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
   const [quoteId, setQuoteId] = useState(() => quoteIdFromPair(initialQuote || "XRP"));
   const [orderType, setOrderType] = useState("market");
-  const [amount, setAmount] = useState("100000");
+  const [amount, setAmount] = useState(() => (action === "addLp" || action === "removeLp" ? "" : "100000"));
   const [quoteQty, setQuoteQty] = useState("");
+  const [editedSide, setEditedSide] = useState("xdx");
   const [price, setPrice] = useState(spotPrice > 0 ? String(spotPrice) : "");
   const [lpAmount, setLpAmount] = useState("");
   const [pools, setPools] = useState(() => (Array.isArray(initialPools) ? initialPools : []));
@@ -109,15 +109,24 @@ export default function TradePanel({
     orderType === "limit" && Number(price) > 0
       ? Number(price)
       : Number(liveSpot || spotPrice || implied || price);
-  const total = tradeTotal(amount, px);
-  const quoteHint = predictedQuoteOut(amount, px, reserves.base, reserves.quote);
-  const shownQuoteQty = visibleQuoteQty(quoteQty, quoteHint);
-  const lpHint = expectedLpTokens(amount, reserves.base, reserves.lpSupply);
+  const linked = linkedDepositAmounts({
+    editedSide,
+    amount,
+    quoteQty,
+    price: px,
+    reserveBase: reserves.base,
+    reserveQuote: reserves.quote,
+  });
+  const total = tradeTotal(linked.xdx || amount, px);
+  const quoteHint = predictedQuoteOut(linked.xdx || amount, px, reserves.base, reserves.quote);
+  const shownAmount = linked.xdxInput;
+  const shownQuoteQty = linked.quoteInput;
+  const lpHint = expectedLpTokens(linked.xdx || amount, reserves.base, reserves.lpSupply);
   const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
   const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices });
   const withdraw = expectedWithdraw(lpAmount || amount, reserves.base, reserves.quote, reserves.lpSupply);
-  const lpXdx = action === "removeLp" ? withdraw.base : Number(amount);
-  const lpQuote = action === "removeLp" ? withdraw.quote : Number(shownQuoteQty || quoteHint);
+  const lpXdx = action === "removeLp" ? withdraw.base : linked.xdx;
+  const lpQuote = action === "removeLp" ? withdraw.quote : linked.quote;
   const deposit = depositValueSplit({
     xdxAmount: lpXdx,
     quoteAmount: lpQuote,
@@ -126,8 +135,8 @@ export default function TradePanel({
   });
   const sides = tradeSides({
     action,
-    amount,
-    quoteQty: shownQuoteQty || quoteHint,
+    amount: linked.xdx || amount,
+    quoteQty: linked.quote || shownQuoteQty || quoteHint,
     quoteLabel: quote.label,
     total,
     lpAmount: lpAmount || amount,
@@ -205,8 +214,8 @@ export default function TradePanel({
       return offerCreateBuyXdx({
         account: walletAddress,
         quote,
-        xdx: amount,
-        cost: shownQuoteQty || total,
+        xdx: linked.xdx || amount,
+        cost: linked.quote || shownQuoteQty || total,
         market: orderType === "market",
       });
     }
@@ -214,8 +223,8 @@ export default function TradePanel({
       return offerCreateSellXdx({
         account: walletAddress,
         quote,
-        xdx: amount,
-        proceeds: shownQuoteQty || total,
+        xdx: linked.xdx || amount,
+        proceeds: linked.quote || shownQuoteQty || total,
         market: orderType === "market",
       });
     }
@@ -223,8 +232,8 @@ export default function TradePanel({
       return ammDepositTx({
         account: walletAddress,
         quote,
-        xdx: amount,
-        quoteQty: shownQuoteQty || quoteHint || total,
+        xdx: linked.xdx || amount,
+        quoteQty: linked.quote || shownQuoteQty || quoteHint || total,
       });
     }
     return ammWithdrawTx({
@@ -259,7 +268,7 @@ export default function TradePanel({
       });
       return;
     }
-    const qty = Number(action === "removeLp" ? lpAmount || amount : amount);
+    const qty = Number(action === "removeLp" ? lpAmount || amount : linked.xdx || amount);
     if (!(qty > 0)) {
       setFormError(t.tradeNeedAmount);
       return;
@@ -268,7 +277,7 @@ export default function TradePanel({
       setFormError(t.tradeNeedTrustline);
       return;
     }
-    if (action === "addLp" && !(Number(shownQuoteQty || quoteHint) > 0)) {
+    if (action === "addLp" && !(linked.quote > 0)) {
       setFormError(t.tradeNeedAmount);
       return;
     }
@@ -316,6 +325,7 @@ export default function TradePanel({
             onChange={(id) => {
               setQuoteId(id);
               setQuoteQty("");
+              setEditedSide("xdx");
             }}
             ariaLabel={t.tradePair}
             searchable
@@ -356,17 +366,15 @@ export default function TradePanel({
               type="number"
               min="0"
               step="any"
-              value={amount}
+              value={shownAmount}
               onChange={(event) => {
-                const next = event.target.value;
-                setAmount(next);
-                const hinted = predictedQuoteOut(next, px, reserves.base, reserves.quote);
-                if (hinted > 0) setQuoteQty(String(hinted));
+                setEditedSide("xdx");
+                setAmount(event.target.value);
               }}
             />
             {action === "addLp" ? (
               <span className="trade-field-usd">
-                {xdxUsd > 0 ? formatUsd(Number(amount) * xdxUsd, locale) : "—"}
+                {xdxUsd > 0 ? formatUsd(linked.xdx * xdxUsd, locale) : "—"}
               </span>
             ) : null}
           </label>
@@ -425,15 +433,13 @@ export default function TradePanel({
               step="any"
               value={shownQuoteQty}
               onChange={(event) => {
-                const next = event.target.value;
-                setQuoteQty(next);
-                const xdx = predictedXdxFromQuote(next, px, reserves.base, reserves.quote);
-                if (xdx > 0) setAmount(String(xdx));
+                setEditedSide("quote");
+                setQuoteQty(event.target.value);
               }}
             />
             {action === "addLp" ? (
               <span className="trade-field-usd">
-                {quoteUsd > 0 ? formatUsd(Number(shownQuoteQty || quoteHint) * quoteUsd, locale) : "—"}
+                {quoteUsd > 0 ? formatUsd(linked.quote * quoteUsd, locale) : "—"}
               </span>
             ) : null}
           </label>

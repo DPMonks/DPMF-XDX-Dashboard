@@ -21,6 +21,8 @@ import {
   predictedXdxFromQuote,
   quoteUnitUsd,
   depositValueSplit,
+  formatLinkedQty,
+  linkedDepositAmounts,
   tradeSides,
   visibleQuoteQty,
   xdxUnitUsd,
@@ -123,6 +125,33 @@ test("trade windows show pay and receive from the selected pair", () => {
   assert.equal(visibleQuoteQty("", 3.12), "3.12");
   assert.equal(visibleQuoteQty("2", 3.12), "2");
   assert.equal(predictedXdxFromQuote(5, 0, 1000, 50), 100);
+  assert.equal(formatLinkedQty(115.072148123), "115.07215");
+  const fromQuote = linkedDepositAmounts({
+    editedSide: "quote",
+    amount: "100000",
+    quoteQty: "0.1",
+    reserveBase: 1150.72148,
+    reserveQuote: 1,
+  });
+  assert.equal(fromQuote.quoteInput, "0.1");
+  assert.ok(fromQuote.xdx > 100);
+  const fromXdx = linkedDepositAmounts({
+    editedSide: "xdx",
+    amount: "115.072148",
+    quoteQty: "9",
+    reserveBase: 1150.72148,
+    reserveQuote: 1,
+  });
+  assert.equal(fromXdx.xdxInput, "115.072148");
+  assert.ok(Number(fromXdx.quoteInput) > 0);
+  assert.equal(
+    quoteUnitUsd({
+      quoteId: "XIO",
+      pool: { reserve_xdx: 1150, reserve_currency: 1, xdxUsd: 0.000087 },
+      prices: { XIO: 0.0001, xrpUsd: 2.8 },
+    }),
+    1150 * 0.000087
+  );
   const add = tradeSides({ action: "addLp", amount: 100, quoteQty: 5, quoteLabel: "XRP", lpOut: 20 });
   assert.equal(add.pay[0].asset, "XDX");
   assert.equal(add.pay[1].asset, "XRP");

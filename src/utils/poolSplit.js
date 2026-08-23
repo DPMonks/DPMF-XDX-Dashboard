@@ -2,6 +2,8 @@
 // that forces every bar to 50/50. Prefer XDX compared to LP token supply
 // (the LP total); if that is missing, compare XDX to the opposing reserve.
 
+import { isXrpMicroFallback } from "./recordedPrice.js";
+
 export function poolAssetSplit({
   reserveXdx,
   reserveQuote,
@@ -107,6 +109,16 @@ export function resolvePoolSplit({
 }
 
 export const STABLE_QUOTES = new Set(["RLUSD", "USD", "USDC", "USDT", "USDB", "USDX"]);
+const DUST_QUOTE_USD = 0.001;
+
+export function usableMarketQuoteUsd(value, { xdxUsd, xrpUsd } = {}) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const xdx = Number(xdxUsd);
+  if (xdx > 0 && Math.abs(n - xdx) <= Math.max(1e-12, Math.abs(xdx) * 0.02)) return 0;
+  if (isXrpMicroFallback(n, xrpUsd)) return 0;
+  return n;
+}
 
 export function impliedQuoteUsd({ reserveXdx, reserveQuote, xdxUsd } = {}) {
   const base = Number(reserveXdx);
@@ -114,6 +126,30 @@ export function impliedQuoteUsd({ reserveXdx, reserveQuote, xdxUsd } = {}) {
   const usd = Number(xdxUsd);
   if (!(base > 0) || !(quote > 0) || !(usd > 0)) return 0;
   return (base * usd) / quote;
+}
+
+export function quoteUsdFromXrpRate(quoteId, prices = {}, xrpUsd) {
+  const id = String(quoteId || "").toUpperCase();
+  const xrp = Number(xrpUsd || prices?.xrpUsd || prices?.XRP || 0);
+  if (!id || id === "XRP" || !(xrp > 0) || !prices || typeof prices !== "object") return 0;
+  const nested = prices.quotes && typeof prices.quotes === "object" ? prices.quotes : null;
+  const lower = id.toLowerCase();
+  const keys = [
+    `${id}Xrp`,
+    `${lower}Xrp`,
+    `${id}_xrp`,
+    `${lower}_xrp`,
+    `${id}XRP`,
+    `${id}PerXrp`,
+    `${lower}PerXrp`,
+    `${id}_per_xrp`,
+    `${lower}_per_xrp`,
+  ];
+  for (const key of keys) {
+    const n = Number(prices[key] ?? nested?.[key]);
+    if (n > 0 && Number.isFinite(n)) return n * xrp;
+  }
+  return 0;
 }
 
 export function quoteUsdFromPrices(quoteId, prices = {}) {
@@ -139,15 +175,18 @@ export function quoteUsdFromMap(quote, prices = {}) {
 export function detectQuoteUsd({ quoteId, pool, prices } = {}) {
   const id = String(quoteId || pool?.quoteName || pool?.quote || "").toUpperCase();
   const xdxUsd = Number(pool?.xdxUsd || prices?.xdxUsd || prices?.recorded_price || 0);
+  const xrpUsd = Number(prices?.xrpUsd || prices?.XRP || 0);
   const implied = impliedQuoteUsd({
     reserveXdx: pool?.reserve_xdx ?? pool?.reserve_asset ?? pool?.base,
     reserveQuote: pool?.reserve_currency ?? pool?.quoteReserve,
     xdxUsd,
   });
-  const market = quoteUsdFromPrices(id, prices);
-  if (market > 0) return market;
+  const market = usableMarketQuoteUsd(quoteUsdFromPrices(id, prices), { xdxUsd, xrpUsd });
+  const fromXrp = usableMarketQuoteUsd(quoteUsdFromXrpRate(id, prices, xrpUsd), { xdxUsd, xrpUsd });
+  const listed = usableMarketQuoteUsd(pool?.quote_usd ?? pool?.quoteUsd, { xdxUsd, xrpUsd });
+  if (market > 0 && (market >= DUST_QUOTE_USD || !(implied > market * 5))) return market;
+  if (fromXrp > 0) return fromXrp;
+  if (listed > 0) return listed;
   if (implied > 0) return implied;
-  const listed = Number(pool?.quote_usd ?? pool?.quoteUsd);
-  if (listed > 0 && listed !== xdxUsd) return listed;
   return 0;
 }

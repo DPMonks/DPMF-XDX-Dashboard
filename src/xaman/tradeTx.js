@@ -203,6 +203,44 @@ export function visibleQuoteQty(quoteQty, hint) {
   return Number(hint) > 0 ? String(hint) : "";
 }
 
+export function formatLinkedQty(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  if (n >= 1_000_000) return String(Math.round(n));
+  const text = n.toPrecision(8);
+  if (/[eE]/.test(text)) return String(n);
+  return String(Number(text));
+}
+
+export function linkedDepositAmounts({
+  editedSide = "xdx",
+  amount,
+  quoteQty,
+  price,
+  reserveBase,
+  reserveQuote,
+} = {}) {
+  const side = editedSide === "quote" ? "quote" : "xdx";
+  if (side === "quote") {
+    const quote = Number(quoteQty);
+    const xdx = predictedXdxFromQuote(quoteQty, price, reserveBase, reserveQuote);
+    return {
+      xdx: xdx > 0 ? xdx : 0,
+      quote: quote > 0 ? quote : 0,
+      xdxInput: xdx > 0 ? formatLinkedQty(xdx) : "",
+      quoteInput: quoteQty == null ? "" : String(quoteQty),
+    };
+  }
+  const xdx = Number(amount);
+  const quote = predictedQuoteOut(amount, price, reserveBase, reserveQuote);
+  return {
+    xdx: xdx > 0 ? xdx : 0,
+    quote: quote > 0 ? quote : 0,
+    xdxInput: amount == null ? "" : String(amount),
+    quoteInput: quote > 0 ? formatLinkedQty(quote) : "",
+  };
+}
+
 export function predictedQuoteOut(xdxAmount, price, reserveBase, reserveQuote) {
   const fromPool = recommendedQuote(xdxAmount, reserveBase, reserveQuote);
   if (fromPool > 0) return fromPool;
