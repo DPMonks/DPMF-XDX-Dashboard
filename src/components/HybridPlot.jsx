@@ -9,7 +9,6 @@ import { hideToolPreview, paintPlaceMark, paintToolPreview } from "../chart/pain
 import ChartDrawings from "./ChartDrawings";
 import ChartEditBar from "./ChartEditBar";
 
-const PRICE_H = 348;
 const VOL_H = 72;
 const RSI_H = 72;
 const PANE_GAP = 8;
@@ -61,7 +60,9 @@ export default function HybridPlot({
   onPriceZoom,
   onPricePan,
   onPriceReset,
+  priceHeight,
 }) {
+  const PRICE_H = Math.max(220, Math.round(Number(priceHeight) || 348));
   const box = useRef(null);
   const svgRef = useRef(null);
   const hairVRef = useRef(null);
@@ -135,7 +136,7 @@ export default function HybridPlot({
       ticks: slots.ticks,
       viewKey: plotViewKey(candles, { left: PAD.l, width: innerW, extra: pad }),
     };
-  }, [view, candles, innerW, futureBars, interval]);
+  }, [view, candles, innerW, futureBars, interval, PRICE_H]);
 
   const yTicks = useMemo(() => priceTicks(scale.min, scale.max, 6), [scale.min, scale.max]);
   const xTicks = useMemo(() => scale.ticks(6), [scale]);
@@ -282,7 +283,7 @@ export default function HybridPlot({
       wheelRaf.current = 0;
       wheelPend.current = null;
     };
-  }, [height]);
+  }, [height, PRICE_H]);
 
   const candleW = candleBodyWidth({
     innerW,

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getAmm, getOrderbooks, getPrices, getWalletActivity, getWalletOffers, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
 import { CHART_MA_PAD, CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, visibleBarsForInterval } from "../chart/intervals";
@@ -18,6 +19,7 @@ import {
 } from "../chart/candles";
 import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../chart/indicators";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
+import { fullViewPriceHeight } from "../chart/fullView";
 import { quotePerXdx } from "../chart/pairQuote";
 import {
   ammRebalanceTrail,
@@ -43,6 +45,7 @@ import {
 } from "../wallet/ledgerOrders";
 import { useWallet } from "../context/useWallet";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
+import { isPhoneDevice } from "../xaman/xamanClient";
 import { useI18n } from "../i18n/useI18n";
 import { elliottTools, moveDrawingHandle, nextDrawingState, patchDrawingStyle, toolAfterDrawing } from "../chart/drawings";
 import ChartErrorBoundary from "./ChartErrorBoundary";
@@ -204,6 +207,9 @@ export default function HybridChart() {
   const [seriesMeta, setSeriesMeta] = useState({ len: 0, head: 0 });
   const windowKey = `${pair}:${timeframe}`;
   const [activeWindow, setActiveWindow] = useState(windowKey);
+  const phone = isPhoneDevice();
+  const [fullView, setFullView] = useState(false);
+  const [viewH, setViewH] = useState(() => (typeof window !== "undefined" ? window.innerHeight : 700));
 
   useEffect(() => {
     let cancelled = false;
@@ -448,6 +454,10 @@ export default function HybridChart() {
   useEffect(() => {
     function onKey(event) {
       if (event.key === "Escape") {
+        if (fullView) {
+          setFullView(false);
+          return;
+        }
         setPending(null);
         setSelected(null);
         return;
@@ -463,7 +473,23 @@ export default function HybridChart() {
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [selected]);
+  }, [selected, fullView]);
+
+  useEffect(() => {
+    if (!fullView) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onResize() {
+      window.setTimeout(() => setViewH(window.innerHeight), 0);
+    }
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, [fullView]);
 
   function applyZoom(directionOrEvent, maybeRatio) {
     const fromEvent = directionOrEvent && typeof directionOrEvent === "object";
@@ -516,8 +542,20 @@ export default function HybridChart() {
     setPriceShift(0);
   }
 
-  return (
-    <div className={`hybrid-chart${showArb && arb?.highlight ? " is-arb" : ""}`}>
+  const plotHeight = fullView
+    ? fullViewPriceHeight(viewH, { volume: showVolume, rsi: showRsi })
+    : undefined;
+  const chart = (
+    <div className={`hybrid-chart${showArb && arb?.highlight ? " is-arb" : ""}${fullView ? " is-fullview" : ""}`}>
+      {fullView ? (
+        <button
+          type="button"
+          className="hybrid-fullview-exit"
+          onClick={() => setFullView(false)}
+        >
+          {t.chartExitFullView}
+        </button>
+      ) : null}
       <div className="hybrid-topbar">
         <div className="hybrid-pairs" role="tablist">
           {CHART_PAIRS.map((name) => (
@@ -621,6 +659,11 @@ export default function HybridChart() {
           >
             +
           </button>
+          {phone && !fullView ? (
+            <button type="button" className="hybrid-fullview-enter" onClick={() => setFullView(true)}>
+              {t.chartFullView}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -696,6 +739,11 @@ export default function HybridChart() {
               >
                 +
               </button>
+              {phone && !fullView ? (
+                <button type="button" className="hybrid-fullview-enter" onClick={() => setFullView(true)}>
+                  {t.chartFullView}
+                </button>
+              ) : null}
             </div>
           <ChartErrorBoundary message={t.chartCrashed} retryLabel={t.chartReload}>
           <HybridPlot
@@ -744,6 +792,7 @@ export default function HybridChart() {
             onPriceZoom={applyPriceZoom}
             onPricePan={applyPricePan}
             onPriceReset={resetPriceScale}
+            priceHeight={plotHeight}
           />
           </ChartErrorBoundary>
           </div>
@@ -773,4 +822,9 @@ export default function HybridChart() {
       </div>
     </div>
   );
+
+  if (fullView && typeof document !== "undefined") {
+    return createPortal(chart, document.body);
+  }
+  return chart;
 }

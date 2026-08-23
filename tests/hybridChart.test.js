@@ -36,6 +36,7 @@ import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/cha
 import { ammImpact, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, scalePriceView, shiftAfterPriceZoom, zoomPriceScale } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
+import { fullViewPriceHeight } from "../src/chart/fullView.js";
 import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
@@ -890,6 +891,12 @@ test("ray extends past the second point and range stats keep the percent move", 
   assert.equal(rangeColor({ t: 0, price: 2 }, { t: 5, price: 3 }), RANGE_UP);
   assert.equal(rangeColor({ t: 0, price: 3 }, { t: 5, price: 2 }), RANGE_DOWN);
   assert.equal(toolMeta("channel").clicks, 3);
+});
+
+test("full view plot height fills the leftover phone viewport after chrome and panes", () => {
+  assert.equal(fullViewPriceHeight(800, { volume: true, rsi: true }), 484);
+  assert.equal(fullViewPriceHeight(500, { volume: false, rsi: false }), 344);
+  assert.equal(fullViewPriceHeight(200, { volume: true, rsi: true }), 240);
 });
 
 test("appendLiveClose updates the current UTC day instead of inventing a second candle", () => {
