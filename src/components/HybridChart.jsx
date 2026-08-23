@@ -35,7 +35,7 @@ import { walletOrdersFromBooks } from "../wallet/composeWallet";
 import { useWallet } from "../context/useWallet";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
-import { moveDrawingHandle, nextDrawingState } from "../chart/drawings";
+import { elliottTools, moveDrawingHandle, nextDrawingState, toolAfterDrawing } from "../chart/drawings";
 import ChartTools from "./ChartTools";
 import HybridPlot from "./HybridPlot";
 import "./HybridChart.css";
@@ -83,6 +83,60 @@ function MaTypeMenu({ value, t, onChange }) {
                 }}
               >
                 {t[row.labelKey] || row.short}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function ElliottWaveMenu({ tool, t, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  const waves = elliottTools();
+  const current = waves.find((row) => row.id === tool);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function onDoc(event) {
+      if (!box.current?.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="hybrid-ma-select is-elliott" ref={box}>
+      <button
+        type="button"
+        className={open || current ? "hybrid-ma-select-btn is-open" : "hybrid-ma-select-btn"}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={current ? t[current.labelKey] || current.id : t.chartElliottGroup}
+        onClick={() => setOpen((on) => !on)}
+      >
+        <span>{t.chartElliottGroup}</span>
+        <svg className="hybrid-ma-caret" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M3 4.5 L6 8 L9 4.5" />
+        </svg>
+      </button>
+      {open ? (
+        <ul className="hybrid-ma-menu is-elliott" role="listbox">
+          {waves.map((row) => (
+            <li key={row.id}>
+              <button
+                type="button"
+                className={row.id === tool ? "active" : undefined}
+                role="option"
+                aria-selected={row.id === tool}
+                onClick={() => {
+                  onSelect(row.id);
+                  setOpen(false);
+                }}
+              >
+                {t[row.labelKey] || row.id}
               </button>
             </li>
           ))}
@@ -276,7 +330,8 @@ export default function HybridChart() {
     setPending(next.pending);
     if (next.drawing) {
       setDrawings((rows) => [...rows, next.drawing]);
-      if (!stayDraw) {
+      const nextTool = toolAfterDrawing(stayDraw, tool);
+      if (nextTool === "cursor") {
         setTool("cursor");
         setPending(null);
       }
@@ -365,6 +420,7 @@ export default function HybridChart() {
             </button>
           ))}
         </div>
+        <ElliottWaveMenu tool={tool} t={t} onSelect={selectTool} />
         <div className="hybrid-ma">
           <span className="hybrid-ma-label">{t.chartMa}</span>
           <MaTypeMenu value={maType} t={t} onChange={setMaType} />

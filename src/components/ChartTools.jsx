@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DRAW_COLORS, LINE_STYLES, LINE_WIDTHS, TOOL_GROUPS, groupForTool, toolMeta } from "../chart/drawings";
+import { DRAW_COLORS, LINE_STYLES, LINE_WIDTHS, TOOL_GROUPS, flyoutSections, groupForTool, toolMeta } from "../chart/drawings";
 
 const ICONS = {
   cross: (
@@ -106,27 +106,48 @@ const ICONS = {
   ),
   elliottimpulse: (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2 12 L5 8 L7 10 L11 3 L13 6 L14 4" />
+      <path d="M1.5 12 L4 7 L6 9.5 L9.5 2.8 L11.2 6.2 L14.5 3" />
+      <text x="3.4" y="6.4" fontSize="3.2" stroke="none" fill="currentColor">1</text>
+      <text x="5.2" y="11.4" fontSize="3.2" stroke="none" fill="currentColor">2</text>
+      <text x="8.8" y="2.4" fontSize="3.2" stroke="none" fill="currentColor">3</text>
+      <text x="10.6" y="8.2" fontSize="3.2" stroke="none" fill="currentColor">4</text>
+      <text x="13.4" y="2.6" fontSize="3.2" stroke="none" fill="currentColor">5</text>
     </svg>
   ),
   elliottcorrection: (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M3 12 L8 4 L11 8 L14 5" />
+      <path d="M2 12 L7.5 3.5 L10.5 8.2 L14 4.2" />
+      <text x="6.6" y="3.2" fontSize="3.4" stroke="none" fill="currentColor">A</text>
+      <text x="9.6" y="10.4" fontSize="3.4" stroke="none" fill="currentColor">B</text>
+      <text x="13.2" y="3.8" fontSize="3.4" stroke="none" fill="currentColor">C</text>
     </svg>
   ),
   elliotttriangle: (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2 12 L6 5 L8 9 L11 4 L13 8 L14 6" />
+      <path d="M1.8 12.2 L5.4 4.2 L7.6 9 L10.6 3.6 L12.6 8.2 L14.4 5.4" />
+      <text x="4.6" y="3.8" fontSize="3" stroke="none" fill="currentColor">A</text>
+      <text x="7" y="11.2" fontSize="3" stroke="none" fill="currentColor">B</text>
+      <text x="9.8" y="3.2" fontSize="3" stroke="none" fill="currentColor">C</text>
+      <text x="11.8" y="10.2" fontSize="3" stroke="none" fill="currentColor">D</text>
+      <text x="13.6" y="5" fontSize="3" stroke="none" fill="currentColor">E</text>
     </svg>
   ),
   elliottdouble: (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2 11 L6 5 L9 9 L14 4" />
+      <path d="M2 11.5 L6 4.5 L9 9.2 L14 3.6" />
+      <text x="5.2" y="4.2" fontSize="3.4" stroke="none" fill="currentColor">W</text>
+      <text x="8.2" y="11.2" fontSize="3.4" stroke="none" fill="currentColor">X</text>
+      <text x="13.2" y="3.4" fontSize="3.4" stroke="none" fill="currentColor">Y</text>
     </svg>
   ),
   elliotttriple: (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2 12 L4 7 L6 10 L9 4 L11 8 L14 3" />
+      <path d="M1.6 12 L3.8 6.6 L5.6 9.8 L8.4 3.4 L10.4 7.8 L14.2 2.8" />
+      <text x="3.2" y="6.2" fontSize="2.8" stroke="none" fill="currentColor">W</text>
+      <text x="5" y="11.4" fontSize="2.8" stroke="none" fill="currentColor">X</text>
+      <text x="7.6" y="3" fontSize="2.8" stroke="none" fill="currentColor">Y</text>
+      <text x="9.6" y="9.6" fontSize="2.8" stroke="none" fill="currentColor">XX</text>
+      <text x="13.2" y="2.6" fontSize="2.8" stroke="none" fill="currentColor">Z</text>
     </svg>
   ),
   text: (
@@ -258,7 +279,8 @@ export default function ChartTools({
   const activeGroup = groupForTool(tool).id;
   const remembered = { ...lastTool, [activeGroup]: tool };
   const flyoutGroup = TOOL_GROUPS.find((group) => group.id === activeGroup && group.id !== "pointer");
-  const open = panel && Boolean(flyoutGroup);
+  const sections = flyoutGroup ? flyoutSections(flyoutGroup.id) : [];
+  const open = panel && sections.length > 0;
 
   useEffect(() => {
     if (!panel) return undefined;
@@ -322,27 +344,29 @@ export default function ChartTools({
       </div>
       {open ? (
         <div className="hybrid-tool-flyout" role="dialog" aria-label={t[flyoutGroup.labelKey] || flyoutGroup.id}>
-          <div className="hybrid-flyout-group">
-            <p className="hybrid-tool-group-label">{t[flyoutGroup.labelKey] || flyoutGroup.id}</p>
-            <div className="hybrid-flyout-tools">
-              {flyoutGroup.tools.map((row) => (
-                <button
-                  key={row.id}
-                  type="button"
-                  className={tool === row.id ? "hybrid-flyout-tool active" : "hybrid-flyout-tool"}
-                  style={tool === row.id && row.colors !== false ? { borderColor: color, color } : undefined}
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    pickFlyout(row.id);
-                  }}
-                  title={t[row.labelKey] || row.id}
-                >
-                  <ToolIcon name={row.icon} />
-                  <span>{t[row.labelKey] || row.id}</span>
-                </button>
-              ))}
+          {sections.map((section) => (
+            <div className="hybrid-flyout-group" key={section.id}>
+              <p className="hybrid-tool-group-label">{t[section.labelKey] || section.id}</p>
+              <div className="hybrid-flyout-tools">
+                {section.tools.map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    className={tool === row.id ? "hybrid-flyout-tool active" : "hybrid-flyout-tool"}
+                    style={tool === row.id && row.colors !== false ? { borderColor: color, color } : undefined}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      pickFlyout(row.id);
+                    }}
+                    title={t[row.labelKey] || row.id}
+                  >
+                    <ToolIcon name={row.icon} />
+                    <span>{t[row.labelKey] || row.id}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ))}
           <DrawStyle
             color={color}
             strokeWidth={strokeWidth}

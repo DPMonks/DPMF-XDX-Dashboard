@@ -37,14 +37,17 @@ import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, form
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   applyPlaceOffset,
+  canMoveHandle,
   drawingHandles,
   drawingStyle,
+  elliottTools,
   fibBands,
   fibExtent,
   fibExtensionBands,
   fibLabelPlacement,
   fibToolLabelPlacement,
   fibPrice,
+  flyoutSections,
   PLACE_OFFSET,
   hitDrawingHandle,
   moveDrawingHandle,
@@ -60,6 +63,7 @@ import {
   rangeStats,
   snapPoint,
   toggleTool,
+  toolAfterDrawing,
   TOOL_GROUPS,
   toolMeta,
 } from "../src/chart/drawings.js";
@@ -676,6 +680,19 @@ test("draw style and extra City Index tools stay available from one toolbox", ()
   assert.equal(toolMeta("elliottimpulse").clicks, 5);
   assert.deepEqual(toolMeta("elliottimpulse").labels, ["1", "2", "3", "4", "5"]);
   assert.equal(toolMeta("elliottcorrection").clicks, 3);
+  assert.deepEqual(
+    elliottTools().map((row) => row.id),
+    ["elliottimpulse", "elliottcorrection", "elliotttriangle", "elliottdouble", "elliotttriple"]
+  );
+  assert.deepEqual(
+    flyoutSections("shapes").flatMap((section) => section.tools.map((row) => row.id)),
+    ["rect", "ellipse", "circle", "triangle", "channel", "elliottimpulse", "elliottcorrection", "elliotttriangle", "elliottdouble", "elliotttriple"]
+  );
+  assert.equal(TOOL_GROUPS.find((group) => group.id === "shapes").labelKey, "chartPatterns");
+  assert.equal(canMoveHandle("trend"), false);
+  assert.equal(canMoveHandle("cursor"), true);
+  assert.equal(toolAfterDrawing(true, "elliottimpulse"), "elliottimpulse");
+  assert.equal(toolAfterDrawing(false, "elliottimpulse"), "cursor");
   assert.equal(toolMeta("pitchfork").clicks, 3);
   const cross = nextDrawingState({
     tool: "crossline",

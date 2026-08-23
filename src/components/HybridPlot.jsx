@@ -4,7 +4,7 @@ import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, form
 import { candleBodyBox, candleBodyWidth, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
-import { applyPlaceOffset, hitDrawingHandle, snapPoint } from "../chart/drawings";
+import { applyPlaceOffset, canMoveHandle, hitDrawingHandle, snapPoint } from "../chart/drawings";
 import { hideToolPreview, paintPlaceMark, paintToolPreview } from "../chart/paintPreview";
 import ChartDrawings from "./ChartDrawings";
 
@@ -330,7 +330,7 @@ export default function HybridPlot({
   function onPointerDown(event) {
     const pointer = locate(event);
     if (!pointer) return;
-    const hit = event.button === 0 ? hitDrawingHandle(drawings, scale, pointer.x, pointer.y) : null;
+    const hit = event.button === 0 && canMoveHandle(tool) ? hitDrawingHandle(drawings, scale, pointer.x, pointer.y) : null;
     if (hit) {
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -390,7 +390,7 @@ export default function HybridPlot({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${drag ? " is-grabbing" : hover && hitDrawingHandle(drawings, scale, hover.x, hover.y) ? " is-grab" : ""}`}
+        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${drag ? " is-grabbing" : canMoveHandle(tool) && hover && hitDrawingHandle(drawings, scale, hover.x, hover.y) ? " is-grab" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => {
           if (drag) return;

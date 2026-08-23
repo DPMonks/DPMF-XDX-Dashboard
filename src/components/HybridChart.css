@@ -112,6 +112,12 @@
   stroke-linejoin: round;
 }
 
+.hybrid-tool svg text,
+.hybrid-flyout-tool svg text {
+  fill: currentColor;
+  stroke: none;
+}
+
 .hybrid-tool.active {
   background: rgba(199, 112, 255, 0.16);
   color: var(--dpmf-neon-violet);
@@ -155,7 +161,7 @@
   left: calc(100% + 8px);
   top: 8px;
   z-index: 16;
-  width: 228px;
+  width: 248px;
   max-height: min(460px, 72vh);
   overflow: auto;
   padding: 8px;
@@ -596,6 +602,15 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.hybrid-ma-select.is-elliott .hybrid-ma-select-btn {
+  min-width: 118px;
+  justify-content: space-between;
+}
+
+.hybrid-ma-menu.is-elliott {
+  min-width: 248px;
 }
 
 .hybrid-ma-menu button {

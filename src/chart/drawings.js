@@ -74,7 +74,7 @@ export const TOOL_GROUPS = [
   },
   {
     id: "shapes",
-    labelKey: "chartShapes",
+    labelKey: "chartPatterns",
     tools: [
       { id: "rect", labelKey: "chartRect", clicks: 2, icon: "rect" },
       { id: "ellipse", labelKey: "chartEllipse", clicks: 2, icon: "ellipse" },
@@ -106,6 +106,28 @@ export const TOOL_GROUPS = [
 
 export function groupForTool(id) {
   return TOOL_GROUPS.find((group) => group.tools.some((row) => row.id === id)) || TOOL_GROUPS[0];
+}
+
+export function elliottTools() {
+  return TOOL_GROUPS.find((group) => group.id === "waves")?.tools || [];
+}
+
+export function flyoutSections(groupId) {
+  const group = TOOL_GROUPS.find((row) => row.id === groupId);
+  if (!group || group.id === "pointer") return [];
+  if (group.id === "shapes") {
+    const waves = TOOL_GROUPS.find((row) => row.id === "waves");
+    return waves ? [group, waves] : [group];
+  }
+  return [group];
+}
+
+export function canMoveHandle(tool) {
+  return tool === "cursor";
+}
+
+export function toolAfterDrawing(stay, tool) {
+  return stay === false ? "cursor" : tool;
 }
 
 export function toggleTool(current, next) {
