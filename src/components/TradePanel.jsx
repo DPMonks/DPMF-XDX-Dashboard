@@ -10,6 +10,7 @@ import {
   ammWithdrawTx,
   expectedLpTokens,
   hasLpTrustline,
+  hasQuoteTrustline,
   lpTrustSetTxjson,
   notifyWalletRefresh,
   offerCreateBuyXdx,
@@ -18,6 +19,8 @@ import {
   quoteChoices,
   quoteIdFromPair,
   quoteTrustSetTxjson,
+  shouldAskLpTrustline,
+  shouldAskQuoteTrustline,
   resolveQuote,
   expectedWithdraw,
   poolPrice,
@@ -95,6 +98,7 @@ export default function TradePanel({
   const [quoteLineReady, setQuoteLineReady] = useState(false);
   const [formError, setFormError] = useState("");
   const [prices, setPrices] = useState(() => priceBookFromPools(initialPools));
+  const [loadedFor, setLoadedFor] = useState("");
   const startRef = useRef(start);
   const resumeOnceRef = useRef(false);
 
@@ -119,12 +123,23 @@ export default function TradePanel({
     lpLineReady ||
     hasLpTrustline(walletLines, lpSpec) ||
     lpHeldForPair(walletLp, quotePair, quoteId) > 0;
-  const needLpLine = isLp && signedIn && Boolean(lpSpec.lpCurrency && lpSpec.amm) && !haveLpLine;
-  const needQuoteTrust =
-    Boolean(quote.issuer) &&
-    !quoteLineReady &&
-    !lineHint.includes(String(quote.currency || "").toUpperCase()) &&
-    !lineHint.includes(String(quote.issuer || "").toUpperCase());
+  const walletReady = !signedIn || loadedFor === `${account || ""}:${action || ""}:${quoteId}`;
+  const haveQuoteLine =
+    quoteLineReady ||
+    hasQuoteTrustline(walletLines, quote) ||
+    lineHint.includes(String(quote.hex || "").toUpperCase()) ||
+    lineHint.includes(String(quote.issuer || "").toUpperCase()) ||
+    lineHint.includes(String(quote.currency || "").toUpperCase());
+  const needLpLine =
+    isLp &&
+    signedIn &&
+    shouldAskLpTrustline({ loaded: walletReady, haveLine: haveLpLine, spec: lpSpec });
+  const needQuoteTrust = shouldAskQuoteTrustline({
+    loaded: walletReady,
+    haveLine: haveQuoteLine,
+    haveLp: isLp && haveLpLine,
+    quote,
+  });
   const reserves = useMemo(() => poolReserves(pools, quote), [pools, quote]);
   const implied = poolPrice(reserves.base, reserves.quote);
   const markerPx = xdxQuoteSpot({ quoteId, prices, pool: reserves });
@@ -204,6 +219,7 @@ export default function TradePanel({
       const rows = Array.isArray(nextLp) ? nextLp : [];
       setWalletLp(rows);
       setWalletLines(Array.isArray(nextLines) ? nextLines : []);
+      setLoadedFor(`${account || ""}:${action || ""}:${quoteId}`);
       if (action === "removeLp") {
         const have = lpHeldForPair(rows, quotePair, quoteId);
         if (have > 0) setLpAmount((current) => current || String(have));

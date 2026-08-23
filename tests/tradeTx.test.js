@@ -21,6 +21,7 @@ import {
   expectedWithdraw,
   gateUnsignedTrade,
   hasLpTrustline,
+  hasQuoteTrustline,
   lpTrustSetTxjson,
   normalizeTradeRequest,
   offerCreateBuyXdx,
@@ -29,6 +30,8 @@ import {
   quoteAsset,
   quoteIdFromPair,
   quoteTrustSetTxjson,
+  shouldAskLpTrustline,
+  shouldAskQuoteTrustline,
   recommendedQuote,
   resolveQuote,
   predictedQuoteOut,
@@ -148,6 +151,8 @@ test("RLUSD needs a trustline; XRP does not", () => {
   const line = quoteTrustSetTxjson("rA", quoteAsset("RLUSD"));
   assert.equal(line.TransactionType, "TrustSet");
   assert.equal(line.LimitAmount.issuer, RLUSD_ISSUER);
+  assert.equal(line.LimitAmount.currency, RLUSD_HEX);
+  assert.notEqual(line.LimitAmount.currency, "RLUSD");
 });
 
 test("LP TrustSet uses the pool LP hex and AMM account", () => {
@@ -170,6 +175,15 @@ test("LP TrustSet uses the pool LP hex and AMM account", () => {
   assert.equal(rlusd.amm, XDX_RLUSD_AMM);
   assert.equal(rlusd.lpCurrency, XDX_RLUSD_LP_HEX);
   assert.equal(poolForQuote(quoteAsset("XIO")).amm, null);
+  const badCatalog = poolForQuote(quoteAsset("RLUSD"), [
+    {
+      pool: "XDX/RLUSD",
+      amm_account: XDX_RLUSD_AMM,
+      lp_currency: "RLUSD",
+    },
+  ]);
+  assert.equal(badCatalog.lpCurrency, XDX_RLUSD_LP_HEX);
+  assert.equal(lpTrustSetTxjson("rLp", { amm: XDX_RLUSD_AMM, lpCurrency: "RLUSD" }), null);
 });
 
 test("hasLpTrustline matches the pool LP line, not a quote IOU", () => {
@@ -191,6 +205,49 @@ test("hasLpTrustline matches the pool LP line, not a quote IOU", () => {
   );
   assert.equal(
     hasLpTrustline([{ lp: true, issuer: XDX_XRP_AMM, ticker: "LP" }], spec),
+    true
+  );
+  const rlusd = quoteAsset("RLUSD");
+  assert.equal(
+    hasQuoteTrustline(
+      [{ currency: RLUSD_HEX, issuer: RLUSD_ISSUER, ticker: "RLUSD" }],
+      rlusd
+    ),
+    true
+  );
+  assert.equal(hasQuoteTrustline([], rlusd), false);
+  const held = [{ pool: "XDX/RLUSD", pool_name: "XDX/RLUSD", lp_balance: 4383 }];
+  assert.equal(lpHeldForPair(held, "XDX/RLUSD", "RLUSD") > 0, true);
+  assert.equal(
+    shouldAskLpTrustline({
+      loaded: false,
+      haveLine: false,
+      spec: poolForQuote(rlusd),
+    }),
+    false
+  );
+  assert.equal(
+    shouldAskLpTrustline({
+      loaded: true,
+      haveLine: true,
+      spec: poolForQuote(rlusd),
+    }),
+    false
+  );
+  assert.equal(
+    shouldAskLpTrustline({
+      loaded: true,
+      haveLine: false,
+      spec: poolForQuote(rlusd),
+    }),
+    true
+  );
+  assert.equal(
+    shouldAskQuoteTrustline({ loaded: true, haveLine: false, haveLp: true, quote: rlusd }),
+    false
+  );
+  assert.equal(
+    shouldAskQuoteTrustline({ loaded: true, haveLine: false, haveLp: false, quote: rlusd }),
     true
   );
 });
