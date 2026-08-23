@@ -227,6 +227,10 @@ export function ammDepositTx({ account, quote, xdx, quoteQty } = {}) {
   return txjson;
 }
 
+export function isLpCurrency(value) {
+  return /^03[A-Fa-f0-9]{38}$/.test(String(value || "").trim());
+}
+
 export function poolForQuote(quote, pools = []) {
   const pair = String(quote?.pair || `XDX/${quote?.id || quote?.currency || "XRP"}`)
     .replace(/\s+/g, "")
@@ -238,7 +242,8 @@ export function poolForQuote(quote, pools = []) {
     return name === pair || name.endsWith(`/${pair.split("/")[1] || ""}`);
   });
   const amm = row?.amm_account || row?.amm || null;
-  const lpCurrency = row?.lp_currency || row?.lp_currency_hex || null;
+  const rawLp = row?.lp_currency || row?.lp_currency_hex || null;
+  const lpCurrency = isLpCurrency(rawLp) ? String(rawLp).trim().toUpperCase() : null;
   if (amm && lpCurrency) return { amm, lpCurrency, pair };
   if (quote?.currency === "RLUSD" || pair === "XDX/RLUSD") {
     return { amm: XDX_RLUSD_AMM, lpCurrency: XDX_RLUSD_LP_HEX, pair: "XDX/RLUSD" };
@@ -250,7 +255,9 @@ export function poolForQuote(quote, pools = []) {
 }
 
 export function lpTrustSetTxjson(account, spec = {}) {
-  const currency = String(spec.lpCurrency || spec.currency || "").trim();
+  const currency = isLpCurrency(spec.lpCurrency || spec.currency)
+    ? String(spec.lpCurrency || spec.currency).trim().toUpperCase()
+    : "";
   const issuer = String(spec.amm || spec.issuer || "").trim();
   if (!currency || !issuer) return null;
   const txjson = {
@@ -301,17 +308,49 @@ export function ammWithdrawTx({ account, quote, lpAmount, pools } = {}) {
 
 export function quoteTrustSetTxjson(account, quote) {
   if (!quote?.issuer) return null;
+  const currency = quoteLedgerCurrency(quote);
+  if (!currency || currency === "XRP") return null;
   const txjson = {
     TransactionType: "TrustSet",
     Flags: TF_SET_NO_RIPPLE,
     LimitAmount: {
-      currency: quote.currency,
+      currency,
       issuer: quote.issuer,
       value: "100000000000",
     },
   };
   if (account) txjson.Account = account;
   return txjson;
+}
+
+export function hasQuoteTrustline(lines, quote = {}) {
+  if (!quote?.issuer) return true;
+  const issuer = String(quote.issuer || "").toUpperCase();
+  const codes = new Set(
+    [quote.currency, quote.hex, quote.id, quote.label, quoteLedgerCurrency(quote)]
+      .map((value) => String(value || "").toUpperCase())
+      .filter(Boolean)
+  );
+  return (Array.isArray(lines) ? lines : []).some((row) => {
+    if (String(row?.issuer || row?.account || "").toUpperCase() !== issuer) return false;
+    const code = String(row?.currency || row?.hex || row?.ticker || "").toUpperCase();
+    return codes.has(code);
+  });
+}
+
+export function shouldAskLpTrustline({ loaded = false, haveLine = false, spec = {} } = {}) {
+  if (!loaded || haveLine) return false;
+  return Boolean(spec?.amm && isLpCurrency(spec.lpCurrency));
+}
+
+export function shouldAskQuoteTrustline({
+  loaded = false,
+  haveLine = false,
+  haveLp = false,
+  quote = {},
+} = {}) {
+  if (!quote?.issuer || haveLine || haveLp || !loaded) return false;
+  return true;
 }
 
 export function tradeTotal(amount, price) {
