@@ -1,4 +1,5 @@
 import {
+  RLUSD_HEX,
   RLUSD_ISSUER,
   TF_SET_NO_RIPPLE,
   XDX_ISSUER,
@@ -8,7 +9,9 @@ import {
   XDX_XRP_AMM,
   XDX_XRP_LP_HEX,
   XIO_ISSUER,
+  XSQUAD_HEX,
   XSQUAD_ISSUER,
+  asciiCurrencyHex,
 } from "../constants/ledger.js";
 import { detectQuoteUsd } from "../utils/poolSplit.js";
 
@@ -20,9 +23,9 @@ export const LEDGER_FEE_XRP = 0.000012;
 
 export const QUOTE_ASSETS = [
   { id: "XRP", currency: "XRP", label: "XRP" },
-  { id: "RLUSD", currency: "RLUSD", issuer: RLUSD_ISSUER, label: "RLUSD" },
+  { id: "RLUSD", currency: "RLUSD", issuer: RLUSD_ISSUER, hex: RLUSD_HEX, label: "RLUSD" },
   { id: "XIO", currency: "XIO", issuer: XIO_ISSUER, label: "XIO" },
-  { id: "XSQUAD", currency: "XSQUAD", issuer: XSQUAD_ISSUER, label: "XSQUAD" },
+  { id: "XSQUAD", currency: "XSQUAD", issuer: XSQUAD_ISSUER, hex: XSQUAD_HEX, label: "XSQUAD" },
 ];
 
 export function quoteAsset(id) {
@@ -100,9 +103,20 @@ export function quoteChoices(pools = []) {
 
 export function quoteLedgerCurrency(quote) {
   if (!quote || quote.currency === "XRP" || !quote.issuer) return "XRP";
-  const code = String(quote.currency || "");
-  if (code.length <= 3) return code;
-  return quote.hex || code;
+  const code = String(quote.currency || quote.hex || "");
+  if (/^[A-Z0-9]{3}$/i.test(code)) return code.toUpperCase();
+  if (/^[A-Fa-f0-9]{40}$/.test(code)) return code.toUpperCase();
+  const hex = String(quote.hex || "");
+  if (/^[A-Fa-f0-9]{40}$/.test(hex)) return hex.toUpperCase();
+  return asciiCurrencyHex(quote.currency || quote.id || code);
+}
+
+export function xrplIssuedValue(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  const abs = Math.abs(n);
+  const decimals = abs >= 1 ? Math.min(8, Math.max(0, 15 - String(Math.trunc(abs)).length)) : 10;
+  return n.toFixed(decimals).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "") || "0";
 }
 
 export function xrpDrops(xrp) {
@@ -115,7 +129,7 @@ export function issuedAmount(currency, issuer, value) {
   return {
     currency,
     issuer,
-    value: String(value),
+    value: xrplIssuedValue(value),
   };
 }
 

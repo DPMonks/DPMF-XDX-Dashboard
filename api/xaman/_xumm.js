@@ -83,7 +83,14 @@ export function xamanErrorMessage(raw, fallback = "Failed to start Xaman sign-in
   if (typeof raw?.error === "string" && raw.error) return raw.error;
   if (typeof raw?.detail === "string" && raw.detail) return raw.detail;
   if (typeof raw?.message === "string" && raw.message) return raw.message;
+  if (typeof raw?.error?.message === "string" && raw.error.message) {
+    const nested = raw.error.message;
+    if (nested && nested !== "[object Object]") return nested;
+  }
   const code = Number(raw?.error?.code ?? raw?.code);
+  if (code === 603) {
+    return "Xaman could not build this transaction (603). The amounts must be valid XRPL values — try again with a smaller, rounded size.";
+  }
   if (AUTH_CODES.has(code)) {
     const configured = xummConfigured();
     if (!configured.key || !configured.secret) {

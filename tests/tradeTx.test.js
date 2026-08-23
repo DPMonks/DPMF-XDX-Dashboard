@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { RLUSD_ISSUER, XDX_ISSUER, XDX_XRP_AMM, XDX_XRP_LP_HEX } from "../src/constants/ledger.js";
+import { RLUSD_HEX, RLUSD_ISSUER, XDX_ISSUER, XDX_XRP_AMM, XDX_XRP_LP_HEX } from "../src/constants/ledger.js";
 import {
   TF_IMMEDIATE_OR_CANCEL,
   TF_LP_TOKEN,
@@ -31,6 +31,7 @@ import {
   xdxUnitUsd,
   tradeTotal,
   xrpDrops,
+  xrplIssuedValue,
 } from "../src/xaman/tradeTx.js";
 
 test("buy XDX spend XRP as TakerGets drops and receive XDX", () => {
@@ -58,7 +59,7 @@ test("sell XDX for RLUSD is a limit OfferCreate", () => {
     proceeds: 4,
   });
   assert.equal(tx.TakerGets.currency, "XDX");
-  assert.equal(tx.TakerPays.currency, "RLUSD");
+  assert.equal(tx.TakerPays.currency, RLUSD_HEX);
   assert.equal(tx.TakerPays.issuer, RLUSD_ISSUER);
   assert.equal(tx.TakerPays.value, "4");
   assert.equal(tx.Flags, undefined);
@@ -76,6 +77,16 @@ test("AMM deposit and withdraw follow XRPL two-asset / LP token flags", () => {
   assert.deepEqual(add.Asset2, { currency: "XRP" });
   assert.equal(add.Amount.value, "10000");
   assert.equal(add.Amount2, "3000000");
+  const messy = ammDepositTx({
+    account: "rLp",
+    quote: quoteAsset("XRP"),
+    xdx: "319.53677886150104",
+    quoteQty: 0.01,
+  });
+  assert.equal(messy.Amount.value, "319.53677886");
+  assert.equal(messy.Amount2, "10000");
+  assert.equal(/[eE]/.test(messy.Amount.value), false);
+  assert.equal(xrplIssuedValue(1.23e-7), "0.000000123");
 
   const take = ammWithdrawTx({
     account: "rLp",

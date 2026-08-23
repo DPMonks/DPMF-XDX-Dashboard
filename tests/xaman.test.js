@@ -81,6 +81,11 @@ test("requestOrigin prefers the forwarded host", () => {
   );
 });
 
+test("xamanErrorMessage explains an invalid transaction 603", () => {
+  const message = xamanErrorMessage({ error: { code: 603, message: "Invalid Hex" } });
+  assert.match(message, /Invalid Hex|603|transaction/i);
+});
+
 test("xamanErrorMessage does not stringify Xaman error objects", () => {
   const message = xamanErrorMessage({
     error: { reference: "abc", code: 811 },
