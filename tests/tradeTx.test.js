@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { RLUSD_HEX, RLUSD_ISSUER, XDX_ISSUER, XDX_XRP_AMM, XDX_XRP_LP_HEX } from "../src/constants/ledger.js";
+import {
+  RLUSD_HEX,
+  RLUSD_ISSUER,
+  TF_SET_NO_RIPPLE,
+  XDX_ISSUER,
+  XDX_RLUSD_AMM,
+  XDX_RLUSD_LP_HEX,
+  XDX_XRP_AMM,
+  XDX_XRP_LP_HEX,
+} from "../src/constants/ledger.js";
 import {
   MARKET_SLIPPAGE,
   TF_LP_TOKEN,
@@ -11,9 +20,12 @@ import {
   expectedLpTokens,
   expectedWithdraw,
   gateUnsignedTrade,
+  hasLpTrustline,
+  lpTrustSetTxjson,
   normalizeTradeRequest,
   offerCreateBuyXdx,
   offerCreateSellXdx,
+  poolForQuote,
   quoteAsset,
   quoteIdFromPair,
   quoteTrustSetTxjson,
@@ -136,6 +148,51 @@ test("RLUSD needs a trustline; XRP does not", () => {
   const line = quoteTrustSetTxjson("rA", quoteAsset("RLUSD"));
   assert.equal(line.TransactionType, "TrustSet");
   assert.equal(line.LimitAmount.issuer, RLUSD_ISSUER);
+});
+
+test("LP TrustSet uses the pool LP hex and AMM account", () => {
+  const xrp = lpTrustSetTxjson("rLp", poolForQuote(quoteAsset("XRP")));
+  assert.equal(xrp.TransactionType, "TrustSet");
+  assert.equal(xrp.Flags, TF_SET_NO_RIPPLE);
+  assert.equal(xrp.LimitAmount.currency, XDX_XRP_LP_HEX);
+  assert.equal(xrp.LimitAmount.issuer, XDX_XRP_AMM);
+  assert.equal(xrp.LimitAmount.value, "100000000000");
+  const catalog = poolForQuote(quoteAsset("XIO"), [
+    {
+      pool: "XDX/XIO",
+      amm_account: "rXioAmm",
+      lp_currency: "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    },
+  ]);
+  assert.equal(catalog.amm, "rXioAmm");
+  assert.equal(catalog.lpCurrency, "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+  const rlusd = poolForQuote(quoteAsset("RLUSD"));
+  assert.equal(rlusd.amm, XDX_RLUSD_AMM);
+  assert.equal(rlusd.lpCurrency, XDX_RLUSD_LP_HEX);
+  assert.equal(poolForQuote(quoteAsset("XIO")).amm, null);
+});
+
+test("hasLpTrustline matches the pool LP line, not a quote IOU", () => {
+  const spec = poolForQuote(quoteAsset("XRP"));
+  assert.equal(hasLpTrustline([], spec), false);
+  assert.equal(
+    hasLpTrustline(
+      [{ currency: "XIO", issuer: "rXio", ticker: "XIO" }],
+      spec
+    ),
+    false
+  );
+  assert.equal(
+    hasLpTrustline(
+      [{ currency: XDX_XRP_LP_HEX, issuer: XDX_XRP_AMM, ticker: "LP", lp: true }],
+      spec
+    ),
+    true
+  );
+  assert.equal(
+    hasLpTrustline([{ lp: true, issuer: XDX_XRP_AMM, ticker: "LP" }], spec),
+    true
+  );
 });
 
 test("totals and LP hints stay simple numbers", () => {

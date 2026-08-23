@@ -205,7 +205,8 @@ export default function App() {
     function onSignInCancelled() {
       pendingTradeRef.current = null;
     }
-    function onTradeExecuted() {
+    function onTradeExecuted(event) {
+      if (event?.detail?.txjson?.TransactionType === "TrustSet") return;
       setTradeAction(null);
       refreshLists();
     }

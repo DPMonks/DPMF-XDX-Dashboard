@@ -707,10 +707,10 @@ export async function getWalletOffers(address, extra = {}) {
   return asArray(body?.orders || body);
 }
 
-export async function getWalletLines(address) {
+export async function getWalletLines(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return [];
-  const body = await api.walletLines(name);
+  const body = await api.walletLines(name, extra);
   return asArray(body?.lines || body);
 }
 
