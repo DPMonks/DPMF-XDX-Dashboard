@@ -434,7 +434,7 @@ export const api = {
     const join = path.includes("?") ? "&" : "?";
     return getJson(`${path}${join}pool=${encodeURIComponent(pool)}`);
   },
-  lpPools: () => getJson(endpoint("lpPools") || "/lp-pools"),
+  lpPools: (opts = {}) => getJson(endpoint("lpPools") || "/lp-pools", opts),
   tvlHistory: () => getJson(endpoint("tvlHistory")),
   holdersHistory: (extra = {}) => getJson(endpoint("holdersHistory"), extra),
   lpHoldersHistory: () => getJson(endpoint("lpHoldersHistory")),
@@ -486,16 +486,17 @@ export const api = {
     if (account) search.set("account", account);
     return getJson(`/amm/governance?${search}`, { retries: 1, queue: false, cache: false });
   },
-  prices: () => getJson(endpoint("prices"), { queue: false }),
+  prices: (opts = {}) => getJson(endpoint("prices"), { queue: false, ...opts }),
   change24h: () => getJson(endpoint("change24h"), { queue: false }),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),
   issuerLocked: () => getJson(endpoint("issuerLocked")),
-  orderbook: (pair = "XDX/XRP") => {
+  orderbook: (pair = "XDX/XRP", opts = {}) => {
     const path = endpoint("orderbook") || "/orderbook";
     const join = path.includes("?") ? "&" : "?";
     return getJson(`${path}${join}pair=${encodeURIComponent(pair)}`, {
       queue: false,
       retries: 1,
+      ...opts,
     });
   },
   orderbooks: () =>

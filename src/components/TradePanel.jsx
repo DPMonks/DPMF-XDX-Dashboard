@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { getAmm, getPrices, getWalletBalances, getWalletLp } from "../api/indexer";
+import { getQuoteMark, getWalletBalances, getWalletLp } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -87,6 +87,7 @@ export default function TradePanel({
   const [lineHint, setLineHint] = useState("");
   const [formError, setFormError] = useState("");
   const [prices, setPrices] = useState(() => priceBookFromPools(initialPools));
+  const [ledgerMark, setLedgerMark] = useState(null);
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
   const quote = useMemo(
@@ -110,11 +111,25 @@ export default function TradePanel({
     !lineHint.includes(String(quote.issuer || "").toUpperCase());
   const reserves = useMemo(() => poolReserves(pools, quote), [pools, quote]);
   const implied = poolPrice(reserves.base, reserves.quote);
-  const markerPx = xdxQuoteSpot({ quoteId, prices, pool: reserves });
+  const liveMark =
+    ledgerMark && String(ledgerMark.quoteId || "").toUpperCase() === String(quoteId).toUpperCase()
+      ? ledgerMark
+      : null;
+  const markerPx =
+    Number(liveMark?.xdxPerQuote) > 0
+      ? Number(liveMark.xdxPerQuote)
+      : xdxQuoteSpot({
+          quoteId,
+          prices,
+          pool: reserves,
+          bookMid: liveMark?.bookMid,
+          dexPresent: liveMark?.dexPresent,
+        });
+  const headerSpot = quoteId === "XRP" && Number(spotPrice) > 0 ? Number(spotPrice) : 0;
   const px =
     orderType === "limit" && Number(price) > 0
       ? Number(price)
-      : markerPx || implied || Number(spotPrice) || 0;
+      : markerPx || (quoteId === "XRP" ? implied || headerSpot : 0);
   const linked = linkedDepositAmounts({
     editedSide,
     amount,
@@ -164,27 +179,32 @@ export default function TradePanel({
   useEffect(() => {
     if (!action) return undefined;
     let cancelled = false;
-    getPrices()
-      .then((nextPrices) => {
-        if (cancelled) return;
+    getQuoteMark(quoteId)
+      .then((mark) => {
+        if (cancelled || !mark) return;
+        setLedgerMark(mark);
+        if (Array.isArray(mark.pools)) setPools(mark.pools);
         setPrices((current) =>
-          priceBookFromPools([], { ...current, ...normalizePriceBook(nextPrices || {}) })
+          priceBookFromPools(mark.pools || [], {
+            ...current,
+            ...normalizePriceBook(mark.prices || {}),
+          })
         );
       })
       .catch(() => {});
-    Promise.all([getAmm().catch(() => []), account ? getWalletLp(account).catch(() => []) : []]).then(
-      ([nextPools, nextLp]) => {
-        if (cancelled) return;
-        setPools(Array.isArray(nextPools) ? nextPools : []);
-        setPrices((current) => priceBookFromPools(nextPools, current));
-        const rows = Array.isArray(nextLp) ? nextLp : [];
-        setWalletLp(rows);
-        if (action === "removeLp") {
-          const have = lpHeldForPair(rows, quotePair, quoteId);
-          if (have > 0) setLpAmount((current) => current || String(have));
-        }
-      }
-    );
+    if (account) {
+      getWalletLp(account)
+        .then((nextLp) => {
+          if (cancelled) return;
+          const rows = Array.isArray(nextLp) ? nextLp : [];
+          setWalletLp(rows);
+          if (action === "removeLp") {
+            const have = lpHeldForPair(rows, quotePair, quoteId);
+            if (have > 0) setLpAmount((current) => current || String(have));
+          }
+        })
+        .catch(() => {});
+    }
     if (account && quoteIssuer) {
       getWalletBalances(account)
         .then((balances) => {
@@ -336,6 +356,7 @@ export default function TradePanel({
               setQuoteQty("");
               setEditedSide("xdx");
               setPrice("");
+              setLedgerMark(null);
             }}
             ariaLabel={t.tradePair}
             searchable

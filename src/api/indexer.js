@@ -20,6 +20,7 @@ import {
   FEATURED_ORDERBOOK_PAIRS,
 } from "../orderbook";
 import { composeWalletSnapshot, emptyWalletSnapshot } from "../wallet/composeWallet";
+import { composeLedgerQuoteMark } from "../wallet/quoteMarker";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -305,10 +306,10 @@ export async function getOverview() {
   return api.overview();
 }
 
-export async function getAmm() {
+export async function getAmm(opts = {}) {
   const [body, prices] = await Promise.all([
-    api.lpPools(),
-    api.prices().catch(() => ({})),
+    api.lpPools(opts),
+    api.prices(opts).catch(() => ({})),
   ]);
   const catchingUp = Boolean(
     body &&
@@ -389,14 +390,48 @@ function ingestOrderbooks(body, pairHint = "XDX/XRP") {
   return lastOrderbooks;
 }
 
-export async function getOrderbook(pair = "XDX/XRP") {
+export async function getOrderbook(pair = "XDX/XRP", opts = {}) {
   const name = normalizeOrderbookPair(pair);
   try {
-    return ingestOrderbooks(await api.orderbook(name), name);
+    return ingestOrderbooks(await api.orderbook(name, opts), name);
   } catch {
     if (lastOrderbooks) return lastOrderbooks;
     throw new Error("Waiting for XRPL book_offers on this pair.");
   }
+}
+
+/**
+ * Fresh ledger mark for the opposing asset when the trade box opens.
+ * Uses this pair's live orderbook mid (DEX + AMM implied) first, then this
+ * pair's AMM reserves, then a USD/XRP cross. No hardcoded XIO/RLUSD/XSQUAD
+ * rates. The indexer already talks to XRPL — no extra indexer agent is required.
+ */
+export async function getQuoteMark(quoteId) {
+  const id = String(quoteId || "XRP").toUpperCase();
+  const pair = `XDX/${id}`;
+  const fresh = { cache: false };
+  const [pools, prices, books] = await Promise.all([
+    getAmm(fresh).catch(() => []),
+    getPrices(fresh).catch(() => ({})),
+    getOrderbook(pair, fresh).catch(() => null),
+  ]);
+  const list = Array.isArray(pools) ? pools : [];
+  const pool =
+    list.find((row) => String(row.pool || row.pool_name || "").toUpperCase() === pair) || null;
+  const book = books?.books?.[pair] || null;
+  return {
+    ...composeLedgerQuoteMark({
+      quoteId: id,
+      pool,
+      prices,
+      bookMid: book?.mid ?? null,
+      dexPresent: Boolean(book?.dex_present),
+    }),
+    pools: list,
+    prices,
+    bookMid: book?.mid ?? null,
+    dexPresent: Boolean(book?.dex_present),
+  };
 }
 
 export async function getOrderbooks() {
@@ -696,8 +731,8 @@ export async function getWalletRank(address) {
   return numberOrNull(body?.rank);
 }
 
-export async function getPrices() {
-  return api.prices();
+export async function getPrices(opts = {}) {
+  return api.prices(opts);
 }
 
 export async function getWalletOffers(address) {
