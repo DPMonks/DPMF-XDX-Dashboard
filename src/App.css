@@ -2062,6 +2062,74 @@ body {
   color: var(--dpmf-text-muted);
 }
 
+.wallet-balance-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wallet-earn-beam {
+  display: grid;
+  grid-template-columns: 1.15fr 0.9fr 1.15fr;
+  gap: 8px;
+}
+
+.wallet-earn-cell {
+  min-width: 0;
+  padding: 5px 8px 6px;
+  border: 1px solid rgba(57, 255, 20, 0.16);
+  border-radius: 8px;
+  background: rgba(57, 255, 20, 0.045);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wallet-earn-label {
+  margin: 0 0 1px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dpmf-neon-lime);
+  opacity: 0.78;
+}
+
+.wallet-earn-row {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--dpmf-neon-lime);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.wallet-earn-range {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.68;
+}
+
+.wallet-earn-value {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  min-width: 0;
+}
+
+.wallet-earn-cell.is-empty .wallet-earn-value,
+.wallet-earn-cell.is-empty .wallet-earn-label {
+  opacity: 0.4;
+}
+
+.wallet-earn-cell.is-filled {
+  animation: walletFill 0.42s ease;
+}
+
 .wallet-infographics {
   display: grid;
   grid-template-columns: 1.15fr 0.9fr 1.15fr;
@@ -2658,7 +2726,8 @@ body {
 
 @media (max-width: 900px) {
   .wallet-token-row,
-  .wallet-infographics {
+  .wallet-infographics,
+  .wallet-earn-beam {
     grid-template-columns: 1fr;
   }
 
