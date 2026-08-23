@@ -398,7 +398,7 @@ router.get("/governance/:address", async (req, res) => {
     success: true,
     data: await enrichAddress(store, req.params.address),
     ranks: [
-      { rank: "New Validator", min: 0, max: 0.001 },
+      { rank: "New Validator", min: 0.0001, max: 0.001 },
       { rank: "Beginner Validator", min: 0.001, max: 0.01 },
       { rank: "Basic Validator", min: 0.01, max: 0.1 },
       { rank: "Validator", min: 0.1, max: 1 },

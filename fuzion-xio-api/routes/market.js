@@ -23,6 +23,7 @@ import {
   toggleWatch,
   traitFacets
 } from "../lib/market.js";
+import { feePolicy, PLATFORM_FEE_BPS } from "../lib/fees.js";
 
 const router = Router();
 
@@ -31,7 +32,8 @@ router.get("/", (_req, res) => {
   res.json({
     success: true,
     desk: "FUZION-XIO market",
-    platformFeeBps: 0,
+    platformFeeBps: PLATFORM_FEE_BPS,
+    fee: feePolicy(),
     collections: exploreCollections(store),
     activity: (store.activity || []).slice(0, 12),
     auctions: (store.auctions || []).filter((row) => row.status === "live"),

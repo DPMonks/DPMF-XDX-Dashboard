@@ -50,6 +50,7 @@ const Activity = React.lazy(() => import("./components/nft/activity"));
 const Rankings = React.lazy(() => import("./components/nft/rankings"));
 const AssetsBook = React.lazy(() => import("./components/nft/assetsBook"));
 const ProfilesDesk = React.lazy(() => import("./components/nft/profilesDesk"));
+const Yem = React.lazy(() => import("./components/nft/yem"));
 
 function App() {
   useSuppressResizeObserverError();
@@ -87,6 +88,8 @@ function App() {
           <Route path="/rankings" element={<Rankings />} />
           <Route path="/assets" element={<AssetsBook />} />
           <Route path="/Xiodashboard" element={<XioDashboard />} />
+          <Route path="/yem" element={<Yem />} />
+          <Route path="/Yem" element={<Yem />} />
 
           <Route element={<PrivateRoute />}>
             <Route path="/Createnft" element={<Createnft />} />

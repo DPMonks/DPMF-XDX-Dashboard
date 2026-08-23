@@ -22,6 +22,8 @@ function Capabilities() {
 
   const collections = payload?.catalog?.collections || [];
   const ranks = payload?.governance?.ranks || [];
+  const overview = payload?.overview || [];
+  const fee = payload?.fee;
 
   return (
     <>
@@ -32,10 +34,12 @@ function Capabilities() {
             <p className="dpmf-kicker">XD-1 // FUZION-XIO</p>
             <h1>The XRPL NFT-Fi exchange</h1>
             <p className="dpmf-muted">
-              Built to outrun OpenSea-class discovery, Blur-class trading, and
-              xrp.cafe on XRPL rails: 0% platform fee, any issued asset as
-              payment, first-class 3D/AR files, XIO governance, traits, floor
-              tape, collection offers, auctions, and sweep.
+              All-currency minting and trading on XRPL rails.
+              {fee ? ` ${fee.label} platform fee` : " 0.1% platform fee"} on
+              every traded asset, any issued currency as payment, first-class
+              3D/AR, XIO governance, and a wallet that auto-downloads
+              trustlines as assets are used. Collector address will be added
+              later.
             </p>
             <p>
               <a href="/explore">Explore</a>
@@ -47,40 +51,28 @@ function Capabilities() {
               <a href="/profiles">Profiles</a>
               {" · "}
               <a href="/rankings">Rankings</a>
+              {" · "}
+              <a href="/yem">Y.E.M.</a>
             </p>
 
             <div className="dpmf-grid">
-              <div className="dpmf-card">
-                <h3>3D file NFTs</h3>
-                <p>
-                  GLB, GLTF, FBX, USDZ plus image, video, audio, and PDF.
-                  Large 3D drops live as marketplace collections. AVA, MegaBits,
-                  and RWA sculpture are separate XD projects and are not built
-                  here.
-                </p>
-              </div>
-              <div className="dpmf-card">
-                <h3>XIO governance</h3>
-                <p>
-                  Profiles carry validator rank from XIO balance and vScore
-                  badges (tick / blue / gold). XIO is the exchange governance
-                  asset.
-                </p>
-              </div>
-              <div className="dpmf-card">
-                <h3>Indexer + ledger</h3>
-                <p>
-                  Token prices and wallet balances from the XDX indexer. NFT
-                  holdings and trustlines from XRPL RPC.
-                </p>
-              </div>
-              <div className="dpmf-card">
-                <h3>0% trade fee</h3>
-                <p>
-                  Issuer royalties stay with creators. xrp.cafe charges 1.589%.
-                  Multi-currency pay is any XRPL issued asset.
-                </p>
-              </div>
+              {overview.map((section) => (
+                <div className="dpmf-card" key={section.id}>
+                  <h3>
+                    {section.id}. {section.title}
+                  </h3>
+                  <p className="dpmf-muted">
+                    {section.status === "reserved"
+                      ? "Reserved — blank page to build later"
+                      : section.status === "partial"
+                      ? "Live path, more to land"
+                      : "Live"}
+                  </p>
+                  {(section.points || []).map((point) => (
+                    <p key={point}>{point}</p>
+                  ))}
+                </div>
+              ))}
             </div>
 
             <h3>Virtual collections</h3>
@@ -110,8 +102,8 @@ function Capabilities() {
 
             <h3>Settlement assets</h3>
             <p className="dpmf-muted">
-              Trade any XRPL issued asset. Full book and multi-asset offers live
-              on <a href="/assets">Assets</a>.
+              Trade any XRPL issued asset. Using one downloads its trustline on
+              the platform wallet. Full book lives on <a href="/assets">Assets</a>.
             </p>
             <table className="dpmf-table">
               <thead>

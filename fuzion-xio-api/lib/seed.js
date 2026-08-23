@@ -1,4 +1,5 @@
 import { DEMO_GLB, XDX_CURRENCY, XDX_ISSUER, XIO_CURRENCY, XIO_ISSUER } from "./constants.js";
+import { PLATFORM_FEE_BPS } from "./fees.js";
 
 export const STORE_VERSION = 8;
 
@@ -72,7 +73,7 @@ export function demoSeed() {
       status: "sale",
       likes: 3,
       royaltyBps: 500,
-      platformFeeBps: 0
+      platformFeeBps: PLATFORM_FEE_BPS
     }),
     nft({
       _id: "seed-anchor-2",
@@ -374,7 +375,7 @@ export function demoSeed() {
         to: DEMO_OWNER,
         createdAt: now,
         royaltyBps: 500,
-        platformFeeBps: 0
+        platformFeeBps: PLATFORM_FEE_BPS
       },
       {
         _id: "act-list-lilly",
@@ -443,6 +444,8 @@ export function demoSeed() {
     listingOverrides: {},
     knownAssets: [],
     preparedPacks: [],
+    wallets: [],
+    fees: [],
     xumms: [],
     leaderboards: [
       { wAddress: DEMO_ISSUER, totalVPoint: 10050, pName: "XIO Issuer" },

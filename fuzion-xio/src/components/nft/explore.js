@@ -25,7 +25,7 @@ function Explore() {
             <p className="dpmf-kicker">Explore</p>
             <h1>Collections</h1>
             <p className="dpmf-muted">
-              Floor, listed supply, volume, and best offer. 0% platform fee.
+              Floor, listed supply, volume, and best offer. 0.1% platform fee.
               Any XRPL asset as payment.
             </p>
             <div className="dpmf-grid">

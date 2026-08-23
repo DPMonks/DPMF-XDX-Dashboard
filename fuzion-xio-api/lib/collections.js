@@ -1,4 +1,5 @@
 import { THREE_D_TYPES } from "./constants.js";
+import { PLATFORM_FEE_BPS } from "./fees.js";
 
 export function templates(store) {
   return store.collectionTemplates || [];
@@ -93,7 +94,7 @@ export function materialize(template, index, store) {
     isPurchased: status === "created" ? 0 : 1,
     isMinted: status !== "created",
     royaltyBps: 500,
-    platformFeeBps: 0,
+    platformFeeBps: PLATFORM_FEE_BPS,
     traits: [
       { trait_type: "Collection", value: template.collectionName },
       { trait_type: "Band", value: band },

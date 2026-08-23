@@ -28,6 +28,7 @@ import {
   mimeFromFile
 } from "../../const/filetypes";
 import { findTicker, mergeTickers, optionLabel } from "../../helper/assets";
+import { ensureWalletTrustlines } from "../../helper/trustlines";
 import { ProgressBar, OverlayTrigger, Tooltip } from "react-bootstrap";
 // import { create as ipfsHttpClient } from 'kubo-rpc-client';
 import {
@@ -268,6 +269,9 @@ const Createnft = () => {
       collection: bufferFiles.length > 1 ? formData.collectionName : null
     };
 
+    ensureWalletTrustlines(myDecodedToken?.ac, [
+      { currency: ticker, issuer: data.issuerAdd }
+    ]);
     setIsMintOffer(!isMintOffer);
     setOfferMintData(data);
     toast.success(MessageConst.ADD_MINT_OFFER, {

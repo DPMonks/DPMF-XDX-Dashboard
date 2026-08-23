@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import multer from "multer";
 import { readStore, update } from "../lib/store.js";
 import { describeAsset } from "../lib/filetypes.js";
+import { PLATFORM_FEE_BPS } from "../lib/fees.js";
 import {
   allowedPreparedFile,
   disseminateUploads,
@@ -14,6 +15,7 @@ import {
   listPacks,
   markCreated
 } from "../lib/prepared.js";
+import { ensureTrustline } from "../lib/wallet.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.resolve(root, "..", "data", "uploads");
@@ -126,7 +128,7 @@ function insertCreatedNfts(store, body, items) {
       status: body.status || "created",
       likes: 0,
       royaltyBps: 500,
-      platformFeeBps: 0,
+        platformFeeBps: PLATFORM_FEE_BPS,
       preparedPackId: body.packId || null,
       createdAt: new Date().toISOString()
     });
@@ -143,6 +145,12 @@ router.post("/nft/createNft", (req, res) => {
   let Ids = [];
   update((current) => {
     Ids = insertCreatedNfts(current, body, items);
+    const account = body.accountNumber || body.issuer;
+    const currency = body.price?.currency || body.currency;
+    const issuer = body.price?.issuer || body.issuerAdd;
+    if (account && currency && currency !== "XRP") {
+      ensureTrustline(current, { address: account, currency, issuer });
+    }
     return current;
   });
   res.json({

@@ -593,6 +593,7 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
                 <Dropdown.Item href="/assets">Assets</Dropdown.Item>
                 <Dropdown.Item href="/rankings">Rankings</Dropdown.Item>
                 <Dropdown.Item href="/Xiodashboard">Validators</Dropdown.Item>
+                <Dropdown.Item href="/yem">Y.E.M.</Dropdown.Item>
                 <Dropdown.Item href="/Vscoredashboard">
                   Verified Profiles
                 </Dropdown.Item>
@@ -628,6 +629,9 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
               </Link>
               <Link to="/Xiodashboard" className="home-class">
                 XIO
+              </Link>
+              <Link to="/yem" className="home-class">
+                Y.E.M.
               </Link>
             </>
           )}

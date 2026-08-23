@@ -30,6 +30,9 @@ npm run reset
 - Market desk: floor/traits, item + collection offers, auctions, sweep, activity, rankings (`/api/market/*`)
 - Mint any Create NFT type: images (png/jpg/gif/webp/svg/bmp/avif), video, audio, PDF, GLB/GLTF/FBX/USDZ/OBJ. Local `/api/mint/upload` when Infura is unset.
 - Pre-prepared mint packs: `POST /api/mint/prepared` accepts a `.zip` or a set of NFT files, disseminates each file, and leaves them ready to create (`POST /api/mint/prepared/:id/create`).
+- 0.1% platform fee on every traded asset (`GET /api/fees`). Collector address is `FEE_COLLECTOR` and will be added later.
+- Wallet auto-downloads trustlines as issued assets are used (`POST /api/wallet/trustlines`).
+- Y.E.M.2 page is reserved and blank (`/yem`).
 - XDX indexer token catalog / prices / wallet balances (cached; static fallback on 429)
 - XRPL `account_nfts`, `nft_info`, `account_lines`
 - Image proxy `GET /api/assets?url=`

@@ -5,6 +5,7 @@ import Header from "../common/header";
 import Footer from "../common/footer";
 import configData from "../../config.json";
 import { assetsLabel, optionLabel } from "../../helper/assets";
+import { ensureWalletTrustlines } from "../../helper/trustlines";
 
 const DEMO_BIDDER = "rFuzionXioDemoBidder1111111111111";
 const emptyLeg = () => ({ currency: "XRP", issuer: "", amount: "" });
@@ -37,6 +38,7 @@ function AssetsBook() {
   ]);
   const [offerNote, setOfferNote] = useState("");
   const [deskOffers, setDeskOffers] = useState([]);
+  const [walletLines, setWalletLines] = useState([]);
 
   const loadCatalog = (wallet = address) => {
     const q = wallet ? `?address=${encodeURIComponent(wallet)}` : "";
@@ -78,6 +80,13 @@ function AssetsBook() {
           }`
         : body.data?.error || "Not found on the XRP Ledger"
     );
+    if (body.success && address) {
+      const trust = await ensureWalletTrustlines(address, [body.data.asset]);
+      if (trust?.data?.downloaded?.length) {
+        setWalletLines(trust.data.wallet?.trustlines || trust.data.downloaded);
+        setLookupNote((prev) => `${prev} · trustline downloaded`);
+      }
+    }
     loadCatalog();
   };
 
@@ -143,6 +152,12 @@ function AssetsBook() {
         ? `Recorded ${body.offer?.label || assetsLabel(body.offer)}`
         : body.error || "Offer failed"
     );
+    if (body.ok) {
+      const trust = await ensureWalletTrustlines(DEMO_BIDDER, assetsToSend);
+      if (trust?.data?.downloaded?.length) {
+        setWalletLines(trust.data.downloaded);
+      }
+    }
     loadDeskOffers();
   };
 
@@ -172,7 +187,10 @@ function AssetsBook() {
             <div className="dpmf-grid">
               <div className="dpmf-card">
                 <h3>Wallet trustlines</h3>
-                <p>Pull `account_lines` for an r-address into the book.</p>
+                <p>
+                  Pull live `account_lines`, and auto-download a trustline
+                  whenever this wallet uses an issued asset.
+                </p>
                 <input
                   type="text"
                   value={address}
@@ -206,6 +224,14 @@ function AssetsBook() {
                   Look up on ledger
                 </button>
                 {lookupNote && <p className="dpmf-muted">{lookupNote}</p>}
+                {walletLines.length > 0 && (
+                  <p className="dpmf-muted">
+                    Downloaded:{" "}
+                    {walletLines
+                      .map((line) => line.currency || line.key)
+                      .join(", ")}
+                  </p>
+                )}
               </div>
             </div>
             <p className="dpmf-muted">

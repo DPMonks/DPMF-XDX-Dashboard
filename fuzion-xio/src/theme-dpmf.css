@@ -390,6 +390,15 @@ a:hover {
   gap: 0.45rem;
 }
 
+.dpmf-yem {
+  min-height: 42vh;
+}
+
+.dpmf-yem h1 {
+  color: var(--dpmf-text-main);
+  margin: 0;
+}
+
 .dpmf-profile-avatar {
   width: 64px;
   height: 64px;

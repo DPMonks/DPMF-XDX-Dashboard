@@ -1,18 +1,125 @@
 import { INDEXER_ORIGIN, THREE_D_TYPES, XIO_CURRENCY, XIO_ISSUER, XRPL_RPC } from "./constants.js";
+import { feePolicy } from "./fees.js";
 
 export function capabilityMap() {
+  const fee = feePolicy();
   return {
     product: "FUZION-XIO",
-    positioning: "XRPL NFT-Fi exchange — 0% platform fee, multi-currency, first-class 3D",
+    positioning: `XRPL NFT-Fi exchange — ${fee.label} platform fee, multi-currency, first-class 3D`,
     comparedTo: ["OpenSea", "Blur", "Magic Eden", "Tensor", "SuperRare", "xrp.cafe"],
     advantages: [
       "Any XRPL issued asset as payment, not only the gas token",
       "Native GLB / GLTF / FBX / USDZ + AR viewers",
       "XIO governance ranks and vScore profile badges",
-      "0% trade fee; royalties stay with the issuer",
+      `${fee.label} trade fee on every asset; royalties stay with the issuer`,
+      "Wallet auto-downloads trustlines as assets are used",
       "XLS-20 native NFTs plus Dynamic NFT (XLS-46) path",
-      "XDX indexer token data (holders, prices, wallet balances)",
-      "Virtual collections of 1,000–10,000 without fat document dumps"
+      "XDX indexer token data (holders, prices, wallet balances)"
+    ],
+    overview: [
+      {
+        id: 1,
+        title: "Multi-currency NFT exchange",
+        status: "live",
+        points: [
+          "Mint and trade NFTs in any XRPL issued asset",
+          "Multi-currency and multi-asset offers",
+          "Instant catalog access to newly issued XRPL assets",
+          "Social finance modules on personal profiles"
+        ]
+      },
+      {
+        id: 2,
+        title: "All-currency NFT minting engine",
+        status: "live",
+        points: [
+          "Images, audio, video, PDF, and 3D (GLB/GLTF/FBX/USDZ/OBJ)",
+          "Creator-controlled pricing and mint currency",
+          "Prepared file packs ready to create"
+        ]
+      },
+      {
+        id: 3,
+        title: "Dynamic NFTs (dNFTs) on XRPL",
+        status: "partial",
+        points: [
+          "XLS-46 path for metadata that can evolve",
+          "URI update signing lands with Xaman keys"
+        ]
+      },
+      {
+        id: 4,
+        title: "Game-Fi infrastructure",
+        status: "partial",
+        points: [
+          "Updatable URI path and multi-currency game-item trades",
+          "Full conditional metadata / leveling is staged"
+        ]
+      },
+      {
+        id: 5,
+        title: "Advanced NFT trading",
+        status: "live",
+        points: [
+          "Item and collection offers, auctions, sweep",
+          "First-issue trading of new XRPL currencies",
+          `${fee.label} desk fee on every traded asset`
+        ]
+      },
+      {
+        id: 6,
+        title: "Decentralised profile validation",
+        status: "live",
+        points: [
+          "Validate profiles with fractional asset payments",
+          "Receiver chooses the asset",
+          "V-Score and validator power rise with activity"
+        ]
+      },
+      {
+        id: 7,
+        title: "XIO-powered validator ranks",
+        status: "live",
+        points: [
+          "New 0.0001 · Beginner 0.001 · Basic 0.01 · Validator 0.1",
+          "Active 1 · Trusted 10 · Master 100"
+        ]
+      },
+      {
+        id: 8,
+        title: "Profile V-Score",
+        status: "live",
+        points: [
+          "100 V-Score: blue checkmark",
+          "10,000 V-Score: gold checkmark",
+          "Applies to the profile and NFTs linked to it"
+        ]
+      },
+      {
+        id: 9,
+        title: "Y.E.M.2 — Yield Earning Mechanism",
+        status: "reserved",
+        points: ["Page is live and blank for later yield build-out"]
+      },
+      {
+        id: 10,
+        title: "Social finance + creator tools",
+        status: "live",
+        points: [
+          "Free profiles, validation monetisation, creator pricing",
+          "Profile-linked NFT verification"
+        ]
+      },
+      {
+        id: 11,
+        title: "High-performance architecture",
+        status: "live",
+        points: [
+          "XRPL RPC + XDX indexer",
+          `${fee.label} fee, auto trustlines, multi-asset settlement`,
+          "Collector address will be added later"
+        ]
+      }
     ],
     peers: {
       opensea: {
@@ -29,8 +136,7 @@ export function capabilityMap() {
       },
       xrpCafe: {
         strength: "XRPL native mint/buy/sell/auction, bulk tools",
-        gapVsFuzion:
-          "1.589% marketplace fee vs FUZION 0%; mint focused on image/video/audio; no XIO governance or 3D/AR first class"
+        gapVsFuzion: `1.589% marketplace fee vs FUZION ${fee.label}; mint focused on image/video/audio; no XIO governance or 3D/AR first class`
       }
     },
     live: {
@@ -55,7 +161,6 @@ export function capabilityMap() {
       auctions: true,
       sweep: true,
       watchlist: true,
-      multiCurrency: true,
       multiAssetOffers: true,
       xrplNftOffers: true,
       xrplAccountTape: true,
@@ -64,11 +169,17 @@ export function capabilityMap() {
       profileOpenGraph: true,
       profileNfts: true,
       preparedMintPacks: true,
-      zeroPlatformFee: true
+      platformFee: true,
+      autoTrustlines: true,
+      yemPage: true,
+      zeroPlatformFee: false
     },
+    fee,
     next: {
       xamanSigning: false,
-      dNftUriUpdate: false
+      dNftUriUpdate: false,
+      feeCollectorAddress: !fee.collector,
+      yemRewards: true
     },
     threeD: {
       types: THREE_D_TYPES,
@@ -87,6 +198,15 @@ export function capabilityMap() {
         "Trusted Validator",
         "Master Validator"
       ],
+      thresholds: {
+        "New Validator": 0.0001,
+        "Beginner Validator": 0.001,
+        "Basic Validator": 0.01,
+        Validator: 0.1,
+        "Active Validator": 1,
+        "Trusted Validator": 10,
+        "Master Validator": 100
+      },
       badges: { tick: "0-99", blue: "100-9999", gold: ">=10000" }
     },
     sources: {

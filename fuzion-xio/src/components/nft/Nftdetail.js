@@ -40,6 +40,7 @@ import { getBalanceAction } from "../../store/actions/wallet";
 import Accordion from "react-bootstrap/Accordion";
 import configData from "../../config.json";
 import { assetsLabel, findTicker, mergeTickers, optionLabel } from "../../helper/assets";
+import { ensureWalletTrustlines } from "../../helper/trustlines";
 import * as Spinners from "react-loader-spinner";
 import { isMobile, isIOS } from "react-device-detect";
 
@@ -1646,6 +1647,9 @@ function Nftdetail() {
         issuerAdd: offerCode === "XRP" ? "" : offerTicker?.issuer || ""
       };
       //   // call api
+      ensureWalletTrustlines(decodedToken?.ac, [
+        { currency: offerCode, issuer: data.issuerAdd }
+      ]);
       dispatch(placeMoreOfferAction({ data, loader: true }));
     } catch (error) {
       toast.error(MessageConst.somethingWrongError, {
@@ -2472,7 +2476,7 @@ function Nftdetail() {
                                                     </Button>
                                                     {/* </OverlayTrigger> */}
                                                     <small className="zerofees">
-                                                      0% Fee
+                                                      0.1% Fee
                                                     </small>
                                                   </div>
                                                 ) : (
@@ -2494,7 +2498,7 @@ function Nftdetail() {
                                                       }
                                                     ></i>{" "} */}
                                                     <small className="zerofees">
-                                                      0% Fee
+                                                      0.1% Fee
                                                     </small>
                                                   </div>
                                                 )
@@ -2520,7 +2524,7 @@ function Nftdetail() {
                                                       }
                                                     ></i> */}
                                                     <small className="zerofees">
-                                                      0% Fee
+                                                      0.1% Fee
                                                     </small>
                                                   </div>
                                                 )}

@@ -5,6 +5,7 @@ import Header from "../common/header";
 import Footer from "../common/footer";
 import configData from "../../config.json";
 import { assetsLabel, optionLabel } from "../../helper/assets";
+import { ensureWalletTrustlines } from "../../helper/trustlines";
 
 const DEMO_BIDDER = "rFuzionXioDemoBidder1111111111111";
 
@@ -62,9 +63,14 @@ function CollectionDesk() {
       body: JSON.stringify({ count: sweepCount, buyer: DEMO_BIDDER })
     });
     const body = await res.json();
+    if (body.ok) {
+      await ensureWalletTrustlines(DEMO_BIDDER, [
+        { currency: body.currency, issuer: "" }
+      ]);
+    }
     setNote(
       body.ok
-        ? `Swept ${body.filled} for ${body.total} ${body.currency} (0% fee).`
+        ? `Swept ${body.filled} for ${body.total} ${body.currency} (0.1% fee).`
         : body.error || "Sweep failed"
     );
     load();
@@ -169,7 +175,7 @@ function CollectionDesk() {
             <div className="dpmf-grid">
               <div className="dpmf-card">
                 <h3>Sweep</h3>
-                <p>Buy the cheapest listed items in one fill. 0% desk fee.</p>
+                <p>Buy the cheapest listed items in one fill. 0.1% desk fee.</p>
                 <input
                   type="number"
                   min="1"

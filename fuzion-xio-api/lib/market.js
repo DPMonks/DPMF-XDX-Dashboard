@@ -9,8 +9,10 @@ import {
   templates
 } from "./collections.js";
 import { assetsLabel, offerAssets } from "./currency.js";
+import { PLATFORM_FEE_BPS, recordFees, splitTrade } from "./fees.js";
+import { ensureTrustlines } from "./wallet.js";
 
-export const PLATFORM_FEE_BPS = 0;
+export { PLATFORM_FEE_BPS };
 export const DEFAULT_ROYALTY_BPS = 500;
 
 function nowIso() {
@@ -30,6 +32,8 @@ export function ensureMarket(store) {
   store.listingOverrides = store.listingOverrides || {};
   store.tradehistories = store.tradehistories || [];
   store.knownAssets = store.knownAssets || [];
+  store.fees = store.fees || [];
+  store.wallets = store.wallets || [];
   return store;
 }
 
@@ -254,7 +258,7 @@ export function delist(store, { nftId }) {
   return { ok: true, activity };
 }
 
-export function buyNow(store, { nftId, buyer }) {
+export function buyNow(store, { nftId, buyer, skipFee = false }) {
   ensureMarket(store);
   const nft = resolveNft(store, nftId);
   if (!nft) return { ok: false, error: "NFT not found" };
@@ -266,11 +270,30 @@ export function buyNow(store, { nftId, buyer }) {
     const row = store.nfts.find((item) => item._id === nft._id);
     if (row) Object.assign(row, patch);
   }
+  const assets = offerAssets({
+    amount: nft.amount,
+    currency: nft.currency,
+    issuer: nft.issuer || nft.Issuer
+  });
+  const fees = skipFee
+    ? []
+    : recordFees(store, {
+        assets,
+        from: patch.accountNumber,
+        to: seller,
+        nftId: nft._id,
+        type: "sale"
+      });
+  ensureTrustlines(store, { address: patch.accountNumber, assets });
+  const split = skipFee ? { fee: 0, net: Number(nft.amount) || 0 } : splitTrade(nft.amount);
   store.tradehistories.push({
     nftID: nft._id,
     NFTokenID: nft.NFTokenID,
     amount: nft.amount,
     currency: nft.currency,
+    fee: split.fee,
+    net: split.net,
+    platformFeeBps: PLATFORM_FEE_BPS,
     from: seller,
     to: patch.accountNumber,
     createdAt: nowIso(),
@@ -284,11 +307,14 @@ export function buyNow(store, { nftId, buyer }) {
     collectionSlug: nft.collectionSlug,
     amount: nft.amount,
     currency: nft.currency,
+    fee: split.fee,
+    net: split.net,
+    platformFeeBps: PLATFORM_FEE_BPS,
     from: seller,
     to: patch.accountNumber,
     royaltyBps: nft.royaltyBps || DEFAULT_ROYALTY_BPS
   });
-  return { ok: true, activity, simulated: true };
+  return { ok: true, activity, simulated: true, fees, fee: split };
 }
 
 export function placeOffer(store, body) {
@@ -317,6 +343,7 @@ export function placeOffer(store, body) {
     createdAt: nowIso()
   };
   store.offers.unshift(offer);
+  ensureTrustlines(store, { address: offer.from, assets });
   pushActivity(store, {
     type: kind === "collection" ? "collection_offer" : "offer",
     nftId: offer.nftId,
@@ -347,8 +374,18 @@ export function acceptOffer(store, offerId, seller) {
   const offer = store.offers.find((row) => row._id === offerId && row.status === "open");
   if (!offer) return { ok: false, error: "offer not found" };
   offer.status = "accepted";
+  const fees = recordFees(store, {
+    assets: offer.assets || offerAssets(offer),
+    from: offer.from,
+    to: seller,
+    nftId: offer.nftId,
+    type: "accept_offer"
+  });
   if (offer.kind === "item" && offer.nftId) {
-    buyNow(store, { nftId: offer.nftId, buyer: offer.from });
+    const nft = resolveNft(store, offer.nftId);
+    if (nft && nft.status === "sale") {
+      buyNow(store, { nftId: offer.nftId, buyer: offer.from, skipFee: true });
+    }
   }
   pushActivity(store, {
     type: "accept_offer",
@@ -360,7 +397,7 @@ export function acceptOffer(store, offerId, seller) {
     from: seller,
     to: offer.from
   });
-  return { ok: true, offer, simulated: true };
+  return { ok: true, offer, simulated: true, fees };
 }
 
 export function startAuction(store, body) {
