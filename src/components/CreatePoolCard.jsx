@@ -178,6 +178,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
   function signLine(txjson) {
     start({
       body: { txjson },
+      trade: { action: "createPool", pair: `XDX/${quoteTicker}` },
       onSigned: (signedAccount) => {
         if (signedAccount) connectWallet(signedAccount);
         notifyWalletRefresh();
@@ -248,6 +249,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
           tradingFee: fee,
         }),
       },
+      trade: { action: "createPool", pair: `XDX/${quoteTicker}` },
       onSigned: () => notifyWalletRefresh(),
       onExecuted: () => {
         notifyWalletRefresh();

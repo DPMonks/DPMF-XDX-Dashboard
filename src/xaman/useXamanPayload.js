@@ -7,6 +7,7 @@ import {
   rememberPendingPayload,
   xamanWebsocketUrl,
 } from "./payloadResume";
+import { stampExchangeMemo } from "./exchangeMemo";
 import { extractTradeMarkerFromPayload, stampTradeTxjson } from "./signMarker";
 import {
   notifyFunctionConfirmed,
@@ -96,7 +97,7 @@ export function useXamanPayload() {
     busyRef.current = true;
     const session = nextPayloadSession(sessionRef.current);
     sessionRef.current = session;
-    const stamped = stampTradeTxjson(body?.txjson);
+    const stamped = stampTradeTxjson(stampExchangeMemo(body?.txjson, { trade }));
     const request = body?.txjson ? { ...body, txjson: stamped.txjson } : body;
     const signMarker = stamped.marker || "";
     const txType = String(request?.txjson?.TransactionType || "");
