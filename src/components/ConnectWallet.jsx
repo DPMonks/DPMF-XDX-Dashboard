@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useWallet } from "../context/useWallet";
 import { shortAddress } from "../utils/format";
 import { takeXamanReturnUuid } from "../xaman/payloadResume";
-import { resolveNeedSignIn } from "../wallet/walletStorage";
+import { liveWalletAddress, resolveNeedSignIn } from "../wallet/walletStorage";
 import { WALLET_EVENTS } from "../xaman/tradeTx";
 import { useXamanPayload } from "../xaman/useXamanPayload";
 import { useI18n } from "../i18n/useI18n";
@@ -14,7 +14,6 @@ export default function ConnectWallet() {
   const { walletAddress, connectWallet, disconnectWallet } = useWallet();
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
   const startRef = useRef(start);
-  const resumeKeyRef = useRef("");
 
   useEffect(() => {
     startRef.current = start;
@@ -26,13 +25,10 @@ export default function ConnectWallet() {
     window.dispatchEvent(new CustomEvent(WALLET_EVENTS.signedIn, { detail: { account } }));
   }, [connectWallet]);
 
-  const resumeSignIn = useCallback((fromWake = false) => {
-    if (walletAddress) return;
+  const resumeSignIn = useCallback(() => {
+    if (liveWalletAddress(walletAddress)) return;
     const pending = takeXamanReturnUuid();
     if (!pending) return;
-    const key = fromWake ? `wake:${pending}` : `boot:${pending}`;
-    if (resumeKeyRef.current === key) return;
-    resumeKeyRef.current = key;
     startRef.current({
       resumeUuid: pending,
       onSigned: finishSignIn,
@@ -41,7 +37,8 @@ export default function ConnectWallet() {
   }, [walletAddress, finishSignIn, t.walletError]);
 
   function startConnection() {
-    if (walletAddress) {
+    if (liveWalletAddress(walletAddress)) {
+      reset();
       disconnectWallet();
       return;
     }
@@ -53,7 +50,6 @@ export default function ConnectWallet() {
   }
 
   function cancelSignIn() {
-    resumeKeyRef.current = "";
     reset();
     window.dispatchEvent(new Event(WALLET_EVENTS.signInCancelled));
   }
@@ -78,10 +74,10 @@ export default function ConnectWallet() {
   }, [walletAddress, connectWallet, finishSignIn, t.walletError]);
 
   useEffect(() => {
-    const boot = window.setTimeout(() => resumeSignIn(false), 0);
+    const boot = window.setTimeout(() => resumeSignIn(), 0);
     function wake() {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      window.setTimeout(() => resumeSignIn(true), 0);
+      window.setTimeout(() => resumeSignIn(), 0);
     }
     document.addEventListener("visibilitychange", wake);
     window.addEventListener("pageshow", wake);

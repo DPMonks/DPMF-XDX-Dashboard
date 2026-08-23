@@ -176,7 +176,9 @@ export function useXamanPayload() {
             await new Promise((resolve) => setTimeout(resolve, 1500));
           }
         }
-        reset();
+        reset({
+          keepPending: !signedAccount && (detection.signed || payloadLooksSigned(result)),
+        });
         setStatus("signed");
       };
 

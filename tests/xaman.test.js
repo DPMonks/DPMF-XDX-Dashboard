@@ -28,6 +28,7 @@ import {
   xamanSignUrl,
 } from "../src/xaman/xamanClient.js";
 import {
+  clearPendingPayload,
   isPayloadUuid,
   peekPendingPayload,
   readXamanReturnUuid,
@@ -186,21 +187,68 @@ test("extractSignedAccount reads Xaman SignIn response shapes", () => {
   assert.equal(extractSignedAccount({ account: "not-an-address" }), null);
 });
 
+function memoryStore() {
+  const map = new Map();
+  return {
+    getItem(key) {
+      return map.has(key) ? map.get(key) : null;
+    },
+    setItem(key, value) {
+      map.set(key, String(value));
+    },
+    removeItem(key) {
+      map.delete(key);
+    },
+  };
+}
+
 test("Xaman return query and pending payload survive a fresh page", () => {
   const uuid = "11111111-2222-4333-a444-555555555555";
   assert.equal(isPayloadUuid(uuid), true);
   assert.equal(readXamanReturnUuid(`?xaman=${uuid}&utm=1`), uuid);
   assert.equal(readXamanReturnUuid("?foo=1"), null);
 
-  const store = new Map();
-  globalThis.sessionStorage = {
-    getItem: (key) => (store.has(key) ? store.get(key) : null),
-    setItem: (key, value) => store.set(key, String(value)),
-    removeItem: (key) => store.delete(key),
+  const previous = {
+    sessionStorage: globalThis.sessionStorage,
+    localStorage: globalThis.localStorage,
   };
-  rememberPendingPayload(uuid);
-  assert.equal(peekPendingPayload()?.uuid, uuid);
-  assert.equal(takeXamanReturnUuid(""), uuid);
+  globalThis.sessionStorage = memoryStore();
+  globalThis.localStorage = memoryStore();
+  try {
+    rememberPendingPayload(uuid);
+    assert.equal(peekPendingPayload()?.uuid, uuid);
+    assert.equal(takeXamanReturnUuid(""), uuid);
+  } finally {
+    clearPendingPayload();
+    if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
+    else globalThis.sessionStorage = previous.sessionStorage;
+    if (previous.localStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous.localStorage;
+  }
+});
+
+test("a new Xaman sign-in still resumes after iOS drops sessionStorage", () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const previous = {
+    sessionStorage: globalThis.sessionStorage,
+    localStorage: globalThis.localStorage,
+  };
+  globalThis.sessionStorage = memoryStore();
+  globalThis.localStorage = memoryStore();
+  try {
+    rememberPendingPayload(uuid);
+    globalThis.sessionStorage.removeItem("dpmf-xaman-pending");
+    assert.equal(peekPendingPayload()?.uuid, uuid);
+    assert.equal(takeXamanReturnUuid(""), uuid);
+    clearPendingPayload();
+    assert.equal(peekPendingPayload(), null);
+  } finally {
+    clearPendingPayload();
+    if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
+    else globalThis.sessionStorage = previous.sessionStorage;
+    if (previous.localStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous.localStorage;
+  }
 });
 
 test("cancelled Xaman sessions do not stay open after reset", () => {

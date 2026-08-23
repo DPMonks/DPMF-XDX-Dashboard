@@ -17,22 +17,20 @@ export function xamanWebsocketUrl(uuid) {
   return id ? `wss://xumm.app/sign/${encodeURIComponent(id)}` : "";
 }
 
-export function rememberPendingPayload(uuid, extra = {}) {
-  const id = String(uuid || "").trim();
-  if (!isPayloadUuid(id) || typeof sessionStorage === "undefined") return null;
-  const record = { uuid: id, at: Date.now(), ...extra };
+function storeOf(name) {
   try {
-    sessionStorage.setItem(PENDING_KEY, JSON.stringify(record));
+    const store = globalThis[name];
+    if (store && typeof store.getItem === "function") return store;
   } catch {
-    // private mode
+    // private mode / blocked storage
   }
-  return record;
+  return null;
 }
 
-export function peekPendingPayload() {
-  if (typeof sessionStorage === "undefined") return null;
+function readPendingFrom(store) {
+  if (!store) return null;
   try {
-    const raw = sessionStorage.getItem(PENDING_KEY);
+    const raw = store.getItem(PENDING_KEY);
     if (!raw) return null;
     const record = JSON.parse(raw);
     if (!isPayloadUuid(record?.uuid)) return null;
@@ -42,13 +40,32 @@ export function peekPendingPayload() {
   }
 }
 
-export function clearPendingPayload() {
-  if (typeof sessionStorage === "undefined") return;
+function writePendingTo(store, record) {
+  if (!store) return;
   try {
-    sessionStorage.removeItem(PENDING_KEY);
+    if (record) store.setItem(PENDING_KEY, JSON.stringify(record));
+    else store.removeItem(PENDING_KEY);
   } catch {
-    // ignore
+    // ignore storage failures
   }
+}
+
+export function rememberPendingPayload(uuid, extra = {}) {
+  const id = String(uuid || "").trim();
+  if (!isPayloadUuid(id)) return null;
+  const record = { uuid: id, at: Date.now(), ...extra };
+  writePendingTo(storeOf("sessionStorage"), record);
+  writePendingTo(storeOf("localStorage"), record);
+  return record;
+}
+
+export function peekPendingPayload() {
+  return readPendingFrom(storeOf("sessionStorage")) || readPendingFrom(storeOf("localStorage"));
+}
+
+export function clearPendingPayload() {
+  writePendingTo(storeOf("sessionStorage"), null);
+  writePendingTo(storeOf("localStorage"), null);
 }
 
 export function readXamanReturnUuid(search = "") {
