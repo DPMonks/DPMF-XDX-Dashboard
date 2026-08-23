@@ -43,6 +43,7 @@ import {
   fibExtent,
   fibExtensionBands,
   fibLabelPlacement,
+  fibToolLabelPlacement,
   fibPrice,
   PLACE_OFFSET,
   hitDrawingHandle,
@@ -632,6 +633,7 @@ test("fib retracement uses TradingView level colors and click order", () => {
   assert.equal(fibPrice(a, b, 0.618), 61.8);
   const bands = fibBands(a, b);
   assert.equal(bands[0].color, "#787B86");
+  assert.equal(bands.find((row) => row.level === 0.5).color, "#26C6DA");
   assert.equal(bands.find((row) => row.level === 0.618).color, "#089981");
   assert.equal(bands.find((row) => row.level === 0.236).color, "#F23645");
   assert.equal(bands.find((row) => row.level === 4.236)?.color, "#E040FB");
@@ -671,6 +673,9 @@ test("draw style and extra City Index tools stay available from one toolbox", ()
   assert.equal(toolMeta("crossline").clicks, 1);
   assert.equal(toolMeta("infoline").clicks, 2);
   assert.equal(toolMeta("fibext").clicks, 3);
+  assert.equal(toolMeta("elliottimpulse").clicks, 5);
+  assert.deepEqual(toolMeta("elliottimpulse").labels, ["1", "2", "3", "4", "5"]);
+  assert.equal(toolMeta("elliottcorrection").clicks, 3);
   assert.equal(toolMeta("pitchfork").clicks, 3);
   const cross = nextDrawingState({
     tool: "crossline",
@@ -689,6 +694,12 @@ test("draw style and extra City Index tools stay available from one toolbox", ()
   const ext = fibExtensionBands(a, b, c);
   assert.equal(ext.find((row) => row.level === 1).price, 22);
   assert.ok(ext.some((row) => row.level === 1.618));
+  const outside = fibToolLabelPlacement(200, 360, { padLeft: 88, gap: 12, textWidth: 78 });
+  assert.equal(outside.textAnchor, "end");
+  assert.ok(outside.x <= 200);
+  const flipped = fibToolLabelPlacement(90, 140, { padLeft: 88, gap: 12, textWidth: 78 });
+  assert.equal(flipped.textAnchor, "start");
+  assert.ok(flipped.x >= 140);
   const extLabel = fibLabelPlacement(220, { side: "left", minX: 88 });
   assert.equal(extLabel.textAnchor, "end");
   assert.ok(extLabel.x <= 210);

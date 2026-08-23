@@ -84,6 +84,17 @@ export const TOOL_GROUPS = [
     ],
   },
   {
+    id: "waves",
+    labelKey: "chartElliottGroup",
+    tools: [
+      { id: "elliottimpulse", labelKey: "chartElliottImpulse", clicks: 5, icon: "elliottimpulse", labels: ["1", "2", "3", "4", "5"] },
+      { id: "elliottcorrection", labelKey: "chartElliottCorrection", clicks: 3, icon: "elliottcorrection", labels: ["A", "B", "C"] },
+      { id: "elliotttriangle", labelKey: "chartElliottTriangle", clicks: 5, icon: "elliotttriangle", labels: ["A", "B", "C", "D", "E"] },
+      { id: "elliottdouble", labelKey: "chartElliottDouble", clicks: 3, icon: "elliottdouble", labels: ["W", "X", "Y"] },
+      { id: "elliotttriple", labelKey: "chartElliottTriple", clicks: 5, icon: "elliotttriple", labels: ["W", "X", "Y", "XX", "Z"] },
+    ],
+  },
+  {
     id: "notes",
     labelKey: "chartNotes",
     tools: [
@@ -107,7 +118,7 @@ export const FIB_LEVELS = [
   { level: 0, color: "#787B86" },
   { level: 0.236, color: "#F23645" },
   { level: 0.382, color: "#FF9800" },
-  { level: 0.5, color: "#3179F5" },
+  { level: 0.5, color: "#26C6DA" },
   { level: 0.618, color: "#089981" },
   { level: 0.786, color: "#2962FF" },
   { level: 1, color: "#787B86" },
@@ -159,6 +170,20 @@ export function fibLabelPlacement(x0, { side = "left", gap = 10, minX = 8, maxX 
     return { x: Number.isFinite(maxX) ? Math.min(maxX, raw) : raw, textAnchor: "start" };
   }
   return { x: Math.max(minX, origin - gap), textAnchor: "end" };
+}
+
+export function fibToolLabelPlacement(xLeft, xRight, { padLeft = 88, padRight = Infinity, gap = 12, textWidth = 78 } = {}) {
+  const left = Math.min(Number(xLeft) || 0, Number(xRight) || 0);
+  const right = Math.max(Number(xLeft) || 0, Number(xRight) || 0);
+  const outsideLeft = left - gap;
+  if (outsideLeft - textWidth >= Number(padLeft) || outsideLeft > Number(padLeft) + 8) {
+    return { x: Math.max(Number(padLeft), outsideLeft), textAnchor: "end" };
+  }
+  const outsideRight = right + gap;
+  return {
+    x: Number.isFinite(Number(padRight)) ? Math.min(Number(padRight), outsideRight) : outsideRight,
+    textAnchor: "start",
+  };
 }
 
 export const FIB_EXT_LEVELS = [
@@ -288,6 +313,10 @@ export function shapeFromPoints(kind, points = [], color) {
   if (kind === "vline") return { kind, color, t: (b || a)?.t, price: (b || a)?.price };
   if (kind === "text") return { kind, color, t: a?.t, price: a?.price, text: "Note" };
   if (kind === "pricelabel") return { kind, color, t: a?.t, price: a?.price };
+  if (String(kind).startsWith("elliott")) {
+    const labels = toolMeta(kind).labels || [];
+    return { kind, color, points: points.map(seedPoint), labels };
+  }
   if (kind === "channel" || kind === "triangle" || kind === "pitchfork" || kind === "fibext") {
     return { kind, color, a, b, c };
   }
@@ -337,6 +366,11 @@ export function drawingHandles(row, fallbackPrice) {
       price: Number.isFinite(Number(row.price)) ? Number(row.price) : mid,
     }];
   }
+  if (Array.isArray(row.points) && row.points.length) {
+    return row.points
+      .map((point, index) => ({ key: `p${index}`, ...seedPoint(point) }))
+      .filter((point) => Number.isFinite(Number(point.t)) && Number.isFinite(Number(point.price)));
+  }
   return ["a", "b", "c"]
     .filter((key) => row[key] && Number.isFinite(Number(row[key].t)) && Number.isFinite(Number(row[key].price)))
     .map((key) => ({ key, ...seedPoint(row[key]) }));
@@ -350,6 +384,12 @@ export function moveDrawingHandle(row, key, point) {
   }
   if (key === "a" || key === "b" || key === "c") {
     return { ...row, [key]: next };
+  }
+  if (String(key).startsWith("p") && Array.isArray(row.points)) {
+    const index = Number(String(key).slice(1));
+    if (!Number.isInteger(index) || !row.points[index]) return row;
+    const points = row.points.map((point, current) => (current === index ? next : point));
+    return { ...row, points };
   }
   return row;
 }

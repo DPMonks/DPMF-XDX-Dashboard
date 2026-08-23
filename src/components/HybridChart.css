@@ -747,6 +747,10 @@
   text-anchor: end;
 }
 
+.hybrid-fib-label.is-right {
+  text-anchor: start;
+}
+
 .hybrid-pending {
   stroke: none;
 }

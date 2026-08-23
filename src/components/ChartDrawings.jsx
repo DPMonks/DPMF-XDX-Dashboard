@@ -1,4 +1,4 @@
-import { channelOffset, dashForStyle, drawingHandles, extendSegment, fibBands, fibExtent, fibExtensionBands, fibLabelPlacement, pitchforkRays, plotX, plotY, rangeColor, raySegment, rangeStats } from "../chart/drawings";
+import { channelOffset, dashForStyle, drawingHandles, extendSegment, fibBands, fibExtent, fibExtensionBands, fibLabelPlacement, fibToolLabelPlacement, pitchforkRays, plotX, plotY, rangeColor, raySegment, rangeStats } from "../chart/drawings";
 import { formatAxisPrice, formatPriceLabel } from "../chart/axis";
 
 function stroke(row) {
@@ -89,15 +89,19 @@ function FibRetracement({ row, scale, pad, plotBottom, clipId, dashed }) {
         const y = scale.y(band.price);
         if (y < topBound - 20 || y > bottomBound + 20) return null;
         const yLabel = Math.min(bottomBound, Math.max(topBound, y));
-        const label = fibLabelPlacement(x0, { side: "left", gap: 10, minX: (pad?.l ?? 16) + 4 });
+        const label = fibToolLabelPlacement(x0, x1, {
+          padLeft: (pad?.l ?? 16) + 4,
+          padRight: x1 + 120,
+          gap: 12,
+        });
         return (
           <text
             key={`label-${band.level}`}
-            className="hybrid-draw-label hybrid-fib-label is-left"
+            className={`hybrid-draw-label hybrid-fib-label ${label.textAnchor === "end" ? "is-left" : "is-right"}`}
             x={label.x}
             y={yLabel + 3}
-            textAnchor="end"
-            style={{ fill: band.color, textAnchor: "end" }}
+            textAnchor={label.textAnchor}
+            style={{ fill: band.color, textAnchor: label.textAnchor }}
           >
             {band.label} ({formatAxisPrice(band.price)})
           </text>
@@ -330,6 +334,30 @@ export default function ChartDrawings({
               ry={ry}
               style={{ ...paint(color, row), fill: color, fillOpacity: 0.06 }}
             />
+          );
+        }
+        if (String(row.kind).startsWith("elliott") && Array.isArray(row.points) && row.points.length) {
+          const coords = row.points.map((point) => `${plotX(point, scale)},${plotY(point, scale)}`).join(" ");
+          return (
+            <g key={key} className={dashed ? "hybrid-wave is-preview" : "hybrid-wave"}>
+              <polyline
+                className={dashed ? "hybrid-draw is-preview" : "hybrid-draw"}
+                points={coords}
+                style={{ ...paint(color, row), fill: "none" }}
+                vectorEffect="non-scaling-stroke"
+              />
+              {row.points.map((point, index) => (
+                <text
+                  key={`wave-${index}`}
+                  className="hybrid-draw-label"
+                  x={plotX(point, scale) + 6}
+                  y={plotY(point, scale) - 6}
+                  style={{ fill: color }}
+                >
+                  {(row.labels || [])[index] || String(index + 1)}
+                </text>
+              ))}
+            </g>
           );
         }
         if (row.kind === "triangle" && row.a && row.b && row.c) {

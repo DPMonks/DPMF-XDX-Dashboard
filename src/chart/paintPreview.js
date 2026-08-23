@@ -7,6 +7,7 @@ import {
   fibExtent,
   fibExtensionBands,
   fibLabelPlacement,
+  fibToolLabelPlacement,
   pitchforkRays,
   plotX,
   plotY,
@@ -199,13 +200,17 @@ export function paintToolPreview(group, {
         );
       }
       line(group, x0, y, x1, y, band.color, { className: "hybrid-fib-line", ...ink });
-      const label = fibLabelPlacement(x0, { side: "left", gap: 10, minX: (pad?.l ?? 16) + 4 });
+      const label = fibToolLabelPlacement(x0, x1, {
+        padLeft: (pad?.l ?? 16) + 4,
+        padRight: x1 + 120,
+        gap: 12,
+      });
       const node = svg("text", {
-        class: "hybrid-draw-label hybrid-fib-label is-left",
+        class: `hybrid-draw-label hybrid-fib-label ${label.textAnchor === "end" ? "is-left" : "is-right"}`,
         x: label.x,
         y: y + 3,
-        "text-anchor": "end",
-        style: `fill:${band.color};text-anchor:end`,
+        "text-anchor": label.textAnchor,
+        style: `fill:${band.color};text-anchor:${label.textAnchor}`,
       });
       node.textContent = `${band.label} (${formatAxisPrice(band.price)})`;
       group.appendChild(node);
@@ -259,6 +264,28 @@ export function paintToolPreview(group, {
         style: `stroke:${tone};fill:${tone};fill-opacity:0.06;stroke-width:${ink.strokeWidth || 1}${ink.dasharray ? `;stroke-dasharray:${ink.dasharray}` : ""}`,
       })
     );
+    return;
+  }
+  if (String(ghost.kind).startsWith("elliott") && Array.isArray(ghost.points) && ghost.points.length) {
+    const coords = ghost.points.map((point) => `${plotX(point, scale)},${plotY(point, scale)}`).join(" ");
+    group.appendChild(
+      svg("polyline", {
+        class: "hybrid-draw",
+        points: coords,
+        style: `stroke:${tone};fill:none;stroke-width:${ink.strokeWidth || 1}${ink.dasharray ? `;stroke-dasharray:${ink.dasharray}` : ""}`,
+        "vector-effect": "non-scaling-stroke",
+      })
+    );
+    ghost.points.forEach((point, index) => {
+      const node = svg("text", {
+        class: "hybrid-draw-label",
+        x: plotX(point, scale) + 6,
+        y: plotY(point, scale) - 6,
+        style: `fill:${tone}`,
+      });
+      node.textContent = (ghost.labels || [])[index] || String(index + 1);
+      group.appendChild(node);
+    });
     return;
   }
   if (ghost.kind === "triangle" && ghost.a && ghost.b && ghost.c) {

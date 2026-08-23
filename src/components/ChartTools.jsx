@@ -104,6 +104,31 @@ const ICONS = {
       <path d="M3 11 L13 5M3 14 L13 8" />
     </svg>
   ),
+  elliottimpulse: (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2 12 L5 8 L7 10 L11 3 L13 6 L14 4" />
+    </svg>
+  ),
+  elliottcorrection: (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3 12 L8 4 L11 8 L14 5" />
+    </svg>
+  ),
+  elliotttriangle: (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2 12 L6 5 L8 9 L11 4 L13 8 L14 6" />
+    </svg>
+  ),
+  elliottdouble: (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2 11 L6 5 L9 9 L14 4" />
+    </svg>
+  ),
+  elliotttriple: (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2 12 L4 7 L6 10 L9 4 L11 8 L14 3" />
+    </svg>
+  ),
   text: (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M4 4h8M8 4v9" />
