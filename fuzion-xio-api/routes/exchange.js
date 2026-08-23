@@ -153,7 +153,8 @@ router.get("/nft/home", (_req, res) => {
       Nft: [nft]
     })),
     allNft: uniqueHome,
-    allMintedNft: [...store.nfts, ...templateCards(store)]
+    allMintedNft: [...store.nfts, ...templateCards(store)],
+    ledgerMints: store.ledgerMints || []
   });
 });
 
@@ -548,7 +549,10 @@ router.get("/assets", async (req, res) => {
     "www.w3.org",
     "w3.org",
     "www.gstatic.com",
-    "gstatic.com"
+    "gstatic.com",
+    "dweb.link",
+    "w3s.link",
+    "gateway.pinata.cloud"
   ];
   if (!allowed.includes(parsed.hostname)) {
     return res.status(400).json({ success: false, message: "host not allowed" });

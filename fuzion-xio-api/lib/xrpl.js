@@ -61,3 +61,18 @@ export async function gatewayBalances(account) {
 export async function bookOffers(takerGets, takerPays, limit = 5) {
   return rpc("book_offers", [{ taker_gets: takerGets, taker_pays: takerPays, limit }]);
 }
+
+export async function ledger(index = "validated", extra = {}) {
+  return rpc("ledger", [
+    {
+      ledger_index: index,
+      transactions: true,
+      expand: true,
+      ...extra
+    }
+  ]);
+}
+
+export async function txByHash(hash) {
+  return rpc("tx", [{ transaction: hash, binary: false }]);
+}

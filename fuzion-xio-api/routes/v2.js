@@ -2,6 +2,7 @@ import { Router } from "express";
 import { readStore, update } from "../lib/store.js";
 import { findTemplate, resolveNft, templates } from "../lib/collections.js";
 import { activityFeed } from "../lib/market.js";
+import { recentLedgerMints } from "../lib/ledgerMints.js";
 import {
   addComment,
   addDrop,
@@ -44,6 +45,11 @@ router.get("/discover", (req, res) => {
 
 router.get("/rails", (_req, res) => {
   res.json({ success: true, data: homeRails(readStore()) });
+});
+
+router.get("/ledger-mints", async (_req, res) => {
+  const payload = await recentLedgerMints(readStore());
+  res.json({ success: true, data: payload.rows, source: payload.source, count: payload.count });
 });
 
 router.get("/activity", (req, res) => {

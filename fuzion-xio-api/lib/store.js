@@ -40,7 +40,8 @@ const empty = () => ({
   votes: [],
   fileHashes: [],
   editorPicks: [],
-  aggregator: { sources: [], listings: [] }
+  aggregator: { sources: [], listings: [] },
+  ledgerMints: []
 });
 
 function ensure() {

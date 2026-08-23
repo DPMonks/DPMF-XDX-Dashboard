@@ -125,6 +125,7 @@ export function capabilityMap() {
         title: "Marketplace V2 — discovery",
         status: "live",
         points: [
+          "Home rail advertises every new XRPL NFTokenMint, minted anywhere",
           "Global search across NFTs, collections, creators, and assets",
           "Trending, 24h/7d volume, new drops, editor’s picks",
           "Verified badges and unverified/suspicious warnings"
@@ -204,6 +205,7 @@ export function capabilityMap() {
       multiAssetOffers: true,
       xrplNftOffers: true,
       xrplAccountTape: true,
+      xrplLedgerMints: true,
       tradeCatalog: true,
       personalProfiles: true,
       profileOpenGraph: true,

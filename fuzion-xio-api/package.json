@@ -9,7 +9,7 @@
     "start": "node app.js",
     "dev": "node --watch app.js",
     "reset": "node scripts/reset.js",
-    "test": "node scripts/test-profile-nfts.js && node scripts/test-prepared.js && node scripts/test-fees-trustlines.js && node scripts/test-v2.js"
+    "test": "node scripts/test-profile-nfts.js && node scripts/test-prepared.js && node scripts/test-fees-trustlines.js && node scripts/test-v2.js && node scripts/test-ledger-mints.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -426,6 +426,56 @@ a:hover {
   background: #ffb020;
 }
 
+.dpmf-mint-rail {
+  padding: 8px 0 28px;
+}
+
+.dpmf-mint-rail .home-hading {
+  color: var(--dpmf-neon-violet);
+  text-shadow: 0 0 16px var(--dpmf-neon-violet-soft);
+}
+
+.dpmf-mint-grid {
+  margin-top: 8px;
+}
+
+.dpmf-mint-card {
+  min-height: 100%;
+}
+
+.dpmf-mint-card h3 {
+  margin: 8px 0 4px;
+  font-size: 0.86rem;
+  color: var(--dpmf-text-main);
+}
+
+.dpmf-mint-media {
+  height: 120px;
+  overflow: hidden;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: #101018;
+}
+
+.dpmf-mint-media img,
+.dpmf-mint-media video,
+.dpmf-mint-media canvas,
+.dpmf-mint-media model-viewer {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+}
+
+.dpmf-mint-placeholder {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dpmf-neon-cyan);
+  letter-spacing: 0.16em;
+  font-size: 0.78rem;
+}
+
 .dpmf-market button,
 .dpmf-card button,
 .dpmf-market .lgOut11 {

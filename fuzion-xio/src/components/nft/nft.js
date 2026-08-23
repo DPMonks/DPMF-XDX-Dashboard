@@ -48,6 +48,7 @@ import {
 } from "swiper";
 
 import { replaceHost } from "../../helper";
+import LedgerMintsRail from "./LedgerMintsRail";
 
 function Nft() {
   const token = localStorage.getItem("jwtToken");
@@ -353,6 +354,7 @@ function Nft() {
                 <br />
               </Container>
             }
+            <LedgerMintsRail />
             <Container>
               <Row className="align-items-center">
                 <Col md={6} xs={8}>

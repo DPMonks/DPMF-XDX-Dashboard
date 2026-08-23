@@ -173,6 +173,11 @@ export function resolveNft(store, id) {
   );
   if (direct) return direct;
 
+  const ledger = (store.ledgerMints || []).find(
+    (nft) => nft._id === id || nft.NFTokenID === id || nft.hash === id
+  );
+  if (ledger) return ledger;
+
   const named = String(id).match(/^(.*)\s*#(\d+)$/);
   if (named) {
     const template = findTemplate(store, named[1].trim());
