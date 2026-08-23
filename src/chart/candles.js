@@ -427,8 +427,14 @@ export function wheelPanSteps(deltaX, deltaY, leftover = 0, threshold = 36) {
 export function wheelZoomSteps(deltaY, leftover = 0, threshold = 56) {
   const total = Number(leftover) + (Number.isFinite(Number(deltaY)) ? Number(deltaY) : 0);
   const step = Math.max(16, Number(threshold) || 56);
-  const steps = Math.trunc(total / step);
-  return { steps, leftover: total - steps * step };
+  if (!Number.isFinite(total)) return { steps: 0, leftover: 0 };
+  if (Math.abs(total) < step) return { steps: 0, leftover: total };
+  return { steps: total > 0 ? 1 : -1, leftover: 0 };
+}
+
+export function liveSeriesGrew({ prevLen = 0, prevHead = 0, nextLen = 0, nextHead = 0 } = {}) {
+  const grew = (Number(nextLen) || 0) - (Number(prevLen) || 0);
+  return grew > 0 && Number(prevLen) > 0 && Number(nextHead) === Number(prevHead);
 }
 
 export function expandDailyToInterval(daily = [], intervalId, fromMs, toMs) {

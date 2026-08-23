@@ -20,6 +20,7 @@ import {
   expandDailyToInterval,
   clampPanOffset,
   clampVisibleBars,
+  liveSeriesGrew,
   panAfterZoom,
   wheelPanSteps,
   wheelZoomSteps,
@@ -326,6 +327,9 @@ test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail"
   assert.equal(wheelPanSteps(0, -40, 0, 36).steps, -1);
   assert.equal(wheelZoomSteps(80, 0, 56).steps, 1);
   assert.equal(wheelZoomSteps(-80, 0, 56).steps, -1);
+  assert.equal(wheelZoomSteps(400, 0, 56).steps, 1);
+  assert.equal(liveSeriesGrew({ prevLen: 100, prevHead: 10, nextLen: 101, nextHead: 10 }), true);
+  assert.equal(liveSeriesGrew({ prevLen: 100, prevHead: 10, nextLen: 400, nextHead: 1 }), false);
   assert.ok(zoomVisibleBars(280, 1) < 280);
   assert.ok(zoomVisibleBars(280, -1) > 280);
   assert.equal(clampVisibleBars(8), 24);

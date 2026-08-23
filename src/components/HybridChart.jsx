@@ -6,6 +6,7 @@ import {
   averagesForWindow,
   clampPanOffset,
   clampVisibleBars,
+  liveSeriesGrew,
   MA_PERIODS,
   MA_TYPES,
   panAfterZoom,
@@ -130,7 +131,7 @@ export default function HybridChart() {
   const [panOffset, setPanOffset] = useState(0);
   const [barZoom, setBarZoom] = useState(null);
   const [loadedBars, setLoadedBars] = useState(() => visibleBarsForInterval(DEFAULT_INTERVAL) + CHART_MA_PAD);
-  const [seriesLen, setSeriesLen] = useState(0);
+  const [seriesMeta, setSeriesMeta] = useState({ len: 0, head: 0 });
   const windowKey = `${pair}:${timeframe}`;
   const [activeWindow, setActiveWindow] = useState(windowKey);
 
@@ -196,17 +197,25 @@ export default function HybridChart() {
   const visibleCount = clampVisibleBars(barZoom ?? baseVisible, baseVisible);
   if (activeWindow !== windowKey) {
     setActiveWindow(windowKey);
-    setSeriesLen(0);
+    setSeriesMeta({ len: 0, head: 0 });
     setPanOffset(0);
     setBarZoom(null);
     setLoadedBars(baseVisible + CHART_MA_PAD);
   }
-  const wantLoaded = visibleCount + panOffset + CHART_MA_PAD + 32;
+  const wantLoaded = Math.min(4000, visibleCount + panOffset + CHART_MA_PAD + 32);
   if (wantLoaded > loadedBars) setLoadedBars(wantLoaded);
-  if (series.length !== seriesLen) {
-    const grew = series.length - seriesLen;
-    setSeriesLen(series.length);
-    if (grew > 0 && panOffset > 0) setPanOffset((current) => current + grew);
+  const seriesHead = Number(series[0]?.t) || 0;
+  if (series.length !== seriesMeta.len || seriesHead !== seriesMeta.head) {
+    const appended = liveSeriesGrew({
+      prevLen: seriesMeta.len,
+      prevHead: seriesMeta.head,
+      nextLen: series.length,
+      nextHead: seriesHead,
+    });
+    setSeriesMeta({ len: series.length, head: seriesHead });
+    if (appended && panOffset > 0) {
+      setPanOffset((current) => current + (series.length - seriesMeta.len));
+    }
   }
   const clampedPan = clampPanOffset(panOffset, series.length, visibleCount);
   if (clampedPan !== panOffset) setPanOffset(clampedPan);
@@ -306,7 +315,7 @@ export default function HybridChart() {
 
   function applyZoom(directionOrEvent, maybeRatio) {
     const fromEvent = directionOrEvent && typeof directionOrEvent === "object";
-    const direction = fromEvent ? directionOrEvent.direction : directionOrEvent;
+    const direction = Math.sign(fromEvent ? directionOrEvent.direction : directionOrEvent);
     const anchorRatio = fromEvent
       ? directionOrEvent.anchorRatio
       : Number.isFinite(maybeRatio)

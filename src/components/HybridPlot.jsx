@@ -145,22 +145,27 @@ export default function HybridPlot({
     const inner = width - PAD.l - PAD.r;
     function onWheel(event) {
       event.preventDefault();
-      const horizontal = event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY);
-      if (horizontal) {
-        const next = wheelPanSteps(event.deltaX, event.shiftKey ? event.deltaY : 0, wheelLeft.current);
-        wheelLeft.current = next.leftover;
-        if (next.steps && onPanRef.current) onPanRef.current(next.steps);
-        return;
-      }
-      const mapped = clientToSvg(node, event.clientX, event.clientY, width, height);
-      const ratio = mapped ? (mapped.x - PAD.l) / Math.max(1, inner) : 0.5;
-      const next = wheelZoomSteps(event.deltaY, wheelZoomLeft.current);
-      wheelZoomLeft.current = next.leftover;
-      if (next.steps && onZoomRef.current) {
-        onZoomRef.current({
-          direction: -next.steps,
-          anchorRatio: Math.min(1, Math.max(0, ratio)),
-        });
+      try {
+        const horizontal = event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY);
+        if (horizontal) {
+          const next = wheelPanSteps(event.deltaX, event.shiftKey ? event.deltaY : 0, wheelLeft.current);
+          wheelLeft.current = next.leftover;
+          if (next.steps && onPanRef.current) onPanRef.current(next.steps);
+          return;
+        }
+        const mapped = clientToSvg(node, event.clientX, event.clientY, width, height);
+        const ratio = mapped ? (mapped.x - PAD.l) / Math.max(1, inner) : 0.5;
+        const next = wheelZoomSteps(event.deltaY, wheelZoomLeft.current);
+        wheelZoomLeft.current = next.leftover;
+        if (next.steps && onZoomRef.current) {
+          onZoomRef.current({
+            direction: next.steps > 0 ? -1 : 1,
+            anchorRatio: Math.min(1, Math.max(0, Number.isFinite(ratio) ? ratio : 0.5)),
+          });
+        }
+      } catch {
+        wheelLeft.current = 0;
+        wheelZoomLeft.current = 0;
       }
     }
     node.addEventListener("wheel", onWheel, { passive: false });
