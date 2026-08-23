@@ -8,7 +8,7 @@ import {
   XSQUAD_HEX,
   XSQUAD_ISSUER,
 } from "../constants/ledger.js";
-import { activityFromAmmVoteTx } from "./ammVote.js";
+import { activityFromAmmVoteTx, pairFromVoteAssets } from "./ammVote.js";
 
 export const RIPPLE_EPOCH = 946684800;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
@@ -321,6 +321,22 @@ export function pendingFor(address, { offersKnown = false } = {}) {
 export function pendingFromExecution(detail = {}, address = "") {
   const txjson = detail.txjson || detail.tx || null;
   const account = address || txjson?.Account || detail.account || null;
+  const type = String(txjson?.TransactionType || "");
+  if ((type === "AMMDeposit" || type === "AMMWithdraw") && account) {
+    const pair = pairFromVoteAssets(txjson.Asset, txjson.Asset2);
+    return {
+      order: null,
+      activity: {
+        account,
+        side: type === "AMMDeposit" ? "addLp" : "removeLp",
+        pair,
+        pool: pair,
+        timestamp: detail.timestamp || new Date().toISOString(),
+        txid: detail.txid || null,
+        status: "filled",
+      },
+    };
+  }
   const order = orderFromTxjson(txjson, {
     account,
     txid: detail.txid,

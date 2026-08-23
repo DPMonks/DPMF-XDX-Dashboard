@@ -6,6 +6,7 @@ import {
   isTradeTxjson,
   ledgerExecutionSignals,
   payloadExecutionSignals,
+  unwrapLedgerTx,
 } from "../src/xaman/detectExecution.js";
 
 const HASH = "A".repeat(64);
@@ -70,4 +71,29 @@ test("a cancelled Xaman payload is not an executed trade", () => {
   assert.equal(detection.executed, false);
   assert.equal(detection.rejected, true);
   assert.equal(payloadExecutionSignals({ meta: { cancelled: true } }).cancelled, true);
+});
+
+test("a signed AMM deposit is executed even before a txid arrives", () => {
+  const detection = detectTradeExecution({
+    payload: {
+      meta: { signed: true, resolved: true, submitted: false },
+      response: { hex: "1200" },
+    },
+  });
+  assert.equal(detection.executed, true);
+  assert.equal(detection.via, "xaman-resolved");
+  assert.equal(detectTradeExecution({ payload: { meta: { signed: true } } }).executed, true);
+});
+
+test("ledger tx unwraps the rippled result envelope", () => {
+  const inner = {
+    Account: "rA",
+    hash: HASH,
+    validated: true,
+    meta: { TransactionResult: "tesSUCCESS" },
+  };
+  assert.equal(unwrapLedgerTx({ result: inner }).Account, "rA");
+  const detection = detectTradeExecution({ ledger: { result: inner } });
+  assert.equal(detection.executed, true);
+  assert.equal(detection.via, "xrpl-validated");
 });

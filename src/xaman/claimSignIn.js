@@ -1,5 +1,7 @@
-import { extractSignedAccount, getPayloadResult } from "./xamanClient.js";
-import { isPayloadUuid } from "./payloadResume.js";
+import { detectTradeExecution } from "./detectExecution.js";
+import { extractSignedAccount, getPayloadResult, payloadLooksSigned } from "./xamanClient.js";
+import { isPayloadUuid, peekPendingPayload } from "./payloadResume.js";
+import { notifyTradeExecuted } from "./tradeTx.js";
 
 export async function claimSignedWallet(
   uuid,
@@ -13,6 +15,39 @@ export async function claimSignedWallet(
     const account = extractSignedAccount(result);
     if (account) return account;
     if (result?.meta?.cancelled === true || result?.meta?.expired === true) return null;
+    if (attempt < tries - 1) {
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+  return null;
+}
+
+export async function claimExecutedTrade(
+  uuid,
+  { fetchResult = getPayloadResult, tries = 10, waitMs = 500 } = {}
+) {
+  const id = String(uuid || "").trim();
+  if (!isPayloadUuid(id)) return null;
+  const pending = peekPendingPayload();
+  const txjson = pending?.txjson || null;
+
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    const result = await fetchResult(id).catch(() => null);
+    if (result?.meta?.cancelled === true || result?.meta?.expired === true) return null;
+    const detection = detectTradeExecution({ payload: result });
+    if (detection.rejected) return null;
+    const signed = detection.executed || detection.signed || payloadLooksSigned(result);
+    if (signed) {
+      const account = extractSignedAccount(result) || detection.account || null;
+      notifyTradeExecuted({
+        ...detection,
+        executed: true,
+        uuid: id,
+        account,
+        txjson,
+      });
+      return { ...detection, executed: true, account, result };
+    }
     if (attempt < tries - 1) {
       await new Promise((resolve) => setTimeout(resolve, waitMs));
     }

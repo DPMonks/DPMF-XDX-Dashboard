@@ -20,6 +20,8 @@ import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 import { useWallet } from "./context/useWallet";
 import { liveWalletAddress } from "./wallet/walletStorage";
+import { claimExecutedTrade } from "./xaman/claimSignIn";
+import { clearXamanReturn, peekPendingPayload, peekXamanUuid } from "./xaman/payloadResume";
 import { WALLET_EVENTS, gateUnsignedTrade } from "./xaman/tradeTx";
 
 const TradingChart = lazy(() => import("./components/TradingChart"));
@@ -180,15 +182,54 @@ export default function App() {
     function onSignInCancelled() {
       pendingTradeRef.current = null;
     }
+    function onTradeExecuted() {
+      setTradeAction(null);
+    }
     window.addEventListener("dpmf-open-trade", onOpen);
+    window.addEventListener("dpmf-trade-executed", onTradeExecuted);
     window.addEventListener(WALLET_EVENTS.signedIn, onSignedIn);
     window.addEventListener(WALLET_EVENTS.signInCancelled, onSignInCancelled);
     return () => {
       window.removeEventListener("dpmf-open-trade", onOpen);
+      window.removeEventListener("dpmf-trade-executed", onTradeExecuted);
       window.removeEventListener(WALLET_EVENTS.signedIn, onSignedIn);
       window.removeEventListener(WALLET_EVENTS.signInCancelled, onSignInCancelled);
     };
   }, [openTrade]);
+
+  useEffect(() => {
+    let busy = false;
+    async function claimPendingTrade() {
+      const record = peekPendingPayload();
+      const uuid = peekXamanUuid();
+      if (!uuid || !record?.watchTrade || busy) return;
+      busy = true;
+      try {
+        const claimed = await claimExecutedTrade(uuid);
+        if (claimed?.executed) clearXamanReturn();
+      } finally {
+        busy = false;
+      }
+    }
+    const boot = window.setTimeout(() => {
+      claimPendingTrade();
+    }, 0);
+    function wake() {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      window.setTimeout(() => {
+        claimPendingTrade();
+      }, 0);
+    }
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("pageshow", wake);
+    window.addEventListener("focus", wake);
+    return () => {
+      clearTimeout(boot);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("pageshow", wake);
+      window.removeEventListener("focus", wake);
+    };
+  }, []);
 
   const linkState = interfaceLinkState(link, t);
 

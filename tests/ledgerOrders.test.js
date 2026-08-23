@@ -138,6 +138,25 @@ test("pendingFromExecution paints the buy immediately and skips IOC as an open o
   assert.equal(swap.activity.status, "filled");
 });
 
+test("pendingFromExecution records an AMM deposit as filled LP activity", () => {
+  const pending = pendingFromExecution(
+    {
+      txjson: {
+        TransactionType: "AMMDeposit",
+        Account: "rLp",
+        Asset: { currency: "XDX", issuer: XDX_ISSUER },
+        Asset2: { currency: "XRP" },
+      },
+      txid: "F".repeat(64),
+    },
+    "rLp"
+  );
+  assert.equal(pending.order, null);
+  assert.equal(pending.activity.side, "addLp");
+  assert.equal(pending.activity.pair, "XDX/XRP");
+  assert.equal(pending.activity.status, "filled");
+});
+
 test("mergeWalletOrders and mergeWalletActivity keep the first copy", () => {
   const orders = mergeWalletOrders(
     [{ account: "rBuyer", pair: "XDX/XRP", side: "bid", price: 0.03, amount: 1000 }],

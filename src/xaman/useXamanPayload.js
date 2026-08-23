@@ -93,12 +93,13 @@ export function useXamanPayload() {
     let latestPayload = null;
     let latestSocket = null;
     let latestLedger = null;
+    let payloadUuid = resumeUuid || null;
 
     const announce = (detection) => {
       if (announced || !detection?.executed) return false;
       announced = true;
       onExecuted?.(detection);
-      if (watchTrade) notifyTradeExecuted({ ...detection, txjson: body?.txjson });
+      if (watchTrade) notifyTradeExecuted({ ...detection, uuid: payloadUuid, txjson: body?.txjson });
       return true;
     };
 
@@ -127,7 +128,8 @@ export function useXamanPayload() {
           }
         : await createPayload(body);
       if (!payloadSessionOpen(session, sessionRef.current)) return;
-      markXamanReturn(payload.uuid, { watchTrade });
+      payloadUuid = payload.uuid;
+      markXamanReturn(payload.uuid, { watchTrade, txjson: body?.txjson || null });
       setQr(payload.qr);
       setMobileUrl(payload.mobileUrl);
       setUuid(payload.uuid);
@@ -154,11 +156,18 @@ export function useXamanPayload() {
           }
         }
         const detection = await inspect();
-        if (signedAccount || detection.signed || detection.executed || payloadLooksSigned(result)) {
+        const looksDone =
+          detection.executed ||
+          detection.signed ||
+          payloadLooksSigned(result) ||
+          payloadLooksSigned(latestPayload) ||
+          Boolean(signedAccount);
+        if (looksDone) {
           onSigned?.(signedAccount, latestPayload || result);
         }
         if (watchTrade) {
-          if (announce(detection)) {
+          setStatus("signed");
+          if (announce(detection.executed ? detection : looksDone ? { ...detection, executed: true, via: detection.via || "xaman-signed" } : detection)) {
             reset();
             setStatus("signed");
             return;
@@ -168,12 +177,15 @@ export function useXamanPayload() {
             const next = await getPayloadResult(payload.uuid).catch(() => null);
             if (next) latestPayload = next;
             const again = await inspect();
-            if (announce(again)) {
+            if (announce(again.executed ? again : looksDone ? { ...again, executed: true, via: again.via || "xaman-signed" } : again)) {
               reset();
               setStatus("signed");
               return;
             }
             await new Promise((resolve) => setTimeout(resolve, 1500));
+          }
+          if (looksDone) {
+            announce({ ...detection, executed: true, via: detection.via || "xaman-signed" });
           }
         }
         reset({
