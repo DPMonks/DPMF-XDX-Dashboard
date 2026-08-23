@@ -206,6 +206,8 @@ export function capabilityMap() {
       xrplNftOffers: true,
       xrplAccountTape: true,
       xrplLedgerMints: true,
+      myNftsWalletScan: true,
+      pixelMode: true,
       tradeCatalog: true,
       personalProfiles: true,
       profileOpenGraph: true,
