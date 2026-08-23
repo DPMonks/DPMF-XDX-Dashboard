@@ -7,11 +7,8 @@ import {
 } from "../lib/profile.js";
 import {
   fallbackCardSvg,
-  isSocialCrawler,
   profileImageSrc,
-  publicOrigin,
-  readStoredImage,
-  shareHtml
+  readStoredImage
 } from "../lib/opengraph.js";
 import { storedUploadPath, upload } from "../lib/upload.js";
 
@@ -81,7 +78,7 @@ router.get("/profiles", (_req, res) => {
   res.json({ success: true, data: listProfiles(store), count: store.profiles.length });
 });
 
-router.get("/profile/:address", async (req, res) => {
+router.get("/profiles/:address", async (req, res) => {
   const store = readStore();
   const address = req.params.address;
   res.json({
@@ -130,30 +127,6 @@ router.get("/og/profile/:address", async (req, res) => {
   res.setHeader("content-type", "image/svg+xml");
   res.setHeader("cache-control", "public, max-age=120");
   res.send(fallbackCardSvg(profile));
-});
-
-function sendShare(req, res, refresh) {
-  const store = readStore();
-  const address = req.params.address;
-  const profile = findProfile(store, address) || { wAddress: address };
-  res.setHeader("content-type", "text/html; charset=utf-8");
-  res.send(
-    shareHtml({
-      origin: publicOrigin(req),
-      address,
-      profile,
-      refresh
-    })
-  );
-}
-
-router.get("/share/profile/:address", (req, res) => sendShare(req, res, true));
-
-router.get("/Profile/:address", (req, res, next) => {
-  if (!isSocialCrawler(req.get("user-agent") || "") && req.query.og !== "1") {
-    return next();
-  }
-  return sendShare(req, res, false);
 });
 
 export default router;
