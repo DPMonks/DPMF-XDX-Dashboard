@@ -194,6 +194,8 @@ const en = {
   tradeAlsoAdd: "Also add",
   tradeExpectedLp: "LP tokens",
   tradeLpTokens: "LP tokens to remove",
+  tradeLpHeld: "LP in wallet",
+  walletNotConnected: "wallet not connected",
   tradeFee: "Ledger fee",
   tradeSign: "Sign in Xaman",
   tradeSignError: "Xaman could not sign this trade",

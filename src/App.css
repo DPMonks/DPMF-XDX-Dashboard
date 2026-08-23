@@ -244,6 +244,13 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.trade-lp-disconnected {
+  display: block;
+  margin-top: 4px;
+  color: #ff4d6d;
+  font-size: 11px;
+}
+
 .trade-deposit-split {
   margin: 4px 0 12px;
   padding: 8px 8px 10px;
@@ -1313,6 +1320,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: auto;
   padding-top: 14px;

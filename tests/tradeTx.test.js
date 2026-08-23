@@ -23,6 +23,7 @@ import {
   depositValueSplit,
   formatLinkedQty,
   linkedDepositAmounts,
+  lpHeldForPair,
   sanitizeQtyInput,
   tradeSides,
   visibleQuoteQty,
@@ -103,6 +104,9 @@ test("totals and LP hints stay simple numbers", () => {
 
 test("opening add LP from a pool card keeps that pair", () => {
   assert.equal(quoteIdFromPair("XDX/XIO"), "XIO");
+  assert.equal(lpHeldForPair([{ pool: "XDX/XRP", lp_balance: 12.5 }], "XDX/XRP", "XRP"), 12.5);
+  assert.equal(lpHeldForPair([{ pool_name: "XDX/PLX", lp: 3 }], "XDX/PLX", "PLX"), 3);
+  assert.equal(lpHeldForPair([], "XDX/XRP", "XRP"), 0);
   const opened = normalizeTradeRequest({
     action: "addLp",
     pair: "XDX/PLX",

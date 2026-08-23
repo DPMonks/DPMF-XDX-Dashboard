@@ -29,6 +29,17 @@ export function quoteAsset(id) {
   return QUOTE_ASSETS.find((row) => row.id === id) || QUOTE_ASSETS[0];
 }
 
+export function lpHeldForPair(rows, pair, quoteId) {
+  const want = String(pair || (quoteId ? `XDX/${quoteId}` : "")).toUpperCase();
+  const quote = String(quoteId || want.split("/")[1] || "").toUpperCase();
+  const row = (Array.isArray(rows) ? rows : []).find((item) => {
+    const name = String(item?.pool_name || item?.pool || item?.pair || "").replace(/\s+/g, "").toUpperCase();
+    return name === want || name === `XDX/${quote}` || (quote && name.endsWith(`/${quote}`));
+  });
+  const n = Number(row?.lp_balance ?? row?.lp ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export function quoteIdFromPair(pair) {
   const text = String(pair || "")
     .toUpperCase()

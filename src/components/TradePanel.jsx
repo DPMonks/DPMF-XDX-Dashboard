@@ -23,6 +23,7 @@ import {
   quoteUnitUsd,
   depositValueSplit,
   linkedDepositAmounts,
+  lpHeldForPair,
   sanitizeQtyInput,
   tradeSides,
   tradeTotal,
@@ -79,6 +80,7 @@ export default function TradePanel({
   const [editedSide, setEditedSide] = useState("xdx");
   const [price, setPrice] = useState(spotPrice > 0 ? String(spotPrice) : "");
   const [lpAmount, setLpAmount] = useState("");
+  const [walletLp, setWalletLp] = useState([]);
   const [pools, setPools] = useState(() => (Array.isArray(initialPools) ? initialPools : []));
   const [lineHint, setLineHint] = useState("");
   const [formError, setFormError] = useState("");
@@ -135,6 +137,7 @@ export default function TradePanel({
     quoteUsd,
   });
   const splitReady = Boolean(deposit.measured);
+  const lpHeld = lpHeldForPair(walletLp, quotePair, quoteId);
   const sides = tradeSides({
     action,
     amount: linked.xdx || amount,
@@ -177,13 +180,11 @@ export default function TradePanel({
         if (cancelled) return;
         setPools(Array.isArray(nextPools) ? nextPools : []);
         setPrices((current) => priceBookFromPools(nextPools, current));
+        const rows = Array.isArray(nextLp) ? nextLp : [];
+        setWalletLp(rows);
         if (action === "removeLp") {
-          const pair = String(quotePair || `XDX/${quoteId}`).toUpperCase();
-          const row = (Array.isArray(nextLp) ? nextLp : []).find(
-            (item) => String(item.pool_name || item.pool || "").toUpperCase() === pair
-          );
-          const have = Number(row?.lp_balance ?? row?.lp ?? 0);
-          if (have > 0) setLpAmount(String(have));
+          const have = lpHeldForPair(rows, quotePair, quoteId);
+          if (have > 0) setLpAmount((current) => current || String(have));
         }
       }
     );
@@ -361,6 +362,13 @@ export default function TradePanel({
               value={lpAmount}
               onChange={(event) => setLpAmount(event.target.value)}
             />
+            {signedIn ? (
+              <span className="trade-field-usd">
+                {t.tradeLpHeld}: {formatToken(lpHeld, locale, 6)}
+              </span>
+            ) : (
+              <span className="trade-lp-disconnected">{t.walletNotConnected}</span>
+            )}
           </label>
         ) : (
           <label className="trade-field">
