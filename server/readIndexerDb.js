@@ -1182,7 +1182,7 @@ async function loadAmmReserveIndex(db) {
       reserve_asset: Number(row.reserve_asset || 0),
       reserve_currency: Number(row.reserve_currency || 0),
       lp_supply: Number(row.lp_supply || 0) || null,
-      trading_fee: Number(row.trading_fee || 0) || null,
+      trading_fee: Number.isFinite(Number(row.trading_fee)) ? Number(row.trading_fee) : 0,
       price: Number(row.price || 0) || null,
       timestamp: row.timestamp || null,
     };
@@ -1525,7 +1525,7 @@ async function loadXdxLpPools(db) {
         quote_pct: split?.quotePct ?? null,
         lead: split?.lead || null,
         lp_supply: lpSupply,
-        trading_fee: extra.trading_fee,
+        trading_fee: Number.isFinite(Number(extra.trading_fee)) ? Number(extra.trading_fee) : 0,
         updated: extra.timestamp || row.updated_at,
       };
     }),
@@ -1840,7 +1840,7 @@ function presentPool(row, xdxUsd, xrpUsd) {
     reserve_asset: reserveAsset,
     reserve_currency: reserveCurrency,
     lp_supply: Number(row.lp_supply || 0),
-    trading_fee: Number(row.trading_fee || 0) || null,
+    trading_fee: Number.isFinite(Number(row.trading_fee)) ? Number(row.trading_fee) : 0,
     apr: Number(row.apr || 0) || null,
     volume24h: Number(row.volume24h || row.volume_24h || 0) || null,
     updated: row.timestamp || row.updated || null,

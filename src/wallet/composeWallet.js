@@ -252,6 +252,22 @@ export function tradingFeeRate(tradingFee) {
   return raw > 20 ? raw / 100_000 : raw / 100;
 }
 
+export function ammFeePercent(tradingFee) {
+  const raw = Number(tradingFee);
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  return tradingFeeRate(raw) * 100;
+}
+
+export function formatAmmFee(tradingFee, locale) {
+  const pct = ammFeePercent(tradingFee);
+  if (!(pct > 0)) return "0%";
+  const digits = pct < 0.01 ? 6 : pct < 1 ? 4 : 2;
+  return `${pct.toLocaleString(locale || "en", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits,
+  })}%`;
+}
+
 export function volume24hByPool(flows = [], now = Date.now()) {
   const cutoff = now - 24 * 60 * 60 * 1000;
   const map = new Map();

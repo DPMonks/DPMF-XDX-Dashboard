@@ -10,6 +10,8 @@ import {
   sortWalletPairs,
   supplyShares,
   tradingFeeRate,
+  ammFeePercent,
+  formatAmmFee,
   walletActivity,
   xrpBarPercents,
   xrpReserveBreakdown,
@@ -208,6 +210,16 @@ test("composeWalletSnapshot stays blank until an address is signed in", () => {
 
 test("lpFeeEarnings sums 24h pool fees across every LP position", () => {
   assert.equal(tradingFeeRate(1000), 0.01);
+  assert.equal(ammFeePercent(0), 0);
+  assert.equal(ammFeePercent(null), 0);
+  assert.equal(ammFeePercent(1), 1);
+  assert.equal(ammFeePercent(1000), 1);
+  assert.equal(ammFeePercent(500), 0.5);
+  assert.equal(formatAmmFee(null), "0%");
+  assert.equal(formatAmmFee(0), "0%");
+  assert.equal(formatAmmFee(1), "1%");
+  assert.equal(formatAmmFee(1000), "1%");
+  assert.match(formatAmmFee(0.000001), /0\.000001%/);
   const now = Date.parse("2026-08-22T12:00:00.000Z");
   const fees = lpFeeEarnings(
     [

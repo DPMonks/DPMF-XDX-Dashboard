@@ -205,7 +205,8 @@ function mapPool(row) {
       ])
     ),
     lp_supply: numberOrNull(pick(row, ["lp_supply", "lpSupply", "lp_token.value", "lpToken"])),
-    trading_fee: numberOrNull(pick(row, ["trading_fee", "tradingFee", "fee"])),
+    trading_fee:
+      numberOrNull(pick(row, ["trading_fee", "tradingFee", "TradingFee", "fee", "fee_bps", "trading_fee_bps"])) ?? 0,
     holder_count: numberOrNull(pick(row, ["holder_count", "lp_holder_count"])),
     xdxUsd: numberOrNull(pick(row, ["xdxUsd", "xdx_usd"])),
     quote_usd: numberOrNull(pick(row, ["quote_usd"])),

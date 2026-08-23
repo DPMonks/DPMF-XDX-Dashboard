@@ -1,6 +1,7 @@
 import { pairParts } from "../utils/currency";
 import { displayPoolSplit, formatPoolPct } from "../utils/poolSplit";
 import { formatNumber, formatToken, formatUsd, formatUsdPrice, formatWhen, shortAddress } from "../utils/format";
+import { formatAmmFee } from "../wallet/composeWallet";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 import WalletButton from "./WalletButton";
@@ -146,16 +147,10 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
                   <dd>{formatToken(pool.lp_supply, locale)}</dd>
                 </div>
               ) : null}
-              {pool.trading_fee != null ? (
-                <div>
-                  <dt>{t.fee}</dt>
-                  <dd>
-                    {formatNumber(pool.trading_fee / (pool.trading_fee > 20 ? 1000 : 1), locale, {
-                      maximumFractionDigits: 3,
-                    })}
-                  </dd>
-                </div>
-              ) : null}
+              <div>
+                <dt>{t.fee}</dt>
+                <dd>{formatAmmFee(pool.trading_fee, locale)}</dd>
+              </div>
               {pool.apr != null ? (
                 <div>
                   <dt>{t.apr}</dt>
