@@ -49,6 +49,12 @@ export function quoteIdFromPair(pair) {
   return text;
 }
 
+export const WALLET_EVENTS = {
+  needSignIn: "dpmf-need-sign-in",
+  signedIn: "dpmf-wallet-signed-in",
+  signInCancelled: "dpmf-sign-in-cancelled",
+};
+
 export function normalizeTradeRequest(detail) {
   if (!detail) return null;
   if (typeof detail === "string") return { action: detail, quote: "XRP" };
@@ -60,6 +66,13 @@ export function normalizeTradeRequest(detail) {
     quoteIssuer: detail.quoteIssuer || detail.quote_issuer || null,
     quoteHex: detail.quoteHex || detail.quote_hex || null,
   };
+}
+
+export function gateUnsignedTrade(detail, walletAddress) {
+  const trade = normalizeTradeRequest(detail);
+  if (!trade) return { action: "ignore" };
+  if (walletAddress) return { action: "open", trade };
+  return { action: "sign-in", trade };
 }
 
 export function resolveQuote(id, extra = {}) {

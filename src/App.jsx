@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
@@ -16,13 +16,16 @@ import { handshake } from "./api";
 import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
 import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
-import { normalizeTradeRequest } from "./xaman/tradeTx";
+import { useWallet } from "./context/useWallet";
+import { WALLET_EVENTS, gateUnsignedTrade } from "./xaman/tradeTx";
 
 const TradingChart = lazy(() => import("./components/TradingChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 
 export default function App() {
   const { t } = useI18n();
+  const { walletAddress } = useWallet();
+  const pendingTradeRef = useRef(null);
   const [holders, setHolders] = useState([]);
   const [holderFreshness, setHolderFreshness] = useState(null);
   const [holdersLoading, setHoldersLoading] = useState(true);
@@ -143,17 +146,37 @@ export default function App() {
   }, []);
 
   const openTrade = useCallback((detail) => {
-    const next = normalizeTradeRequest(detail);
-    if (!next) return;
-    setTradeAction({ ...next, openId: Date.now() });
-  }, []);
+    const gated = gateUnsignedTrade(detail, walletAddress);
+    if (gated.action === "ignore") return;
+    if (gated.action === "sign-in") {
+      pendingTradeRef.current = gated.trade;
+      window.dispatchEvent(new Event(WALLET_EVENTS.needSignIn));
+      return;
+    }
+    pendingTradeRef.current = null;
+    setTradeAction({ ...gated.trade, openId: Date.now() });
+  }, [walletAddress]);
 
   useEffect(() => {
     function onOpen(event) {
       openTrade(event.detail);
     }
+    function onSignedIn() {
+      const pending = pendingTradeRef.current;
+      pendingTradeRef.current = null;
+      if (pending) setTradeAction({ ...pending, openId: Date.now() });
+    }
+    function onSignInCancelled() {
+      pendingTradeRef.current = null;
+    }
     window.addEventListener("dpmf-open-trade", onOpen);
-    return () => window.removeEventListener("dpmf-open-trade", onOpen);
+    window.addEventListener(WALLET_EVENTS.signedIn, onSignedIn);
+    window.addEventListener(WALLET_EVENTS.signInCancelled, onSignInCancelled);
+    return () => {
+      window.removeEventListener("dpmf-open-trade", onOpen);
+      window.removeEventListener(WALLET_EVENTS.signedIn, onSignedIn);
+      window.removeEventListener(WALLET_EVENTS.signInCancelled, onSignInCancelled);
+    };
   }, [openTrade]);
 
   const linkState = interfaceLinkState(link, t);

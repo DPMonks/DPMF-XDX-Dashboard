@@ -9,6 +9,7 @@ import {
   ammWithdrawTx,
   expectedLpTokens,
   expectedWithdraw,
+  gateUnsignedTrade,
   normalizeTradeRequest,
   offerCreateBuyXdx,
   offerCreateSellXdx,
@@ -117,6 +118,13 @@ test("opening add LP from a pool card keeps that pair", () => {
   const quote = resolveQuote(opened.quote, opened);
   assert.equal(quote.pair, "XDX/PLX");
   assert.equal(quote.issuer, "rPlxIssuer");
+});
+
+test("unsigned trade clicks ask for sign-in before the trade window", () => {
+  assert.equal(gateUnsignedTrade("addLp", null).action, "sign-in");
+  assert.equal(gateUnsignedTrade({ action: "buy", pair: "XDX/XIO" }, null).trade.quote, "XIO");
+  assert.equal(gateUnsignedTrade("sell", "rSignedIn").action, "open");
+  assert.equal(gateUnsignedTrade(null, null).action, "ignore");
 });
 
 test("trade windows show pay and receive from the selected pair", () => {
