@@ -9,12 +9,13 @@
     "start": "node app.js",
     "dev": "node --watch app.js",
     "reset": "node scripts/reset.js",
-    "test": "node scripts/test-profile-nfts.js"
+    "test": "node scripts/test-profile-nfts.js && node scripts/test-prepared.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "jszip": "^3.10.1",
     "multer": "^2.2.0",
     "uuid": "^11.1.0"
   }

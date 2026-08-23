@@ -49,6 +49,7 @@ import RangeSlider from "react-bootstrap-range-slider";
 import "react-bootstrap-range-slider/dist/react-bootstrap-range-slider.css";
 import GenerateFamilySeeds from "../common/GenerateFamilySeeds.js";
 import PaymentQRModal from "./PaymentQRModel.js";
+import PreparedFiles from "./PreparedFiles.js";
 
 const projectId = process.env.REACT_APP_INFURA_IPFS_PROJECT_ID;
 const projectSecret = process.env.REACT_APP_INFURA_IPFS_PROJECT_SECRET;
@@ -755,7 +756,12 @@ const Createnft = () => {
             setFileName(file1.name);
 
             let url;
-            try {
+            if (
+              typeof file1 === "string" &&
+              (/^https?:\/\//i.test(file1) || file1.startsWith("/api/") || file1.startsWith("uploads/"))
+            ) {
+              url = file1.startsWith("uploads/") ? `/api/${file1}` : file1;
+            } else try {
               const result = await client.add(file1, {
                 chunker: file1.size > 1048576 ? "size-1048576" : undefined,
                 wrapWithDirectory: false,
@@ -915,10 +921,10 @@ const Createnft = () => {
     setShowModel(false);
   };
 
-  const validation = () => {
+  const validation = (fromPrepared = false) => {
     let decimalregex = /^\d{0,7}(\.\d{0,6})?$/;
 
-    if (bufferFiles.length > 1 && !formData["collectionName"]) {
+    if (!fromPrepared && bufferFiles.length > 1 && !formData["collectionName"]) {
       toast.warn(MessageConst.warningEnterNftCollection, {
         toastId: "createNft10" + Date.now()
       });
@@ -1115,6 +1121,8 @@ const Createnft = () => {
         description: formData.description,
         externalurl: formData.externalurl,
         status: "created",
+        accountNumber: myDecodedToken?.ac,
+        issuer: myDecodedToken?.ac,
         fileType: arrImg.length ? arrImg : urlArr,
         contentType: arrImg.length ? arrImg : urlArr
       };
@@ -1193,6 +1201,29 @@ const Createnft = () => {
                       <sup className="text-danger">*</sup> Fill in the Required
                       Fields
                     </p>
+                    <PreparedFiles
+                      account={myDecodedToken?.ac}
+                      token={token}
+                      formData={formData}
+                      validate={validation}
+                      onApply={(items, pack) => {
+                        setUrlArr(items);
+                        setBufferFiles(items);
+                        setTotalPercentage(true);
+                        setFormData((prev) => ({
+                          ...prev,
+                          collectionName:
+                            prev.collectionName || pack?.collectionName || "",
+                          name: prev.name || pack?.name || "",
+                          description:
+                            prev.description || pack?.description || ""
+                        }));
+                      }}
+                      onCreated={() => {
+                        setIsLoader(false);
+                        navigate("/MyNFT");
+                      }}
+                    />
                     <Form.Group className="mb-3" controlId="formBasicFirstName">
                       <Form.Label>Collection</Form.Label>
                       <Form.Control

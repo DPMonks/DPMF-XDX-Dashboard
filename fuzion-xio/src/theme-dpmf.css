@@ -328,6 +328,68 @@ a:hover {
   margin: 0;
 }
 
+.dpmf-prepared {
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.1rem 0.85rem;
+  border: 1px solid var(--dpmf-border-soft);
+  border-radius: var(--dpmf-radius-card);
+  background: rgba(12, 12, 20, 0.7);
+}
+
+.dpmf-prepared-title {
+  color: var(--dpmf-neon-cyan);
+  font-size: 1.05rem;
+  margin: 0 0 0.35rem;
+}
+
+.dpmf-prepared-copy,
+.dpmf-prepared-label {
+  color: var(--dpmf-text-muted);
+  font-size: 0.86rem;
+}
+
+.dpmf-prepared-busy {
+  margin-bottom: 0.75rem;
+}
+
+.dpmf-prepared-pack {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0 0;
+  border-top: 1px solid var(--dpmf-border-soft);
+}
+
+.dpmf-prepared-pack-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--dpmf-text-main);
+  font-size: 0.9rem;
+}
+
+.dpmf-prepared-list {
+  list-style: none;
+  margin: 0.45rem 0 0.65rem;
+  padding: 0;
+}
+
+.dpmf-prepared-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--dpmf-text-main);
+  font-size: 0.82rem;
+}
+
+.dpmf-prepared-list small {
+  color: var(--dpmf-text-muted);
+}
+
+.dpmf-prepared-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 .dpmf-profile-avatar {
   width: 64px;
   height: 64px;

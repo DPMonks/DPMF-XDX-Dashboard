@@ -63,6 +63,7 @@ export function capabilityMap() {
       personalProfiles: true,
       profileOpenGraph: true,
       profileNfts: true,
+      preparedMintPacks: true,
       zeroPlatformFee: true
     },
     next: {

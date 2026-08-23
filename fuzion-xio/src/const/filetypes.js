@@ -99,6 +99,10 @@ export const FILE_ACCEPT = [
 export const FILE_LABEL =
   "png, jpg, jpeg, gif, webp, svg, bmp, avif, mp4, webm, mov, mkv, ogg, mp3, wav, m4a, aac, flac, pdf, glb, gltf, fbx, usdz, obj";
 
+export const PREPARED_ACCEPT = [FILE_ACCEPT, ".zip", "application/zip", "application/x-zip-compressed", ".json"].join(",");
+
+export const PREPARED_LABEL = `${FILE_LABEL}, plus a .zip pack or manifest.json`;
+
 export function extensionOf(nameOrType = "") {
   const value = String(nameOrType).toLowerCase().split("?")[0];
   if (value.includes(".")) return value.split(".").pop();

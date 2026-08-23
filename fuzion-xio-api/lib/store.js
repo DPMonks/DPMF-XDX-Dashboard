@@ -26,7 +26,8 @@ const empty = () => ({
   watchlist: [],
   listingOverrides: {},
   knownAssets: [],
-  profileNfts: []
+  profileNfts: [],
+  preparedPacks: []
 });
 
 function ensure() {

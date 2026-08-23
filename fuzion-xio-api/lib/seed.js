@@ -442,6 +442,7 @@ export function demoSeed() {
     watchlist: [],
     listingOverrides: {},
     knownAssets: [],
+    preparedPacks: [],
     xumms: [],
     leaderboards: [
       { wAddress: DEMO_ISSUER, totalVPoint: 10050, pName: "XIO Issuer" },
