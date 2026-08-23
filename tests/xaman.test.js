@@ -7,6 +7,7 @@ import {
   cleanCredential,
   requestOrigin,
   shouldSubmitTxjson,
+  siteOriginFrom,
   xamanErrorMessage,
   xamanReturnUrl,
   xummConfigured,
@@ -90,6 +91,38 @@ test("requestOrigin prefers the forwarded host", () => {
       },
     }),
     "https://xdx-exchange.dpmf.technology"
+  );
+});
+
+test("Xaman Next never returns to a Vercel login host", () => {
+  assert.equal(
+    requestOrigin({
+      headers: {
+        "x-forwarded-proto": "https",
+        "x-forwarded-host": "dpmf-xdx-dashboard-git-cursor-mobile-sig-a5d2b5-dpmf-s-projects.vercel.app",
+      },
+    }),
+    "https://xdx-exchange.dpmf.technology"
+  );
+  assert.equal(
+    requestOrigin({
+      headers: { host: "dpmf-xdx-dashboard.vercel.app" },
+    }),
+    "https://xdx-exchange.dpmf.technology"
+  );
+  assert.equal(
+    siteOriginFrom("https://vercel.com/dpmf-s-projects/dpmf-xdx-dashboard"),
+    "https://xdx-exchange.dpmf.technology"
+  );
+  assert.equal(
+    xamanReturnUrl("https://dpmf-xdx-dashboard.vercel.app"),
+    "https://xdx-exchange.dpmf.technology/?xaman={id}"
+  );
+  assert.equal(
+    requestOrigin({
+      headers: { host: "localhost:5173", "x-forwarded-proto": "http" },
+    }),
+    "http://localhost:5173"
   );
 });
 
