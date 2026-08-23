@@ -3,6 +3,7 @@ import { readStore, update } from "../lib/store.js";
 import { findProfile } from "../lib/profile.js";
 import { placeOffer } from "../lib/market.js";
 import { paperMark } from "../lib/tradeMarker.js";
+import { extractTradeMarker } from "../../fuzion-xio/src/helper/signMarker.js";
 import {
   accountFromAuth,
   applySignedIntent,
@@ -85,12 +86,19 @@ async function createSignedPayload(kind, req, res, instruction) {
       message: xamanUserError(created.data, created.error || "Xaman payload failed")
     });
   }
-  const shaped = shapeCreated(created.data);
+  const shaped = shapeCreated({ ...created.data, signMarker: created.signMarker });
+  const signMarker = created.signMarker || extractTradeMarker(created.txjson || txjson);
   update((current) => {
-    rememberPayload(current, { ...intent, uuid: shaped.uuid, status: "pending" });
+    rememberPayload(current, {
+      ...intent,
+      uuid: shaped.uuid,
+      status: "pending",
+      signMarker,
+      signState: "unsigned"
+    });
     return current;
   });
-  return res.json(shaped);
+  return res.json({ ...shaped, signMarker });
 }
 
 async function payloadStatus(req, res) {
@@ -122,7 +130,9 @@ async function payloadStatus(req, res) {
       uuid,
       txid: settled.txid || "",
       tesSuccess: settled.tesSuccess === true,
-      executed: false
+      executed: false,
+      resolved_at: got.data?.meta?.resolved_at || "",
+      signMarker: remembered?.signMarker || ""
     });
   }
   const account = settled.account || got.data.response?.account || "";
@@ -142,7 +152,9 @@ async function payloadStatus(req, res) {
     account,
     tesSuccess: settled.tesSuccess === true,
     token: account ? signSession(account) : undefined,
-    kind: record?.kind || kind
+    kind: record?.kind || kind,
+    resolved_at: got.data?.meta?.resolved_at || "",
+    signMarker: record?.signMarker || remembered?.signMarker || ""
   });
 }
 

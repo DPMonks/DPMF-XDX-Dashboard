@@ -67,5 +67,6 @@ Xaman reliability (ported from the indexer/dashboard settle work):
 - Connect never times out into a page reload. `accountDetail` returns 202 until the wallet signs; the header persists the uuid and resumes from `?xaman=` / storage.
 - Ledger txs are pre-checked (64-hex `NFTokenID`, amount, destination) so demo paper ids never hit Xaman (that used to 603).
 - Desk fills apply once (`appliedAt`) and only after `status === "completed"`.
+- Leftover-sign lock: every NFT trade gets a unique `dpmf.sign` marker. Opening Buy/Sell/Mint discards a leftover pending UUID. Resume/claim only if that payload is still unsigned. Create returns **409** if Xaman hands back an already-signed payload. `tesSUCCESS` from a previous click cannot skip the next QR.
 
 Every Fuzion trade is stamped `marker: FUZION-XIO` with `signed: true|false`. Xaman-signed ledger txs carry the same marker in `Memos`, so they cannot be mixed with paper fills or other XRPL marketplace traffic. Filter the tape with `GET /api/market/activity?signed=true`.

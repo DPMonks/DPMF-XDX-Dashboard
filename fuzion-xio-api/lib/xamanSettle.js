@@ -1,3 +1,21 @@
+import {
+  extractSignedAccount,
+  isFreshXamanCreate,
+  isReusableUnsignedPayload,
+  payloadLooksSigned,
+  payloadResolvedAtMs,
+  payloadSignedThisSession
+} from "../../fuzion-xio/src/helper/xamanProof.js";
+
+export {
+  extractSignedAccount,
+  isFreshXamanCreate,
+  isReusableUnsignedPayload,
+  payloadLooksSigned,
+  payloadResolvedAtMs,
+  payloadSignedThisSession
+};
+
 export function isTxHash(value) {
   return /^[A-Fa-f0-9]{64}$/.test(String(value || "").trim());
 }
@@ -57,24 +75,6 @@ export function engineResultOf(...sources) {
 
 export function isSignInKind(kind) {
   return ["connect", "register", "signin", "SignIn"].includes(String(kind || ""));
-}
-
-export function extractSignedAccount(result) {
-  const response = result?.response || {};
-  const account = response.account || result?.account || "";
-  if (/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(account)) return account;
-  if (/^r[A-Za-z0-9]{24,34}$/.test(account)) return account;
-  return "";
-}
-
-export function payloadLooksSigned(result) {
-  if (!result || typeof result !== "object") return false;
-  if (extractSignedAccount(result)) return true;
-  if (result.meta?.signed === true || result.signed === true) return true;
-  if (result.meta?.resolved === true && result.meta?.cancelled !== true) {
-    return Boolean(result.response?.hex || result.response?.account);
-  }
-  return false;
 }
 
 export function detectExecution({ payload, ledger } = {}) {

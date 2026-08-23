@@ -2,7 +2,10 @@ import axios from "axios";
 import config from "../config.json";
 import { actionTypes } from "../store/actionTypes/wallet";
 import {
+  isConsumedUuid,
   onXamanWake,
+  peekPendingPayload,
+  rememberConsumedUuid,
   rememberPendingPayload,
   shouldFinishXamanPoll
 } from "./xamanResume";
@@ -38,9 +41,27 @@ const checkTransactionStatusHelper = (data, path) => {
   const startTime = Date.now();
 
   const pollState = { cancelled: false };
+  const startedAt = startTime;
+  const watchTrade = !String(path || "").includes("checkRegistrationFee");
   if (uuid) {
+    if (isConsumedUuid(uuid)) {
+      return Promise.reject({
+        error: true,
+        message: "This Xaman sign was already used. Start a new sign."
+      });
+    }
+    const existing = peekPendingPayload();
+    if (existing?.uuid && existing.uuid !== uuid && existing.watchTrade) {
+      rememberConsumedUuid(existing.uuid, existing.signMarker);
+    }
     activePolling.set(uuid, pollState);
-    rememberPendingPayload(uuid, { kind: path });
+    rememberPendingPayload(uuid, {
+      kind: path,
+      watchTrade,
+      signState: "unsigned",
+      signMarker: requestData.signMarker || "",
+      txjson: requestData.txjson || null
+    });
   }
 
   /* Always set QR URLs when uuid exists — API may omit qr_url (e.g. push-only); require dispatch */
@@ -111,8 +132,10 @@ const checkTransactionStatusHelper = (data, path) => {
           validateStatus: () => true
         });
 
-        const verdict = shouldFinishXamanPoll(resp);
+        const verdict = shouldFinishXamanPoll(resp, { startedAt, uuid });
         if (verdict === "done") {
+          rememberPendingPayload(uuid, { signState: "executed" });
+          rememberConsumedUuid(uuid, peekPendingPayload()?.signMarker || requestData.signMarker);
           return finish(resolve, resp);
         }
         if (verdict === "fail") {

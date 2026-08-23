@@ -15,11 +15,13 @@ import {
 import { signedMark, xrplMemos } from "./tradeMarker.js";
 import {
   extractTxHash,
+  isFreshXamanCreate,
   settleDecision,
   shouldRetryXaman,
   statusHttp as settleHttp
 } from "./xamanSettle.js";
 import { validateSignedIntent, xamanUserError } from "./xamanPrepare.js";
+import { stampTradeTxjson, xamanSignIdentifier } from "../../fuzion-xio/src/helper/signMarker.js";
 import { accountInfo, accountLines, txByHash } from "./xrpl.js";
 
 export const XUMM_API = "https://xumm.app/api/v1/platform";
@@ -245,7 +247,7 @@ export function txjsonFor(kind, body = {}, account = "") {
       txjson = body.txjson || { TransactionType: "SignIn" };
   }
   if (!txjson || txjson.TransactionType === "SignIn") return txjson;
-  return { ...txjson, ...xrplMemos({ kind }) };
+  return stampTradeTxjson({ ...txjson, ...xrplMemos({ kind }) }).txjson;
 }
 
 export function shapeCreated(created = {}) {
@@ -263,7 +265,8 @@ export function shapeCreated(created = {}) {
     next_url: next,
     next,
     websocket: created.refs?.websocket_status || "",
-    pushed: Boolean(created.pushed)
+    pushed: Boolean(created.pushed),
+    signMarker: created.signMarker || ""
   };
 }
 
@@ -460,12 +463,18 @@ export async function pingXaman({ fetchImpl = fetch } = {}) {
 }
 
 export async function createPayload(txjson, { options = {}, custom_meta, fetchImpl = fetch } = {}) {
-  return xummRequest("/payload", {
+  const stamped =
+    txjson?.TransactionType && txjson.TransactionType !== "SignIn"
+      ? stampTradeTxjson(txjson)
+      : { txjson, marker: "" };
+  const marker = stamped.marker || options.signMarker || "";
+  const identifier = xamanSignIdentifier(marker);
+  const created = await xummRequest("/payload", {
     method: "POST",
     body: {
-      txjson,
+      txjson: stamped.txjson,
       options: {
-        submit: txjson?.TransactionType !== "SignIn",
+        submit: stamped.txjson?.TransactionType !== "SignIn",
         expire: 5,
         return_url: {
           web: fuzionReturnUrl(),
@@ -473,12 +482,34 @@ export async function createPayload(txjson, { options = {}, custom_meta, fetchIm
         },
         ...options
       },
-      custom_meta: custom_meta || {
-        instruction: "FUZION-XIO"
+      custom_meta: {
+        instruction: custom_meta?.instruction || "FUZION-XIO",
+        ...(identifier
+          ? {
+              identifier,
+              blob: {
+                sign: true,
+                marker,
+                tx: stamped.txjson?.TransactionType || ""
+              }
+            }
+          : {}),
+        ...custom_meta
       }
     },
     fetchImpl
   });
+  if (created.ok && !isFreshXamanCreate(created.data)) {
+    return {
+      ok: false,
+      configured: true,
+      status: 409,
+      error: "Xaman returned a payload that was already signed. Start a new sign.",
+      data: created.data,
+      signMarker: marker
+    };
+  }
+  return { ...created, signMarker: marker, txjson: stamped.txjson };
 }
 
 export async function getPayload(uuid, { fetchImpl = fetch } = {}) {

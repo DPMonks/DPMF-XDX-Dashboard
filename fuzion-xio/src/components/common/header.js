@@ -37,7 +37,10 @@ import { homeNftDetail } from "../../store/actions/homedetail";
 import MessageConst from "../../const/message.json";
 import {
   clearPendingPayload,
+  discardStalePendingTrade,
+  isConnectPending,
   onXamanWake,
+  peekPendingPayload,
   peekXamanUuid,
   rememberPendingPayload
 } from "../../helper/xamanResume";
@@ -340,6 +343,7 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
       setShowModel(false);
       setWalletEnable(false);
     } else if (accountDetail?.account?.token) {
+      discardStalePendingTrade({ force: true });
       clearPendingPayload();
       localStorage.setItem("jwtToken", accountDetail.account.token);
       window.location.reload();
@@ -388,15 +392,21 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
     if (token) return;
     const resume = (uuid) => {
       if (!uuid) return;
+      const pending = peekPendingPayload();
+      if (pending?.watchTrade || (pending && !isConnectPending(pending))) return;
       setQrCode(`https://xumm.app/sign/${uuid}_q.png`);
       setForMobile(uuid);
       setShowModel(true);
       setWalletEnable(true);
       dispatch(accountDetailAction({ data: { uuid }, loader: true }));
     };
+    const pending = peekPendingPayload();
+    if (pending?.watchTrade) return;
     resume(peekXamanUuid());
     return onXamanWake(() => {
       if (localStorage.getItem("jwtToken")) return;
+      const next = peekPendingPayload();
+      if (next?.watchTrade) return;
       resume(peekXamanUuid());
     });
   }, [token, dispatch]);
@@ -411,7 +421,12 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
         let data = {
           uuid: walletConnectStatus?.wallet?.uuid
         };
-        rememberPendingPayload(data.uuid, { kind: "connect" });
+        rememberPendingPayload(data.uuid, {
+          kind: "connect",
+          watchTrade: false,
+          txjson: { TransactionType: "SignIn" },
+          signState: "unsigned"
+        });
         dispatch(accountDetailAction({ data, loader: true }));
       } else {
         alert(MessageConst.alertTryAfterSometime);

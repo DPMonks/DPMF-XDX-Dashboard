@@ -45,6 +45,8 @@ import { assetsLabel, findTicker, mergeTickers, optionLabel } from "../../helper
 import { ensureWalletTrustlines } from "../../helper/trustlines";
 import * as Spinners from "react-loader-spinner";
 import { isMobile, isIOS } from "react-device-detect";
+import { discardStalePendingTrade } from "../../helper/xamanResume";
+import { openNftTradePanel } from "../../helper/nftTradeSign";
 
 // actions
 import {
@@ -187,6 +189,8 @@ function Nftdetail() {
       });
       return;
     }
+    discardStalePendingTrade({ force: true });
+    openNftTradePanel("mint");
     setShowMintModel(true);
   };
   //////////////////////// CHECK box handle start/////////
@@ -303,6 +307,8 @@ function Nftdetail() {
       });
       return;
     }
+    discardStalePendingTrade({ force: true });
+    openNftTradePanel("sale");
     setCurrency("XRP");
     setShowSaleModel(true);
   };
@@ -941,6 +947,8 @@ function Nftdetail() {
     }
     if (nft.status === "sale") {
       try {
+        discardStalePendingTrade({ force: true });
+        openNftTradePanel("buy");
         let data = {
           _id: nft._id
         };
@@ -1042,6 +1050,7 @@ function Nftdetail() {
 
     // call api
     try {
+      discardStalePendingTrade({ force: true });
       let data = {
         _id: nft._id,
         amount: saleAmountModel,
@@ -1078,6 +1087,8 @@ function Nftdetail() {
     // call api
 
     try {
+      discardStalePendingTrade({ force: true });
+      openNftTradePanel("burn");
       let data = {
         _id: nft._id
       };
@@ -1127,6 +1138,8 @@ function Nftdetail() {
       });
       return;
     }
+    discardStalePendingTrade({ force: true });
+    openNftTradePanel("mint");
     setShowMintModel(true);
   };
 
@@ -1424,6 +1437,8 @@ function Nftdetail() {
     }
     // call api
     try {
+      discardStalePendingTrade({ force: true });
+      openNftTradePanel("send");
       let data = {
         _id: nft._id,
         destAdd: desAddress
@@ -1624,6 +1639,8 @@ function Nftdetail() {
 
     // call api
     try {
+      discardStalePendingTrade({ force: true });
+      openNftTradePanel("makeOffer");
       let data = {
         _id: nft._id,
         amount: moreOfferAmount,
@@ -1693,6 +1710,8 @@ function Nftdetail() {
       return;
     } else {
       try {
+        discardStalePendingTrade({ force: true });
+        openNftTradePanel("acceptOffer");
         let data = {
           _id: nft._id,
           offerId: val.nftOfferIndex,
