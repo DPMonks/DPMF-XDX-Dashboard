@@ -106,6 +106,17 @@ test("TrustSet payloads submit to XRPL; SignIn payloads do not", () => {
   );
 });
 
+test("xApp payloads stay in the wallet overlay and do not bounce to a return URL", () => {
+  const payload = buildXamanPayload(
+    "https://xdx-exchange.dpmf.technology",
+    { TransactionType: "Payment", Amount: "1" },
+    { xapp: true }
+  );
+  assert.equal(payload.options.return_url, undefined);
+  assert.equal(payload.options.force_network, "MAINNET");
+  assert.equal(payload.options.submit, true);
+});
+
 test("buildSignInPayload returns to the site with the payload id after Xaman", () => {
   const payload = buildSignInPayload("https://xdx-exchange.dpmf.technology/");
   assert.equal(payload.txjson.TransactionType, "SignIn");

@@ -39,7 +39,7 @@ export function contentSecurityPolicy({ development = false } = {}) {
     "font-src 'self' data:",
     `connect-src ${connect}`,
     `frame-src ${DEXSCREENER_ORIGINS}`,
-    "frame-ancestors 'self' https://dpmf.technology https://*.dpmf.technology",
+    "frame-ancestors 'self' https://dpmf.technology https://*.dpmf.technology https://xumm.app https://*.xumm.app https://xaman.app https://*.xaman.app",
     "base-uri 'self'",
     "form-action 'self'",
     "object-src 'none'",

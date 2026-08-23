@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import xamanLogo from "../assets/XAMAN.jpg";
 import { isPhoneDevice, launchXamanSign, xamanAppUrl, xamanSignUrl } from "../xaman/xamanClient";
+import { isXappHost } from "../xaman/xappHost";
 import { useI18n } from "../i18n/useI18n";
 
 export default function WalletModal({
@@ -13,21 +15,30 @@ export default function WalletModal({
   onClose,
 }) {
   const { t } = useI18n();
-  if (!visible) return null;
-
-  const phone = isPhoneDevice();
+  const xapp = isXappHost();
+  const phone = xapp || isPhoneDevice();
   const appHref = xamanAppUrl(uuid) || mobileUrl;
   const webHref = xamanSignUrl(uuid) || mobileUrl;
-  const connectLabel = t.connectXaman || t.openApp;
+  const connectLabel = xapp ? t.xappApprove || t.connectXaman || t.openApp : t.connectXaman || t.openApp;
   const confirming = status === "confirming";
   const heading =
     status === "loading"
       ? preparingLabel || t.preparing
       : confirming
         ? scanLabel || t.scan
-        : phone
+        : xapp
           ? connectLabel
-          : scanLabel || t.scan;
+          : phone
+            ? connectLabel
+            : scanLabel || t.scan;
+
+  useEffect(() => {
+    if (!visible || !xapp || !uuid || status === "loading" || confirming) return undefined;
+    launchXamanSign(uuid);
+    return undefined;
+  }, [visible, xapp, uuid, status, confirming]);
+
+  if (!visible) return null;
 
   function closeOverlay(event) {
     event.preventDefault();
@@ -64,11 +75,15 @@ export default function WalletModal({
           {heading}
         </h2>
 
-        {!phone && qrUrl && status !== "loading" && !confirming ? (
+        {!phone && !xapp && qrUrl && status !== "loading" && !confirming ? (
           <img src={qrUrl} alt={t.xamanQr || t.scan} className="qr-image" />
         ) : null}
 
-        {phone && status !== "loading" && !confirming && (appHref || webHref) ? (
+        {xapp && status !== "loading" && !confirming ? (
+          <p className="wallet-modal-hint">{t.xappApproveHint || t.waitingXaman}</p>
+        ) : null}
+
+        {phone && !xapp && status !== "loading" && !confirming && (appHref || webHref) ? (
           <>
             {appHref ? (
               <button type="button" className="mobile-link-btn" onClick={openXamanApp}>

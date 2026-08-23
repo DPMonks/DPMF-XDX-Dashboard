@@ -12,7 +12,7 @@ import WalletModal from "./WalletModal";
 
 export default function ConnectWallet() {
   const { t } = useI18n();
-  const { walletAddress, connectWallet, disconnectWallet } = useWallet();
+  const { walletAddress, connectWallet, disconnectWallet, xappBooting } = useWallet();
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
   const startRef = useRef(start);
   const resetRef = useRef(reset);
@@ -135,7 +135,7 @@ export default function ConnectWallet() {
     <div className="wallet-control">
       <WalletButton
         onClick={startConnection}
-        disabled={waiting}
+        disabled={waiting || Boolean(xappBooting)}
         connected={Boolean(walletAddress)}
         address={shortAddress(walletAddress)}
       />

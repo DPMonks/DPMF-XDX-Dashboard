@@ -124,14 +124,20 @@ export function buildXamanPayload(origin, txjson, options = {}) {
     options: {
       submit: options.submit ?? shouldSubmitTxjson(tx),
       expire: options.expire ?? 5,
-      return_url: {
-        // {id} is replaced with the payload uuid so a fresh iPhone/iPad
-        // tab can finish sign-in after Xaman reopens the dashboard.
-        app: returnTo,
-        web: returnTo,
-      },
     },
   };
+  if (options.xapp) {
+    // Stay inside the Xaman overlay. A return URL would reload the xApp
+    // webview and skip the native openSignRequest flow.
+    payload.options.force_network = options.force_network || "MAINNET";
+  } else {
+    payload.options.return_url = {
+      // {id} is replaced with the payload uuid so a fresh iPhone/iPad
+      // tab can finish sign-in after Xaman reopens the dashboard.
+      app: returnTo,
+      web: returnTo,
+    };
+  }
   if (identifier) {
     payload.custom_meta = {
       identifier,

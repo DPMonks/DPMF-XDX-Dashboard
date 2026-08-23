@@ -1,3 +1,5 @@
+import { isXappHost, openXappSignRequest } from "./xappHost.js";
+
 function pick(object, keys) {
   for (const key of keys) {
     const value = key.split(".").reduce((acc, part) => acc?.[part], object);
@@ -57,6 +59,9 @@ export function launchXamanSign(
   const web = xamanSignUrl(id);
   const app = xamanAppUrl(id);
   if (!id) return { opened: false, web, app };
+  if (isXappHost()) {
+    return { opened: openXappSignRequest(id), web, app, xapp: true };
+  }
   if (appendNode && createFrame && app) {
     const iframe = createFrame();
     iframe.src = app;
@@ -89,13 +94,20 @@ export function isPhoneDevice(
 }
 
 export async function createPayload(body = {}) {
+  const request = body && typeof body === "object" ? body : {};
   const response = await fetch("/api/xaman/create-payload", {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body && typeof body === "object" ? body : {}),
+    body: JSON.stringify({
+      ...request,
+      options: {
+        ...request.options,
+        ...(isXappHost() ? { xapp: true } : {}),
+      },
+    }),
   });
   const raw = await response.json().catch(() => ({}));
   if (!response.ok) {
