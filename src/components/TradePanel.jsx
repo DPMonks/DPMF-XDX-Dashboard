@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { getQuoteMark, getWalletBalances, getWalletLp } from "../api/indexer";
+import { getQuoteMarks, getWalletBalances, getWalletLp } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -87,7 +87,7 @@ export default function TradePanel({
   const [lineHint, setLineHint] = useState("");
   const [formError, setFormError] = useState("");
   const [prices, setPrices] = useState(() => priceBookFromPools(initialPools));
-  const [ledgerMark, setLedgerMark] = useState(null);
+  const [ledgerMarks, setLedgerMarks] = useState({});
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
   const quote = useMemo(
@@ -111,10 +111,7 @@ export default function TradePanel({
     !lineHint.includes(String(quote.issuer || "").toUpperCase());
   const reserves = useMemo(() => poolReserves(pools, quote), [pools, quote]);
   const implied = poolPrice(reserves.base, reserves.quote);
-  const liveMark =
-    ledgerMark && String(ledgerMark.quoteId || "").toUpperCase() === String(quoteId).toUpperCase()
-      ? ledgerMark
-      : null;
+  const liveMark = ledgerMarks[quoteId] || null;
   const markerPx =
     Number(liveMark?.xdxPerQuote) > 0
       ? Number(liveMark.xdxPerQuote)
@@ -179,15 +176,15 @@ export default function TradePanel({
   useEffect(() => {
     if (!action) return undefined;
     let cancelled = false;
-    getQuoteMark(quoteId)
-      .then((mark) => {
-        if (cancelled || !mark) return;
-        setLedgerMark(mark);
-        if (Array.isArray(mark.pools)) setPools(mark.pools);
+    getQuoteMarks([quoteId])
+      .then((payload) => {
+        if (cancelled || !payload) return;
+        setLedgerMarks(payload.marks || {});
+        if (Array.isArray(payload.pools)) setPools(payload.pools);
         setPrices((current) =>
-          priceBookFromPools(mark.pools || [], {
+          priceBookFromPools(payload.pools || [], {
             ...current,
-            ...normalizePriceBook(mark.prices || {}),
+            ...normalizePriceBook(payload.prices || {}),
           })
         );
       })
@@ -356,7 +353,6 @@ export default function TradePanel({
               setQuoteQty("");
               setEditedSide("xdx");
               setPrice("");
-              setLedgerMark(null);
             }}
             ariaLabel={t.tradePair}
             searchable

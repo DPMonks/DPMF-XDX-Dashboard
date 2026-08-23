@@ -99,6 +99,23 @@ export function xdxQuoteSpot({ quoteId, prices = {}, pool = {}, bookMid = 0, dex
   return composeLedgerQuoteMark({ quoteId, prices, pool, bookMid, dexPresent }).xdxPerQuote;
 }
 
+export function tradableQuoteIds(pools = [], extraIds = []) {
+  const ids = [];
+  const add = (value) => {
+    const raw = String(value || "").trim().toUpperCase().replace(/\s+/g, "");
+    if (!raw) return;
+    const id = raw.includes("/") ? raw.split("/").pop() : raw;
+    if (!id || id === "XDX" || ids.includes(id)) return;
+    ids.push(id);
+  };
+  for (const known of ["XRP", "RLUSD", "XIO", "XSQUAD"]) add(known);
+  for (const row of Array.isArray(pools) ? pools : []) {
+    add(row?.pool || row?.pool_name || row?.pair || row?.quote);
+  }
+  for (const id of Array.isArray(extraIds) ? extraIds : []) add(id);
+  return ids;
+}
+
 export function preferMarkWhenPoolInsane(fromPool, fromMark) {
   const pool = num(fromPool);
   const mark = num(fromMark);

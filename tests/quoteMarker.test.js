@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   composeLedgerQuoteMark,
   preferMarkWhenPoolInsane,
+  tradableQuoteIds,
   xdxQuoteSpot,
   xdxXrpSpot,
 } from "../src/wallet/quoteMarker.js";
@@ -100,4 +101,21 @@ test("every featured quote uses its own ledger mid, not XDX/XRP", () => {
     assert.equal(mark.xdxPerQuote, mid);
     assert.ok(Math.abs(tradeTotal(100000, mark.xdxPerQuote) - 100000 * mid) < 1e-9);
   }
+});
+
+test("every XDX pool on the platform is a tradable opposing asset, not only XIO", () => {
+  const ids = tradableQuoteIds(
+    [
+      { pool: "XDX/XRP" },
+      { pool_name: "XDX/RLUSD" },
+      { pair: "XDX/XIO" },
+      { pool: "XDX/XSQUAD" },
+      { pool: "XDX/USDC" },
+    ],
+    ["XDX/COREUM"]
+  );
+  assert.deepEqual(ids, ["XRP", "RLUSD", "XIO", "XSQUAD", "USDC", "COREUM"]);
+  const usdc = composeLedgerQuoteMark({ quoteId: "USDC", bookMid: 0.0018, dexPresent: true });
+  assert.equal(usdc.quoteId, "USDC");
+  assert.equal(usdc.xdxPerQuote, 0.0018);
 });

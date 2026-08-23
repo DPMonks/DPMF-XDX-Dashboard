@@ -20,7 +20,7 @@ import {
   FEATURED_ORDERBOOK_PAIRS,
 } from "../orderbook";
 import { composeWalletSnapshot, emptyWalletSnapshot } from "../wallet/composeWallet";
-import { composeLedgerQuoteMark } from "../wallet/quoteMarker";
+import { composeLedgerQuoteMark, tradableQuoteIds } from "../wallet/quoteMarker";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -408,13 +408,13 @@ export async function getOrderbook(pair = "XDX/XRP", opts = {}) {
  */
 export async function getQuoteMark(quoteId) {
   const id = String(quoteId || "XRP").toUpperCase();
+  const payload = await getQuoteMarks([id]);
+  const mark = payload.marks[id] || markForQuote(id, payload.pools, payload.prices, null);
+  return { ...mark, pools: payload.pools, prices: payload.prices };
+}
+
+function markForQuote(id, pools, prices, books) {
   const pair = `XDX/${id}`;
-  const fresh = { cache: false };
-  const [pools, prices, books] = await Promise.all([
-    getAmm(fresh).catch(() => []),
-    getPrices(fresh).catch(() => ({})),
-    getOrderbook(pair, fresh).catch(() => null),
-  ]);
   const list = Array.isArray(pools) ? pools : [];
   const pool =
     list.find((row) => String(row.pool || row.pool_name || "").toUpperCase() === pair) || null;
@@ -427,16 +427,34 @@ export async function getQuoteMark(quoteId) {
       bookMid: book?.mid ?? null,
       dexPresent: Boolean(book?.dex_present),
     }),
-    pools: list,
-    prices,
     bookMid: book?.mid ?? null,
     dexPresent: Boolean(book?.dex_present),
   };
 }
 
-export async function getOrderbooks() {
+/**
+ * Detect a live ledger mark for every XDX tradable quote on the platform
+ * (featured pairs plus whatever AMM pools the indexer currently lists).
+ */
+export async function getQuoteMarks(extraIds = []) {
+  const fresh = { cache: false };
+  const [pools, prices, books] = await Promise.all([
+    getAmm(fresh).catch(() => []),
+    getPrices(fresh).catch(() => ({})),
+    getOrderbooks(fresh).catch(() => null),
+  ]);
+  const list = Array.isArray(pools) ? pools : [];
+  const ids = tradableQuoteIds(list, extraIds);
+  const marks = {};
+  for (const id of ids) {
+    marks[id] = markForQuote(id, list, prices, books);
+  }
+  return { pools: list, prices, marks };
+}
+
+export async function getOrderbooks(opts = {}) {
   try {
-    return ingestOrderbooks(await api.orderbooks());
+    return ingestOrderbooks(await api.orderbooks(opts));
   } catch {
     if (lastOrderbooks) return lastOrderbooks;
     throw new Error("Waiting for XRPL book_offers on this pair.");

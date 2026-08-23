@@ -499,6 +499,6 @@ export const api = {
       ...opts,
     });
   },
-  orderbooks: () =>
-    getJson(endpoint("orderbooks") || "/orderbooks", { queue: false, retries: 1 }),
+  orderbooks: (opts = {}) =>
+    getJson(endpoint("orderbooks") || "/orderbooks", { queue: false, retries: 1, ...opts }),
 };
