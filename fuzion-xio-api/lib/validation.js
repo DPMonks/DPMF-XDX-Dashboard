@@ -141,7 +141,9 @@ export function applyValidation(store, { from, to, currency, amount }) {
     from,
     to,
     amount: String(paid),
-    currency: asset
+    currency: asset,
+    signed: false,
+    sign: "paper"
   });
   const target = addressValidation(store, to);
   const validator = addressValidation(store, from);

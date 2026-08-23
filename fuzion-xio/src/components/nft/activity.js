@@ -5,17 +5,20 @@ import Header from "../common/header";
 import Footer from "../common/footer";
 import configData from "../../config.json";
 import { assetsLabel } from "../../helper/assets";
+import SignBadge from "./SignBadge";
 
 function Activity() {
   const [searchKey, setSearchKey] = useState(true);
   const [rows, setRows] = useState([]);
   const [type, setType] = useState("");
+  const [signed, setSigned] = useState("");
   const [address, setAddress] = useState("");
   const [ledgerRows, setLedgerRows] = useState([]);
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (type) params.set("type", type);
+    if (signed) params.set("signed", signed);
     if (address) params.set("address", address);
     const q = params.toString() ? `?${params}` : "";
     fetch(`${configData.LOCAL_API_URL}market/activity${q}`)
@@ -28,7 +31,7 @@ function Activity() {
         setRows([]);
         setLedgerRows([]);
       });
-  }, [type, address]);
+  }, [type, signed, address]);
 
   return (
     <>
@@ -39,8 +42,8 @@ function Activity() {
             <p className="dpmf-kicker">Tape</p>
             <h1>Activity</h1>
             <p className="dpmf-muted">
-              Desk tape plus NFT/offer rows read from the XRP Ledger when you
-              enter an r-address. Offers can be several assets at once.
+              Every FUZION-XIO trade is marked. Signed = Xaman + ledger memo.
+              Paper = desk fill that was not signed. They do not mix.
             </p>
             <p>
               <Link to="/assets">Asset book</Link>
@@ -64,6 +67,11 @@ function Activity() {
               <option value="validation">Validations</option>
               <option value="drop">Drops</option>
             </select>
+            <select value={signed} onChange={(e) => setSigned(e.target.value)}>
+              <option value="">Signed and paper</option>
+              <option value="true">Signed only</option>
+              <option value="false">Paper only</option>
+            </select>
             <table className="dpmf-table">
               <thead>
                 <tr>
@@ -71,7 +79,7 @@ function Activity() {
                   <th>Item</th>
                   <th>Assets</th>
                   <th>From</th>
-                  <th>Source</th>
+                  <th>Sign</th>
                 </tr>
               </thead>
               <tbody>
@@ -87,7 +95,9 @@ function Activity() {
                     </td>
                     <td>{assetsLabel(row)}</td>
                     <td>{row.from ? `${row.from.slice(0, 8)}…` : "—"}</td>
-                    <td>{row.source || "desk"}</td>
+                    <td>
+                      <SignBadge row={row} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -101,7 +111,7 @@ function Activity() {
                       <th>Type</th>
                       <th>NFT</th>
                       <th>Assets</th>
-                      <th>Source</th>
+                      <th>Sign</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -116,7 +126,13 @@ function Activity() {
                             ? `${row.amount.amount} ${row.amount.currency}`
                             : "—"}
                         </td>
-                        <td>{row.source || "xrpl"}</td>
+                        <td>
+                          {row.signed ? (
+                            <SignBadge row={row} />
+                          ) : (
+                            row.source || "xrpl"
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

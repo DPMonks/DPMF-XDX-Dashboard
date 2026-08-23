@@ -44,7 +44,9 @@ const sale = buyNow(store, { nftId: "seed-lilly-1", buyer: DEMO_BIDDER });
 assert.equal(sale.ok, true);
 assert.equal(sale.fee.bps, 10);
 assert.equal(sale.fee.fee, 0.012);
-assert.ok(store.fees.some((row) => row.nftId === "seed-lilly-1" && row.fee === 0.012));
+assert.ok(store.fees.some((row) => row.nftId === "seed-lilly-1" && row.fee === 0.012 && row.signed === false));
+assert.equal(sale.activity.signed, false);
+assert.equal(sale.activity.marker, "FUZION-XIO");
 
 const offer = placeOffer(store, {
   nftId: "seed-orbit-3",

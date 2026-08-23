@@ -101,6 +101,8 @@ const listed = applySignedIntent(
   { account: "rFuzionXioDemoOwner11111111111111", txid: "TX1" }
 );
 assert.equal(listed.ok, true);
+assert.equal(listed.activity.signed, true);
+assert.equal(listed.activity.txid, "TX1");
 const signal = store.nfts.find((nft) => nft._id === "seed-signal-4");
 assert.equal(signal.status, "sale");
 assert.equal(signal.amount, "8");

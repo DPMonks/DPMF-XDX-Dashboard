@@ -426,6 +426,11 @@ a:hover {
   background: #ffb020;
 }
 
+.dpmf-badge-paper {
+  background: #3a3a48;
+  color: #c8c8d8;
+}
+
 .dpmf-check {
   display: inline-block;
   margin-left: 8px;

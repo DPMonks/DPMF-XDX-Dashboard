@@ -1,3 +1,5 @@
+import { stampTrade } from "./tradeMarker.js";
+
 export const PLATFORM_FEE_BPS = 10;
 export const FEE_COLLECTOR = process.env.FEE_COLLECTOR || "";
 
@@ -40,10 +42,10 @@ export function feeAssets(assets = []) {
   }));
 }
 
-export function recordFees(store, { assets, from, to, nftId, type }) {
+export function recordFees(store, { assets, from, to, nftId, type, signed, txid, sign }) {
   store.fees = store.fees || [];
   const rows = feeAssets(assets || []).map((asset, index) => {
-    const row = {
+    const row = stampTrade({
       _id: `fee-${Date.now()}-${index + 1}`,
       type: type || "trade",
       nftId: nftId || null,
@@ -57,8 +59,11 @@ export function recordFees(store, { assets, from, to, nftId, type }) {
       pending: asset.pending,
       from: from || "",
       to: to || "",
-      createdAt: new Date().toISOString()
-    };
+      createdAt: new Date().toISOString(),
+      signed,
+      txid,
+      sign
+    });
     store.fees.unshift(row);
     return row;
   });

@@ -4,6 +4,7 @@ import { Container } from "react-bootstrap";
 import Header from "../common/header";
 import Footer from "../common/footer";
 import configData from "../../config.json";
+import SignBadge from "./SignBadge";
 
 function CreatorDesk() {
   const { address } = useParams();
@@ -87,6 +88,7 @@ function CreatorDesk() {
                   <th>Type</th>
                   <th>Item</th>
                   <th>Amount</th>
+                  <th>Sign</th>
                 </tr>
               </thead>
               <tbody>
@@ -96,6 +98,9 @@ function CreatorDesk() {
                     <td>{row.name || row.collectionName || "—"}</td>
                     <td>
                       {row.amount || "—"} {row.currency || ""}
+                    </td>
+                    <td>
+                      <SignBadge row={row} />
                     </td>
                   </tr>
                 ))}

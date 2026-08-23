@@ -6,6 +6,7 @@ import Footer from "../common/footer";
 import configData from "../../config.json";
 import { assetsLabel, optionLabel } from "../../helper/assets";
 import { ensureWalletTrustlines } from "../../helper/trustlines";
+import SignBadge from "./SignBadge";
 
 const DEMO_BIDDER = "rFuzionXioDemoBidder1111111111111";
 const emptyLeg = () => ({ currency: "XRP", issuer: "", amount: "" });
@@ -348,7 +349,7 @@ function AssetsBook() {
                       <th>Type</th>
                       <th>NFT</th>
                       <th>Amount</th>
-                      <th>Hash</th>
+                      <th>Sign</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -364,7 +365,11 @@ function AssetsBook() {
                             : "—"}
                         </td>
                         <td>
-                          {row.hash ? `${String(row.hash).slice(0, 8)}…` : "—"}
+                          {row.signed ? (
+                            <SignBadge row={row} />
+                          ) : (
+                            row.hash ? `${String(row.hash).slice(0, 8)}…` : "—"
+                          )}
                         </td>
                       </tr>
                     ))}

@@ -6,6 +6,7 @@ import Footer from "../common/footer";
 import configData from "../../config.json";
 import { assetsLabel, optionLabel } from "../../helper/assets";
 import { ensureWalletTrustlines } from "../../helper/trustlines";
+import SignBadge from "./SignBadge";
 
 const DEMO_BIDDER = "rFuzionXioDemoBidder1111111111111";
 
@@ -367,6 +368,7 @@ function CollectionDesk() {
                       <th>Type</th>
                       <th>Item</th>
                       <th>Amount</th>
+                      <th>Sign</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -376,6 +378,9 @@ function CollectionDesk() {
                         <td>{row.name || row.collectionName}</td>
                         <td>
                           {row.amount || "—"} {row.currency || ""}
+                        </td>
+                        <td>
+                          <SignBadge row={row} />
                         </td>
                       </tr>
                     ))}

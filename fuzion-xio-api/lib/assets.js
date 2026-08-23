@@ -10,6 +10,7 @@ import {
 } from "./constants.js";
 import { tokenCatalog, walletTokenData } from "./indexer.js";
 import { decodeCurrency, encodeCurrency, normalizeAsset } from "./currency.js";
+import { memoFromLedger } from "./tradeMarker.js";
 import { readStore, update } from "./store.js";
 import {
   accountInfo,
@@ -216,6 +217,7 @@ export async function ledgerAccountTape(address) {
     const type = inner.TransactionType;
     if (!type) continue;
     if (!/NFToken|Offer/i.test(type)) continue;
+    const fuzion = memoFromLedger(inner);
     rows.push({
       type,
       hash: inner.hash || item.hash,
@@ -223,7 +225,11 @@ export async function ledgerAccountTape(address) {
       account: inner.Account,
       nftId: inner.NFTokenID || inner.nft_id || meta.nftoken_id || meta.NFTokenID,
       amount: amountFromLedger(inner.Amount || inner.NFTokenBrokerFee),
-      source: "xrpl"
+      source: fuzion ? "fuzion-xio" : "xrpl",
+      venue: fuzion?.venue || "",
+      marker: fuzion?.marker || "",
+      signed: Boolean(fuzion?.signed),
+      sign: fuzion?.sign || ""
     });
   }
   return {

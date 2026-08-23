@@ -59,3 +59,5 @@ Get the pair from [apps.xumm.dev](https://apps.xumm.dev). Add these origins on t
 `GET /api/xumm/status` is the same flag.
 
 The header already calls `POST /api/xumm/connect` (QR) then `POST /api/xumm/accountDetail` (waits for the signed SignIn and returns a JWT with `ac`). Mint/buy/sell still open a Xaman payload; after the wallet signs, the desk records the fill.
+
+Every Fuzion trade is stamped `marker: FUZION-XIO` with `signed: true|false`. Xaman-signed ledger txs carry the same marker in `Memos`, so they cannot be mixed with paper fills or other XRPL marketplace traffic. Filter the tape with `GET /api/market/activity?signed=true`.

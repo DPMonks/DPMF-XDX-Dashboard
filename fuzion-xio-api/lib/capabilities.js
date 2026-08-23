@@ -234,6 +234,7 @@ export function capabilityMap() {
       fiatRampSlot: true,
       onboarding: true,
       xamanConnect: xamanConfigured(),
+      signedTradeMarker: true,
       zeroPlatformFee: false
     },
     fee,

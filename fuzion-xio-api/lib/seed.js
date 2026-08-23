@@ -1,7 +1,8 @@
 import { DEMO_GLB, XDX_CURRENCY, XDX_ISSUER, XIO_CURRENCY, XIO_ISSUER } from "./constants.js";
 import { PLATFORM_FEE_BPS } from "./fees.js";
+import { stampTrade } from "./tradeMarker.js";
 
-export const STORE_VERSION = 10;
+export const STORE_VERSION = 11;
 
 export const DEMO_ISSUER = "rFuzionXioDemoIssuer1111111111111";
 export const DEMO_OWNER = "rFuzionXioDemoOwner11111111111111";
@@ -197,7 +198,7 @@ export function demoSeed() {
     })
   ];
 
-  return {
+  const seed = {
     version: STORE_VERSION,
     nfts,
     collectionTemplates,
@@ -577,4 +578,14 @@ export function demoSeed() {
       listings: []
     }
   };
+  seed.activity = (seed.activity || []).map((row) =>
+    stampTrade(row, { signed: false, sign: "paper" })
+  );
+  seed.tradehistories = (seed.tradehistories || []).map((row) =>
+    stampTrade(row, { signed: false, sign: "paper" })
+  );
+  seed.offers = (seed.offers || []).map((row) =>
+    stampTrade(row, { signed: false, sign: "paper" })
+  );
+  return seed;
 }

@@ -25,6 +25,7 @@ import {
   traitFacets
 } from "../lib/market.js";
 import { feePolicy, PLATFORM_FEE_BPS } from "../lib/fees.js";
+import { paperMark } from "../lib/tradeMarker.js";
 
 const router = Router();
 
@@ -140,26 +141,26 @@ function mutate(res, run) {
 }
 
 router.post("/list", (req, res) => {
-  mutate(res, (store) => listForSale(store, req.body || {}));
+  mutate(res, (store) => listForSale(store, { ...(req.body || {}), ...paperMark() }));
 });
 
 router.post("/delist", (req, res) => {
-  mutate(res, (store) => delist(store, req.body || {}));
+  mutate(res, (store) => delist(store, { ...(req.body || {}), ...paperMark() }));
 });
 
 router.post("/burn", (req, res) => {
-  mutate(res, (store) => burnNft(store, req.body || {}));
+  mutate(res, (store) => burnNft(store, { ...(req.body || {}), ...paperMark() }));
 });
 
 router.post("/buy", (req, res) => {
   mutate(res, (store) => ({
-    ...buyNow(store, req.body || {}),
-    note: "Paper fill on the local desk. Xaman signs the same path when keys are present."
+    ...buyNow(store, { ...(req.body || {}), ...paperMark() }),
+    note: "Paper fill. Marker is FUZION-XIO / paper so it cannot be mixed with Xaman-signed trades."
   }));
 });
 
 router.post("/offer", (req, res) => {
-  mutate(res, (store) => placeOffer(store, req.body || {}));
+  mutate(res, (store) => placeOffer(store, { ...(req.body || {}), ...paperMark() }));
 });
 
 router.post("/offer/:id/cancel", (req, res) => {
@@ -167,7 +168,9 @@ router.post("/offer/:id/cancel", (req, res) => {
 });
 
 router.post("/offer/:id/accept", (req, res) => {
-  mutate(res, (store) => acceptOffer(store, req.params.id, req.body?.seller));
+  mutate(res, (store) =>
+    acceptOffer(store, req.params.id, req.body?.seller, paperMark())
+  );
 });
 
 router.post("/auction", (req, res) => {
@@ -189,7 +192,7 @@ router.get("/sweep/:name", (req, res) => {
 });
 
 router.post("/sweep/:name", (req, res) => {
-  mutate(res, (store) => runSweep(store, req.params.name, req.body || {}));
+  mutate(res, (store) => runSweep(store, req.params.name, { ...(req.body || {}), ...paperMark() }));
 });
 
 router.post("/watch", (req, res) => {

@@ -15,6 +15,7 @@ import {
   placeOffer,
   searchMarket
 } from "./market.js";
+import { stampRows } from "./tradeMarker.js";
 
 export const NETWORK_NOTE =
   "XRPL network cost is reserve + transaction drops, paid in XRP. It is not a platform fee.";
@@ -304,7 +305,7 @@ export function portfolio(store, address) {
     value: +value.toFixed(4),
     pnl: +(sold - gained).toFixed(4),
     collections: Object.values(byCollection),
-    activity: sales.slice(0, 20),
+    activity: stampRows(sales).slice(0, 20),
     nfts: owned.slice(0, 48)
   };
 }

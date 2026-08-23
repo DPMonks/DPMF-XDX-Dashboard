@@ -10,6 +10,7 @@ import {
 } from "./collections.js";
 import { assetsLabel, offerAssets } from "./currency.js";
 import { PLATFORM_FEE_BPS, recordFees, splitTrade } from "./fees.js";
+import { signedQuery, stampRows, stampTrade, tradeMark } from "./tradeMarker.js";
 import { ensureTrustlines } from "./wallet.js";
 
 export { PLATFORM_FEE_BPS };
@@ -228,17 +229,23 @@ export function sweepPlan(store, name, { count = 5, maxPrice } = {}) {
 
 export function pushActivity(store, event) {
   ensureMarket(store);
-  store.activity.unshift({
-    _id: id("act"),
-    createdAt: nowIso(),
-    platformFeeBps: PLATFORM_FEE_BPS,
-    ...event
-  });
+  store.activity.unshift(
+    stampTrade({
+      _id: id("act"),
+      createdAt: nowIso(),
+      platformFeeBps: PLATFORM_FEE_BPS,
+      ...event
+    })
+  );
   store.activity = store.activity.slice(0, 500);
   return store.activity[0];
 }
 
-export function listForSale(store, { nftId, amount, currency, seller }) {
+function markFrom(body = {}) {
+  return tradeMark(body);
+}
+
+export function listForSale(store, { nftId, amount, currency, seller, signed, txid, sign }) {
   ensureMarket(store);
   const nft = resolveNft(store, nftId);
   if (!nft) return { ok: false, error: "NFT not found" };
@@ -261,12 +268,13 @@ export function listForSale(store, { nftId, amount, currency, seller }) {
     collectionSlug: nft.collectionSlug,
     amount: patch.amount,
     currency: patch.currency,
-    from: patch.accountNumber
+    from: patch.accountNumber,
+    ...markFrom({ signed, txid, sign })
   });
   return { ok: true, nft: hydrate(store, { ...nft, ...patch }), activity };
 }
 
-export function burnNft(store, { nftId, from }) {
+export function burnNft(store, { nftId, from, signed, txid, sign }) {
   ensureMarket(store);
   const nft = resolveNft(store, nftId);
   if (!nft) return { ok: false, error: "NFT not found" };
@@ -290,12 +298,13 @@ export function burnNft(store, { nftId, from }) {
     nftId: nft._id,
     name: nft.name,
     collectionName: nft.collectionName,
-    from: from || nft.accountNumber
+    from: from || nft.accountNumber,
+    ...markFrom({ signed, txid, sign })
   });
   return { ok: true, nft: { ...nft, ...patch }, activity };
 }
 
-export function delist(store, { nftId }) {
+export function delist(store, { nftId, signed, txid, sign }) {
   ensureMarket(store);
   const nft = resolveNft(store, nftId);
   if (!nft) return { ok: false, error: "NFT not found" };
@@ -311,12 +320,13 @@ export function delist(store, { nftId }) {
     name: nft.name,
     collectionName: nft.collectionName,
     collectionSlug: nft.collectionSlug,
-    from: nft.accountNumber
+    from: nft.accountNumber,
+    ...markFrom({ signed, txid, sign })
   });
   return { ok: true, activity };
 }
 
-export function buyNow(store, { nftId, buyer, skipFee = false }) {
+export function buyNow(store, { nftId, buyer, skipFee = false, signed, txid, sign }) {
   ensureMarket(store);
   const nft = resolveNft(store, nftId);
   if (!nft) return { ok: false, error: "NFT not found" };
@@ -333,6 +343,7 @@ export function buyNow(store, { nftId, buyer, skipFee = false }) {
     currency: nft.currency,
     issuer: nft.issuer || nft.Issuer
   });
+  const mark = markFrom({ signed, txid, sign });
   const fees = skipFee
     ? []
     : recordFees(store, {
@@ -340,23 +351,27 @@ export function buyNow(store, { nftId, buyer, skipFee = false }) {
         from: patch.accountNumber,
         to: seller,
         nftId: nft._id,
-        type: "sale"
+        type: "sale",
+        ...mark
       });
   ensureTrustlines(store, { address: patch.accountNumber, assets });
   const split = skipFee ? { fee: 0, net: Number(nft.amount) || 0 } : splitTrade(nft.amount);
-  store.tradehistories.push({
-    nftID: nft._id,
-    NFTokenID: nft.NFTokenID,
-    amount: nft.amount,
-    currency: nft.currency,
-    fee: split.fee,
-    net: split.net,
-    platformFeeBps: PLATFORM_FEE_BPS,
-    from: seller,
-    to: patch.accountNumber,
-    createdAt: nowIso(),
-    type: "sale"
-  });
+  store.tradehistories.push(
+    stampTrade({
+      nftID: nft._id,
+      NFTokenID: nft.NFTokenID,
+      amount: nft.amount,
+      currency: nft.currency,
+      fee: split.fee,
+      net: split.net,
+      platformFeeBps: PLATFORM_FEE_BPS,
+      from: seller,
+      to: patch.accountNumber,
+      createdAt: nowIso(),
+      type: "sale",
+      ...mark
+    })
+  );
   const activity = pushActivity(store, {
     type: "sale",
     nftId: nft._id,
@@ -370,9 +385,10 @@ export function buyNow(store, { nftId, buyer, skipFee = false }) {
     platformFeeBps: PLATFORM_FEE_BPS,
     from: seller,
     to: patch.accountNumber,
-    royaltyBps: nft.royaltyBps || DEFAULT_ROYALTY_BPS
+    royaltyBps: nft.royaltyBps || DEFAULT_ROYALTY_BPS,
+    ...mark
   });
-  return { ok: true, activity, simulated: true, fees, fee: split };
+  return { ok: true, activity, simulated: !mark.signed, fees, fee: split };
 }
 
 export function placeOffer(store, body) {
@@ -398,7 +414,8 @@ export function placeOffer(store, body) {
     from: body.from || "rFuzionXioDemoBidder1111111111111",
     status: "open",
     source: body.source || "desk",
-    createdAt: nowIso()
+    createdAt: nowIso(),
+    ...markFrom(body)
   };
   store.offers.unshift(offer);
   ensureTrustlines(store, { address: offer.from, assets });
@@ -414,35 +431,54 @@ export function placeOffer(store, body) {
     assets,
     label: offer.label,
     from: offer.from,
-    source: offer.source
+    source: offer.source,
+    ...markFrom(body)
   });
   return { ok: true, offer };
 }
 
-export function cancelOffer(store, offerId) {
+export function cancelOffer(store, offerId, extra = {}) {
   ensureMarket(store);
   const offer = store.offers.find((row) => row._id === offerId);
   if (!offer) return { ok: false, error: "offer not found" };
   offer.status = "cancelled";
+  const mark = markFrom(extra);
+  pushActivity(store, {
+    type: "cancel_offer",
+    nftId: offer.nftId,
+    name: offer.name,
+    collectionName: offer.collectionName,
+    amount: offer.amount,
+    currency: offer.currency,
+    from: extra.from || offer.from,
+    ...mark
+  });
   return { ok: true, offer };
 }
 
-export function acceptOffer(store, offerId, seller) {
+export function acceptOffer(store, offerId, seller, extra = {}) {
   ensureMarket(store);
   const offer = store.offers.find((row) => row._id === offerId && row.status === "open");
   if (!offer) return { ok: false, error: "offer not found" };
   offer.status = "accepted";
+  const mark = markFrom(extra);
   const fees = recordFees(store, {
     assets: offer.assets || offerAssets(offer),
     from: offer.from,
     to: seller,
     nftId: offer.nftId,
-    type: "accept_offer"
+    type: "accept_offer",
+    ...mark
   });
   if (offer.kind === "item" && offer.nftId) {
     const nft = resolveNft(store, offer.nftId);
     if (nft && nft.status === "sale") {
-      buyNow(store, { nftId: offer.nftId, buyer: offer.from, skipFee: true });
+      buyNow(store, {
+        nftId: offer.nftId,
+        buyer: offer.from,
+        skipFee: true,
+        ...mark
+      });
     }
   }
   pushActivity(store, {
@@ -453,9 +489,10 @@ export function acceptOffer(store, offerId, seller) {
     amount: offer.amount,
     currency: offer.currency,
     from: seller,
-    to: offer.from
+    to: offer.from,
+    ...mark
   });
-  return { ok: true, offer, simulated: true, fees };
+  return { ok: true, offer, simulated: !mark.signed, fees };
 }
 
 export function startAuction(store, body) {
@@ -484,12 +521,13 @@ export function startAuction(store, body) {
     name: nft.name,
     amount: auction.minBid,
     currency: auction.currency,
-    from: auction.seller
+    from: auction.seller,
+    ...markFrom(body)
   });
   return { ok: true, auction };
 }
 
-export function bidAuction(store, { auctionId, from, amount }) {
+export function bidAuction(store, { auctionId, from, amount, signed, txid, sign }) {
   ensureMarket(store);
   const auction = store.auctions.find((row) => row._id === auctionId && row.status === "live");
   if (!auction) return { ok: false, error: "auction not found" };
@@ -508,7 +546,8 @@ export function bidAuction(store, { auctionId, from, amount }) {
     name: auction.name,
     amount: bid.amount,
     currency: auction.currency,
-    from
+    from,
+    ...markFrom({ signed, txid, sign })
   });
   return { ok: true, auction, bid };
 }
@@ -517,19 +556,22 @@ export function runSweep(store, name, body) {
   const plan = sweepPlan(store, name, body);
   if (!plan.ok) return plan;
   const fills = [];
+  const fillMark = markFrom(body);
   for (const item of plan.items) {
-    const result = buyNow(store, { nftId: item._id, buyer: body.buyer });
+    const result = buyNow(store, { nftId: item._id, buyer: body.buyer, ...fillMark });
     if (result.ok) fills.push(item);
   }
+  const mark = markFrom(body);
   pushActivity(store, {
     type: "sweep",
     collectionName: plan.collection,
     amount: plan.total,
     currency: plan.currency,
     from: body.buyer,
-    count: fills.length
+    count: fills.length,
+    ...mark
   });
-  return { ok: true, simulated: true, ...plan, filled: fills.length };
+  return { ok: true, simulated: !mark.signed, ...plan, filled: fills.length };
 }
 
 export function searchMarket(store, q) {
@@ -578,7 +620,10 @@ export function rankings(store) {
 }
 
 export function activityFeed(store, query = {}) {
-  let rows = store.activity || [];
+  let rows = stampRows(store.activity || []);
+  const signed = signedQuery(query.signed);
+  if (signed === true) rows = rows.filter((row) => row.signed);
+  if (signed === false) rows = rows.filter((row) => !row.signed);
   if (query.type) rows = rows.filter((row) => row.type === query.type);
   if (query.collection) {
     const slug = String(query.collection).toLowerCase();

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { readStore, update } from "../lib/store.js";
 import { findProfile } from "../lib/profile.js";
 import { placeOffer } from "../lib/market.js";
+import { paperMark } from "../lib/tradeMarker.js";
 import {
   accountFromAuth,
   applySignedIntent,
@@ -279,7 +280,7 @@ router.post("/xrpl/bidNft", (req, res) => {
   }
   let result;
   update((current) => {
-    result = placeOffer(current, { ...req.body, from: account });
+    result = placeOffer(current, { ...req.body, from: account, ...paperMark() });
     return current;
   });
   if (!result?.ok) {

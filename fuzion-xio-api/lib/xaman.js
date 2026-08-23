@@ -9,8 +9,10 @@ import {
   cancelOffer,
   delist,
   listForSale,
-  placeOffer
+  placeOffer,
+  pushActivity
 } from "./market.js";
+import { signedMark, xrplMemos } from "./tradeMarker.js";
 import { accountInfo, accountLines } from "./xrpl.js";
 
 export const XUMM_API = "https://xumm.app/api/v1/platform";
@@ -144,6 +146,7 @@ export function txjsonFor(kind, body = {}, account = "") {
   const nftId = body.NFTokenID || body.nftokenID || body.nft_id || "";
   const offerIndex = body.nftOfferIndex || body.offerIndex || body.NFTokenSellOffer || "";
   const dest = body.destAdd || body.destination || body.Destination || "";
+  let txjson;
 
   switch (kind) {
     case "connect":
@@ -151,7 +154,7 @@ export function txjsonFor(kind, body = {}, account = "") {
     case "signin":
       return { TransactionType: "SignIn" };
     case "mint":
-      return {
+      txjson = {
         TransactionType: "NFTokenMint",
         Account: account,
         URI: toHex(body.uri || body.image || body.URL || ""),
@@ -159,47 +162,53 @@ export function txjsonFor(kind, body = {}, account = "") {
         TransferFee: transferFeeFromBps(body.royaltyBps || body.TransferFee || DEFAULT_ROYALTY_BPS),
         NFTokenTaxon: Number(body.taxon || body.NFTokenTaxon || 0)
       };
+      break;
     case "sale":
-      return {
+      txjson = {
         TransactionType: "NFTokenCreateOffer",
         Account: account,
         NFTokenID: nftId,
         Amount: amountForXrpl(body),
         Flags: 1
       };
+      break;
     case "buy":
     case "makeOffer":
-      return {
+      txjson = {
         TransactionType: "NFTokenCreateOffer",
         Account: account,
         NFTokenID: nftId,
         Amount: amountForXrpl(body),
         ...(body.Owner || body.nft_owner ? { Owner: body.Owner || body.nft_owner } : {})
       };
+      break;
     case "acceptOffer":
-      return {
+      txjson = {
         TransactionType: "NFTokenAcceptOffer",
         Account: account,
         ...(body.NFTokenBuyOffer
           ? { NFTokenBuyOffer: body.NFTokenBuyOffer }
           : { NFTokenSellOffer: offerIndex || body.NFTokenSellOffer })
       };
+      break;
     case "cancelSale":
     case "cancelSend":
     case "cancelOffer":
-      return {
+      txjson = {
         TransactionType: "NFTokenCancelOffer",
         Account: account,
         NFTokenOffers: [offerIndex || body.offerId].filter(Boolean)
       };
+      break;
     case "burn":
-      return {
+      txjson = {
         TransactionType: "NFTokenBurn",
         Account: account,
         NFTokenID: nftId
       };
+      break;
     case "send":
-      return {
+      txjson = {
         TransactionType: "NFTokenCreateOffer",
         Account: account,
         NFTokenID: nftId,
@@ -207,8 +216,9 @@ export function txjsonFor(kind, body = {}, account = "") {
         Destination: dest,
         Flags: 1
       };
+      break;
     case "trustset":
-      return {
+      txjson = {
         TransactionType: "TrustSet",
         Account: account,
         LimitAmount: {
@@ -217,9 +227,12 @@ export function txjsonFor(kind, body = {}, account = "") {
           value: String(body.limit || "1000000000")
         }
       };
+      break;
     default:
-      return body.txjson || { TransactionType: "SignIn" };
+      txjson = body.txjson || { TransactionType: "SignIn" };
   }
+  if (!txjson || txjson.TransactionType === "SignIn") return txjson;
+  return { ...txjson, ...xrplMemos({ kind }) };
 }
 
 export function shapeCreated(created = {}) {
@@ -299,6 +312,7 @@ export function applySignedIntent(store, record = {}, signed = {}) {
   const txid = signed.txid || "";
   const nftId = record.nftId || record._id;
   const kind = record.kind || "connect";
+  const mark = signedMark({ txid });
   let applied = { ok: true, kind, skipped: false };
 
   if (kind === "connect" || kind === "register" || kind === "signin") {
@@ -309,26 +323,31 @@ export function applySignedIntent(store, record = {}, signed = {}) {
       nftId,
       amount: record.amount,
       currency: record.currency,
-      seller: account
+      seller: account,
+      ...mark
     });
   } else if (kind === "cancelSale" && nftId) {
-    applied = delist(store, { nftId });
+    applied = delist(store, { nftId, ...mark });
   } else if (kind === "buy" && nftId) {
-    applied = buyNow(store, { nftId, buyer: account });
+    applied = buyNow(store, { nftId, buyer: account, ...mark });
   } else if (kind === "burn" && nftId) {
-    applied = burnNft(store, { nftId, from: account });
+    applied = burnNft(store, { nftId, from: account, ...mark });
   } else if (kind === "makeOffer") {
     applied = placeOffer(store, {
       nftId,
       from: account,
       amount: record.amount,
       currency: record.currency,
-      issuer: record.issuer
+      issuer: record.issuer,
+      ...mark
     });
   } else if (kind === "acceptOffer" && (record.offerId || record.nftOfferIndex)) {
-    applied = acceptOffer(store, record.offerId || record.nftOfferIndex, account);
+    applied = acceptOffer(store, record.offerId || record.nftOfferIndex, account, mark);
   } else if (kind === "cancelOffer" && (record.offerId || record.nftOfferIndex)) {
-    applied = cancelOffer(store, record.offerId || record.nftOfferIndex);
+    applied = cancelOffer(store, record.offerId || record.nftOfferIndex, {
+      from: account,
+      ...mark
+    });
   } else if (kind === "send" && nftId && record.destAdd) {
     const nft = resolveNft(store, nftId);
     if (nft && !nft.virtual) {
@@ -338,6 +357,13 @@ export function applySignedIntent(store, record = {}, signed = {}) {
         row.status = "minted";
       }
     }
+    pushActivity(store, {
+      type: "send",
+      nftId,
+      from: account,
+      to: record.destAdd,
+      ...mark
+    });
     applied = { ok: true, kind, destAdd: record.destAdd };
   } else if (kind === "mint" && nftId) {
     const row = (store.nfts || []).find((item) => item._id === nftId);
@@ -345,7 +371,15 @@ export function applySignedIntent(store, record = {}, signed = {}) {
       row.isMinted = true;
       row.status = row.status === "sale" ? "sale" : "minted";
       row.ledgerTx = txid;
+      Object.assign(row, mark);
     }
+    pushActivity(store, {
+      type: "mint",
+      nftId,
+      name: row?.name,
+      from: account,
+      ...mark
+    });
     applied = { ok: true, kind, minted: true };
   }
 
