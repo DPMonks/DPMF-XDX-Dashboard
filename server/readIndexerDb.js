@@ -44,6 +44,7 @@ import { carryActivityMetrics, issuedActivitySeries } from "../src/activityHisto
 import { inferTradesFromHistory } from "../src/xdxTrades.js";
 import { loadIssuedHolderHistory } from "./issuedHolderHistory.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
+import { attachQuoteXrpPrices, loadQuoteXrpRates } from "./quoteXrpMarket.js";
 import {
   XDX_BLACKHOLED_AT,
   blackholeAtFromTransactions,
@@ -1476,7 +1477,11 @@ async function loadXdxLpPools(db) {
   const quote = await loadXrpQuote(db);
   const xrpUsd = Number(quote.usd || 0);
   const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
-  const quotePrices = await loadQuoteUsdMap(db, xrpUsd);
+  const quotePrices = attachQuoteXrpPrices(
+    { ...(await loadQuoteUsdMap(db, xrpUsd)), xrpUsd },
+    await loadQuoteXrpRates().catch(() => ({})),
+    xrpUsd
+  );
 
   return {
     count: stored.rows.length,
@@ -1957,16 +1962,21 @@ async function buildPrices(db) {
   const quotes = { ...quoteMap, XRP: xrpUsd || Number(quoteMap.XRP) || 0 };
   delete quotes.XDX;
   delete quotes.xdx;
-  return {
-    xrpUsd,
-    xrpGbp: Number(quote.gbp || 0),
-    xdxUsd,
-    recorded_price: xdxUsd,
-    xdxGbp: xdxUsd > 0 && quote.gbp && xrpUsd > 0 ? xdxUsd * (quote.gbp / xrpUsd) : 0,
-    quotes,
-    ...quotes,
-    source: "db",
-  };
+  const liveRates = await loadQuoteXrpRates().catch(() => ({}));
+  return attachQuoteXrpPrices(
+    {
+      xrpUsd,
+      xrpGbp: Number(quote.gbp || 0),
+      xdxUsd,
+      recorded_price: xdxUsd,
+      xdxGbp: xdxUsd > 0 && quote.gbp && xrpUsd > 0 ? xdxUsd * (quote.gbp / xrpUsd) : 0,
+      quotes,
+      ...quotes,
+      source: "db",
+    },
+    liveRates,
+    xrpUsd
+  );
 }
 
 async function buildTokenOverview(db) {

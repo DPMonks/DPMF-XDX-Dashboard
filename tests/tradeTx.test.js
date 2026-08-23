@@ -160,6 +160,15 @@ test("trade windows show pay and receive from the selected pair", () => {
     }),
     1150 * 0.000087
   );
+  assert.equal(
+    quoteUnitUsd({
+      quoteId: "XIO",
+      pool: { reserve_xdx: 1150, reserve_currency: 1, xdxUsd: 0.000087 },
+      prices: { xioXrp: 26.4, xrpUsd: 1 },
+      allowImplied: false,
+    }),
+    26.4
+  );
   const add = tradeSides({ action: "addLp", amount: 100, quoteQty: 5, quoteLabel: "XRP", lpOut: 20 });
   assert.equal(add.pay[0].asset, "XDX");
   assert.equal(add.pay[1].asset, "XRP");
