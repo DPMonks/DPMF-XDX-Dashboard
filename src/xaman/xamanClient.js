@@ -102,15 +102,21 @@ export function isClassicAddress(value) {
 }
 
 export function extractSignedAccount(result) {
-  const account =
-    result?.response?.account ||
-    result?.account ||
-    result?.payload?.response?.account ||
-    result?.response?.signer ||
-    result?.meta?.account ||
-    null;
-  const text = String(account || "").trim();
-  return isClassicAddress(text) ? text : null;
+  const seen = new Set();
+  const queue = [result];
+  for (let depth = 0; queue.length && depth < 40; depth += 1) {
+    const node = queue.shift();
+    if (!node || typeof node !== "object" || seen.has(node)) continue;
+    seen.add(node);
+    for (const key of ["account", "signer", "signer_account", "address"]) {
+      const text = String(node[key] || "").trim();
+      if (isClassicAddress(text)) return text;
+    }
+    for (const child of [node.response, node.payload, node.meta, node.data]) {
+      if (child && typeof child === "object") queue.push(child);
+    }
+  }
+  return null;
 }
 
 export function payloadLooksSigned(result) {

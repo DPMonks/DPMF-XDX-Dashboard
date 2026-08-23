@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "../context/useWallet";
 import { shortAddress } from "../utils/format";
-import { takeXamanReturnUuid } from "../xaman/payloadResume";
+import { claimSignedWallet } from "../xaman/claimSignIn";
+import { clearXamanReturn, peekXamanUuid } from "../xaman/payloadResume";
 import { liveWalletAddress, resolveNeedSignIn } from "../wallet/walletStorage";
 import { WALLET_EVENTS } from "../xaman/tradeTx";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -14,26 +15,49 @@ export default function ConnectWallet() {
   const { walletAddress, connectWallet, disconnectWallet } = useWallet();
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
   const startRef = useRef(start);
+  const resetRef = useRef(reset);
+  const claimingRef = useRef(false);
+  const [claiming, setClaiming] = useState(false);
 
   useEffect(() => {
     startRef.current = start;
-  }, [start]);
+    resetRef.current = reset;
+  }, [start, reset]);
 
   const finishSignIn = useCallback((account) => {
     if (!account) return;
     connectWallet(account);
+    clearXamanReturn();
     window.dispatchEvent(new CustomEvent(WALLET_EVENTS.signedIn, { detail: { account } }));
   }, [connectWallet]);
 
-  const resumeSignIn = useCallback(() => {
-    if (liveWalletAddress(walletAddress)) return;
-    const pending = takeXamanReturnUuid();
-    if (!pending) return;
-    startRef.current({
-      resumeUuid: pending,
-      onSigned: finishSignIn,
-      errorMessage: t.walletError,
-    });
+  const completePendingSignIn = useCallback(async () => {
+    if (liveWalletAddress(walletAddress)) {
+      clearXamanReturn();
+      return;
+    }
+    const pending = peekXamanUuid();
+    if (!pending || claimingRef.current) return;
+    claimingRef.current = true;
+    window.setTimeout(() => setClaiming(true), 0);
+    try {
+      const account = await claimSignedWallet(pending);
+      if (account) {
+        finishSignIn(account);
+        resetRef.current();
+        return;
+      }
+      startRef.current({
+        resumeUuid: pending,
+        onSigned: (signed) => {
+          if (signed) finishSignIn(signed);
+        },
+        errorMessage: t.walletError,
+      });
+    } finally {
+      claimingRef.current = false;
+      window.setTimeout(() => setClaiming(false), 0);
+    }
   }, [walletAddress, finishSignIn, t.walletError]);
 
   function startConnection() {
@@ -74,10 +98,12 @@ export default function ConnectWallet() {
   }, [walletAddress, connectWallet, finishSignIn, t.walletError]);
 
   useEffect(() => {
-    const boot = window.setTimeout(() => resumeSignIn(), 0);
+    const boot = window.setTimeout(() => {
+      completePendingSignIn();
+    }, 0);
     function wake() {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      window.setTimeout(() => resumeSignIn(), 0);
+      window.setTimeout(() => completePendingSignIn(), 0);
     }
     document.addEventListener("visibilitychange", wake);
     window.addEventListener("pageshow", wake);
@@ -88,23 +114,26 @@ export default function ConnectWallet() {
       window.removeEventListener("pageshow", wake);
       window.removeEventListener("focus", wake);
     };
-  }, [resumeSignIn]);
+  }, [completePendingSignIn]);
+
+  const waiting = status === "loading" || status === "waiting" || claiming;
 
   return (
     <div className="wallet-control">
       <WalletButton
         onClick={startConnection}
-        disabled={status === "loading" || status === "waiting"}
+        disabled={waiting}
         connected={Boolean(walletAddress)}
         address={shortAddress(walletAddress)}
       />
       {error && <p className="wallet-error">{error}</p>}
       <WalletModal
-        visible={status === "loading" || status === "waiting"}
+        visible={waiting}
         qrUrl={qr}
         mobileUrl={mobileUrl}
-        uuid={uuid}
-        status={status}
+        uuid={uuid || peekXamanUuid()}
+        status={claiming && status === "idle" ? "loading" : status}
+        preparingLabel={t.preparing}
         onClose={cancelSignIn}
       />
     </div>

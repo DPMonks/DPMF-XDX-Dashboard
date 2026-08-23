@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { WalletContext } from "./walletContextInstance";
 import { persistLiveWallet, readLiveWallet } from "../wallet/walletStorage";
-import { clearPendingPayload } from "../xaman/payloadResume";
+import { clearXamanReturn } from "../xaman/payloadResume";
 
 export function WalletProvider({ children }) {
   const [walletAddress, setWalletAddress] = useState(() => {
@@ -46,7 +46,7 @@ export function WalletProvider({ children }) {
 
   const disconnectWallet = useCallback(() => {
     persistLiveWallet(null);
-    clearPendingPayload();
+    clearXamanReturn();
     setWalletAddress(null);
   }, []);
 

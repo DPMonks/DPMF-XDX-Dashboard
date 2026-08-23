@@ -32,6 +32,19 @@ export default function WalletModal({
     if (event.target === event.currentTarget) onClose?.();
   }
 
+  function openXamanApp(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (appHref) window.location.href = appHref;
+  }
+
+  function openXamanWeb(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!webHref) return;
+    window.open(webHref, "_blank", "noopener,noreferrer");
+  }
+
   return (
     <div className="wallet-modal-overlay" onPointerDown={closeOverlay} onClick={(event) => event.stopPropagation()}>
       <div
@@ -54,19 +67,14 @@ export default function WalletModal({
         {phone && status !== "loading" && (appHref || webHref) ? (
           <>
             {appHref ? (
-              <a href={appHref} className="mobile-link-btn">
+              <button type="button" className="mobile-link-btn" onClick={openXamanApp}>
                 {connectLabel}
-              </a>
+              </button>
             ) : null}
             {webHref ? (
-              <a
-                href={webHref}
-                className="mobile-link-btn is-web"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <button type="button" className="mobile-link-btn is-web" onClick={openXamanWeb}>
                 {t.openXamanWeb || t.openApp}
-              </a>
+              </button>
             ) : null}
             <p className="wallet-modal-hint">{t.waitingXaman}</p>
           </>

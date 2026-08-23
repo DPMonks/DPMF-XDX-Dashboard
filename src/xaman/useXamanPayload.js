@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { detectTradeExecution, isTradeTxjson } from "./detectExecution";
 import {
-  clearPendingPayload,
-  rememberPendingPayload,
+  clearXamanReturn,
+  markXamanReturn,
   xamanWebsocketUrl,
 } from "./payloadResume";
 import { notifyTradeExecuted } from "./tradeTx";
@@ -55,7 +55,7 @@ export function useXamanPayload() {
     setMobileUrl(null);
     setUuid(null);
     setStatus("idle");
-    if (!options.keepPending) clearPendingPayload();
+    if (!options.keepPending) clearXamanReturn();
   };
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export function useXamanPayload() {
           }
         : await createPayload(body);
       if (!payloadSessionOpen(session, sessionRef.current)) return;
-      rememberPendingPayload(payload.uuid, { watchTrade });
+      markXamanReturn(payload.uuid, { watchTrade });
       setQr(payload.qr);
       setMobileUrl(payload.mobileUrl);
       setUuid(payload.uuid);

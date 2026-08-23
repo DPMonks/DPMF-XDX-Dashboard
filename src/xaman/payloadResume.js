@@ -93,14 +93,43 @@ function stripXamanSearchParams() {
   }
 }
 
+export function writeXamanSearchParam(uuid) {
+  const id = String(uuid || "").trim();
+  if (!isPayloadUuid(id) || typeof window === "undefined" || !window.location || !window.history?.replaceState) {
+    return;
+  }
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("xaman") === id) return;
+    for (const key of RETURN_PARAMS) url.searchParams.delete(key);
+    url.searchParams.set("xaman", id);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // ignore history failures
+  }
+}
+
+export function markXamanReturn(uuid, extra = {}) {
+  const record = rememberPendingPayload(uuid, extra);
+  if (record) writeXamanSearchParam(record.uuid);
+  return record;
+}
+
+export function peekXamanUuid(
+  search = typeof window !== "undefined" ? window.location.search : ""
+) {
+  return readXamanReturnUuid(search) || peekPendingPayload()?.uuid || null;
+}
+
 export function takeXamanReturnUuid(
   search = typeof window !== "undefined" ? window.location.search : ""
 ) {
-  const fromUrl = readXamanReturnUuid(search);
-  if (fromUrl) {
-    rememberPendingPayload(fromUrl);
-    stripXamanSearchParams();
-    return fromUrl;
-  }
-  return peekPendingPayload()?.uuid || null;
+  const id = peekXamanUuid(search);
+  if (id) rememberPendingPayload(id);
+  return id;
+}
+
+export function clearXamanReturn() {
+  clearPendingPayload();
+  stripXamanSearchParams();
 }

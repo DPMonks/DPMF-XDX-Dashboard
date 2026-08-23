@@ -18,6 +18,7 @@ import {
   XDX_TOTAL_SUPPLY,
   xdxTrustSetTxjson,
 } from "../src/constants/ledger.js";
+import { claimSignedWallet } from "../src/xaman/claimSignIn.js";
 import {
   extractSignedAccount,
   isClassicAddress,
@@ -31,6 +32,7 @@ import {
   clearPendingPayload,
   isPayloadUuid,
   peekPendingPayload,
+  peekXamanUuid,
   readXamanReturnUuid,
   rememberPendingPayload,
   takeXamanReturnUuid,
@@ -181,10 +183,32 @@ test("extractSignedAccount reads Xaman SignIn response shapes", () => {
   const account = "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo";
   assert.equal(isClassicAddress(account), true);
   assert.equal(extractSignedAccount({ response: { account } }), account);
+  assert.equal(extractSignedAccount({ payload: { response: { signer: account } } }), account);
   assert.equal(extractSignedAccount({ meta: { signed: true } }), null);
   assert.equal(payloadLooksSigned({ meta: { signed: true } }), true);
   assert.equal(payloadLooksSigned({ response: { account } }), true);
   assert.equal(extractSignedAccount({ account: "not-an-address" }), null);
+});
+
+test("claimSignedWallet keeps polling until Xaman returns the signed account", async () => {
+  const account = "rN7n7suQDqawFkUvqhD56VwThRCFSStdz1";
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  let calls = 0;
+  const found = await claimSignedWallet(uuid, {
+    waitMs: 0,
+    fetchResult: async () => {
+      calls += 1;
+      if (calls < 3) return { meta: { signed: false } };
+      return { meta: { signed: true }, response: { account } };
+    },
+  });
+  assert.equal(found, account);
+  assert.equal(calls, 3);
+  const cancelled = await claimSignedWallet(uuid, {
+    waitMs: 0,
+    fetchResult: async () => ({ meta: { cancelled: true } }),
+  });
+  assert.equal(cancelled, null);
 });
 
 function memoryStore() {
@@ -217,7 +241,9 @@ test("Xaman return query and pending payload survive a fresh page", () => {
   try {
     rememberPendingPayload(uuid);
     assert.equal(peekPendingPayload()?.uuid, uuid);
+    assert.equal(peekXamanUuid(""), uuid);
     assert.equal(takeXamanReturnUuid(""), uuid);
+    assert.equal(takeXamanReturnUuid(`?xaman=${uuid}&utm=1`), uuid);
   } finally {
     clearPendingPayload();
     if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
