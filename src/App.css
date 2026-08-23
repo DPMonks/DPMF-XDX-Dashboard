@@ -2080,7 +2080,7 @@ body {
   padding: 5px 8px 6px;
   border: 1px solid rgba(57, 255, 20, 0.16);
   border-radius: 8px;
-  background: rgba(57, 255, 20, 0.045);
+  background: var(--dpmf-bg-elevated);
   display: flex;
   flex-direction: column;
   gap: 2px;
