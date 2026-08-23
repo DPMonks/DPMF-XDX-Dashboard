@@ -50,11 +50,13 @@ export function shouldSubmitTxjson(txjson) {
   return Boolean(type && type !== "SignIn");
 }
 
+export function xamanReturnUrl(origin) {
+  const web = String(origin || "https://xdx-exchange.dpmf.technology").replace(/\/$/, "");
+  return `${web}/?xaman={id}`;
+}
+
 export function buildXamanPayload(origin, txjson, options = {}) {
-  const web = String(origin || "https://xdx-exchange.dpmf.technology").replace(
-    /\/$/,
-    ""
-  );
+  const returnTo = xamanReturnUrl(origin);
   const tx = txjson && typeof txjson === "object" ? txjson : { TransactionType: "SignIn" };
   return {
     txjson: tx,
@@ -62,9 +64,10 @@ export function buildXamanPayload(origin, txjson, options = {}) {
       submit: options.submit ?? shouldSubmitTxjson(tx),
       expire: options.expire ?? 5,
       return_url: {
-        // App-only: identical web+app URLs make Xaman steal the current
-        // browser tab and show their hosted sign-in page.
-        app: web,
+        // {id} is replaced with the payload uuid so a fresh iPhone/iPad
+        // tab can finish sign-in after Xaman reopens the dashboard.
+        app: returnTo,
+        web: returnTo,
       },
     },
   };

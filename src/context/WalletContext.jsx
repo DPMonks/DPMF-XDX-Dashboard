@@ -1,38 +1,49 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { WalletContext } from "./walletContextInstance";
 
 const STORAGE_KEY = "dpmf-xdx-wallet";
 
+function readStoredWallet() {
+  try {
+    return sessionStorage.getItem(STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function persistWallet(account) {
+  try {
+    if (account) sessionStorage.setItem(STORAGE_KEY, account);
+    else sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore storage failures (private mode, etc.)
+  }
+}
+
 export function WalletProvider({ children }) {
   const [walletAddress, setWalletAddress] = useState(() => {
-    try {
-      return sessionStorage.getItem(STORAGE_KEY);
-    } catch {
-      return null;
-    }
+    const stored = readStoredWallet();
+    if (typeof window !== "undefined") window.userAccount = stored;
+    return stored;
   });
 
   useEffect(() => {
-    try {
-      if (walletAddress) {
-        sessionStorage.setItem(STORAGE_KEY, walletAddress);
-      } else {
-        sessionStorage.removeItem(STORAGE_KEY);
-      }
-    } catch {
-      // ignore storage failures (private mode, etc.)
-    }
+    persistWallet(walletAddress);
+    window.userAccount = walletAddress || null;
   }, [walletAddress]);
 
-  const connectWallet = (account) => {
-    setWalletAddress(account || null);
-    window.userAccount = account || null;
-  };
+  const connectWallet = useCallback((account) => {
+    const next = account || null;
+    persistWallet(next);
+    setWalletAddress(next);
+    window.userAccount = next;
+  }, []);
 
-  const disconnectWallet = () => {
+  const disconnectWallet = useCallback(() => {
+    persistWallet(null);
     setWalletAddress(null);
     window.userAccount = null;
-  };
+  }, []);
 
   return (
     <WalletContext.Provider

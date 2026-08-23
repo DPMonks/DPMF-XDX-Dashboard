@@ -97,13 +97,30 @@ export async function getPayloadResult(uuid) {
   }
 }
 
+export function isClassicAddress(value) {
+  return /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(String(value || "").trim());
+}
+
 export function extractSignedAccount(result) {
-  return (
+  const account =
     result?.response?.account ||
     result?.account ||
     result?.payload?.response?.account ||
-    null
-  );
+    result?.response?.signer ||
+    result?.meta?.account ||
+    null;
+  const text = String(account || "").trim();
+  return isClassicAddress(text) ? text : null;
+}
+
+export function payloadLooksSigned(result) {
+  if (!result || typeof result !== "object") return false;
+  if (extractSignedAccount(result)) return true;
+  if (result.meta?.signed === true || result.signed === true) return true;
+  if (result.meta?.resolved === true && result.meta?.cancelled !== true) {
+    return Boolean(result.response?.hex || result.response?.account);
+  }
+  return false;
 }
 
 export async function getLedgerTx(hash) {
