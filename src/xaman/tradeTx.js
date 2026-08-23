@@ -197,6 +197,11 @@ export function poolPrice(reserveBase, reserveQuote) {
   return quote / base;
 }
 
+export function visibleQuoteQty(quoteQty, hint) {
+  if (quoteQty !== "" && quoteQty != null) return String(quoteQty);
+  return Number(hint) > 0 ? String(hint) : "";
+}
+
 export function predictedQuoteOut(xdxAmount, price, reserveBase, reserveQuote) {
   const fromPool = recommendedQuote(xdxAmount, reserveBase, reserveQuote);
   if (fromPool > 0) return fromPool;

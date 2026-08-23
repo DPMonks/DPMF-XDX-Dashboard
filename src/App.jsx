@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
@@ -142,11 +142,11 @@ export default function App() {
     };
   }, []);
 
-  function openTrade(detail) {
+  const openTrade = useCallback((detail) => {
     const next = normalizeTradeRequest(detail);
     if (!next) return;
     setTradeAction({ ...next, openId: Date.now() });
-  }
+  }, []);
 
   useEffect(() => {
     function onOpen(event) {
@@ -154,7 +154,7 @@ export default function App() {
     }
     window.addEventListener("dpmf-open-trade", onOpen);
     return () => window.removeEventListener("dpmf-open-trade", onOpen);
-  }, []);
+  }, [openTrade]);
 
   const linkState = interfaceLinkState(link, t);
 
@@ -270,6 +270,7 @@ export default function App() {
           action={tradeAction.action}
           initialQuote={tradeAction.quote}
           quoteExtra={tradeAction}
+          initialPools={ammData}
           onClose={() => setTradeAction(null)}
         />
       ) : null}

@@ -471,8 +471,9 @@ body {
   justify-content: center;
   align-items: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(8px);
+  background: rgba(5, 5, 8, 0.82);
+  isolation: isolate;
+  transform: translateZ(0);
   z-index: 9999;
 }
 

@@ -25,6 +25,7 @@ import {
   depositValueSplit,
   tradeSides,
   tradeTotal,
+  visibleQuoteQty,
   xdxUnitUsd,
 } from "../xaman/tradeTx";
 import { formatPoolPct } from "../utils/poolSplit";
@@ -62,6 +63,7 @@ export default function TradePanel({
   action,
   initialQuote = "XRP",
   quoteExtra,
+  initialPools = [],
   spotPrice = 0,
   onClose,
   onSigned,
@@ -75,7 +77,7 @@ export default function TradePanel({
   const [quoteQty, setQuoteQty] = useState("");
   const [price, setPrice] = useState(spotPrice > 0 ? String(spotPrice) : "");
   const [lpAmount, setLpAmount] = useState("");
-  const [pools, setPools] = useState([]);
+  const [pools, setPools] = useState(() => (Array.isArray(initialPools) ? initialPools : []));
   const [lineHint, setLineHint] = useState("");
   const [formError, setFormError] = useState("");
   const [liveSpot, setLiveSpot] = useState(spotPrice);
@@ -108,22 +110,20 @@ export default function TradePanel({
       : Number(liveSpot || spotPrice || implied || price);
   const total = tradeTotal(amount, px);
   const quoteHint = predictedQuoteOut(amount, px, reserves.base, reserves.quote);
-  if ((action === "addLp" || !isLp) && quoteHint > 0 && !quoteQty) {
-    setQuoteQty(String(quoteHint));
-  }
+  const shownQuoteQty = visibleQuoteQty(quoteQty, quoteHint);
   const lpHint = expectedLpTokens(amount, reserves.base, reserves.lpSupply);
   const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
   const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices });
   const deposit = depositValueSplit({
     xdxAmount: amount,
-    quoteAmount: quoteQty || quoteHint,
+    quoteAmount: shownQuoteQty || quoteHint,
     xdxUsd,
     quoteUsd,
   });
   const sides = tradeSides({
     action,
     amount,
-    quoteQty: quoteQty || quoteHint,
+    quoteQty: shownQuoteQty || quoteHint,
     quoteLabel: quote.label,
     total,
     lpAmount: lpAmount || amount,
@@ -202,7 +202,7 @@ export default function TradePanel({
         account: walletAddress,
         quote,
         xdx: amount,
-        cost: quoteQty || total,
+        cost: shownQuoteQty || total,
         market: orderType === "market",
       });
     }
@@ -211,7 +211,7 @@ export default function TradePanel({
         account: walletAddress,
         quote,
         xdx: amount,
-        proceeds: quoteQty || total,
+        proceeds: shownQuoteQty || total,
         market: orderType === "market",
       });
     }
@@ -220,7 +220,7 @@ export default function TradePanel({
         account: walletAddress,
         quote,
         xdx: amount,
-        quoteQty: quoteQty || quoteHint || total,
+        quoteQty: shownQuoteQty || quoteHint || total,
       });
     }
     return ammWithdrawTx({
@@ -264,7 +264,7 @@ export default function TradePanel({
       setFormError(t.tradeNeedTrustline);
       return;
     }
-    if (action === "addLp" && !(Number(quoteQty || quoteHint) > 0)) {
+    if (action === "addLp" && !(Number(shownQuoteQty || quoteHint) > 0)) {
       setFormError(t.tradeNeedAmount);
       return;
     }
@@ -407,7 +407,7 @@ export default function TradePanel({
               type="number"
               min="0"
               step="any"
-              value={quoteQty}
+              value={shownQuoteQty}
               onChange={(event) => {
                 const next = event.target.value;
                 setQuoteQty(next);
@@ -417,7 +417,7 @@ export default function TradePanel({
             />
             {action === "addLp" ? (
               <span className="trade-field-usd">
-                {quoteUsd > 0 ? formatUsd(Number(quoteQty || quoteHint) * quoteUsd, locale) : "—"}
+                {quoteUsd > 0 ? formatUsd(Number(shownQuoteQty || quoteHint) * quoteUsd, locale) : "—"}
               </span>
             ) : null}
           </label>

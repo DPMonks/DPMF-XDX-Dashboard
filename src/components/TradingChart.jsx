@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useI18n } from "../i18n/useI18n";
 import DexChart from "./DexChart";
 import HybridChart from "./HybridChart";
 
-export default function TradingChart() {
+function TradingChart() {
   const { t } = useI18n();
   const [mode, setMode] = useState("hybrid");
 
@@ -29,3 +29,5 @@ export default function TradingChart() {
     </div>
   );
 }
+
+export default memo(TradingChart);

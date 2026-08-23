@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import xamanLogo from "../assets/XAMAN.jpg";
 import { useI18n } from "../i18n/useI18n";
 
@@ -11,12 +12,25 @@ export default function WalletButton({
 }) {
   const { t } = useI18n();
   const caption = label || (connected ? `${t.connected} ${address}` : t.connectWallet);
+  const armed = useRef(0);
+
+  function fire(event) {
+    if (disabled || !onClick) return;
+    const now = Date.now();
+    if (now - armed.current < 400) return;
+    armed.current = now;
+    onClick(event);
+  }
 
   return (
     <button
       type="button"
       className={connected && !label ? "connect-wallet-btn is-connected" : "connect-wallet-btn"}
-      onClick={onClick}
+      onPointerDown={(event) => {
+        if (event.button) return;
+        fire(event);
+      }}
+      onClick={fire}
       disabled={disabled}
       title={title || (connected ? t.disconnect : t.connectWallet)}
     >

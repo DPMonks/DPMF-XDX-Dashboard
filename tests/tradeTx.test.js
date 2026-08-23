@@ -22,6 +22,7 @@ import {
   quoteUnitUsd,
   depositValueSplit,
   tradeSides,
+  visibleQuoteQty,
   xdxUnitUsd,
   tradeTotal,
   xrpDrops,
@@ -119,6 +120,8 @@ test("trade windows show pay and receive from the selected pair", () => {
   assert.deepEqual(sell.pay, [{ value: 1000, asset: "XDX" }]);
   assert.deepEqual(sell.receive, [{ value: 4.632, asset: "XIO" }]);
   assert.equal(predictedQuoteOut(100, 0, 1000, 50), 5);
+  assert.equal(visibleQuoteQty("", 3.12), "3.12");
+  assert.equal(visibleQuoteQty("2", 3.12), "2");
   assert.equal(predictedXdxFromQuote(5, 0, 1000, 50), 100);
   const add = tradeSides({ action: "addLp", amount: 100, quoteQty: 5, quoteLabel: "XRP", lpOut: 20 });
   assert.equal(add.pay[0].asset, "XDX");
