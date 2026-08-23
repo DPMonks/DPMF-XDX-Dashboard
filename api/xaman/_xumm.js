@@ -95,10 +95,31 @@ export function xamanReturnUrl(origin) {
   return `${siteOriginFrom(origin)}/?xaman={id}`;
 }
 
+export function xamanSignIdentifier(marker) {
+  const id = String(marker || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "");
+  if (!/^[0-9a-f]{16,32}$/.test(id)) return "";
+  return `dpmf:${id}`.slice(0, 40);
+}
+
+export function isFreshXamanCreate(raw) {
+  if (!raw || typeof raw !== "object") return false;
+  const uuid = raw.uuid || raw.payload?.uuid;
+  if (!uuid) return false;
+  const meta = raw.meta && typeof raw.meta === "object" ? raw.meta : {};
+  if (meta.resolved === true || meta.signed === true || meta.cancelled === true || meta.expired === true) {
+    return false;
+  }
+  return true;
+}
+
 export function buildXamanPayload(origin, txjson, options = {}) {
   const returnTo = xamanReturnUrl(origin);
   const tx = txjson && typeof txjson === "object" ? txjson : { TransactionType: "SignIn" };
-  return {
+  const identifier = xamanSignIdentifier(options.signMarker);
+  const payload = {
     txjson: tx,
     options: {
       submit: options.submit ?? shouldSubmitTxjson(tx),
@@ -111,6 +132,17 @@ export function buildXamanPayload(origin, txjson, options = {}) {
       },
     },
   };
+  if (identifier) {
+    payload.custom_meta = {
+      identifier,
+      blob: {
+        dpmf: "sign",
+        marker: String(options.signMarker).trim(),
+        tx: tx.TransactionType || "",
+      },
+    };
+  }
+  return payload;
 }
 
 export function buildSignInPayload(origin, txjson) {

@@ -6,6 +6,7 @@ import lockedCandles from "./src/data/lockedCandles.json" with { type: "json" };
 import { hasIndexerDatabase, readIndexerDb } from "./server/readIndexerDb.js";
 import {
   buildXamanPayload,
+  isFreshXamanCreate,
   readJson,
   requestOrigin,
   xamanErrorMessage,
@@ -25,11 +26,16 @@ function xamanDevPlugin() {
           body: JSON.stringify(buildXamanPayload(origin, body.txjson, body.options)),
         });
         const data = await response.json().catch(() => ({}));
-        res.statusCode = response.status;
+        const stale = response.ok && !isFreshXamanCreate(data);
+        res.statusCode = stale ? 409 : response.status;
         res.setHeader("Content-Type", "application/json");
         res.end(
           JSON.stringify(
-            response.ok ? data : { error: xamanErrorMessage(data), code: data?.error?.code }
+            stale
+              ? { error: "Xaman returned a payload that was already signed. Start a new sign.", code: 409 }
+              : response.ok
+                ? data
+                : { error: xamanErrorMessage(data), code: data?.error?.code }
           )
         );
         return;

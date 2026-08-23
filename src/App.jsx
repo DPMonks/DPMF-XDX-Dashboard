@@ -30,7 +30,7 @@ import {
 } from "./xaman/payloadResume";
 import {
   WALLET_EVENTS,
-  executionClosesTradeAction,
+  executionBelongsToOpenTrade,
   gateUnsignedTrade,
   normalizeTradeRequest,
 } from "./xaman/tradeTx";
@@ -211,26 +211,41 @@ export default function App() {
     function onSignedIn() {
       const pending = pendingTradeRef.current;
       pendingTradeRef.current = null;
-      if (pending) setTradeAction({ ...pending, openId: Date.now() });
+      if (!pending) return;
+      discardStalePendingTrade({ force: true });
+      setTradeAction({ ...pending, openId: Date.now() });
     }
     function onSignInCancelled() {
       pendingTradeRef.current = null;
+    }
+    function onTradePending(event) {
+      const detail = event?.detail || {};
+      setTradeAction((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          activeUuid: detail.uuid || current.activeUuid || null,
+          signMarker: detail.signMarker || current.signMarker || null,
+        };
+      });
     }
     function onTradeExecuted(event) {
       const detail = event?.detail || {};
       setTradeAction((current) => {
         if (!current) return null;
-        if (!executionClosesTradeAction(current.action, detail)) return current;
+        if (!executionBelongsToOpenTrade(current, detail)) return current;
         return null;
       });
       refreshLists();
     }
     window.addEventListener("dpmf-open-trade", onOpen);
+    window.addEventListener(WALLET_EVENTS.tradePending, onTradePending);
     window.addEventListener("dpmf-trade-executed", onTradeExecuted);
     window.addEventListener(WALLET_EVENTS.signedIn, onSignedIn);
     window.addEventListener(WALLET_EVENTS.signInCancelled, onSignInCancelled);
     return () => {
       window.removeEventListener("dpmf-open-trade", onOpen);
+      window.removeEventListener(WALLET_EVENTS.tradePending, onTradePending);
       window.removeEventListener("dpmf-trade-executed", onTradeExecuted);
       window.removeEventListener(WALLET_EVENTS.signedIn, onSignedIn);
       window.removeEventListener(WALLET_EVENTS.signInCancelled, onSignInCancelled);

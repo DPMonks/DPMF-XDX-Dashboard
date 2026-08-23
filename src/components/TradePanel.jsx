@@ -38,7 +38,7 @@ import { xdxQuoteSpot } from "../wallet/quoteMarker";
 import { formatPoolPct, normalizePriceBook, priceBookFromPools } from "../utils/poolSplit";
 import { formatToken, formatUsd } from "../utils/format";
 import { shortAddress } from "../utils/format";
-import { isConsumedUuid, isPayloadUuid } from "../xaman/payloadResume";
+import { isConsumedUuid, isPayloadUuid, peekPendingPayload } from "../xaman/payloadResume";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import BrandSelect from "./BrandSelect";
 import WalletModal from "./WalletModal";
@@ -389,7 +389,17 @@ export default function TradePanel({
 
   useEffect(() => {
     const id = String(resumeUuid || "").trim();
-    if (!isPayloadUuid(id) || isConsumedUuid(id) || !signedIn || resumeOnceRef.current) return undefined;
+    const pending = peekPendingPayload();
+    if (
+      !isPayloadUuid(id) ||
+      isConsumedUuid(id) ||
+      pending?.signState === "executed" ||
+      (pending?.uuid && pending.uuid !== id) ||
+      !signedIn ||
+      resumeOnceRef.current
+    ) {
+      return undefined;
+    }
     const timer = window.setTimeout(() => {
       if (resumeOnceRef.current) return;
       resumeOnceRef.current = true;
