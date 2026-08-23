@@ -86,6 +86,8 @@ export const TF_PARTIAL_PAYMENT = 131072;
 export const TF_TWO_ASSET = 1_048_576;
 export const TF_SINGLE_ASSET = 524_288;
 export const TF_LP_TOKEN = 65_536;
+export const TF_ONE_ASSET_LP_TOKEN = 262_144;
+export const LP_SINGLE_WITHDRAW_SLIPPAGE = 0.03;
 export const LEDGER_FEE_XRP = 0.000012;
 export const MARKET_SLIPPAGE = 0.15;
 
@@ -354,7 +356,15 @@ export function hasLpTrustline(lines, spec = {}) {
   });
 }
 
-export function ammWithdrawTx({ account, quote, lpAmount, pools } = {}) {
+export function ammWithdrawTx({
+  account,
+  quote,
+  lpAmount,
+  pools,
+  mode = "double",
+  singleAsset = "xdx",
+  amountOut,
+} = {}) {
   const pool = poolForQuote(quote, pools);
   const txjson = {
     TransactionType: "AMMWithdraw",
@@ -370,6 +380,13 @@ export function ammWithdrawTx({ account, quote, lpAmount, pools } = {}) {
     },
     Flags: TF_LP_TOKEN,
   };
+  if (mode === "single") {
+    txjson.Flags = TF_ONE_ASSET_LP_TOKEN;
+    const minOut = singleWithdrawMin(amountOut);
+    if (minOut > 0) {
+      txjson.Amount = singleAsset === "quote" ? quoteAmount(quote, minOut) : xdxAmount(minOut);
+    }
+  }
   if (account) txjson.Account = account;
   return txjson;
 }
@@ -583,7 +600,32 @@ export function expectedWithdraw(lpAmount, reserveBase, reserveQuote, lpSupply) 
   };
 }
 
-export function tradeSides({ action, amount, quoteQty, quoteLabel, total, lpAmount, lpOut, withdraw } = {}) {
+export function expectedSingleWithdraw(lpAmount, reserve, lpSupply) {
+  const lp = Number(lpAmount);
+  const pool = Number(reserve);
+  const supply = Number(lpSupply);
+  if (!(lp > 0) || !(pool > 0) || !(supply > 0) || lp > supply) return 0;
+  const remain = 1 - lp / supply;
+  return pool * (1 - remain * remain);
+}
+
+export function singleWithdrawMin(amount) {
+  const n = Number(amount);
+  if (!(n > 0)) return 0;
+  return n * (1 - LP_SINGLE_WITHDRAW_SLIPPAGE);
+}
+
+export function tradeSides({
+  action,
+  amount,
+  quoteQty,
+  quoteLabel,
+  total,
+  lpAmount,
+  lpOut,
+  withdraw,
+  singleAsset,
+} = {}) {
   const label = quoteLabel || "XRP";
   if (action === "buy") {
     return {
@@ -607,12 +649,15 @@ export function tradeSides({ action, amount, quoteQty, quoteLabel, total, lpAmou
       receive: [{ value: Number(lpOut) || 0, asset: "LP" }],
     };
   }
+  const receive = [
+    { value: Number(withdraw?.base) || 0, asset: "XDX" },
+    { value: Number(withdraw?.quote) || 0, asset: label },
+  ];
+  if (singleAsset === "xdx") receive.splice(1, 1);
+  if (singleAsset === "quote") receive.splice(0, 1);
   return {
     pay: [{ value: Number(lpAmount) || 0, asset: "LP" }],
-    receive: [
-      { value: Number(withdraw?.base) || 0, asset: "XDX" },
-      { value: Number(withdraw?.quote) || 0, asset: label },
-    ],
+    receive,
   };
 }
 

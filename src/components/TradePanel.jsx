@@ -10,6 +10,7 @@ import {
   ammWithdrawTx,
   expectedLpTokens,
   expectedSingleLpTokens,
+  expectedSingleWithdraw,
   hasLpTrustline,
   hasQuoteTrustline,
   lpTrustSetTxjson,
@@ -140,7 +141,8 @@ export default function TradePanel({
     isLp &&
     signedIn &&
     shouldAskLpTrustline({ loaded: walletReady, haveLine: haveLpLine, spec: lpSpec });
-  const isSingleLp = action === "addLp" && lpMode === "single";
+  const isSingleLp = isLp && lpMode === "single";
+  const isSingleRemove = action === "removeLp" && lpMode === "single";
   const needQuoteTrust =
     shouldAskQuoteTrustline({
       loaded: walletReady,
@@ -187,13 +189,33 @@ export default function TradePanel({
     : expectedLpTokens(addXdx || amount, reserves.base, reserves.lpSupply);
   const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
   const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices, allowImplied: false });
-  const withdraw = expectedWithdraw(lpAmount || amount, reserves.base, reserves.quote, reserves.lpSupply);
+  const withdrawLp = lpAmount || amount;
+  const doubleWithdraw = expectedWithdraw(withdrawLp, reserves.base, reserves.quote, reserves.lpSupply);
+  const singleOut = isSingleRemove
+    ? expectedSingleWithdraw(
+        withdrawLp,
+        singleAsset === "quote" ? reserves.quote : reserves.base,
+        reserves.lpSupply
+      )
+    : 0;
+  const withdraw = isSingleRemove
+    ? {
+        base: singleAsset === "xdx" ? singleOut : 0,
+        quote: singleAsset === "quote" ? singleOut : 0,
+      }
+    : doubleWithdraw;
   const deposit = isSingleLp
     ? {
         xdxPct: singleAsset === "xdx" ? 100 : 0,
         quotePct: singleAsset === "quote" ? 100 : 0,
-        measured: (singleAsset === "xdx" ? typedXdx : typedQuote) > 0,
-        total: singleAsset === "xdx" ? typedXdx * xdxUsd : typedQuote * quoteUsd,
+        measured: isSingleRemove
+          ? singleOut > 0
+          : (singleAsset === "xdx" ? typedXdx : typedQuote) > 0,
+        total: isSingleRemove
+          ? singleOut * (singleAsset === "quote" ? quoteUsd : xdxUsd)
+          : singleAsset === "xdx"
+            ? typedXdx * xdxUsd
+            : typedQuote * quoteUsd,
       }
     : depositValueSplit({
         xdxAmount: action === "removeLp" ? withdraw.base : typedXdx,
@@ -218,6 +240,7 @@ export default function TradePanel({
     lpAmount: lpAmount || amount,
     lpOut: lpHint,
     withdraw,
+    singleAsset: isSingleRemove ? singleAsset : undefined,
   });
   const titles = {
     buy: t.buyXdx,
@@ -314,6 +337,9 @@ export default function TradePanel({
       quote,
       lpAmount: lpAmount || amount,
       pools,
+      mode: lpMode,
+      singleAsset: isSingleRemove ? singleAsset : undefined,
+      amountOut: isSingleRemove ? singleOut : undefined,
     });
   }
 
@@ -324,7 +350,7 @@ export default function TradePanel({
       quoteIssuer: quote.issuer || null,
       quoteHex: quote.hex || null,
       pair: quote.pair || `XDX/${quoteId}`,
-      ...(action === "addLp" ? { lpMode, singleAsset: isSingleLp ? singleAsset : undefined } : {}),
+      ...(isLp ? { lpMode, singleAsset: isSingleLp ? singleAsset : undefined } : {}),
     };
   }
 
@@ -386,6 +412,10 @@ export default function TradePanel({
     const removeQty = Number(lpAmount || amount);
     const tradeQty = Number(linked.xdx || amount);
     if (action === "removeLp" && !(removeQty > 0)) {
+      setFormError(t.tradeNeedAmount);
+      return;
+    }
+    if (isSingleRemove && !(singleOut > 0)) {
       setFormError(t.tradeNeedAmount);
       return;
     }
@@ -530,9 +560,13 @@ export default function TradePanel({
           />
         </label>
 
-        {action === "addLp" ? (
+        {isLp ? (
           <>
-            <div className="tabs trade-lp-mode" role="tablist" aria-label={t.lpDepositMode}>
+            <div
+              className="tabs trade-lp-mode"
+              role="tablist"
+              aria-label={action === "removeLp" ? t.lpWithdrawMode || t.lpDepositMode : t.lpDepositMode}
+            >
               <button
                 type="button"
                 role="tab"
@@ -583,7 +617,9 @@ export default function TradePanel({
                     {quote.label}
                   </button>
                 </div>
-                <p className="trade-panel-hint trade-lp-hint">{t.lpSingleHint}</p>
+                <p className="trade-panel-hint trade-lp-hint">
+                  {action === "removeLp" ? t.lpSingleRemoveHint || t.lpSingleHint : t.lpSingleHint}
+                </p>
               </>
             ) : null}
           </>
@@ -662,7 +698,7 @@ export default function TradePanel({
             ) : null}
           </label>
         )}
-        {action === "removeLp" ? (
+        {action === "removeLp" && (!isSingleRemove || singleAsset === "xdx") ? (
           <label className="trade-field">
             {t.xdxAmount}
             <input type="text" readOnly value={formatToken(withdraw.base, locale, 6)} />
@@ -713,7 +749,7 @@ export default function TradePanel({
             </div>
           </div>
         ) : null}
-        {action === "removeLp" ? (
+        {action === "removeLp" && (!isSingleRemove || singleAsset === "quote") ? (
           <label className="trade-field">
             {quote.label}
             <input type="text" readOnly value={formatToken(withdraw.quote, locale, 6)} />

@@ -252,6 +252,8 @@ const en = {
   lpSingleSided: "Single-sided",
   lpSingleAsset: "Asset",
   lpSingleHint: "Add one asset. The pool price will move toward that side.",
+  lpWithdrawMode: "Withdraw",
+  lpSingleRemoveHint: "Remove one asset. The pool price will move toward the other side.",
   removeLiquidity: "Remove liquidity",
   signInToTrade: "Sign in to trade",
   tradePair: "Pair",

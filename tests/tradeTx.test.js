@@ -13,6 +13,7 @@ import {
 import {
   MARKET_SLIPPAGE,
   TF_LP_TOKEN,
+  TF_ONE_ASSET_LP_TOKEN,
   TF_PARTIAL_PAYMENT,
   TF_SINGLE_ASSET,
   TF_TWO_ASSET,
@@ -20,6 +21,7 @@ import {
   ammWithdrawTx,
   expectedLpTokens,
   expectedSingleLpTokens,
+  expectedSingleWithdraw,
   expectedWithdraw,
   executionBelongsToOpenTrade,
   executionClosesTradeAction,
@@ -172,6 +174,51 @@ test("AMM deposit and withdraw follow XRPL two-asset / LP token flags", () => {
   assert.equal(take.LPTokenIn.issuer, XDX_XRP_AMM);
   assert.equal(take.LPTokenIn.currency, XDX_XRP_LP_HEX);
   assert.equal(take.LPTokenIn.value, "12.5");
+  assert.equal(take.Amount, undefined);
+
+  assert.ok(Math.abs(expectedSingleWithdraw(20, 1000, 200) - 190) < 1e-9);
+  assert.equal(expectedSingleWithdraw(0, 1000, 200), 0);
+  assert.equal(expectedSingleWithdraw(200, 1000, 200), 1000);
+
+  const takeXdx = ammWithdrawTx({
+    account: "rLp",
+    quote: quoteAsset("XRP"),
+    lpAmount: "20",
+    mode: "single",
+    singleAsset: "xdx",
+    amountOut: 190,
+  });
+  assert.equal(takeXdx.Flags, TF_ONE_ASSET_LP_TOKEN);
+  assert.equal(takeXdx.Amount.value, "184.3");
+  assert.equal(takeXdx.Amount.currency, "XDX");
+  assert.equal(takeXdx.Amount2, undefined);
+  assert.equal(takeXdx.LPTokenIn.value, "20");
+
+  const takeXrp = ammWithdrawTx({
+    account: "rLp",
+    quote: quoteAsset("XRP"),
+    lpAmount: "20",
+    mode: "single",
+    singleAsset: "quote",
+    amountOut: 10,
+  });
+  assert.equal(takeXrp.Flags, TF_ONE_ASSET_LP_TOKEN);
+  assert.equal(takeXrp.Amount, "9700000");
+  assert.equal(takeXrp.Amount2, undefined);
+
+  assert.deepEqual(
+    tradeSides({
+      action: "removeLp",
+      lpAmount: 20,
+      quoteLabel: "XRP",
+      withdraw: { base: 190, quote: 0 },
+      singleAsset: "xdx",
+    }),
+    {
+      pay: [{ value: 20, asset: "LP" }],
+      receive: [{ value: 190, asset: "XDX" }],
+    }
+  );
 });
 
 test("RLUSD needs a trustline; XRP does not", () => {
