@@ -89,14 +89,15 @@ function FibRetracement({ row, scale, pad, plotBottom, clipId, dashed }) {
         const y = scale.y(band.price);
         if (y < topBound - 20 || y > bottomBound + 20) return null;
         const yLabel = Math.min(bottomBound, Math.max(topBound, y));
+        const label = fibLabelPlacement(x0, { side: "left", gap: 10, minX: (pad?.l ?? 16) + 4 });
         return (
           <text
             key={`label-${band.level}`}
-            className="hybrid-draw-label hybrid-fib-label"
-            x={x0 + 6}
+            className="hybrid-draw-label hybrid-fib-label is-left"
+            x={label.x}
             y={yLabel + 3}
-            textAnchor="start"
-            style={{ fill: band.color }}
+            textAnchor="end"
+            style={{ fill: band.color, textAnchor: "end" }}
           >
             {band.label} ({formatAxisPrice(band.price)})
           </text>

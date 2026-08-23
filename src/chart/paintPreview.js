@@ -199,6 +199,16 @@ export function paintToolPreview(group, {
         );
       }
       line(group, x0, y, x1, y, band.color, { className: "hybrid-fib-line", ...ink });
+      const label = fibLabelPlacement(x0, { side: "left", gap: 10, minX: (pad?.l ?? 16) + 4 });
+      const node = svg("text", {
+        class: "hybrid-draw-label hybrid-fib-label is-left",
+        x: label.x,
+        y: y + 3,
+        "text-anchor": "end",
+        style: `fill:${band.color};text-anchor:end`,
+      });
+      node.textContent = `${band.label} (${formatAxisPrice(band.price)})`;
+      group.appendChild(node);
     }
     line(group, scale.x(ghost.a.t), scale.y(ghost.a.price), scale.x(ghost.b.t), scale.y(ghost.b.price), "#787B86", ink);
     return;
