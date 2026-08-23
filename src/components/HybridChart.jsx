@@ -6,6 +6,7 @@ import {
   averagesForWindow,
   clampPanOffset,
   clampVisibleBars,
+  futureBarsFromPan,
   liveSeriesGrew,
   MA_PERIODS,
   MA_TYPES,
@@ -266,7 +267,7 @@ export default function HybridChart() {
     setPriceShift(0);
     setLoadedBars(baseVisible + CHART_MA_PAD);
   }
-  const wantLoaded = Math.min(4000, visibleCount + panOffset + CHART_MA_PAD + 32);
+  const wantLoaded = Math.min(4000, visibleCount + Math.max(0, panOffset) + CHART_MA_PAD + 32);
   if (wantLoaded > loadedBars) setLoadedBars(wantLoaded);
   const seriesHead = Number(series[0]?.t) || 0;
   if (series.length !== seriesMeta.len || seriesHead !== seriesMeta.head) {
@@ -283,6 +284,7 @@ export default function HybridChart() {
   }
   const clampedPan = clampPanOffset(panOffset, series.length, visibleCount);
   if (clampedPan !== panOffset) setPanOffset(clampedPan);
+  const futureBars = futureBarsFromPan(clampedPan);
   const candles = useMemo(
     () => windowBars(series, { bars: visibleCount, offset: clampedPan }),
     [series, visibleCount, clampedPan]
@@ -641,6 +643,7 @@ export default function HybridChart() {
           <HybridPlot
             key={windowKey}
             candles={candles}
+            futureBars={futureBars}
             quote={quote}
             interval={timeframe}
             view={view}

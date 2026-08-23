@@ -20,6 +20,9 @@ import {
   expandDailyToInterval,
   clampPanOffset,
   clampVisibleBars,
+  FUTURE_BARS_MIN,
+  futureBarLimit,
+  futureBarsFromPan,
   liveSeriesGrew,
   panAfterZoom,
   wheelPanSteps,
@@ -336,6 +339,24 @@ test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail"
   assert.equal(panned[0].t, expanded[2].t);
   assert.equal(panned[1].t, expanded[3].t);
   assert.equal(clampPanOffset(80, expanded.length, 2), 4);
+  assert.equal(clampPanOffset(-10, 100, 20), -10);
+  assert.equal(clampPanOffset(-400, 100, 20), -futureBarLimit(20));
+  assert.equal(clampPanOffset(-5, 100, 20, 3), -3);
+  assert.equal(futureBarsFromPan(-24), 24);
+  assert.equal(futureBarsFromPan(8), 0);
+  assert.ok(futureBarLimit(280) >= FUTURE_BARS_MIN);
+  const latest = windowBars(expanded, { bars: 2, offset: -8 });
+  assert.equal(latest.length, 2);
+  assert.equal(latest[0].t, expanded[4].t);
+  assert.equal(latest[1].t, expanded[5].t);
+  const heldFuture = panAfterZoom({
+    total: 400,
+    oldVisible: 100,
+    newVisible: 50,
+    oldPan: -20,
+    anchorRatio: 1,
+  });
+  assert.equal(heldFuture, -20);
   assert.equal(wheelPanSteps(40, 0, 0, 36).steps, 1);
   assert.equal(wheelPanSteps(0, -40, 0, 36).steps, -1);
   assert.equal(wheelZoomSteps(80, 0, 56).steps, 1);
@@ -381,6 +402,12 @@ test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail"
   for (const x of [30, 150, 300, 570]) {
     assert.ok(Math.abs(slots.x(slots.tAt(x)) - x) < 1e-6);
   }
+  const padded = barSlots(expanded, { left: 0, width: 600, extra: 4 });
+  const lastX = padded.x(expanded[expanded.length - 1].t);
+  assert.ok(lastX < 600 - padded.slot);
+  assert.ok(padded.tAt(580) > expanded[expanded.length - 1].t);
+  assert.ok(Math.abs(padded.x(padded.tAt(540)) - 540) < 1e-6);
+  assert.ok(padded.last > expanded[expanded.length - 1].t);
   const scale = { x: () => 40, y: () => 80, viewKey: "v1" };
   assert.equal(plotX({ t: 1, x: 220, viewKey: "v1" }, scale), 220);
   assert.equal(plotY({ price: 2, y: 90, viewKey: "v1" }, scale), 90);
@@ -815,6 +842,15 @@ test("snapPoint locks to the nearest candle open high low or close", () => {
   );
   assert.equal(snapped.t, 100);
   assert.equal(snapped.price, 2);
+  const future = snapPoint(
+    { t: 360, price: 2.2 },
+    [
+      { t: 100, o: 1, h: 2, l: 0.5, c: 1.2 },
+      { t: 200, o: 3, h: 4, l: 2.5, c: 3.5 },
+    ]
+  );
+  assert.equal(future.t, 360);
+  assert.equal(future.price, 2.2);
 });
 
 test("ray extends past the second point and range stats keep the percent move", () => {

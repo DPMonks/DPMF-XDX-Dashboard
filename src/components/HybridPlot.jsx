@@ -21,6 +21,7 @@ const DOWN = "#ef5350";
 
 export default function HybridPlot({
   candles = [],
+  futureBars = 0,
   quote = "RLUSD",
   interval = "1D",
   view,
@@ -106,13 +107,19 @@ export default function HybridPlot({
   const rsiBottom = rsiTop + rsiH;
 
   const scale = useMemo(() => {
+    const pad = Math.max(0, Math.trunc(Number(futureBars) || 0));
+    const slots = barSlots(candles, {
+      left: PAD.l,
+      width: innerW,
+      extra: pad,
+      step: intervalMs(interval),
+    });
     const start = candles[0]?.t || view?.start || 0;
-    const end = candles[candles.length - 1]?.t || view?.end || 1;
+    const end = slots.last || candles[candles.length - 1]?.t || view?.end || 1;
     const min = view?.min || 0;
     const max = view?.max || 1;
     const spanT = Math.max(end - start, 1);
     const spanP = Math.max(max - min, 1e-12);
-    const slots = barSlots(candles, { left: PAD.l, width: innerW });
     return {
       x: slots.x,
       tAt: slots.tAt,
@@ -124,9 +131,9 @@ export default function HybridPlot({
       spanT,
       slot: slots.slot,
       ticks: slots.ticks,
-      viewKey: plotViewKey(candles, { left: PAD.l, width: innerW }),
+      viewKey: plotViewKey(candles, { left: PAD.l, width: innerW, extra: pad }),
     };
-  }, [view, candles, innerW]);
+  }, [view, candles, innerW, futureBars, interval]);
 
   const yTicks = useMemo(() => priceTicks(scale.min, scale.max, 6), [scale.min, scale.max]);
   const xTicks = useMemo(() => scale.ticks(6), [scale]);
@@ -236,6 +243,7 @@ export default function HybridPlot({
     start: scale.start,
     end: scale.end,
     stepMs: intervalMs(interval),
+    extra: futureBars,
   });
 
   function locate(event, { place = false } = {}) {
@@ -409,7 +417,8 @@ export default function HybridPlot({
     if (livePan) {
       const slot = Math.max(
         4,
-        ((svgRef.current?.getBoundingClientRect?.().width || width) / width) * (innerW / Math.max(1, candles.length))
+        ((svgRef.current?.getBoundingClientRect?.().width || width) / width) *
+          (innerW / Math.max(1, candles.length + Math.max(0, Number(futureBars) || 0)))
       );
       const moved = event.clientX - livePan.x;
       const steps = Math.trunc(moved / slot);

@@ -272,6 +272,12 @@ export function toolMeta(id) {
 
 export function snapPoint(point, candles = []) {
   if (!point || !candles.length) return point;
+  const last = candles[candles.length - 1];
+  const prev = candles.length >= 2 ? candles[candles.length - 2] : null;
+  const step = prev ? Number(last.t) - Number(prev.t) : 0;
+  if (step > 0 && Number(point.t) > Number(last.t) + step * 0.45) {
+    return { t: Number(point.t), price: Number(point.price) };
+  }
   let nearest = candles[0];
   let best = Infinity;
   for (const row of candles) {

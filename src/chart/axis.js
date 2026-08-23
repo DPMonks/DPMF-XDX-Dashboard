@@ -76,22 +76,30 @@ export function equalGrid(count, start, length) {
   return Array.from({ length: n + 1 }, (_, index) => origin + (span * index) / n);
 }
 
-export function plotViewKey(candles = [], { left = 0, width = 0 } = {}) {
+export function plotViewKey(candles = [], { left = 0, width = 0, extra = 0 } = {}) {
   const rows = Array.isArray(candles) ? candles : [];
   return [
     rows[0]?.t ?? 0,
     rows[rows.length - 1]?.t ?? 0,
     rows.length,
+    Math.max(0, Math.trunc(Number(extra) || 0)),
     Math.round(Number(left) || 0),
     Math.round(Number(width) || 0),
   ].join(":");
 }
 
-export function barSlots(candles = [], { left = 0, width = 0 } = {}) {
+export function barSlots(candles = [], { left = 0, width = 0, extra = 0, step = 0 } = {}) {
   const rows = Array.isArray(candles) ? candles : [];
-  const n = Math.max(1, rows.length);
+  const pad = Math.max(0, Math.trunc(Number(extra) || 0));
+  const real = rows.length;
+  const n = Math.max(1, real + pad);
   const slot = (Number(width) || 0) / n;
   const times = rows.map((row) => Number(row.t));
+  if (real > 0 && pad > 0) {
+    const last = times[real - 1];
+    const span = real >= 2 ? times[real - 1] - times[real - 2] || Number(step) || 1 : Number(step) > 0 ? Number(step) : 1;
+    for (let i = 1; i <= pad; i += 1) times.push(last + i * span);
+  }
 
   function timeAtIndex(index) {
     if (!times.length) return 0;
@@ -129,6 +137,7 @@ export function barSlots(candles = [], { left = 0, width = 0 } = {}) {
   return {
     n,
     slot,
+    last: times[times.length - 1] || 0,
     x(t) {
       if (!times.length) return left;
       return left + (indexAtTime(Number(t)) + 0.5) * slot;
