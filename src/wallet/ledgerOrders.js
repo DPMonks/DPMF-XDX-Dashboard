@@ -200,6 +200,53 @@ export function unwrapAccountTx(row = {}) {
   return { tx, meta, hash, timestamp, validated: row.validated !== false };
 }
 
+export function activityFromPaymentTx(row, address) {
+  const { tx, meta, hash, timestamp } = unwrapAccountTx(row);
+  if (tx?.TransactionType !== "Payment") return null;
+  if (address && tx.Account && !sameWallet(tx.Account, address)) return null;
+  const result = meta.TransactionResult || row.TransactionResult || "";
+  if (result && result !== "tesSUCCESS") return null;
+  const order = orderFromPayment(tx, {
+    account: tx.Account || address,
+    txid: hash,
+    timestamp,
+  });
+  if (!order) return null;
+  return {
+    account: order.account,
+    side: order.side === "ask" ? "sell" : "buy",
+    pair: order.pair,
+    pool: order.pair,
+    xdx: order.amount,
+    price: order.price,
+    timestamp: timestamp || new Date().toISOString(),
+    txid: hash,
+    status: "filled",
+  };
+}
+
+export function activityFromTrustSetTx(row, address) {
+  const { tx, meta, hash, timestamp } = unwrapAccountTx(row);
+  if (tx?.TransactionType !== "TrustSet") return null;
+  if (address && tx.Account && !sameWallet(tx.Account, address)) return null;
+  const result = meta.TransactionResult || row.TransactionResult || "";
+  if (result && result !== "tesSUCCESS") return null;
+  const limit = tx.LimitAmount || {};
+  const currency = currencyCode(limit.currency);
+  if (!currency || currency === "XRP") return null;
+  return {
+    account: tx.Account || address,
+    side: "trustline",
+    kind: "trustline",
+    pair: currency === "XDX" ? "XDX" : `XDX/${currency}`,
+    currency,
+    issuer: limit.issuer || null,
+    timestamp: timestamp || new Date().toISOString(),
+    txid: hash,
+    status: "filled",
+  };
+}
+
 export function activityFromOfferTx(row, address) {
   const { tx, meta, hash, timestamp } = unwrapAccountTx(row);
   if (tx?.TransactionType !== "OfferCreate") return null;
@@ -276,9 +323,11 @@ export function activityFromAccountTx(transactions, address) {
     .map(
       (row) =>
         activityFromOfferTx(row, address) ||
+        activityFromPaymentTx(row, address) ||
         activityFromAmmVoteTx(row, address) ||
         activityFromAmmCreateTx(row, address) ||
-        activityFromAmmLpTx(row, address)
+        activityFromAmmLpTx(row, address) ||
+        activityFromTrustSetTx(row, address)
     )
     .filter(Boolean)
     .sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
@@ -371,6 +420,25 @@ export function pendingFromExecution(detail = {}, address = "") {
   const txjson = detail.txjson || detail.tx || null;
   const account = address || txjson?.Account || detail.account || null;
   const type = String(txjson?.TransactionType || "");
+  if (type === "TrustSet" && account) {
+    const limit = txjson.LimitAmount || {};
+    const currency = currencyCode(limit.currency);
+    if (!currency || currency === "XRP") return null;
+    return {
+      order: null,
+      activity: {
+        account,
+        side: "trustline",
+        kind: "trustline",
+        pair: currency === "XDX" ? "XDX" : `XDX/${currency}`,
+        currency,
+        issuer: limit.issuer || null,
+        timestamp: detail.timestamp || new Date().toISOString(),
+        txid: detail.txid || null,
+        status: "filled",
+      },
+    };
+  }
   if ((type === "AMMDeposit" || type === "AMMWithdraw" || type === "AMMCreate") && account) {
     const pair =
       type === "AMMCreate"

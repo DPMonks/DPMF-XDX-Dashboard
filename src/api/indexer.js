@@ -700,10 +700,10 @@ export async function getPrices() {
   return api.prices();
 }
 
-export async function getWalletOffers(address) {
+export async function getWalletOffers(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return [];
-  const body = await api.walletOffers(name);
+  const body = await api.walletOffers(name, extra);
   return asArray(body?.orders || body);
 }
 
@@ -725,14 +725,14 @@ export async function getPoolGovernance(pair, account) {
   return api.ammGovernance(pair, account);
 }
 
-export async function getWalletActivity(address) {
+export async function getWalletActivity(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return [];
-  const body = await api.walletActivity(name);
+  const body = await api.walletActivity(name, extra);
   return asArray(body?.activity || body);
 }
 
-export async function getConnectedWallet(address) {
+export async function getConnectedWallet(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return emptyWalletSnapshot(null);
 
@@ -748,8 +748,8 @@ export async function getConnectedWallet(address) {
       getAmm().catch(() => []),
       getOrderbooks().catch(() => null),
       getXdxFlows().catch(() => []),
-      getWalletOffers(name).catch(() => []),
-      getWalletActivity(name).catch(() => []),
+      getWalletOffers(name, extra).catch(() => []),
+      getWalletActivity(name, extra).catch(() => []),
     ]);
 
   return composeWalletSnapshot({

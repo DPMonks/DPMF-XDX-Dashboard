@@ -5,7 +5,12 @@ import {
   markXamanReturn,
   xamanWebsocketUrl,
 } from "./payloadResume";
-import { notifyTradeExecuted, notifyTradeFailed, notifyTradeUnconfirmed } from "./tradeTx";
+import {
+  notifyFunctionConfirmed,
+  notifyTradeExecuted,
+  notifyTradeFailed,
+  notifyTradeUnconfirmed,
+} from "./tradeTx";
 import {
   createPayload,
   extractSignedAccount,
@@ -87,7 +92,9 @@ export function useXamanPayload() {
     busyRef.current = true;
     const session = nextPayloadSession(sessionRef.current);
     sessionRef.current = session;
-    const watchTrade = isTradeTxjson(body?.txjson) || body?.txjson?.TransactionType === "AMMVote";
+    const txType = String(body?.txjson?.TransactionType || "");
+    const watchTrade = isTradeTxjson(body?.txjson) || txType === "AMMVote";
+    const watchConfirm = watchTrade || txType === "TrustSet";
     let announced = false;
     let finishing = false;
     let latestPayload = null;
@@ -107,6 +114,9 @@ export function useXamanPayload() {
       announced = true;
       onExecuted?.(detection);
       if (watchTrade) notifyTradeExecuted({ ...detection, uuid: payloadUuid, txjson: body?.txjson });
+      else if (txType === "TrustSet") {
+        notifyFunctionConfirmed({ ...detection, uuid: payloadUuid, txjson: body?.txjson });
+      }
       return true;
     };
 
@@ -174,7 +184,7 @@ export function useXamanPayload() {
           setMobileUrl(null);
           setStatus(detection.executed ? "signed" : "confirming");
         }
-        if (watchTrade) {
+        if (watchConfirm) {
           if (announce(detection)) {
             reset();
             setStatus(detection.executed ? "signed" : "failed");
@@ -192,7 +202,7 @@ export function useXamanPayload() {
             }
             await new Promise((resolve) => setTimeout(resolve, 1500));
           }
-          if (looksSigned && !announced) {
+          if (looksSigned && !announced && watchTrade) {
             notifyTradeUnconfirmed({
               ...detection,
               uuid: payloadUuid,

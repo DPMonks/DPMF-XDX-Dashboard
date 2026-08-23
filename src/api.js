@@ -463,20 +463,20 @@ export const api = {
     getJson(endpoint("walletRank", { address }) || `/wallet/rank/${encodeURIComponent(address)}`, {
       retries: 1,
     }),
-  walletOffers: (address) =>
-    getJson(`/wallet/offers/${encodeURIComponent(address)}`, {
+  walletOffers: (address, extra = {}) =>
+    getJson(`/wallet/offers/${encodeURIComponent(address)}${extra.fresh ? "?fresh=1" : ""}`, {
       retries: 1,
       queue: false,
       cache: false,
     }),
-  walletLines: (address) =>
-    getJson(`/wallet/lines/${encodeURIComponent(address)}`, {
+  walletLines: (address, extra = {}) =>
+    getJson(`/wallet/lines/${encodeURIComponent(address)}${extra.fresh ? "?fresh=1" : ""}`, {
       retries: 1,
       queue: false,
       cache: false,
     }),
-  walletActivity: (address) =>
-    getJson(`/wallet/activity/${encodeURIComponent(address)}`, {
+  walletActivity: (address, extra = {}) =>
+    getJson(`/wallet/activity/${encodeURIComponent(address)}${extra.fresh ? "?fresh=1" : ""}`, {
       retries: 1,
       queue: false,
       cache: false,

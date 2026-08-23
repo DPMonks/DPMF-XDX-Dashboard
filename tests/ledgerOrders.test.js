@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   activityFromAccountTx,
   activityFromOfferTx,
+  activityFromPaymentTx,
+  activityFromTrustSetTx,
   mergeWalletActivity,
   mergeWalletOrders,
   orderFromTxjson,
@@ -172,6 +174,81 @@ test("mergeWalletOrders and mergeWalletActivity keep the first copy", () => {
 
 test("rippleIso uses the XRPL epoch", () => {
   assert.equal(rippleIso(0), "2000-01-01T00:00:00.000Z");
+});
+
+test("activityFromPaymentTx keeps a confirmed market buy and drops engine failures", () => {
+  const buy = {
+    TransactionType: "Payment",
+    Account: "rBuyer",
+    Destination: "rBuyer",
+    Amount: { currency: "XDX", issuer: XDX_ISSUER, value: "10" },
+    SendMax: "313",
+  };
+  const filled = activityFromPaymentTx(
+    {
+      hash: "1".repeat(64),
+      close_time_iso: "2026-08-23T13:50:00.000Z",
+      tx: buy,
+      meta: { TransactionResult: "tesSUCCESS" },
+    },
+    "rBuyer"
+  );
+  assert.equal(filled.side, "buy");
+  assert.equal(filled.status, "filled");
+  assert.equal(filled.xdx, 10);
+  assert.equal(
+    activityFromPaymentTx(
+      { tx: buy, meta: { TransactionResult: "tecPATH_DRY" } },
+      "rBuyer"
+    ),
+    null
+  );
+});
+
+test("activityFromTrustSetTx records a confirmed XDX line", () => {
+  const row = activityFromTrustSetTx(
+    {
+      hash: "2".repeat(64),
+      tx: {
+        TransactionType: "TrustSet",
+        Account: "rBuyer",
+        LimitAmount: { currency: "XDX", issuer: XDX_ISSUER, value: "10000000000" },
+      },
+      meta: { TransactionResult: "tesSUCCESS" },
+    },
+    "rBuyer"
+  );
+  assert.equal(row.side, "trustline");
+  assert.equal(row.currency, "XDX");
+  const pending = pendingFromExecution(
+    {
+      txjson: {
+        TransactionType: "TrustSet",
+        Account: "rBuyer",
+        LimitAmount: { currency: "XDX", issuer: XDX_ISSUER, value: "10000000000" },
+      },
+      txid: "3".repeat(64),
+    },
+    "rBuyer"
+  );
+  assert.equal(pending.activity.side, "trustline");
+  const history = activityFromAccountTx(
+    [
+      {
+        hash: "4".repeat(64),
+        tx: {
+          TransactionType: "Payment",
+          Account: "rBuyer",
+          Destination: "rBuyer",
+          Amount: { currency: "XDX", issuer: XDX_ISSUER, value: "5" },
+          SendMax: "160",
+        },
+        meta: { TransactionResult: "tesSUCCESS" },
+      },
+    ],
+    "rBuyer"
+  );
+  assert.equal(history[0].side, "buy");
 });
 
 test("rememberPending keeps a just-signed limit until the ledger fetch catches up", () => {

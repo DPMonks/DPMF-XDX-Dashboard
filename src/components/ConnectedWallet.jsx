@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getConnectedWallet } from "../api/indexer";
+import { pendingVoteFromExecution } from "../wallet/ammVote";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import {
@@ -92,7 +93,7 @@ function XdxBalancePanel({ xdx, locale, t, empty }) {
   ];
   return (
     <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
-      <p className="wallet-panel-title">{t.xdxValue}</p>
+      <p className="wallet-panel-title is-center">{t.xdxValue}</p>
       <dl className="wallet-mini-list">
         {rows.map((row) => (
           <div key={row.id}>
@@ -114,7 +115,7 @@ function SupplyShareBars({ supply, locale, t, empty }) {
     : Math.min(100, Math.max(Number(supplyPct) > 0 ? 4 : 0, Number(supplyPct)));
   return (
     <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
-      <p className="wallet-panel-title">{t.supplyShare}</p>
+      <p className="wallet-panel-title is-center">{t.supplyShare}</p>
       <div className="wallet-micro">
         <span>{t.circulating}</span>
         <span className="wallet-micro-track">
@@ -219,8 +220,8 @@ export default function ConnectedWallet() {
     if (!walletAddress) return undefined;
     let cancelled = false;
 
-    async function load() {
-      const next = await getConnectedWallet(walletAddress).catch(() =>
+    async function load(fresh = false) {
+      const next = await getConnectedWallet(walletAddress, { fresh }).catch(() =>
         emptyWalletSnapshot(walletAddress)
       );
       if (cancelled) return;
@@ -235,31 +236,44 @@ export default function ConnectedWallet() {
 
     load();
     const id = setInterval(load, 30000);
-    function onRefresh() {
-      load();
+    const retries = [];
+    function refreshConfirmed() {
+      load(true);
+      retries.push(window.setTimeout(() => load(true), 2500));
+      retries.push(window.setTimeout(() => load(true), 8000));
     }
-    window.addEventListener("dpmf-wallet-refresh", onRefresh);
-    function onTrade(event) {
-      const pending = pendingFromExecution(event.detail, walletAddress);
-      if (!pending) {
-        load();
-        return;
-      }
+    function applyPending(detail) {
+      const pending =
+        pendingFromExecution(detail, walletAddress) || pendingVoteFromExecution(detail, walletAddress);
+      if (!pending) return;
       setSnap((current) => ({
         ...current,
         signedIn: true,
         filled: true,
         orders: mergeWalletOrders(pending.order ? [pending.order] : [], current.orders || []),
-        activity: mergeWalletActivity(pending.activity ? [pending.activity] : [], current.activity || []).slice(0, 3),
+        activity: mergeWalletActivity(pending.activity ? [pending.activity] : [], current.activity || []).slice(
+          0,
+          3
+        ),
       }));
-      load();
     }
+    function onRefresh() {
+      load(true);
+    }
+    function onTrade(event) {
+      applyPending(event.detail);
+      refreshConfirmed();
+    }
+    window.addEventListener("dpmf-wallet-refresh", onRefresh);
     window.addEventListener("dpmf-trade-executed", onTrade);
+    window.addEventListener("dpmf-function-confirmed", onTrade);
     return () => {
       cancelled = true;
       clearInterval(id);
+      for (const timer of retries) window.clearTimeout(timer);
       window.removeEventListener("dpmf-wallet-refresh", onRefresh);
       window.removeEventListener("dpmf-trade-executed", onTrade);
+      window.removeEventListener("dpmf-function-confirmed", onTrade);
     };
   }, [walletAddress]);
 
@@ -412,9 +426,14 @@ export default function ConnectedWallet() {
                             .replace("{pair}", row.pair || "")
                             .replace(/\s+/g, " ")
                             .trim()
-                        : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
-                            row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""
-                          }`}
+                        : row.side === "trustline"
+                          ? (t.trustlineActivity || "Added {asset} trustline").replace(
+                              "{asset}",
+                              row.currency || t.xdx
+                            )
+                          : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
+                              row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""
+                            }`}
             </li>
           ))}
         </ol>
