@@ -12,6 +12,7 @@ import {
   notifyFunctionConfirmed,
   notifyTradeExecuted,
   notifyTradeFailed,
+  notifyTradePending,
   notifyTradeUnconfirmed,
 } from "./tradeTx";
 import {
@@ -173,7 +174,10 @@ export function useXamanPayload() {
             mobileUrl: xamanSignUrl(resumeUuid),
             websocket: xamanWebsocketUrl(resumeUuid),
           }
-        : await createPayload(request);
+        : await createPayload({
+            ...request,
+            options: { ...request.options, signMarker },
+          });
       if (!payloadSessionOpen(session, sessionRef.current)) {
         busyRef.current = false;
         return;
@@ -186,6 +190,14 @@ export function useXamanPayload() {
         signMarker: signMarker || null,
         signState: "unsigned",
       });
+      if (watchTrade) {
+        notifyTradePending({
+          uuid: payload.uuid,
+          signMarker,
+          txjson: request?.txjson || null,
+          trade: trade || null,
+        });
+      }
       setQr(payload.qr);
       setMobileUrl(payload.mobileUrl);
       setUuid(payload.uuid);

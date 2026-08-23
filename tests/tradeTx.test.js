@@ -19,6 +19,7 @@ import {
   ammWithdrawTx,
   expectedLpTokens,
   expectedWithdraw,
+  executionBelongsToOpenTrade,
   executionClosesTradeAction,
   gateUnsignedTrade,
   hasLpTrustline,
@@ -370,4 +371,46 @@ test("only a matching ledger tx closes the open trade panel", () => {
   assert.equal(executionClosesTradeAction("buy", { txType: "AMMDeposit" }), false);
   assert.equal(executionClosesTradeAction("buy", { txjson: { TransactionType: "TrustSet" } }), false);
   assert.equal(executionClosesTradeAction("addLp", { txType: "SignIn" }), false);
+});
+
+test("a leftover executed payload cannot close a newly opened trade panel", () => {
+  const opened = {
+    action: "buy",
+    quote: "XRP",
+    openId: Date.now(),
+  };
+  assert.equal(
+    executionBelongsToOpenTrade(opened, {
+      uuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      txType: "Payment",
+    }),
+    false
+  );
+  assert.equal(
+    executionBelongsToOpenTrade(opened, {
+      uuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      txType: "Payment",
+      resolved_at: new Date(Date.now() - 60_000).toISOString(),
+    }),
+    false
+  );
+  assert.equal(
+    executionBelongsToOpenTrade(
+      { ...opened, activeUuid: "11111111-2222-4333-a444-555555555555" },
+      { uuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", txType: "Payment" }
+    ),
+    false
+  );
+  assert.equal(
+    executionBelongsToOpenTrade(
+      { ...opened, activeUuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", signMarker: "ab".repeat(16) },
+      {
+        uuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        txType: "Payment",
+        signMarker: "ab".repeat(16),
+        resolved_at: new Date(Date.now() + 1000).toISOString(),
+      }
+    ),
+    true
+  );
 });

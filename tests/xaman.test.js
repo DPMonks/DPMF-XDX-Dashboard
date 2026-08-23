@@ -4,6 +4,8 @@ import {
   buildSignInPayload,
   buildTrustSetPayload,
   buildXamanPayload,
+  isFreshXamanCreate,
+  xamanSignIdentifier,
   cleanCredential,
   requestOrigin,
   shouldSubmitTxjson,
@@ -83,6 +85,23 @@ test("TrustSet payloads submit to XRPL; SignIn payloads do not", () => {
 
   const fromBody = buildXamanPayload("https://xdx-exchange.dpmf.technology", xdxTrustSetTxjson());
   assert.equal(fromBody.options.submit, true);
+
+  const marker = "ab".repeat(16);
+  const marked = buildXamanPayload(
+    "https://xdx-exchange.dpmf.technology",
+    { TransactionType: "Payment", Amount: "1" },
+    { signMarker: marker }
+  );
+  assert.equal(marked.custom_meta.identifier, xamanSignIdentifier(marker));
+  assert.equal(marked.custom_meta.blob.marker, marker);
+  assert.equal(isFreshXamanCreate({ uuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", meta: {} }), true);
+  assert.equal(
+    isFreshXamanCreate({
+      uuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      meta: { signed: true, resolved: true },
+    }),
+    false
+  );
 });
 
 test("buildSignInPayload returns to the site with the payload id after Xaman", () => {

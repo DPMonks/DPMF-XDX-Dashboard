@@ -116,6 +116,10 @@ export async function createPayload(body = {}) {
   if (!payload) {
     throw new Error("Xaman returned an incomplete payload");
   }
+  const meta = raw.meta && typeof raw.meta === "object" ? raw.meta : {};
+  if (meta.resolved === true || meta.signed === true || meta.cancelled === true) {
+    throw new Error("Xaman returned a payload that was already signed. Start a new sign.");
+  }
   return payload;
 }
 

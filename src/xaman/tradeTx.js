@@ -50,6 +50,36 @@ export function executionClosesTradeAction(action, detail = {}) {
   return allowed.includes(txType);
 }
 
+export function executionResolvedAtMs(detail = {}) {
+  const raw =
+    detail.resolved_at ||
+    detail.payload?.meta?.resolved_at ||
+    detail.result?.meta?.resolved_at ||
+    detail.signed_at ||
+    "";
+  const parsed = Date.parse(raw);
+  if (Number.isFinite(parsed)) return parsed;
+  const numeric = Number(detail.at);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+export function executionBelongsToOpenTrade(current, detail = {}) {
+  if (!current?.action || !executionClosesTradeAction(current.action, detail)) return false;
+  const openedAt = Number(current.openId) || 0;
+  const resolvedMs = executionResolvedAtMs(detail);
+  if (openedAt && resolvedMs && resolvedMs + 2000 < openedAt) return false;
+
+  const eventUuid = String(detail.uuid || "").trim().toLowerCase();
+  const currentUuid = String(current.activeUuid || current.resumeUuid || "").trim().toLowerCase();
+  if (!currentUuid) return false;
+  if (eventUuid && currentUuid !== eventUuid) return false;
+
+  const eventMarker = String(detail.signMarker || extractTradeMarker(detail.txjson) || "").trim();
+  const currentMarker = String(current.signMarker || "").trim();
+  if (currentMarker && eventMarker && currentMarker !== eventMarker) return false;
+  return true;
+}
+
 export const DROPS_PER_XRP = 1_000_000;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
 export const TF_PARTIAL_PAYMENT = 131072;
@@ -99,6 +129,7 @@ export const WALLET_EVENTS = {
   needSignIn: "dpmf-need-sign-in",
   signedIn: "dpmf-wallet-signed-in",
   signInCancelled: "dpmf-sign-in-cancelled",
+  tradePending: "dpmf-trade-pending",
 };
 
 export function normalizeTradeRequest(detail) {
@@ -582,6 +613,11 @@ function rememberConfirmed(detail = {}) {
   const pending = pendingFromExecution(detail, account) || pendingVoteFromExecution(detail, account);
   if (pending) rememberPending(pending.activity.account, pending);
   return pending;
+}
+
+export function notifyTradePending(detail = {}) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(WALLET_EVENTS.tradePending, { detail }));
 }
 
 export function notifyTradeExecuted(detail = {}) {
