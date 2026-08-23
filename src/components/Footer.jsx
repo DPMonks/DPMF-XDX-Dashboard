@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../xaman/xappHost";
 import { useI18n } from "../i18n/useI18n";
 
 export default function Footer() {
@@ -15,6 +16,10 @@ export default function Footer() {
         href="https://dpmf.technology"
         target="_blank"
         rel="noreferrer"
+        onClick={(event) => {
+          event.preventDefault();
+          openExternalUrl("https://dpmf.technology");
+        }}
       >
         {t.footerSite}
       </a>

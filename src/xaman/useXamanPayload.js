@@ -26,6 +26,7 @@ import {
   payloadSignedThisSession,
   xamanSignUrl,
 } from "./xamanClient";
+import { isXappHost, isXappPayloadEvent, listenXappEvents, openXappSignRequest } from "./xappHost";
 import { nextPayloadSession, payloadSessionOpen } from "./payloadSession";
 
 export { nextPayloadSession, payloadSessionOpen };
@@ -87,10 +88,16 @@ export function useXamanPayload() {
     document.addEventListener("visibilitychange", wake);
     window.addEventListener("pageshow", wake);
     window.addEventListener("focus", wake);
+    const stopXapp = isXappHost()
+      ? listenXappEvents((event) => {
+          if (isXappPayloadEvent(event)) settleRef.current?.();
+        })
+      : () => {};
     return () => {
       document.removeEventListener("visibilitychange", wake);
       window.removeEventListener("pageshow", wake);
       window.removeEventListener("focus", wake);
+      stopXapp();
     };
   }, []);
 
@@ -214,6 +221,7 @@ export function useXamanPayload() {
       setMobileUrl(payload.mobileUrl);
       setUuid(payload.uuid);
       setStatus("waiting");
+      if (isXappHost() && payload.uuid) openXappSignRequest(payload.uuid);
 
       timeoutRef.current = setTimeout(() => {
         if (payloadSessionOpen(session, sessionRef.current)) reset();
@@ -305,10 +313,14 @@ export function useXamanPayload() {
       };
       settleRef.current = settle;
 
-      pollRef.current = setInterval(() => {
-        if (!payloadSessionOpen(session, sessionRef.current)) return;
-        settle().catch(() => {});
-      }, 2000);
+      // xApp listing rules: no payload polling. Websocket + native
+      // payload events + visibility wake cover the overlay.
+      if (!isXappHost()) {
+        pollRef.current = setInterval(() => {
+          if (!payloadSessionOpen(session, sessionRef.current)) return;
+          settle().catch(() => {});
+        }, 2000);
+      }
 
       if (payload.websocket && typeof WebSocket !== "undefined") {
         const socket = new WebSocket(payload.websocket);

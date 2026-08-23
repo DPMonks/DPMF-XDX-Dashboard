@@ -23,6 +23,7 @@ test("production CSP does not allow third-party scripts or eval", () => {
   assert.match(csp, /frame-src[^;]*https:\/\/dexscreener\.com/);
   assert.match(csp, /frame-src[^;]*https:\/\/\*\.dexscreener\.com/);
   assert.match(csp, /frame-ancestors 'self' https:\/\/dpmf\.technology/);
+  assert.match(csp, /frame-ancestors[^;]*https:\/\/xumm\.app/);
 });
 
 test("only DPMF and local origins may call the dashboard API from a browser", () => {

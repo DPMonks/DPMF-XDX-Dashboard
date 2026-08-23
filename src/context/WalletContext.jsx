@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { WalletContext } from "./walletContextInstance";
 import { persistLiveWallet, readLiveWallet } from "../wallet/walletStorage";
 import { clearXamanReturn } from "../xaman/payloadResume";
+import { readXappLaunch } from "../xaman/xappHost";
+import { useXappSession } from "../xaman/useXappSession";
 
 export function WalletProvider({ children }) {
   const [walletAddress, setWalletAddress] = useState(() => {
@@ -9,6 +11,7 @@ export function WalletProvider({ children }) {
     if (typeof window !== "undefined") window.userAccount = stored;
     return stored;
   });
+  const [xappBooting, setXappBooting] = useState(() => Boolean(readXappLaunch().token));
 
   useEffect(() => {
     if (walletAddress) persistLiveWallet(walletAddress);
@@ -50,9 +53,15 @@ export function WalletProvider({ children }) {
     setWalletAddress(null);
   }, []);
 
+  const finishXappBoot = useCallback(() => {
+    setXappBooting(false);
+  }, []);
+
+  useXappSession(connectWallet, finishXappBoot);
+
   return (
     <WalletContext.Provider
-      value={{ walletAddress, connectWallet, disconnectWallet }}
+      value={{ walletAddress, connectWallet, disconnectWallet, xappBooting }}
     >
       {children}
     </WalletContext.Provider>

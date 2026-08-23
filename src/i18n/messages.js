@@ -31,6 +31,8 @@ const en = {
   scan: "Scan with Xaman",
   openApp: "Connect to Xaman",
   connectXaman: "Connect to Xaman",
+  xappApprove: "Approve in Xaman",
+  xappApproveHint: "Approve this sign in Xaman. This page stays here.",
   openXamanWeb: "Open Xaman in browser",
   waitingXaman: "Approve in Xaman. This page will sign you in when you return.",
   xamanQr: "Xaman QR",

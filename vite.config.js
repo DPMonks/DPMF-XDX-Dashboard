@@ -81,6 +81,33 @@ function xamanDevPlugin() {
         return;
       }
 
+      if (req.url?.startsWith("/api/xaman/xapp-ott") && req.method === "GET") {
+        const token = new URL(req.url, "http://localhost").searchParams.get("token") || "";
+        const { isXappOtt } = await import("./src/xaman/xappHost.js");
+        const { publicOttView } = await import("./api/xaman/xapp-ott.js");
+        if (!isXappOtt(token)) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Missing xApp token" }));
+          return;
+        }
+        const response = await fetch(
+          `https://xumm.app/api/v1/platform/xapp/ott/${encodeURIComponent(token)}`,
+          { headers: xummHeaders(origin) }
+        );
+        const data = await response.json().catch(() => ({}));
+        res.statusCode = response.ok ? 200 : response.status;
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify(
+            response.ok
+              ? publicOttView(data)
+              : { error: xamanErrorMessage(data, "Failed to read the Xaman xApp session") }
+          )
+        );
+        return;
+      }
+
       if (req.url?.startsWith("/api/xaman/payload-result") && req.method === "GET") {
         const uuid = new URL(req.url, "http://localhost").searchParams.get("uuid");
         const response = await fetch(
