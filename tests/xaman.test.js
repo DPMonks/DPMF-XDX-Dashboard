@@ -25,9 +25,11 @@ import {
   extractSignedAccount,
   isClassicAddress,
   isPhoneDevice,
+  isReusableUnsignedPayload,
   launchXamanSign,
   normalizePayload,
   payloadLooksSigned,
+  payloadSignedThisSession,
   xamanAppUrl,
   xamanSignUrl,
 } from "../src/xaman/xamanClient.js";
@@ -213,8 +215,46 @@ test("extractSignedAccount reads Xaman SignIn response shapes", () => {
   assert.equal(extractSignedAccount({ payload: { response: { signer: account } } }), account);
   assert.equal(extractSignedAccount({ meta: { signed: true } }), null);
   assert.equal(payloadLooksSigned({ meta: { signed: true } }), true);
-  assert.equal(payloadLooksSigned({ response: { account } }), true);
+  assert.equal(payloadLooksSigned({ response: { account } }), false);
+  assert.equal(payloadLooksSigned({ meta: { signed: true }, response: { account } }), true);
   assert.equal(extractSignedAccount({ account: "not-an-address" }), null);
+  assert.equal(
+    extractSignedAccount({
+      meta: { signed: false, destination: account },
+      payload: { tx_destination: account, request_json: { Account: account } },
+    }),
+    null
+  );
+  assert.equal(
+    payloadLooksSigned({
+      meta: { signed: false },
+      payload: { request_json: { Account: account, TransactionType: "Payment" } },
+    }),
+    false
+  );
+  assert.equal(isReusableUnsignedPayload({ meta: { signed: false, resolved: false } }), true);
+  assert.equal(isReusableUnsignedPayload({ meta: { signed: true, resolved: true } }), false);
+  const started = Date.now();
+  assert.equal(
+    payloadSignedThisSession(
+      {
+        meta: { signed: true, resolved_at: new Date(started - 60_000).toISOString() },
+        response: { account, resolved_at: new Date(started - 60_000).toISOString() },
+      },
+      started
+    ),
+    false
+  );
+  assert.equal(
+    payloadSignedThisSession(
+      {
+        meta: { signed: true, resolved_at: new Date(started + 1000).toISOString() },
+        response: { account, hex: "AA", resolved_at: new Date(started + 1000).toISOString() },
+      },
+      started
+    ),
+    true
+  );
 });
 
 test("claimSignedWallet keeps polling until Xaman returns the signed account", async () => {
