@@ -184,6 +184,12 @@ export async function ledgerNftOffers(nftId) {
     ...amountFromLedger(row.amount),
     source: "xrpl"
   }));
+  const sourceOf = (result) => {
+    if (result.ok) return "xrpl";
+    const err = String(result.error || "");
+    if (/not found/i.test(err)) return "empty";
+    return err || "error";
+  };
   return {
     ok: true,
     nftId,
@@ -192,8 +198,8 @@ export async function ledgerNftOffers(nftId) {
     sell: sells,
     offers: [...buys, ...sells],
     source: {
-      buy: buy.ok ? "xrpl" : buy.error,
-      sell: sell.ok ? "xrpl" : sell.error
+      buy: sourceOf(buy),
+      sell: sourceOf(sell)
     }
   };
 }
@@ -206,6 +212,7 @@ export async function ledgerAccountTape(address) {
   const rows = [];
   for (const item of tx.result?.transactions || []) {
     const inner = item.tx || item.tx_json || {};
+    const meta = item.meta || {};
     const type = inner.TransactionType;
     if (!type) continue;
     if (!/NFToken|Offer/i.test(type)) continue;
@@ -214,7 +221,7 @@ export async function ledgerAccountTape(address) {
       hash: inner.hash || item.hash,
       date: item.date,
       account: inner.Account,
-      nftId: inner.NFTokenID || inner.nft_id,
+      nftId: inner.NFTokenID || inner.nft_id || meta.nftoken_id || meta.NFTokenID,
       amount: amountFromLedger(inner.Amount || inner.NFTokenBrokerFee),
       source: "xrpl"
     });

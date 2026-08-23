@@ -18,7 +18,9 @@ function AssetsBook() {
     "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU"
   );
   const [lookupNote, setLookupNote] = useState("");
-  const [nftId, setNftId] = useState("");
+  const [nftId, setNftId] = useState(
+    "00081388B26A0589780AC54111320F6F5226AD8E07AD7AE721D708390000009E"
+  );
   const [ledgerOffers, setLedgerOffers] = useState(null);
   const [tapeAddress, setTapeAddress] = useState(
     "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU"
@@ -50,11 +52,6 @@ function AssetsBook() {
       .then((body) => setDeskOffers(body.data || []))
       .catch(() => setDeskOffers([]));
   };
-
-  useEffect(() => {
-    loadCatalog();
-    loadDeskOffers();
-  }, []);
 
   const assets = catalog?.assets || [];
 
@@ -105,6 +102,13 @@ function AssetsBook() {
     const body = await res.json();
     setTape(body.data || null);
   };
+
+  useEffect(() => {
+    loadCatalog();
+    loadDeskOffers();
+    loadNftOffers();
+    loadTape();
+  }, []);
 
   const setLeg = (index, patch) => {
     setLegs((prev) =>
