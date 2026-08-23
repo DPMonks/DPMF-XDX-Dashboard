@@ -13,6 +13,16 @@ Infura project keys are **not** required to browse the exchange. They are requir
 
 ## Run
 
+Start the local API first (fresh demo catalog, old Mongo dumps are not used):
+
+```bash
+cd fuzion-xio-api
+npm install
+npm start
+```
+
+Then the frontend:
+
 ```bash
 cd fuzion-xio
 npm install
@@ -21,6 +31,8 @@ npm run dev
 
 Open http://localhost:5174
 
+The Vite dev server proxies `/api` to `http://127.0.0.1:8080`.
+
 ```bash
 npm run build
 npm run preview
@@ -28,11 +40,11 @@ npm run preview
 
 ## Config
 
-`src/config.json` points at the live API and IPFS gateway:
+`src/config.json` uses same-origin `/api/` (Vite → local Express). IPFS reads still go through the public gateway:
 
 | Key | Value |
 | --- | --- |
-| `LOCAL_API_URL` | `https://fuzion-xio.com/api/` |
+| `LOCAL_API_URL` | `/api/` |
 | `ipfs_p` | `https://radical-x.infura-ipfs.io/ipfs/` |
 
 Copy `.env.example` to `.env` if you need Infura mint uploads.

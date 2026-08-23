@@ -13,7 +13,8 @@ export const getHomeDetailServise = async () => {
 		if (getHomeDeatail.status === 200) {
 			return getHomeDeatail;
 		}
+		return { status: getHomeDeatail?.status || 0, data: {} };
 	} catch (e) {
-		return e.response;
+		return e.response || { status: 0, data: { message: e.message } };
 	}
 };

@@ -514,7 +514,7 @@ function Nftdetail() {
     (async () => {
       // console.log(nftdtl, "check the adfsdf");
       if (nftdtl.nftDetailsNFT !== "") {
-        const { data, datauser, minData, totalNft } = nftdtl.nftDetailsNFT;
+        const { data, datauser, minData, totalNft } = nftdtl.nftDetailsNFT || {};
         if (data !== undefined) {
           data.image = await getImageURL(data.image);
           setNft({ ...data, totalNft });

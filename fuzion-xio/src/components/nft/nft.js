@@ -106,13 +106,16 @@ function Nft() {
 
   useEffect(() => {
     if (homedtl.nftDetail !== "") {
-      let { rcTop, sallingCreater, todayPicks, mostLikedNft, allMintedNft } =
-        homedtl.nftDetail;
+      let {
+        rcTop = [],
+        todayPicks = [],
+        mostLikedNft = [],
+        allMintedNft = []
+      } = homedtl.nftDetail || {};
       setTimeout(async () => {
         setListRc(await bindVscoreData(rcTop));
-        // setListSallingCreater(sallingCreater);
         setListTodayPicks(await bindVscoreData(todayPicks));
-        if (mostLikedNft.length) {
+        if (Array.isArray(mostLikedNft) && mostLikedNft.length) {
           mostLikedNft = await Promise.all(
             mostLikedNft.map(async (vl) => ({
               ...vl,
@@ -121,7 +124,7 @@ function Nft() {
           );
         }
         setListMostLikedNft(mostLikedNft);
-      }, 2000);
+      }, 200);
       setAllMintedNfts(allMintedNft);
     }
   }, [homedtl]); // eslint-disable-line
@@ -236,7 +239,7 @@ function Nft() {
   useEffect(() => {
     dispatch(getProfileAction({ wAddress: "" }))
       .then((pDetail) => {
-        setAllProfile(pDetail.data.allProfile);
+        setAllProfile(pDetail?.data?.allProfile || []);
       })
       .catch((err) => console.log(err, "pdetails error"));
   }, []); // eslint-disable-line
@@ -252,6 +255,7 @@ function Nft() {
   };
 
   const bindVscoreData = async (data) => {
+    if (!Array.isArray(data)) return [];
     return await Promise.all(
       data.map(async (vl) => ({
         ...vl,

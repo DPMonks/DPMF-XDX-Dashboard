@@ -8,7 +8,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, root, "");
-  const apiOrigin = env.VITE_API_ORIGIN || "https://fuzion-xio.com";
+  const apiOrigin = env.VITE_API_ORIGIN || "http://127.0.0.1:8080";
 
   return {
     plugins: [

@@ -1,0 +1,19 @@
+{
+  "name": "fuzion-xio-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local FUZION-XIO / Radical-X exchange API. Fresh file store (old Mongo dumps were index-only and are not used).",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js",
+    "reset": "node scripts/reset.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "uuid": "^11.1.0"
+  }
+}
