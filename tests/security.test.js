@@ -20,6 +20,8 @@ test("production CSP does not allow third-party scripts or eval", () => {
   assert.equal(csp.includes("ipwho.is"), false);
   assert.equal(csp.includes("ipapi.co"), false);
   assert.match(csp, /connect-src[^;]*https:\/\/xumm\.app/);
+  assert.match(csp, /frame-src[^;]*https:\/\/dexscreener\.com/);
+  assert.match(csp, /frame-src[^;]*https:\/\/\*\.dexscreener\.com/);
   assert.match(csp, /frame-ancestors 'self' https:\/\/dpmf\.technology/);
 });
 

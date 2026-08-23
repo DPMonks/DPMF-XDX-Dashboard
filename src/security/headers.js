@@ -1,5 +1,7 @@
 export const PUBLIC_SITE_ORIGIN = "https://xdx-exchange.dpmf.technology";
 export const INDEXER_ORIGIN = "https://dpmf-xdx-indexer-production.up.railway.app";
+export const DEXSCREENER_ORIGINS =
+  "https://dexscreener.com https://www.dexscreener.com https://cdn.dexscreener.com https://*.dexscreener.com";
 
 export function isAllowedDashboardOrigin(origin) {
   const text = String(origin || "").trim();
@@ -23,6 +25,7 @@ export function contentSecurityPolicy({ development = false } = {}) {
     "wss://xumm.app",
     "https://api.xrpl.to",
     INDEXER_ORIGIN,
+    DEXSCREENER_ORIGINS,
     development ? "ws://localhost:5173 http://localhost:5173 ws://127.0.0.1:5173" : "",
   ]
     .filter(Boolean)
@@ -32,10 +35,10 @@ export function contentSecurityPolicy({ development = false } = {}) {
     "default-src 'self'",
     `script-src ${script}`,
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: https://xumm.app ${PUBLIC_SITE_ORIGIN}`,
+    `img-src 'self' data: blob: https://xumm.app ${PUBLIC_SITE_ORIGIN} ${DEXSCREENER_ORIGINS}`,
     "font-src 'self' data:",
     `connect-src ${connect}`,
-    "frame-src https://dexscreener.com",
+    `frame-src ${DEXSCREENER_ORIGINS}`,
     "frame-ancestors 'self' https://dpmf.technology https://*.dpmf.technology",
     "base-uri 'self'",
     "form-action 'self'",
