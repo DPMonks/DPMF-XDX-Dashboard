@@ -460,8 +460,13 @@ export function notifyWalletRefresh() {
   window.dispatchEvent(new CustomEvent("dpmf-wallet-refresh"));
 }
 
+const announcedTrades = new Set();
+
 export function notifyTradeExecuted(detail = {}) {
   if (typeof window === "undefined") return;
+  const key = String(detail.uuid || detail.txid || "").trim().toLowerCase();
+  if (key && announcedTrades.has(key)) return;
+  if (key) announcedTrades.add(key);
   const account = detail.account || detail.txjson?.Account || null;
   const pending = pendingFromExecution(detail, account) || pendingVoteFromExecution(detail, account);
   if (pending) rememberPending(pending.activity.account, pending);

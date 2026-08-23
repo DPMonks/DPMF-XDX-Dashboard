@@ -5,20 +5,39 @@ export function isTradeTxjson(txjson) {
   return txjson?.TransactionType === "Payment" && txjson.SendMax != null;
 }
 
+function isTxHash(value) {
+  return /^[A-Fa-f0-9]{64}$/.test(String(value || "").trim());
+}
+
 export function extractTxHash(...sources) {
+  const keys = ["txid", "tx_hash", "hash", "dispatched_txid"];
+  function walk(node, depth) {
+    if (!node || depth > 4) return null;
+    if (typeof node === "string" && isTxHash(node)) return node.trim().toUpperCase();
+    if (typeof node !== "object") return null;
+    for (const key of keys) {
+      if (isTxHash(node[key])) return String(node[key]).trim().toUpperCase();
+    }
+    for (const child of [node.response, node.meta, node.tx, node.result, node.data, node.payload]) {
+      const hit = walk(child, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
   for (const source of sources) {
-    if (!source || typeof source !== "object") continue;
-    const raw =
-      source.txid ||
-      source.tx_hash ||
-      source.hash ||
-      source.response?.txid ||
-      source.response?.tx_hash ||
-      source.response?.hash;
-    const hash = String(raw || "").trim();
-    if (/^[A-Fa-f0-9]{64}$/.test(hash)) return hash.toUpperCase();
+    const hit = walk(source, 0);
+    if (hit) return hit;
   }
   return null;
+}
+
+export function unwrapLedgerTx(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  if (raw.error && !raw.Account && !raw.hash) return raw;
+  if (raw.result && typeof raw.result === "object" && (raw.result.Account || raw.result.hash || raw.result.meta)) {
+    return raw.result;
+  }
+  return raw;
 }
 
 export function payloadExecutionSignals(result) {
@@ -26,7 +45,8 @@ export function payloadExecutionSignals(result) {
   const response = result?.response && typeof result.response === "object" ? result.response : {};
   const dispatched = String(response.dispatched_result || result?.dispatched_result || "");
   return {
-    signed: meta.signed === true,
+    signed: meta.signed === true || result?.signed === true,
+    resolved: meta.resolved === true,
     cancelled: meta.cancelled === true,
     expired: meta.expired === true,
     submitted: meta.submitted === true || Boolean(extractTxHash(result, response)),
@@ -49,12 +69,13 @@ export function socketExecutionSignals(data) {
   };
 }
 
-export function ledgerExecutionSignals(tx) {
-  const hash = extractTxHash(tx);
-  const result = tx?.meta?.TransactionResult || tx?.TransactionResult || "";
+export function ledgerExecutionSignals(raw) {
+  const tx = unwrapLedgerTx(raw);
+  const hash = extractTxHash(tx, raw);
+  const result = tx?.meta?.TransactionResult || tx?.TransactionResult || raw?.meta?.TransactionResult || "";
   return {
     found: Boolean(tx && (tx.Account || tx.hash || tx.meta) && !tx.error),
-    validated: tx?.validated === true,
+    validated: tx?.validated === true || raw?.validated === true,
     tesSuccess: result === "tesSUCCESS",
     txid: hash,
   };
@@ -97,6 +118,12 @@ export function detectTradeExecution({ payload, socket, ledger } = {}) {
   }
   if (l.found && tesSuccess) {
     return { executed: true, via: "xrpl-tx", txid, detectors, signed, tesSuccess };
+  }
+  if (signed && (p.resolved || p.submitted) && !p.cancelled && !p.expired) {
+    return { executed: true, via: "xaman-resolved", txid, detectors, signed, tesSuccess };
+  }
+  if (signed && !p.cancelled && !p.expired) {
+    return { executed: true, via: "xaman-signed", txid, detectors, signed, tesSuccess };
   }
   return { executed: false, rejected: false, signed, tesSuccess, txid, via: null, detectors };
 }

@@ -18,7 +18,7 @@ import {
   XDX_TOTAL_SUPPLY,
   xdxTrustSetTxjson,
 } from "../src/constants/ledger.js";
-import { claimSignedWallet } from "../src/xaman/claimSignIn.js";
+import { claimExecutedTrade, claimSignedWallet } from "../src/xaman/claimSignIn.js";
 import {
   extractSignedAccount,
   isClassicAddress,
@@ -209,6 +209,21 @@ test("claimSignedWallet keeps polling until Xaman returns the signed account", a
     fetchResult: async () => ({ meta: { cancelled: true } }),
   });
   assert.equal(cancelled, null);
+});
+
+test("claimExecutedTrade treats a signed AMM deposit as executed", async () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  let calls = 0;
+  const claimed = await claimExecutedTrade(uuid, {
+    waitMs: 0,
+    fetchResult: async () => {
+      calls += 1;
+      if (calls < 2) return { meta: { signed: false } };
+      return { meta: { signed: true, resolved: true } };
+    },
+  });
+  assert.equal(claimed.executed, true);
+  assert.equal(calls, 2);
 });
 
 function memoryStore() {
