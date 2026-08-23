@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { getAmm, getPrices, getWalletBalances, getWalletLp } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
@@ -81,11 +82,18 @@ export default function TradePanel({
   const [prices, setPrices] = useState({});
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
-  const quote = resolveQuote(quoteId, {
-    ...quoteExtra,
-    quote_issuer: quoteExtra?.quoteIssuer || matched?.quote_issuer,
-    quote_hex: quoteExtra?.quoteHex || matched?.quote_hex,
-  });
+  const quote = useMemo(
+    () =>
+      resolveQuote(quoteId, {
+        ...quoteExtra,
+        quote_issuer: quoteExtra?.quoteIssuer || matched?.quote_issuer,
+        quote_hex: quoteExtra?.quoteHex || matched?.quote_hex,
+      }),
+    [quoteId, quoteExtra, matched]
+  );
+  const quoteIssuer = quote.issuer || "";
+  const quoteHex = quote.hex || "";
+  const quotePair = quote.pair || "";
   const isLp = action === "addLp" || action === "removeLp";
   const signedIn = Boolean(walletAddress);
   const needTrust =
@@ -154,7 +162,7 @@ export default function TradePanel({
         if (cancelled) return;
         setPools(Array.isArray(nextPools) ? nextPools : []);
         if (action === "removeLp") {
-          const pair = String(quote.pair || poolForQuote(quote).pair || "").toUpperCase();
+          const pair = String(quotePair || `XDX/${quoteId}`).toUpperCase();
           const row = (Array.isArray(nextLp) ? nextLp : []).find(
             (item) => String(item.pool_name || item.pool || "").toUpperCase() === pair
           );
@@ -163,7 +171,7 @@ export default function TradePanel({
         }
       }
     );
-    if (walletAddress && quote.issuer) {
+    if (walletAddress && quoteIssuer) {
       getWalletBalances(walletAddress)
         .then((balances) => {
           if (cancelled) return;
@@ -174,7 +182,19 @@ export default function TradePanel({
     return () => {
       cancelled = true;
     };
-  }, [action, quote, quoteId, walletAddress]);
+  }, [action, quoteHex, quoteId, quoteIssuer, quotePair, walletAddress]);
+
+  function close() {
+    reset();
+    onClose?.();
+  }
+
+  function onBackdrop(event) {
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  }
 
   function buildTx() {
     if (action === "buy") {
@@ -265,13 +285,14 @@ export default function TradePanel({
 
   if (!action) return null;
 
-  return (
-    <div className="wallet-modal-overlay" onClick={onClose}>
+  return createPortal(
+    <div className="wallet-modal-overlay" onPointerDown={onBackdrop} onClick={(event) => event.stopPropagation()}>
       <div
         className="wallet-modal trade-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="trade-panel-title"
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id="trade-panel-title" className="modal-title">
@@ -444,7 +465,7 @@ export default function TradePanel({
           <button type="button" className="connect-wallet-btn" onClick={submit}>
             {!signedIn ? t.signInToTrade : needTrust && quote.issuer ? t.xdxTrustline : t.tradeSign}
           </button>
-          <button type="button" className="cancel-wallet-btn" onClick={onClose}>
+          <button type="button" className="cancel-wallet-btn" onClick={close}>
             {t.cancel}
           </button>
         </div>
@@ -457,6 +478,7 @@ export default function TradePanel({
         status={status}
         onClose={reset}
       />
-    </div>
+    </div>,
+    document.body
   );
 }

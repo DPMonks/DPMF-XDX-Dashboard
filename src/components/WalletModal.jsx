@@ -39,13 +39,20 @@ export default function WalletModal({
     }
   }
 
+  function closeOverlay(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.target === event.currentTarget) onClose?.();
+  }
+
   return (
-    <div className="wallet-modal-overlay" onClick={onClose}>
+    <div className="wallet-modal-overlay" onPointerDown={closeOverlay} onClick={(event) => event.stopPropagation()}>
       <div
         className="wallet-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="wallet-modal-title"
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
         <img src={xamanLogo} alt="" className="wallet-modal-logo" />

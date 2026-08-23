@@ -142,10 +142,15 @@ export default function App() {
     };
   }, []);
 
+  function openTrade(detail) {
+    const next = normalizeTradeRequest(detail);
+    if (!next) return;
+    setTradeAction({ ...next, openId: Date.now() });
+  }
+
   useEffect(() => {
     function onOpen(event) {
-      const next = normalizeTradeRequest(event.detail);
-      if (next) setTradeAction(next);
+      openTrade(event.detail);
     }
     window.addEventListener("dpmf-open-trade", onOpen);
     return () => window.removeEventListener("dpmf-open-trade", onOpen);
@@ -247,14 +252,12 @@ export default function App() {
             loading={ammLoading}
             error={errors.amm}
             onAddLiquidity={(pool) =>
-              setTradeAction(
-                normalizeTradeRequest({
-                  action: "addLp",
-                  pair: pool.pool || pool.pool_name,
-                  quote_issuer: pool.quote_issuer,
-                  quote_hex: pool.quote_hex,
-                })
-              )
+              openTrade({
+                action: "addLp",
+                pair: pool.pool || pool.pool_name,
+                quote_issuer: pool.quote_issuer,
+                quote_hex: pool.quote_hex,
+              })
             }
           />
         </section>
@@ -263,7 +266,7 @@ export default function App() {
       <Footer />
       {tradeAction ? (
         <TradePanel
-          key={`${tradeAction.action}-${tradeAction.quote}`}
+          key={tradeAction.openId || `${tradeAction.action}-${tradeAction.quote}`}
           action={tradeAction.action}
           initialQuote={tradeAction.quote}
           quoteExtra={tradeAction}

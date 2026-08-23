@@ -22,6 +22,8 @@ import {
   xamanAppUrl,
   xamanSignUrl,
 } from "../src/xaman/xamanClient.js";
+import { nextPayloadSession, payloadSessionOpen } from "../src/xaman/payloadSession.js";
+import { normalizeTradeRequest } from "../src/xaman/tradeTx.js";
 
 test("cleanCredential strips quotes and whitespace", () => {
   assert.equal(cleanCredential('  "abc-def" \n'), "abc-def");
@@ -109,4 +111,16 @@ test("xaman sign links stay on the payload uuid and phones are detected", () => 
   assert.equal(xamanAppUrl("abc-1"), "xumm://xumm.app/sign/abc-1");
   assert.equal(isPhoneDevice("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), true);
   assert.equal(isPhoneDevice("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), false);
+});
+
+test("cancelled Xaman sessions do not stay open after reset", () => {
+  const first = nextPayloadSession(0);
+  const afterCancel = nextPayloadSession(first);
+  assert.equal(payloadSessionOpen(first, first), true);
+  assert.equal(payloadSessionOpen(first, afterCancel), false);
+  assert.equal(payloadSessionOpen(0, 0), false);
+  const buy = normalizeTradeRequest("buy");
+  const sell = normalizeTradeRequest("sell");
+  assert.equal(buy.action, "buy");
+  assert.equal(sell.action, "sell");
 });
