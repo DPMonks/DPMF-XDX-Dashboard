@@ -20,7 +20,13 @@ import MessageConst from "../../const/message.json";
 import { Category, MetaVerse } from "../../const/category.js";
 import { create as ipfsHttpClient } from "ipfs-http-client";
 import PreviewFiletype from "../common/PreviewFiletype";
-import fileArr from "../../const/filetypearray";
+import {
+  FILE_ACCEPT,
+  FILE_LABEL,
+  describeFile,
+  isAllowedFile,
+  mimeFromFile
+} from "../../const/filetypes";
 import { ProgressBar, OverlayTrigger, Tooltip } from "react-bootstrap";
 // import { create as ipfsHttpClient } from 'kubo-rpc-client';
 import {
@@ -292,33 +298,11 @@ const Createnft = () => {
   };
 
   function getMimeType(file) {
-    if (file.type && file.type.trim() !== "") return file.type;
-
-    const ext = file.name.split(".").pop().toLowerCase();
-    switch (ext) {
-      case "glb":
-        return "model/gltf-binary";
-      case "gltf":
-        return "model/gltf+json";
-      case "fbx":
-        return "application/octet-stream";
-      case "usdz":
-        return "model/vnd.usdz+zip";
-      case "obj":
-        return "text/plain";
-      default:
-        return "application/octet-stream";
-    }
+    return mimeFromFile(file);
   }
 
   function getFileType(file) {
-    if (file.type) {
-      return file.type; // MIME type (if available)
-    }
-
-    // Fallback to file extension
-    const extension = file.name.split(".").pop().toLowerCase();
-    return extension;
+    return describeFile(file).mime;
   }
 
   const handleFileEvent = (e) => {
@@ -327,14 +311,7 @@ const Createnft = () => {
     const chosenFiles = Array.prototype.slice.call(e.target.files);
     setTotalFiles(chosenFiles.length);
 
-    const finalChosenFiles = chosenFiles.map((file) => ({
-      ...file,
-      type: getMimeType(file)
-    }));
-
-    const checkFiles = finalChosenFiles.filter(
-      (files) => !fileArr.includes(getFileType(files))
-    );
+    const checkFiles = chosenFiles.filter((files) => !isAllowedFile(files));
 
     if (checkFiles?.length > 0) {
       e.target.value = "";
@@ -347,10 +324,9 @@ const Createnft = () => {
       });
     } else {
       const filterWithType = chosenFiles.map((file) => {
-        if (!file.type) {
-          return new File([file], file.name, {
-            type: getFileType(file)
-          });
+        const mime = getMimeType(file);
+        if (!file.type || file.type === "application/octet-stream") {
+          return new File([file], file.name, { type: mime });
         }
         return file;
       });
@@ -683,19 +659,8 @@ const Createnft = () => {
   // 	memoizedFunction(file);
   // }, [memoizedFunction, file]);  // eslint-disable-line
   function getFileMeta(vl) {
-    let fileType;
-    let contentType;
-    if (["fbx", "glb", "gltf"].includes(vl.type)) {
-      fileType = vl.type;
-      contentType = vl.type;
-    } else if (vl.type.indexOf("gltf") > -1) {
-      fileType = "glb";
-      contentType = "glb";
-    } else {
-      fileType = vl.type.split("/")[1];
-      contentType = vl.type.split("/")[0];
-    }
-    return { fileType, contentType };
+    const meta = describeFile(vl);
+    return { fileType: meta.ftype, contentType: meta.ctype };
   }
 
   // useEffect(() => {
@@ -774,15 +739,27 @@ const Createnft = () => {
             if (!isMounted) break;
             setFileName(file1.name);
 
-            const result = await client.add(file1, {
-              chunker: file1.size > 1048576 ? "size-1048576" : undefined,
-              wrapWithDirectory: false, // ensures CID is the file itself
-              pin: true,
-              progress: (prog) =>
-                setProgress(Math.floor((prog / file1.size) * 100))
-            });
-
-            const url = `${configData.ipfs_p}${result.cid.toString()}`;
+            let url;
+            try {
+              const result = await client.add(file1, {
+                chunker: file1.size > 1048576 ? "size-1048576" : undefined,
+                wrapWithDirectory: false,
+                pin: true,
+                progress: (prog) =>
+                  setProgress(Math.floor((prog / file1.size) * 100))
+              });
+              url = `${configData.ipfs_p}${result.cid.toString()}`;
+            } catch (ipfsError) {
+              const body = new FormData();
+              body.append("file", file1);
+              const local = await axios.post(
+                `${configData.LOCAL_API_URL}mint/upload`,
+                body,
+                { headers: { "Content-Type": "multipart/form-data" } }
+              );
+              if (!local.data?.url) throw ipfsError;
+              url = local.data.url;
+            }
             const { fileType, contentType } = getFileMeta(file1);
 
             finalFiles.push({
@@ -1311,13 +1288,13 @@ const Createnft = () => {
                       <Form.Control
                         type="file"
                         name="file"
+                        accept={FILE_ACCEPT}
                         onChange={handleFileEvent}
                         multiple
                         disabled={urlArr.length > 0 ? true : false}
                       />
                       <Form.Label style={{ paddingTop: "5px" }}>
-                        Select png, gif, jpg, jpeg, mpeg, ogg, mp4, pdf, FBX,
-                        GLB files. <sup className="text-danger">*</sup>
+                        Select {FILE_LABEL}. <sup className="text-danger">*</sup>
                       </Form.Label>
                     </Form.Group>
                     {urlArr.length > 0 && <p>Add Metadata</p>}

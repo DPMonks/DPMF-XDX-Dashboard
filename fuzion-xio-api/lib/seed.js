@@ -1,6 +1,6 @@
 import { DEMO_GLB, XDX_CURRENCY, XIO_CURRENCY } from "./constants.js";
 
-export const STORE_VERSION = 4;
+export const STORE_VERSION = 5;
 
 export const DEMO_ISSUER = "rFuzionXioDemoIssuer1111111111111";
 export const DEMO_OWNER = "rFuzionXioDemoOwner11111111111111";
@@ -113,6 +113,62 @@ export function demoSeed() {
       status: "minted",
       likes: 0,
       isPurchased: 1
+    }),
+    nft({
+      _id: "seed-clip-video",
+      name: "Signal Reel",
+      category: "Video",
+      description: "MP4 listing — video files mint and play on the exchange.",
+      image: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+      currency: "XRP",
+      amount: "2",
+      NFTokenID: "00080000FUZIONXIODEMO0000000000000000000000000000000005",
+      fileType: "video",
+      contentType: "video",
+      status: "sale",
+      likes: 4
+    }),
+    nft({
+      _id: "seed-clip-audio",
+      name: "Anchor Tone",
+      category: "Audio",
+      description: "MPEG audio listing — mp3/wav/ogg/m4a mint and play.",
+      image: "https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3",
+      currency: XIO_CURRENCY,
+      amount: "0.02",
+      NFTokenID: "00080000FUZIONXIODEMO0000000000000000000000000000000006",
+      fileType: "audio",
+      contentType: "audio",
+      status: "sale",
+      likes: 2
+    }),
+    nft({
+      _id: "seed-clip-pdf",
+      name: "Desk Brief",
+      category: "Utility",
+      description: "PDF listing — documents mint and render in the viewer.",
+      image: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+      currency: "XRP",
+      amount: "1",
+      NFTokenID: "00080000FUZIONXIODEMO0000000000000000000000000000000007",
+      fileType: "application",
+      contentType: "application",
+      status: "sale",
+      likes: 1
+    }),
+    nft({
+      _id: "seed-clip-webp",
+      name: "Web Frame",
+      category: "Digital Art",
+      description: "WEBP still — modern image types mint alongside png/jpg/gif/svg.",
+      image: "https://www.gstatic.com/webp/gallery/1.webp",
+      currency: XDX_CURRENCY,
+      amount: "8",
+      NFTokenID: "00080000FUZIONXIODEMO0000000000000000000000000000000008",
+      fileType: "image",
+      contentType: "image",
+      status: "sale",
+      likes: 5
     }),
     nft({
       _id: "seed-fuzion-3d-hero",

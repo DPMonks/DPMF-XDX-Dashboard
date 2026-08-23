@@ -490,7 +490,12 @@ router.get("/assets", async (req, res) => {
     "modelviewer.dev",
     "fuzion-xio.com",
     "www.dpmf.technology",
-    "dpmf.technology"
+    "dpmf.technology",
+    "interactive-examples.mdn.mozilla.net",
+    "www.w3.org",
+    "w3.org",
+    "www.gstatic.com",
+    "gstatic.com"
   ];
   if (!allowed.includes(parsed.hostname)) {
     return res.status(400).json({ success: false, message: "host not allowed" });
@@ -534,9 +539,7 @@ const stubPosts = [
   "xrpl/saleNft",
   "xrpl/buyNft",
   "xrpl/burnNft",
-  "xrpl/sendNft",
-  "nft/createNft",
-  "mintoffer/create"
+  "xrpl/sendNft"
 ];
 
 for (const pathName of stubPosts) {

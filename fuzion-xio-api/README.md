@@ -28,7 +28,7 @@ npm run reset
 - Profiles, vScore board, XIO validator board and ranks
 - Virtual marketplace collections (generic FUZION 3D × 1,000). AVA, MegaBits, and RWA sculpture are separate projects and are not seeded here.
 - Market desk: floor/traits, item + collection offers, auctions, sweep, activity, rankings (`/api/market/*`)
-- First-class 3D file types (`glb` / `gltf` / `fbx` / `usdz`)
+- Mint any Create NFT type: images (png/jpg/gif/webp/svg/bmp/avif), video, audio, PDF, GLB/GLTF/FBX/USDZ/OBJ. Local `/api/mint/upload` when Infura is unset.
 - XDX indexer token catalog / prices / wallet balances (cached; static fallback on 429)
 - XRPL `account_nfts`, `nft_info`, `account_lines`
 - Image proxy `GET /api/assets?url=`

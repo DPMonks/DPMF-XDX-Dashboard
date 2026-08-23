@@ -317,6 +317,17 @@ const checkFileType = async (file) => {
 
 const detectModelMimeType = async (url) => {
   try {
+    const named =
+      typeof url === "string"
+        ? url.toLowerCase()
+        : String(url?.name || "").toLowerCase();
+    if (named.endsWith(".usdz")) return "usdz";
+    if (named.endsWith(".obj")) return "obj";
+    if (named.endsWith(".fbx")) return "fbx";
+    if (named.endsWith(".glb")) return "glb";
+    if (named.endsWith(".gltf")) return "gltf";
+    if (typeof url !== "string") return null;
+
     // Only request the first 4KB of the file
     const res = await fetch(url, { headers: { Range: "bytes=0-4095" } });
 

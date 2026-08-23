@@ -11,7 +11,7 @@ export const XDX_CURRENCY = "XDX";
 export const XSQUAD_ISSUER = "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg";
 export const XSQUAD_CURRENCY = "XSQUAD";
 
-export const THREE_D_TYPES = ["glb", "gltf", "fbx", "usdz"];
+export const THREE_D_TYPES = ["glb", "gltf", "fbx", "usdz", "obj"];
 export const MODEL_MIMES = {
   glb: "model/gltf-binary",
   gltf: "model/gltf+json",

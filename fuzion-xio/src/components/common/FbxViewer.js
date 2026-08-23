@@ -75,6 +75,18 @@ const ModelViewer = forwardRef(
       (async () => {
         try {
           const type = await detectModelMimeType(fbxPath);
+          const named =
+            typeof fbxPath === "string"
+              ? fbxPath.toLowerCase()
+              : String(fbxPath?.name || "").toLowerCase();
+          if (type === "usdz" || named.endsWith(".usdz")) {
+            const src =
+              typeof fbxPath === "string"
+                ? fbxPath
+                : URL.createObjectURL(fbxPath);
+            if (!cancelled) updateGLBPath(src);
+            return;
+          }
           // if fbx file has already been deployed on ipfs
           if (type === "fbx" && fbxPath.includes("/ipfs")) {
             if (curref.current) return;
