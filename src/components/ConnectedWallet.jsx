@@ -186,9 +186,14 @@ function LpFeeTracker({ fees, locale, t, empty }) {
       <p className="wallet-fees-xdx">{blank ? "—" : `${formatToken(fees.xdx, locale, 4)} ${t.xdx}`}</p>
       <p className="wallet-fees-usd">{blank ? "—" : formatUsd(fees.usd, locale)}</p>
       <p className="wallet-fees-pct">
-        {blank || !Number.isFinite(pct)
-          ? "—"
-          : `+${formatSupplySharePercent(pct, locale)} ${t.lpFees24h}`}
+        {blank || !Number.isFinite(pct) ? (
+          "—"
+        ) : (
+          <>
+            <span className="wallet-fees-pct-value">+{formatSupplySharePercent(pct, locale)}</span>
+            <span className="wallet-fees-pct-range">{t.lpFees24h}</span>
+          </>
+        )}
       </p>
     </div>
   );
