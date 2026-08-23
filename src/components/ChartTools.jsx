@@ -281,6 +281,7 @@ export default function ChartTools({
   const flyoutGroup = TOOL_GROUPS.find((group) => group.id === activeGroup && group.id !== "pointer");
   const sections = flyoutGroup ? flyoutSections(flyoutGroup.id) : [];
   const open = panel && sections.length > 0;
+  if (tool === "cursor" && panel) setPanel(false);
 
   useEffect(() => {
     if (!panel) return undefined;
@@ -392,11 +393,11 @@ export default function ChartTools({
         </button>
         <button
           type="button"
-          className={stay || tool !== "cursor" ? "hybrid-tool active" : "hybrid-tool"}
-          aria-pressed={stay || tool !== "cursor"}
+          className={stay ? "hybrid-tool active" : "hybrid-tool"}
+          aria-pressed={stay}
           onPointerDown={(event) => {
             event.preventDefault();
-            if (!stay) onToggleStay();
+            onToggleStay();
           }}
           title={t.chartStayDraw}
         >

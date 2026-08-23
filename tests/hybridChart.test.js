@@ -703,7 +703,7 @@ test("draw style and extra City Index tools stay available from one toolbox", ()
   assert.equal(pinned.t, 10);
   assert.equal(toggleInspect(pinned, { t: 10, candle: { t: 10 } }), null);
   assert.equal(toolAfterDrawing(true, "elliottimpulse"), "elliottimpulse");
-  assert.equal(toolAfterDrawing(false, "elliottimpulse"), "elliottimpulse");
+  assert.equal(toolAfterDrawing(false, "elliottimpulse"), "cursor");
   assert.equal(toolAfterDrawing(false, "cursor"), "cursor");
   assert.equal(toolMeta("pitchfork").clicks, 3);
   const cross = nextDrawingState({

@@ -144,8 +144,9 @@ export function toggleInspect(current, next) {
   return next;
 }
 
-export function toolAfterDrawing(_stay, tool) {
-  return tool && tool !== "cursor" ? tool : "cursor";
+export function toolAfterDrawing(stay, tool) {
+  if (stay === true && tool && tool !== "cursor") return tool;
+  return "cursor";
 }
 
 export function toggleTool(current, next) {
