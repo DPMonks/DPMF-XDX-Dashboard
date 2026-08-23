@@ -90,9 +90,9 @@ export function capabilityMap() {
         title: "Profile V-Score",
         status: "live",
         points: [
-          "100 V-Score: blue checkmark",
-          "10,000 V-Score: gold checkmark",
-          "Applies to the profile and NFTs linked to it"
+          "100 V-Score: blue checkmark on the issuer wallet, profile, and all issued/linked NFTs",
+          "10,000 V-Score: gold checkmark on the issuer wallet, profile, and all issued/linked NFTs",
+          "Validation is a fractional payment in the owner’s chosen asset plus an XIO power tick"
         ]
       },
       {

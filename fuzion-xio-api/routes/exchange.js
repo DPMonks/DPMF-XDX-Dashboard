@@ -9,6 +9,12 @@ import {
   templateCards
 } from "../lib/collections.js";
 import { xioRank, vScoreBadge } from "../lib/governance.js";
+import {
+  addressValidation,
+  applyValidation,
+  nftValidation,
+  withNftValidation
+} from "../lib/validation.js";
 import { indexerGet, walletTokenData } from "../lib/indexer.js";
 import { tradeCatalog } from "../lib/assets.js";
 import {
@@ -42,6 +48,20 @@ function nftById(store, id) {
 
 function listedNfts(store) {
   return (store.nfts || []).filter((nft) => nft.status === "sale");
+}
+
+function validatorFromReq(req) {
+  if (req.body?.from || req.body?.account || req.body?.wAddress) {
+    return req.body.from || req.body.account || req.body.wAddress;
+  }
+  const header = String(req.headers.authorization || "").replace(/^Basic\s+/i, "");
+  if (!header || header.split(".").length < 2) return "";
+  try {
+    const payload = JSON.parse(Buffer.from(header.split(".")[1], "base64url").toString());
+    return payload.ac || payload.address || "";
+  } catch {
+    return "";
+  }
 }
 
 router.get("/health", (_req, res) => {
@@ -137,10 +157,12 @@ router.get("/nft/home", (_req, res) => {
     const key = nft.name || nft._id;
     if (seen.has(key)) continue;
     seen.add(key);
-    uniqueHome.push({
-      ...nft,
-      contentType: nft.contentType || nft.fileType
-    });
+    uniqueHome.push(
+      withNftValidation(store, {
+        ...nft,
+        contentType: nft.contentType || nft.fileType
+      })
+    );
   }
   res.json({
     success: true,
@@ -153,7 +175,9 @@ router.get("/nft/home", (_req, res) => {
       Nft: [nft]
     })),
     allNft: uniqueHome,
-    allMintedNft: [...store.nfts, ...templateCards(store)],
+    allMintedNft: [...store.nfts, ...templateCards(store)].map((nft) =>
+      withNftValidation(store, nft)
+    ),
     ledgerMints: store.ledgerMints || []
   });
 });
@@ -181,6 +205,8 @@ router.get("/nft/getNftDetail/:id", async (req, res) => {
       ...nft,
       issuerRank: issuerGov.rank,
       issuerBadge: issuerGov.badge,
+      issuerVScore: issuerGov.vScore,
+      validation: nftValidation(store, nft),
       threeD: ["glb", "gltf", "fbx", "usdz"].includes(nft.fileType)
     },
     datauser: owner || null,
@@ -321,15 +347,21 @@ router.post("/profile/getProfile", async (req, res) => {
 router.post("/profile/getvpoint", (req, res) => {
   const store = readStore();
   const wAddress = req.body?.wAddress;
-  const rows = store.leaderboards.filter((row) => !wAddress || row.wAddress === wAddress);
+  const addresses = wAddress
+    ? [wAddress]
+    : (store.leaderboards || []).map((row) => row.wAddress);
   res.json({
     success: true,
-    vPointDetails: rows.length
-      ? rows.map((row) => ({
-          ...row,
-          validator: xioDashboardRows(store).find((item) => item.accountNumber === row.wAddress)
-        }))
-      : [{ wAddress, totalVPoint: 0 }]
+    vPointDetails: addresses.map((address) => {
+      const state = addressValidation(store, address);
+      return {
+        wAddress: address,
+        totalVPoint: state.vScore,
+        badge: state.badge,
+        rank: state.rank,
+        validator: xioDashboardRows(store).find((item) => item.accountNumber === address)
+      };
+    })
   });
 });
 
@@ -377,8 +409,31 @@ router.post("/profile/getbalanceandlevel", async (req, res) => {
   });
 });
 
-router.post("/profile/verifyprofile", (_req, res) => {
-  res.status(200).json(notReady("profile/verifyprofile"));
+router.post("/profile/verifyprofile", (req, res) => {
+  const to = req.body?.dWalletAdd || req.body?.to;
+  const from = validatorFromReq(req);
+  let result;
+  update((current) => {
+    result = applyValidation(current, {
+      from,
+      to,
+      currency: req.body?.currency,
+      amount: req.body?.amount
+    });
+    return current;
+  });
+  if (!result?.ok) {
+    return res.status(400).json({ success: false, message: result?.error || "Validation failed" });
+  }
+  res.json({
+    success: true,
+    message: result.message,
+    data: result
+  });
+});
+
+router.post("/profile/verifyprofilestatus", (_req, res) => {
+  res.json({ success: true, message: "Validation recorded on the local desk." });
 });
 
 router.post("/profile/createfbxfile", (_req, res) => {

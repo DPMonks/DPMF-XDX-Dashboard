@@ -35,27 +35,15 @@ function XioDashboard() {
   }, [token]); // eslint-disable-line
 
   const rankFilter = (balance) => {
-    if (+balance > 0 && +balance <= 0.000999999999999) {
-      return "New Validator";
-    }
-    if (+balance >= 0.001 && +balance <= 0.00999999999999) {
-      return "Beginner Validator";
-    }
-    if (+balance >= 0.01 && +balance <= 0.099999999999999) {
-      return "Basic Validator";
-    }
-    if (+balance >= 0.1 && +balance <= 0.99999999999999) {
-      return "Validator";
-    }
-    if (+balance >= 1 && +balance <= 9.999999999999999) {
-      return "Active Validator";
-    }
-    if (+balance >= 10 && +balance <= 99.999999999999999) {
-      return "Trusted Validator";
-    }
-    if (+balance >= 100) {
-      return "Master Validator";
-    }
+    const x = Number(balance) || 0;
+    if (x >= 100) return "Master Validator";
+    if (x >= 10) return "Trusted Validator";
+    if (x >= 1) return "Active Validator";
+    if (x >= 0.1) return "Validator";
+    if (x >= 0.01) return "Basic Validator";
+    if (x >= 0.001) return "Beginner Validator";
+    if (x >= 0.0001) return "New Validator";
+    return "Unranked";
   };
 
   return (

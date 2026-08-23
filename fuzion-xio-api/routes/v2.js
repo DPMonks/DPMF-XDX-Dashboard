@@ -3,6 +3,7 @@ import { readStore, update } from "../lib/store.js";
 import { findTemplate, resolveNft, templates } from "../lib/collections.js";
 import { activityFeed } from "../lib/market.js";
 import { recentLedgerMints } from "../lib/ledgerMints.js";
+import { addressValidation, nftValidation } from "../lib/validation.js";
 import {
   addComment,
   addDrop,
@@ -50,6 +51,17 @@ router.get("/rails", (_req, res) => {
 router.get("/ledger-mints", async (_req, res) => {
   const payload = await recentLedgerMints(readStore());
   res.json({ success: true, data: payload.rows, source: payload.source, count: payload.count });
+});
+
+router.get("/validation/:address", (req, res) => {
+  res.json({ success: true, data: addressValidation(readStore(), req.params.address) });
+});
+
+router.get("/nft/:id/validation", (req, res) => {
+  const store = readStore();
+  const nft = resolveNft(store, req.params.id);
+  if (!nft) return res.status(404).json({ success: false, message: "NFT not found" });
+  res.json({ success: true, data: nftValidation(store, nft) });
 });
 
 router.get("/activity", (req, res) => {

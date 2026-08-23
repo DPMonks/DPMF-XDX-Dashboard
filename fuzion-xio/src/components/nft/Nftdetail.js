@@ -28,6 +28,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { forceVisible } from "react-lazyload";
 import Like from "./like/like";
 import NftMarketplacePanel from "./NftMarketplacePanel";
+import { profileBatchColor } from "../../helper/getProfileDetails";
 import {
   nftDetailAction,
   tradeHistoryAction,
@@ -2072,6 +2073,9 @@ function Nftdetail() {
                             " #" +
                             nft?.name.split("#")[1]
                           : nft?.name}
+                        <span className="dpmf-check">
+                          {profileBatchColor(nft?.validation?.vScore || nft?.issuerVScore)}
+                        </span>
                       </h2>
                     </Col>
                   </Row>
@@ -2150,7 +2154,15 @@ function Nftdetail() {
                               " #" +
                               nft?.name.split("#")[1]
                             : nft?.name}
+                          <span className="dpmf-check">
+                            {profileBatchColor(
+                              nft?.validation?.vScore || nft?.issuerVScore
+                            )}
+                          </span>
                         </h2>
+                        {nft?.validation?.note && (
+                          <p className="dpmf-muted">{nft.validation.note}</p>
+                        )}
                         <p
                           className="nft_description"
                           style={{ whiteSpace: "pre-line" }}

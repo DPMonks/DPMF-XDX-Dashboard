@@ -10,9 +10,12 @@ export function xioRank(balance) {
   return "Unranked";
 }
 
+export const V_SCORE_BLUE = 100;
+export const V_SCORE_GOLD = 10000;
+
 export function vScoreBadge(vScore) {
   const n = Number(vScore) || 0;
-  if (n >= 10000) return "gold";
-  if (n >= 100) return "blue";
+  if (n >= V_SCORE_GOLD) return "gold";
+  if (n >= V_SCORE_BLUE) return "blue";
   return "tick";
 }

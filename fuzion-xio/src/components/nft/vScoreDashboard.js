@@ -12,6 +12,7 @@ import { getVScoreDashboardAction } from "../../store/actions/profile";
 import DummyProfile from "../../assets/defaultpimage.jpg";
 import configData from "../../config.json";
 import { replaceHost } from "../../helper";
+import { profileBatchColor } from "../../helper/getProfileDetails";
 
 // actions
 // import { checkDeclinedNFTAction } from "../../store/actions/send";
@@ -86,13 +87,14 @@ function VscoreDashboard() {
                       <th>Image</th>
                       <th>Wallet Address</th>
                       <th>Vscore</th>
+                      <th>Checkmark</th>
                     </tr>
                   </thead>
                   <tbody>
                     {!!vScoreDashboard &&
                       (vScoreDashboard.length < 1 ? (
                         <tr>
-                          <td colSpan={5} className="text-center">
+                          <td colSpan={6} className="text-center">
                             No Records Found
                           </td>
                         </tr>
@@ -143,6 +145,13 @@ function VscoreDashboard() {
                                 </td>
                                 <td width="40%">
                                   {val.vScoreSum}
+                                </td>
+                                <td>
+                                  {profileBatchColor(val.vScoreSum)}
+                                  <span className="dpmf-muted">
+                                    {" "}
+                                    {val.badge || ""}
+                                  </span>
                                   {/* <Button
                                 variant="danger"
                                 onClick={() =>{setLoaderId(key); cancelSendNft(val)}}

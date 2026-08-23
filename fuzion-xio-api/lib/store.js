@@ -41,7 +41,8 @@ const empty = () => ({
   fileHashes: [],
   editorPicks: [],
   aggregator: { sources: [], listings: [] },
-  ledgerMints: []
+  ledgerMints: [],
+  validations: []
 });
 
 function ensure() {

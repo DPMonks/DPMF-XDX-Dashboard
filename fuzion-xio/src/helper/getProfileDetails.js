@@ -25,13 +25,12 @@ export const getProfileDetails = (profileArray, allMintedNfts, nftTokenId ) => {
 
 
 export const profileBatchColor = (vScore) => {
-  if(vScore >= 0 && vScore <= 99.9999){
-    return  <img src={tickbadge} alt="tickbadge"/>
-  } else if (vScore >= 100 && vScore < 9999.9999){
-    return <img src={bluebadge} alt="tickbadge"/>
-  } else if (vScore >= 10000){
-    return <img src={goldbadge} alt="tickbadge"/>
-  } else {
-    return <img src={tickbadge} alt="tickbadge"/>
+  const n = Number(vScore) || 0;
+  if (n >= 10000) {
+    return <img src={goldbadge} alt="gold verified checkmark" />;
   }
-}
+  if (n >= 100) {
+    return <img src={bluebadge} alt="blue verified checkmark" />;
+  }
+  return <img src={tickbadge} alt="unverified tick" />;
+};

@@ -11,6 +11,7 @@ function CreatorDesk() {
   const [portfolio, setPortfolio] = useState(null);
   const [royalties, setRoyalties] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [validation, setValidation] = useState(null);
 
   useEffect(() => {
     if (!address) return;
@@ -26,6 +27,10 @@ function CreatorDesk() {
       .then((res) => res.json())
       .then((body) => setProfile(body.data || body || null))
       .catch(() => setProfile(null));
+    fetch(`${configData.LOCAL_API_URL}v2/validation/${address}`)
+      .then((res) => res.json())
+      .then((body) => setValidation(body.data || null))
+      .catch(() => setValidation(null));
   }, [address]);
 
   return (
@@ -36,6 +41,10 @@ function CreatorDesk() {
           <Container className="dpmf-market">
             <p className="dpmf-kicker">Creator desk</p>
             <h1>{profile?.pName || address}</h1>
+            <p className="dpmf-muted">
+              {validation?.rank || profile?.rank} · V-Score {validation?.vScore ?? profile?.vScore ?? 0} ·{" "}
+              {validation?.badge || profile?.badge || "tick"} checkmark
+            </p>
             <p className="dpmf-muted">{profile?.bio || profile?.tagline || address}</p>
             <p>
               <Link to={`/Profile/${address}`}>Profile</Link>

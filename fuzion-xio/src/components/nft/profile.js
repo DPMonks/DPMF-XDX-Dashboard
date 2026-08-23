@@ -1331,6 +1331,13 @@ const Profile = () => {
 
                       <div className="newdivideradd">
                         {profileBatchColor(!!vScore && vScore ? vScore : 0)}
+                        <span className="dpmf-muted ms-2">
+                          {Number(vScore) >= 10000
+                            ? "Gold checkmark · 10,000 V-Score"
+                            : Number(vScore) >= 100
+                            ? "Blue checkmark · 100 V-Score"
+                            : "Tick · 100 V-Score for blue, 10,000 for gold"}
+                        </span>
                         {/* <img src={tickbadge} alt=""/> */}
                         <span className="mail">
                           <svg

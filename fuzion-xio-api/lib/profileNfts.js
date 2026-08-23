@@ -6,6 +6,7 @@ import {
   virtualId
 } from "./collections.js";
 import { accountNfts } from "./xrpl.js";
+import { nftValidation } from "./validation.js";
 
 function looksLikeXrpl(address) {
   return typeof address === "string" && /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(address);
@@ -178,7 +179,8 @@ export function pinsForNft(store, nftId) {
   return out;
 }
 
-function card(nft, extra = {}) {
+function card(store, nft, extra = {}) {
+  const validation = nftValidation(store, nft);
   return {
     _id: nft._id,
     name: nft.name,
@@ -196,6 +198,9 @@ function card(nft, extra = {}) {
     currency: nft.currency,
     status: nft.status,
     isPurchased: nft.isPurchased,
+    vscore: validation.vScore,
+    badge: validation.badge,
+    validation,
     ...extra
   };
 }
@@ -230,13 +235,14 @@ export async function profileNftDesk(store, address) {
     };
   const hidden = new Set(profile.profileHiddenNfts || []);
   const found = storeNftsForAddress(store, address).map((nft) =>
-    card(nft, { source: nft.source || "store", found: true })
+    card(store, nft, { source: nft.source || "store", found: true })
   );
   const pinned = [];
   for (const pin of profile.profileNfts || []) {
     const nft = resolveNft(store, pin.nftId) || resolveNft(store, pin.NFTokenID);
     pinned.push(
       card(
+        store,
         nft || {
           _id: pin.nftId,
           name: pin.name,
@@ -263,6 +269,7 @@ export async function profileNftDesk(store, address) {
           resolveNft(store, row.NFTokenID) ||
           (store.nfts || []).find((item) => item.NFTokenID === row.NFTokenID);
         return card(
+          store,
           match || {
             _id: row.NFTokenID,
             name: `XRPL NFT ${String(row.NFTokenID).slice(0, 8)}…`,

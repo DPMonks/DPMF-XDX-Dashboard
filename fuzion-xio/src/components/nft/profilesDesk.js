@@ -6,6 +6,7 @@ import Footer from "../common/footer";
 import configData from "../../config.json";
 import { profileMediaUrl } from "../../helper/profileMedia";
 import DummyProfile from "../../assets/defaultpimage.jpg";
+import { profileBatchColor } from "../../helper/getProfileDetails";
 import Banner from "../../assets/profilelargebanner.png";
 
 function ProfilesDesk() {
@@ -56,10 +57,13 @@ function ProfilesDesk() {
                       e.target.src = DummyProfile;
                     }}
                   />
-                  <h3>{row.pName || "Unnamed"}</h3>
+                  <h3>
+                    {row.pName || "Unnamed"}
+                    <span className="dpmf-check">{profileBatchColor(row.vScore)}</span>
+                  </h3>
                   <p>{row.tagline || row.bio || "—"}</p>
                   <p className="dpmf-muted">
-                    {row.rank} · vScore {row.vScore} · {row.badge}
+                    {row.rank} · vScore {row.vScore} · {row.badge} checkmark
                   </p>
                   {row.location && (
                     <p className="dpmf-muted">{row.location}</p>
