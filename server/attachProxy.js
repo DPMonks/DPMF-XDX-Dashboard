@@ -48,7 +48,7 @@ export function attachIndexerProxy(server) {
 
     if (req.method === "OPTIONS") {
       res.statusCode = 204;
-      for (const [key, value] of Object.entries(proxyCorsHeaders())) {
+      for (const [key, value] of Object.entries(proxyCorsHeaders(req))) {
         res.setHeader(key, value);
       }
       res.end();
@@ -69,14 +69,14 @@ export function attachIndexerProxy(server) {
         suffix,
       });
       res.statusCode = last?.status || 502;
-      for (const [key, value] of Object.entries(proxyResponseHeaders(last))) {
+      for (const [key, value] of Object.entries(proxyResponseHeaders(last, req))) {
         res.setHeader(key, value);
       }
       res.end(last?.body || JSON.stringify({ error: "Indexer proxy failed" }));
     } catch (error) {
       res.statusCode = 502;
       res.setHeader("content-type", "application/json");
-      for (const [key, value] of Object.entries(proxyCorsHeaders())) {
+      for (const [key, value] of Object.entries(proxyCorsHeaders(req))) {
         res.setHeader(key, value);
       }
       res.end(JSON.stringify({ error: error.message }));
