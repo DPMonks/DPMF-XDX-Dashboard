@@ -650,6 +650,19 @@ body {
   color: #fff;
 }
 
+.mobile-link-btn.is-web {
+  background: transparent;
+  color: var(--dpmf-neon-cyan, #00ffff);
+  border: 1px solid var(--dpmf-border-soft);
+}
+
+.wallet-modal-hint {
+  margin: 12px 0 0;
+  color: var(--dpmf-text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .cancel-wallet-btn {
   background: #222;
   color: white;
@@ -2627,6 +2640,8 @@ body {
   .pair-chip,
   .pagination button,
   .connect-wallet-btn,
+  .hybrid-fullview-enter,
+  .hybrid-fullview-exit,
   .mobile-link-btn,
   .cancel-wallet-btn,
   .pool-card-actions .connect-wallet-btn,
@@ -2643,6 +2658,8 @@ body {
   .pair-chip,
   .pagination button,
   .connect-wallet-btn,
+  .hybrid-fullview-enter,
+  .hybrid-fullview-exit,
   .mobile-link-btn,
   .cancel-wallet-btn,
   .pool-card-actions .connect-wallet-btn,

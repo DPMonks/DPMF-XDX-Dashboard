@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { detectTradeExecution, isTradeTxjson } from "./detectExecution";
+import {
+  clearPendingPayload,
+  rememberPendingPayload,
+  xamanWebsocketUrl,
+} from "./payloadResume";
 import { notifyTradeExecuted } from "./tradeTx";
 import {
   createPayload,
   extractSignedAccount,
   getLedgerTx,
   getPayloadResult,
+  payloadLooksSigned,
+  xamanSignUrl,
 } from "./xamanClient";
 import { nextPayloadSession, payloadSessionOpen } from "./payloadSession";
 
@@ -22,6 +29,7 @@ export function useXamanPayload() {
   const pollRef = useRef(null);
   const sessionRef = useRef(0);
   const busyRef = useRef(false);
+  const settleRef = useRef(null);
 
   const clearTimers = () => {
     if (socketRef.current) {
@@ -38,25 +46,43 @@ export function useXamanPayload() {
     }
   };
 
-  const reset = () => {
+  const reset = (options = {}) => {
     sessionRef.current = nextPayloadSession(sessionRef.current);
     busyRef.current = false;
+    settleRef.current = null;
     clearTimers();
     setQr(null);
     setMobileUrl(null);
     setUuid(null);
     setStatus("idle");
+    if (!options.keepPending) clearPendingPayload();
   };
 
   useEffect(() => {
     return () => {
       sessionRef.current = nextPayloadSession(sessionRef.current);
       busyRef.current = false;
+      settleRef.current = null;
       clearTimers();
     };
   }, []);
 
-  async function start({ body = {}, onSigned, onExecuted, errorMessage } = {}) {
+  useEffect(() => {
+    function wake() {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      settleRef.current?.();
+    }
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("pageshow", wake);
+    window.addEventListener("focus", wake);
+    return () => {
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("pageshow", wake);
+      window.removeEventListener("focus", wake);
+    };
+  }, []);
+
+  async function start({ body = {}, onSigned, onExecuted, errorMessage, resumeUuid } = {}) {
     if (busyRef.current) return;
     busyRef.current = true;
     const session = nextPayloadSession(sessionRef.current);
@@ -92,24 +118,44 @@ export function useXamanPayload() {
       setError(null);
       setStatus("loading");
 
-      const payload = await createPayload(body);
+      const payload = resumeUuid
+        ? {
+            uuid: resumeUuid,
+            qr: null,
+            mobileUrl: xamanSignUrl(resumeUuid),
+            websocket: xamanWebsocketUrl(resumeUuid),
+          }
+        : await createPayload(body);
       if (!payloadSessionOpen(session, sessionRef.current)) return;
+      rememberPendingPayload(payload.uuid, { watchTrade });
       setQr(payload.qr);
       setMobileUrl(payload.mobileUrl);
       setUuid(payload.uuid);
       setStatus("waiting");
 
       timeoutRef.current = setTimeout(() => {
-        if (payloadSessionOpen(session, sessionRef.current)) reset();
-      }, 120000);
+        if (payloadSessionOpen(session, sessionRef.current)) reset({ keepPending: true });
+      }, 300000);
 
       const finish = async (account, result) => {
         if (finishing || !payloadSessionOpen(session, sessionRef.current)) return;
         finishing = true;
         if (result) latestPayload = result;
+        let signedAccount = account || extractSignedAccount(result);
+        if (!signedAccount && payloadLooksSigned(result)) {
+          for (let attempt = 0; attempt < 5 && !signedAccount; attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 400));
+            if (!payloadSessionOpen(session, sessionRef.current)) return;
+            const next = await getPayloadResult(payload.uuid).catch(() => null);
+            if (next) {
+              latestPayload = next;
+              signedAccount = extractSignedAccount(next);
+            }
+          }
+        }
         const detection = await inspect();
-        if (account || detection.signed || detection.executed) {
-          onSigned?.(account || extractSignedAccount(result), result);
+        if (signedAccount || detection.signed || detection.executed || payloadLooksSigned(result)) {
+          onSigned?.(signedAccount, latestPayload || result);
         }
         if (watchTrade) {
           if (announce(detection)) {
@@ -135,6 +181,7 @@ export function useXamanPayload() {
       };
 
       const settle = async () => {
+        if (!payloadSessionOpen(session, sessionRef.current)) return;
         const result = await getPayloadResult(payload.uuid);
         if (result) latestPayload = result;
         const detection = await inspect();
@@ -142,17 +189,23 @@ export function useXamanPayload() {
           reset();
           return;
         }
-        if (detection.signed || detection.executed || extractSignedAccount(result)) {
+        if (
+          detection.signed ||
+          detection.executed ||
+          payloadLooksSigned(result) ||
+          extractSignedAccount(result)
+        ) {
           await finish(extractSignedAccount(result), result);
         }
       };
+      settleRef.current = settle;
 
       pollRef.current = setInterval(() => {
         if (!payloadSessionOpen(session, sessionRef.current)) return;
         settle().catch(() => {});
       }, 2000);
 
-      if (payload.websocket) {
+      if (payload.websocket && typeof WebSocket !== "undefined") {
         const socket = new WebSocket(payload.websocket);
         socketRef.current = socket;
 
@@ -169,12 +222,9 @@ export function useXamanPayload() {
           if (result) latestPayload = result;
           await finish(extractSignedAccount(result) || data.account, result);
         };
-
-        socket.onerror = () => {
-          if (!payloadSessionOpen(session, sessionRef.current)) return;
-          setError(errorMessage);
-        };
       }
+
+      await settle();
     } catch (err) {
       if (!payloadSessionOpen(session, sessionRef.current)) return;
       console.error("Xaman payload error:", err);

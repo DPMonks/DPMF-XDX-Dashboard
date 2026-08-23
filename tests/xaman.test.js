@@ -8,6 +8,7 @@ import {
   requestOrigin,
   shouldSubmitTxjson,
   xamanErrorMessage,
+  xamanReturnUrl,
   xummConfigured,
 } from "../api/xaman/_xumm.js";
 import {
@@ -17,11 +18,22 @@ import {
   xdxTrustSetTxjson,
 } from "../src/constants/ledger.js";
 import {
+  extractSignedAccount,
+  isClassicAddress,
   isPhoneDevice,
   normalizePayload,
+  payloadLooksSigned,
   xamanAppUrl,
   xamanSignUrl,
 } from "../src/xaman/xamanClient.js";
+import {
+  isPayloadUuid,
+  peekPendingPayload,
+  readXamanReturnUuid,
+  rememberPendingPayload,
+  takeXamanReturnUuid,
+  xamanWebsocketUrl,
+} from "../src/xaman/payloadResume.js";
 import { nextPayloadSession, payloadSessionOpen } from "../src/xaman/payloadSession.js";
 import { normalizeTradeRequest } from "../src/xaman/tradeTx.js";
 
@@ -53,19 +65,19 @@ test("TrustSet payloads submit to XRPL; SignIn payloads do not", () => {
   );
   assert.equal(trust.txjson.TransactionType, "TrustSet");
   assert.equal(trust.options.submit, true);
-  assert.equal(trust.options.return_url.app, "https://xdx-exchange.dpmf.technology");
-  assert.equal(trust.options.return_url.web, undefined);
+  assert.equal(trust.options.return_url.app, "https://xdx-exchange.dpmf.technology/?xaman={id}");
+  assert.equal(trust.options.return_url.web, "https://xdx-exchange.dpmf.technology/?xaman={id}");
   assert.equal(shouldSubmitTxjson(trust.txjson), true);
 
   const fromBody = buildXamanPayload("https://xdx-exchange.dpmf.technology", xdxTrustSetTxjson());
   assert.equal(fromBody.options.submit, true);
 });
 
-test("buildSignInPayload returns to the site from the app, not a Xaman web page", () => {
+test("buildSignInPayload returns to the site with the payload id after Xaman", () => {
   const payload = buildSignInPayload("https://xdx-exchange.dpmf.technology/");
   assert.equal(payload.txjson.TransactionType, "SignIn");
-  assert.equal(payload.options.return_url.app, "https://xdx-exchange.dpmf.technology");
-  assert.equal(payload.options.return_url.web, undefined);
+  assert.equal(payload.options.return_url.app, "https://xdx-exchange.dpmf.technology/?xaman={id}");
+  assert.equal(payload.options.return_url.web, "https://xdx-exchange.dpmf.technology/?xaman={id}");
   assert.equal(payload.options.submit, false);
 });
 
@@ -118,6 +130,44 @@ test("xaman sign links stay on the payload uuid and phones are detected", () => 
   assert.equal(isPhoneDevice("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)"), true);
   assert.equal(isPhoneDevice("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)", { platform: "MacIntel", maxTouchPoints: 5 }), true);
   assert.equal(isPhoneDevice("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), false);
+});
+
+test("xaman return URLs carry the payload id placeholder", () => {
+  assert.equal(
+    xamanReturnUrl("https://xdx-exchange.dpmf.technology/"),
+    "https://xdx-exchange.dpmf.technology/?xaman={id}"
+  );
+  assert.equal(
+    xamanWebsocketUrl("11111111-2222-4333-a444-555555555555"),
+    "wss://xumm.app/sign/11111111-2222-4333-a444-555555555555"
+  );
+});
+
+test("extractSignedAccount reads Xaman SignIn response shapes", () => {
+  const account = "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo";
+  assert.equal(isClassicAddress(account), true);
+  assert.equal(extractSignedAccount({ response: { account } }), account);
+  assert.equal(extractSignedAccount({ meta: { signed: true } }), null);
+  assert.equal(payloadLooksSigned({ meta: { signed: true } }), true);
+  assert.equal(payloadLooksSigned({ response: { account } }), true);
+  assert.equal(extractSignedAccount({ account: "not-an-address" }), null);
+});
+
+test("Xaman return query and pending payload survive a fresh page", () => {
+  const uuid = "11111111-2222-4333-a444-555555555555";
+  assert.equal(isPayloadUuid(uuid), true);
+  assert.equal(readXamanReturnUuid(`?xaman=${uuid}&utm=1`), uuid);
+  assert.equal(readXamanReturnUuid("?foo=1"), null);
+
+  const store = new Map();
+  globalThis.sessionStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+    removeItem: (key) => store.delete(key),
+  };
+  rememberPendingPayload(uuid);
+  assert.equal(peekPendingPayload()?.uuid, uuid);
+  assert.equal(takeXamanReturnUuid(""), uuid);
 });
 
 test("cancelled Xaman sessions do not stay open after reset", () => {

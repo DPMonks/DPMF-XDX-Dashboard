@@ -26,19 +26,6 @@ export default function WalletModal({
         ? connectLabel
         : scanLabel || t.scan;
 
-  function openXaman(event) {
-    if (!appHref && !webHref) return;
-    event.preventDefault();
-    if (appHref) window.location.href = appHref;
-    if (webHref && webHref !== appHref) {
-      window.setTimeout(() => {
-        if (document.visibilityState === "visible") {
-          window.location.href = webHref;
-        }
-      }, 700);
-    }
-  }
-
   function closeOverlay(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -65,13 +52,24 @@ export default function WalletModal({
         ) : null}
 
         {phone && status !== "loading" && (appHref || webHref) ? (
-          <a
-            href={webHref || appHref}
-            className="mobile-link-btn"
-            onClick={openXaman}
-          >
-            {connectLabel}
-          </a>
+          <>
+            {appHref ? (
+              <a href={appHref} className="mobile-link-btn">
+                {connectLabel}
+              </a>
+            ) : null}
+            {webHref ? (
+              <a
+                href={webHref}
+                className="mobile-link-btn is-web"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t.openXamanWeb || t.openApp}
+              </a>
+            ) : null}
+            <p className="wallet-modal-hint">{t.waitingXaman}</p>
+          </>
         ) : null}
 
         <button type="button" onClick={onClose} className="cancel-wallet-btn">
