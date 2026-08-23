@@ -419,6 +419,7 @@ export function pendingFor(address, { offersKnown = false } = {}) {
 export function pendingFromExecution(detail = {}, address = "") {
   const txjson = detail.txjson || detail.tx || null;
   const account = address || txjson?.Account || detail.account || null;
+  const signMarker = detail.signMarker || null;
   const type = String(txjson?.TransactionType || "");
   if (type === "TrustSet" && account) {
     const limit = txjson.LimitAmount || {};
@@ -436,6 +437,7 @@ export function pendingFromExecution(detail = {}, address = "") {
         timestamp: detail.timestamp || new Date().toISOString(),
         txid: detail.txid || null,
         status: "filled",
+        signMarker,
       },
     };
   }
@@ -458,6 +460,7 @@ export function pendingFromExecution(detail = {}, address = "") {
         timestamp: detail.timestamp || new Date().toISOString(),
         txid: detail.txid || null,
         status: "filled",
+        signMarker,
       },
     };
   }
@@ -477,6 +480,7 @@ export function pendingFromExecution(detail = {}, address = "") {
     timestamp: order.timestamp || new Date().toISOString(),
     txid: detail.txid || null,
     status: isMarketSwap(txjson) ? "filled" : "open",
+    signMarker,
   };
   return {
     order: isMarketSwap(txjson) ? null : order,

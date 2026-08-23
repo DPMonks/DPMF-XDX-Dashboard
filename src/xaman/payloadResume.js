@@ -1,5 +1,12 @@
+import {
+  extractTradeMarker,
+  extractTradeMarkerFromPayload,
+  normalizeSignMarker,
+} from "./signMarker.js";
+
 const PENDING_KEY = "dpmf-xaman-pending";
 const CONSUMED_KEY = "dpmf-xaman-consumed";
+const CONSUMED_MARKERS_KEY = "dpmf-xaman-consumed-markers";
 const CONSUMED_MAX = 40;
 const RETURN_PARAMS = ["xaman", "payload", "payload_uuid"];
 export const TRADE_CLAIM_TX = new Set([
@@ -64,10 +71,17 @@ export function rememberPendingPayload(uuid, extra = {}) {
   const id = String(uuid || "").trim();
   if (!isPayloadUuid(id)) return null;
   const current = peekPendingPayload();
+  const signMarker = normalizeSignMarker(extra.signMarker || extractTradeMarker(extra.txjson));
   const record =
     current?.uuid === id
-      ? { ...current, ...extra, uuid: id, at: Date.now() }
-      : { uuid: id, at: Date.now(), ...extra };
+      ? {
+          ...current,
+          ...extra,
+          uuid: id,
+          at: Number(current.at) > 0 ? current.at : Date.now(),
+          signMarker: signMarker || current.signMarker || null,
+        }
+      : { uuid: id, at: Date.now(), signState: extra.signState || "unsigned", ...extra, signMarker: signMarker || extra.signMarker || null };
   writePendingTo(storeOf("sessionStorage"), record);
   writePendingTo(storeOf("localStorage"), record);
   return record;
@@ -138,33 +152,49 @@ export function peekXamanUuid(
   return fromUrl || fromStore || null;
 }
 
-function readConsumedFrom(store) {
+function readListFrom(store, key, keep) {
   if (!store) return [];
   try {
-    const raw = store.getItem(CONSUMED_KEY);
+    const raw = store.getItem(key);
     if (!raw) return [];
     const rows = JSON.parse(raw);
-    return (Array.isArray(rows) ? rows : [])
-      .map((value) => String(value || "").trim().toLowerCase())
-      .filter((value) => isPayloadUuid(value));
+    return (Array.isArray(rows) ? rows : []).map((value) => String(value || "")).filter(keep);
   } catch {
     return [];
   }
 }
 
-function writeConsumedTo(store, rows) {
+function writeListTo(store, key, rows) {
   if (!store) return;
   try {
-    if (!rows?.length) store.removeItem(CONSUMED_KEY);
-    else store.setItem(CONSUMED_KEY, JSON.stringify(rows));
+    if (!rows?.length) store.removeItem(key);
+    else store.setItem(key, JSON.stringify(rows));
   } catch {
     // ignore storage failures
   }
 }
 
-function readConsumed() {
-  const fromSession = readConsumedFrom(storeOf("sessionStorage"));
-  const fromLocal = readConsumedFrom(storeOf("localStorage"));
+function readConsumedFrom(store) {
+  return readListFrom(store, CONSUMED_KEY, (value) => isPayloadUuid(value.toLowerCase())).map((value) =>
+    value.toLowerCase()
+  );
+}
+
+function writeConsumedTo(store, rows) {
+  writeListTo(store, CONSUMED_KEY, rows);
+}
+
+function readConsumedMarkersFrom(store) {
+  return readListFrom(store, CONSUMED_MARKERS_KEY, (value) => Boolean(normalizeSignMarker(value))).map((value) =>
+    normalizeSignMarker(value)
+  );
+}
+
+function writeConsumedMarkersTo(store, rows) {
+  writeListTo(store, CONSUMED_MARKERS_KEY, rows);
+}
+
+function mergeStored(fromSession, fromLocal) {
   const seen = new Set();
   const merged = [];
   for (const id of [...fromSession, ...fromLocal]) {
@@ -175,13 +205,40 @@ function readConsumed() {
   return merged;
 }
 
-export function rememberConsumedUuid(uuid) {
+function readConsumed() {
+  return mergeStored(readConsumedFrom(storeOf("sessionStorage")), readConsumedFrom(storeOf("localStorage")));
+}
+
+function readConsumedMarkers() {
+  return mergeStored(
+    readConsumedMarkersFrom(storeOf("sessionStorage")),
+    readConsumedMarkersFrom(storeOf("localStorage"))
+  );
+}
+
+export function rememberConsumedUuid(uuid, marker) {
   const id = String(uuid || "").trim().toLowerCase();
-  if (!isPayloadUuid(id)) return [];
-  const next = [id, ...readConsumed().filter((value) => value !== id)].slice(0, CONSUMED_MAX);
-  writeConsumedTo(storeOf("sessionStorage"), next);
-  writeConsumedTo(storeOf("localStorage"), next);
+  if (isPayloadUuid(id)) {
+    const next = [id, ...readConsumed().filter((value) => value !== id)].slice(0, CONSUMED_MAX);
+    writeConsumedTo(storeOf("sessionStorage"), next);
+    writeConsumedTo(storeOf("localStorage"), next);
+  }
+  if (marker) rememberConsumedMarker(marker);
+  return readConsumed();
+}
+
+export function rememberConsumedMarker(marker) {
+  const id = normalizeSignMarker(marker);
+  if (!id) return [];
+  const next = [id, ...readConsumedMarkers().filter((value) => value !== id)].slice(0, CONSUMED_MAX);
+  writeConsumedMarkersTo(storeOf("sessionStorage"), next);
+  writeConsumedMarkersTo(storeOf("localStorage"), next);
   return next;
+}
+
+export function isConsumedMarker(marker) {
+  const id = normalizeSignMarker(marker);
+  return Boolean(id) && readConsumedMarkers().includes(id);
 }
 
 export function isConsumedUuid(uuid) {
@@ -192,6 +249,8 @@ export function isConsumedUuid(uuid) {
 export function clearConsumedUuids() {
   writeConsumedTo(storeOf("sessionStorage"), []);
   writeConsumedTo(storeOf("localStorage"), []);
+  writeConsumedMarkersTo(storeOf("sessionStorage"), []);
+  writeConsumedMarkersTo(storeOf("localStorage"), []);
 }
 
 export function payloadTxType(payload) {
@@ -218,11 +277,23 @@ export function payloadResolvedAtMs(payload) {
 
 export function payloadMatchesPendingTrade(record, payload) {
   if (!record?.watchTrade || !payload) return false;
+  if (record.signState === "executed") return false;
   const txType = payloadTxType(payload);
   if (txType === "SignIn" || txType === "TrustSet") return false;
   if (txType && !TRADE_CLAIM_TX.has(txType)) return false;
   const expected = String(record.txjson?.TransactionType || "").trim();
   if (expected && txType && expected !== txType) return false;
+  const pendingMarker = normalizeSignMarker(record.signMarker || extractTradeMarker(record.txjson));
+  const payloadTx =
+    payload?.payload?.request_json ||
+    payload?.payload?.txjson ||
+    payload?.txjson ||
+    payload?.request_json ||
+    null;
+  if (pendingMarker && payloadTx) {
+    if (extractTradeMarkerFromPayload(payload) !== pendingMarker) return false;
+    if (isConsumedMarker(pendingMarker)) return false;
+  }
   const resolvedMs = payloadResolvedAtMs(payload);
   if (resolvedMs != null && Number(record.at) > 0 && resolvedMs + 5000 < Number(record.at)) {
     return false;
@@ -234,7 +305,8 @@ export function canClaimExecutedTrade(uuid, record = peekPendingPayload(), paylo
   const id = String(uuid || "").trim();
   if (!isPayloadUuid(id) || !record?.watchTrade) return false;
   if (record.uuid !== id) return false;
-  if (isConsumedUuid(id)) return false;
+  if (record.signState === "executed") return false;
+  if (isConsumedUuid(id) || isConsumedMarker(record.signMarker)) return false;
   if (payload && !payloadMatchesPendingTrade(record, payload)) return false;
   return true;
 }
@@ -245,7 +317,8 @@ export function shouldAutoClaimPendingTrade(
   const record = peekPendingPayload();
   const urlUuid = readXamanReturnUuid(search);
   if (!record?.watchTrade || !urlUuid || record.uuid !== urlUuid) return false;
-  return !isConsumedUuid(record.uuid);
+  if (record.signState === "executed") return false;
+  return !isConsumedUuid(record.uuid) && !isConsumedMarker(record.signMarker);
 }
 
 export function discardStalePendingTrade({ force = false, search } = {}) {

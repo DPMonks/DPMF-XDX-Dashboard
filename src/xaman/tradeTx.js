@@ -18,7 +18,8 @@ import { pendingFromExecution, rememberPending } from "../wallet/ledgerOrders.js
 import { pendingVoteFromExecution } from "../wallet/ammVote.js";
 import { preferMarkWhenPoolInsane } from "../wallet/quoteMarker.js";
 import { liveWalletAddress } from "../wallet/walletStorage.js";
-import { isConsumedUuid, isPayloadUuid, rememberConsumedUuid } from "./payloadResume.js";
+import { extractTradeMarker } from "./signMarker.js";
+import { isConsumedUuid, isPayloadUuid, rememberConsumedUuid, rememberPendingPayload } from "./payloadResume.js";
 
 export const ACTION_TX_TYPES = {
   buy: ["Payment", "OfferCreate"],
@@ -587,11 +588,15 @@ export function notifyTradeExecuted(detail = {}) {
   if (typeof window === "undefined") return;
   if (detail.executed === false || detail.failed || detail.rejected) return;
   const key = String(detail.uuid || detail.txid || "").trim().toLowerCase();
+  const marker = detail.signMarker || extractTradeMarker(detail.txjson);
   if (key && (announcedTrades.has(key) || isConsumedUuid(key))) return;
   if (key) {
     announcedTrades.add(key);
-    if (isPayloadUuid(key)) rememberConsumedUuid(key);
+    if (isPayloadUuid(key)) rememberConsumedUuid(key, marker);
+  } else if (marker) {
+    rememberConsumedUuid("", marker);
   }
+  if (isPayloadUuid(key)) rememberPendingPayload(key, { signState: "executed", signMarker: marker });
   rememberConfirmed(detail);
   window.dispatchEvent(new CustomEvent("dpmf-trade-executed", { detail: { ...detail, executed: true } }));
   notifyWalletRefresh();

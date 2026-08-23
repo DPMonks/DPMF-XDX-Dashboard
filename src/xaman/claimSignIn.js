@@ -62,6 +62,7 @@ export async function claimExecutedTrade(
         account,
         txjson,
         txType,
+        signMarker: pending?.signMarker || null,
       });
       return { ...detection, executed: true, account, result, txType };
     }
