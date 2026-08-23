@@ -116,20 +116,30 @@ export function supplyShares(xdx, circulating, totalSupply) {
   };
 }
 
+function fiatViaXrp(unitUsd, xrpUsd, xrpFx) {
+  if (unitUsd == null || !(num(xrpUsd) > 0) || !(num(xrpFx) > 0)) return null;
+  return unitUsd * (Number(xrpFx) / Number(xrpUsd));
+}
+
+function fiatAmount(bal, unitPrice, unitUsd, xrpUsd, xrpFx) {
+  if (num(unitPrice) != null) return bal * Number(unitPrice);
+  const via = fiatViaXrp(unitUsd, xrpUsd, xrpFx);
+  return via != null ? bal * via : null;
+}
+
 export function xdxFiatValues(xdx, prices = {}) {
   const bal = num(xdx);
   const usd = num(prices.xdxUsd ?? prices.recorded_price);
-  const gbp = num(prices.xdxGbp);
   const xrp = num(prices.xdxXrp ?? prices.xdxPerXrp);
   if (bal == null) {
-    return { xdx: null, usd: null, gbp: null, xrp: null };
+    return { xdx: null, usd: null, gbp: null, eur: null, jpy: null, xrp: null };
   }
   return {
     xdx: bal,
     usd: usd != null ? bal * usd : null,
-    gbp: gbp != null ? bal * gbp : usd != null && num(prices.xrpGbp) && num(prices.xrpUsd)
-      ? bal * usd * (Number(prices.xrpGbp) / Number(prices.xrpUsd))
-      : null,
+    gbp: fiatAmount(bal, prices.xdxGbp, usd, prices.xrpUsd, prices.xrpGbp),
+    eur: fiatAmount(bal, prices.xdxEur, usd, prices.xrpUsd, prices.xrpEur),
+    jpy: fiatAmount(bal, prices.xdxJpy, usd, prices.xrpUsd, prices.xrpJpy),
     xrp: xrp != null ? bal * xrp : null,
   };
 }
@@ -347,12 +357,18 @@ export function composeWalletSnapshot({
   const fiat = xdxFiatValues(xdxBal, {
     xdxUsd: prices.xdxUsd ?? prices.recorded_price ?? token.xdxUsd,
     xdxGbp: prices.xdxGbp,
+    xdxEur: prices.xdxEur,
+    xdxJpy: prices.xdxJpy,
     xrpUsd: prices.xrpUsd,
     xrpGbp: prices.xrpGbp,
+    xrpEur: prices.xrpEur,
+    xrpJpy: prices.xrpJpy,
     xdxXrp: xdxPerXrp,
   });
   if (fiat.usd == null && num(networth.totalUsd)) fiat.usd = Number(networth.totalUsd);
   if (fiat.gbp == null && num(networth.totalGbp)) fiat.gbp = Number(networth.totalGbp);
+  if (fiat.eur == null && num(networth.totalEur)) fiat.eur = Number(networth.totalEur);
+  if (fiat.jpy == null && num(networth.totalJpy)) fiat.jpy = Number(networth.totalJpy);
 
   const circulating = num(token.circulating);
   const totalSupply = num(token.totalSupply ?? token.total_supply) || XDX_TOTAL_SUPPLY;

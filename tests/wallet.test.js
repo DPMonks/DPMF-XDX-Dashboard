@@ -98,6 +98,20 @@ test("xdxFiatValues keeps USD and GBP from recorded prices", () => {
   assert.ok(Math.abs(fiat.xrp - 0.03) < 1e-12);
 });
 
+test("xdxFiatValues fills EUR and JPY from XRP FX when those marks are missing", () => {
+  const fiat = xdxFiatValues(1000, {
+    xdxUsd: 0.00005,
+    xrpUsd: 2,
+    xrpEur: 1.8,
+    xrpJpy: 300,
+    xdxXrp: 0.000025,
+  });
+  assert.ok(Math.abs(fiat.usd - 0.05) < 1e-12);
+  assert.ok(Math.abs(fiat.eur - 0.045) < 1e-12);
+  assert.ok(Math.abs(fiat.jpy - 7.5) < 1e-12);
+  assert.equal(fiat.gbp, null);
+});
+
 test("lpPositionFromPool estimates withdraw from pool share", () => {
   const row = lpPositionFromPool(100, {
     pool_name: "XDX/XRP",
@@ -199,13 +213,22 @@ test("composeWalletSnapshot stays blank until an address is signed in", () => {
   const filled = composeWalletSnapshot({
     address: "rExample",
     balances: { xrp: 12, xdx: 5000 },
-    prices: { xdxUsd: 0.00004, xdxGbp: 0.00003 },
+    prices: {
+      xdxUsd: 0.00004,
+      xdxGbp: 0.00003,
+      xrpUsd: 2,
+      xrpEur: 1.8,
+      xrpJpy: 300,
+    },
     token: { circulating: 10_000_000_000, xdxPerXrp: 0.00003 },
     pools: [{ pool_name: "XDX/XRP", reserve_asset: 60_000_000 }],
   });
   assert.equal(filled.signedIn, true);
   assert.equal(filled.filled, true);
   assert.equal(filled.xdx.usd, 0.2);
+  assert.equal(filled.xdx.gbp, 0.15);
+  assert.ok(Math.abs(filled.xdx.eur - 0.18) < 1e-12);
+  assert.ok(Math.abs(filled.xdx.jpy - 30) < 1e-12);
 });
 
 test("lpFeeEarnings sums 24h pool fees across every LP position", () => {

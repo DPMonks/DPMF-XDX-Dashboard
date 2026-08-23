@@ -2020,11 +2020,29 @@ body {
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
-.wallet-hero-gbp {
+.wallet-hero-qty {
+  margin-left: 6px;
+  letter-spacing: 0.02em;
+  color: var(--dpmf-neon-cyan);
+  font-variant-numeric: tabular-nums;
+}
+
+.wallet-hero-gbp,
+.wallet-hero-eur,
+.wallet-hero-jpy {
   margin: 2px 0 0;
   font-size: 16px;
   color: var(--dpmf-neon-violet);
   transition: opacity 0.4s ease;
+}
+
+.wallet-hero-eur {
+  font-size: 14px;
+  color: var(--dpmf-neon-cyan);
+}
+
+.wallet-hero-jpy {
+  font-size: 14px;
 }
 
 .wallet-hero-hint {
@@ -2054,6 +2072,9 @@ body {
 .wallet-panel.is-empty .wallet-xrp-col b,
 .wallet-hero-usd.is-empty,
 .wallet-hero-gbp.is-empty,
+.wallet-hero-eur.is-empty,
+.wallet-hero-jpy.is-empty,
+.wallet-hero-qty.is-empty,
 .wallet-lp-info.is-empty dd,
 .wallet-book.is-empty b,
 .wallet-activity.is-empty li {
@@ -2066,6 +2087,9 @@ body {
 .wallet-activity.is-filled,
 .wallet-hero-usd.is-filled,
 .wallet-hero-gbp.is-filled,
+.wallet-hero-eur.is-filled,
+.wallet-hero-jpy.is-filled,
+.wallet-hero-qty.is-filled,
 .wallet-fees.is-filled {
   animation: walletFill 0.42s ease;
 }
