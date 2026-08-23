@@ -80,6 +80,20 @@ test("LP, vote, and pool-create memos follow the natural templates", () => {
   );
   assert.equal(
     exchangeMemoText({
+      txjson: ammWithdrawTx({
+        account: "rLp",
+        quote: quoteAsset("XRP"),
+        lpAmount: "5",
+        mode: "single",
+        singleAsset: "xdx",
+        amountOut: 10,
+      }),
+      trade: { action: "removeLp", pair: "XDX/XRP", lpMode: "single" },
+    }),
+    `${EXCHANGE_PLATFORM} | Single-sided liquidity removed from XDX/XRP pool`
+  );
+  assert.equal(
+    exchangeMemoText({
       txjson: { TransactionType: "AMMVote", Asset: { currency: "XDX" }, Asset2: { currency: "XRP" } },
       trade: { action: "vote", voteType: "trading_fee" },
     }),
