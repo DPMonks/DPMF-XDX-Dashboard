@@ -73,15 +73,16 @@ export function composeLedgerQuoteMark({
   const liveBook = Boolean(mid && (dexPresent || !leftover));
   const usableReserve = leftover ? 0 : reserveSpot;
 
-  let xdxPerQuote = 0;
-  let source = null;
-  if (liveBook) {
-    xdxPerQuote = mid;
-    source = "ledger-book";
-  } else {
-    xdxPerQuote = preferMarkWhenPoolInsane(usableReserve, cross) || usableReserve || cross;
-    source = xdxPerQuote && xdxPerQuote === usableReserve ? "amm" : xdxPerQuote ? "usd-cross" : null;
-  }
+  const xdxPerQuote = liveBook
+    ? mid
+    : preferMarkWhenPoolInsane(usableReserve, cross) || usableReserve || cross;
+  const source = liveBook
+    ? "ledger-book"
+    : xdxPerQuote && xdxPerQuote === usableReserve
+      ? "amm"
+      : xdxPerQuote
+        ? "usd-cross"
+        : null;
 
   return {
     quoteId: id,
