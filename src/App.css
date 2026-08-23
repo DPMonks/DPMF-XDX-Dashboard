@@ -111,14 +111,36 @@ body {
   align-items: stretch;
   gap: 8px;
   width: 100%;
+  container-type: inline-size;
+  container-name: trade-bar;
 }
 
 .trade-bar .connect-wallet-btn {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
+  max-width: 100%;
   min-height: 42px;
+  overflow: hidden;
   justify-content: center;
   text-align: center;
+  white-space: normal;
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+.trade-bar .wallet-btn-logo {
+  width: 18px;
+  height: 18px;
+}
+
+.trade-bar .connect-wallet-btn > span {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: block;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  line-height: 1.2;
 }
 
 .trade-panel {
@@ -438,6 +460,28 @@ body {
   display: inline-flex;
   align-items: center;
   line-height: 1;
+}
+
+@container trade-bar (max-width: 520px) {
+  .connect-wallet-btn {
+    padding: 8px 6px;
+    gap: 5px;
+    font-size: 12px;
+    letter-spacing: 0;
+  }
+
+  .wallet-btn-logo {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.is-embedded .trade-bar .connect-wallet-btn,
+.is-embedded .hybrid-footer .trade-bar .connect-wallet-btn {
+  padding: 8px 6px;
+  gap: 5px;
+  font-size: 12px;
+  letter-spacing: 0;
 }
 
 .wallet-status-online {
