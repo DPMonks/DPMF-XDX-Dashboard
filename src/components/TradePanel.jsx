@@ -524,26 +524,6 @@ export default function TradePanel({
           />
         </label>
 
-        {needLpLine ? null : !isLp ? (
-          <label className="trade-field">
-            {t.tradeOrderType}
-            <BrandSelect
-              value={orderType}
-              options={[
-                { id: "market", label: t.tradeMarket },
-                { id: "limit", label: t.tradeLimit },
-              ]}
-              onChange={(id) => {
-                setOrderType(id);
-                if (id === "limit" && markerPx > 0) setPrice(String(markerPx));
-              }}
-              ariaLabel={t.tradeOrderType}
-            />
-          </label>
-        ) : null}
-
-        {needLpLine ? null : (
-        <>
         {action === "addLp" ? (
           <>
             <div className="tabs trade-lp-mode" role="tablist" aria-label={t.lpDepositMode}>
@@ -602,6 +582,27 @@ export default function TradePanel({
             ) : null}
           </>
         ) : null}
+
+        {needLpLine ? null : !isLp ? (
+          <label className="trade-field">
+            {t.tradeOrderType}
+            <BrandSelect
+              value={orderType}
+              options={[
+                { id: "market", label: t.tradeMarket },
+                { id: "limit", label: t.tradeLimit },
+              ]}
+              onChange={(id) => {
+                setOrderType(id);
+                if (id === "limit" && markerPx > 0) setPrice(String(markerPx));
+              }}
+              ariaLabel={t.tradeOrderType}
+            />
+          </label>
+        ) : null}
+
+        {needLpLine ? null : (
+        <>
         {action === "removeLp" ? (
           <label className="trade-field">
             {t.tradeLpTokens}
