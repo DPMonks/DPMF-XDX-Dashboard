@@ -57,6 +57,9 @@ export default function HybridPlot({
   onDeleteDrawing,
   onPan,
   onZoom,
+  onPriceZoom,
+  onPricePan,
+  onPriceReset,
 }) {
   const box = useRef(null);
   const svgRef = useRef(null);
@@ -77,14 +80,19 @@ export default function HybridPlot({
   const [inspect, setInspect] = useState(null);
   const [drag, setDrag] = useState(null);
   const [panDrag, setPanDrag] = useState(null);
+  const [priceDrag, setPriceDrag] = useState(null);
   const [pointerKind, setPointerKind] = useState("pan");
   const [enterTs, setEnterTs] = useState([]);
   const [seenTs, setSeenTs] = useState([]);
   const [maDraw, setMaDraw] = useState({ ready: [], armed: [] });
   const wheelLeft = useRef(0);
   const wheelZoomLeft = useRef(0);
+  const wheelPriceLeft = useRef(0);
   const onPanRef = useRef(onPan);
   const onZoomRef = useRef(onZoom);
+  const onPriceZoomRef = useRef(onPriceZoom);
+  const onPricePanRef = useRef(onPricePan);
+  const scaleRef = useRef(null);
   const uid = useId().replace(/:/g, "");
   const width = 960;
   const volH = showVolume ? VOL_H : 0;
@@ -149,6 +157,15 @@ export default function HybridPlot({
     onZoomRef.current = onZoom;
   }, [onZoom]);
   useEffect(() => {
+    onPriceZoomRef.current = onPriceZoom;
+  }, [onPriceZoom]);
+  useEffect(() => {
+    onPricePanRef.current = onPricePan;
+  }, [onPricePan]);
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+  useEffect(() => {
     onMoveHandleRef.current = onMoveHandle;
   }, [onMoveHandle]);
   useEffect(() => {
@@ -180,6 +197,20 @@ export default function HybridPlot({
           return;
         }
         const mapped = clientToSvg(node, event.clientX, event.clientY, width, height);
+        if (mapped && mapped.x < PAD.l && mapped.y >= PAD.t && mapped.y <= PAD.t + PRICE_H) {
+          const live = scaleRef.current;
+          const span = Math.max(1e-12, Number(live?.max) - Number(live?.min));
+          const anchorPrice = Number(live?.max) - ((mapped.y - PAD.t) / PRICE_H) * span;
+          const next = wheelZoomSteps(event.deltaY, wheelPriceLeft.current);
+          wheelPriceLeft.current = next.leftover;
+          if (next.steps && onPriceZoomRef.current) {
+            onPriceZoomRef.current({
+              direction: next.steps > 0 ? 1 : -1,
+              anchorPrice,
+            });
+          }
+          return;
+        }
         const ratio = mapped ? (mapped.x - PAD.l) / Math.max(1, inner) : 0.5;
         const next = wheelZoomSteps(event.deltaY, wheelZoomLeft.current);
         wheelZoomLeft.current = next.leftover;
@@ -192,6 +223,7 @@ export default function HybridPlot({
       } catch {
         wheelLeft.current = 0;
         wheelZoomLeft.current = 0;
+        wheelPriceLeft.current = 0;
       }
     }
     node.addEventListener("wheel", onWheel, { passive: false });
@@ -217,6 +249,7 @@ export default function HybridPlot({
     const y = shifted.y;
     const t = scale.tAt ? scale.tAt(x) : scale.start + ((x - PAD.l) / innerW) * (scale.end - scale.start);
     const price = scale.max - ((y - PAD.t) / PRICE_H) * (scale.max - scale.min);
+    const inPriceGutter = y >= PAD.t - 2 && y <= plotBottom + 2 && x < PAD.l;
     const inPrice = y >= PAD.t - 2 && y <= plotBottom + 2 && x >= PAD.l && x <= width - PAD.r;
     const inVolume = volH > 0 && y >= volTop && y <= volBottom && x >= PAD.l && x <= width - PAD.r;
     const inRsi = rsiH > 0 && y >= rsiTop && y <= rsiBottom && x >= PAD.l && x <= width - PAD.r;
@@ -239,6 +272,7 @@ export default function HybridPlot({
       viewKey: scale.viewKey,
       candle: nearest,
       inPrice,
+      inPriceGutter,
       inVolume,
       inRsi,
     };
@@ -328,8 +362,8 @@ export default function HybridPlot({
     });
   }
 
-  function setPointerFromHit(hit) {
-    const next = hit?.handle ? "grab" : hit ? "edit" : "pan";
+  function setPointerFromHit(hit, pointer) {
+    const next = pointer?.inPriceGutter ? "price" : hit?.handle ? "grab" : hit ? "edit" : "pan";
     if (pointerKindRef.current === next) return;
     pointerKindRef.current = next;
     setPointerKind(next);
@@ -347,6 +381,17 @@ export default function HybridPlot({
   }
 
   function onMove(event) {
+    if (priceDrag) {
+      const pointer = locate(event);
+      if (!pointer) return;
+      const dy = pointer.y - priceDrag.y;
+      if (dy && onPricePanRef.current) {
+        const span = Math.max(1e-12, scale.max - scale.min);
+        onPricePanRef.current((dy / PRICE_H) * span);
+        setPriceDrag({ y: pointer.y });
+      }
+      return;
+    }
     let livePan = panDrag;
     if (
       clickRef.current &&
@@ -385,7 +430,7 @@ export default function HybridPlot({
       paintCursor(null);
     }
     paintPlacement(placing && !drag ? next : null);
-    if (!drag && !livePan) setPointerFromHit(hit);
+    if (!drag && !livePan) setPointerFromHit(hit, pointer);
     if (drag && pointer && Number.isFinite(pointer.t) && Number.isFinite(pointer.price)) {
       queueHandleMove(drag.index, drag.key, pointer);
     }
@@ -394,6 +439,13 @@ export default function HybridPlot({
   function onPointerDown(event) {
     const pointer = locate(event);
     if (!pointer) return;
+    if (event.button === 0 && pointer.inPriceGutter) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      clickRef.current = null;
+      setPriceDrag({ y: pointer.y });
+      return;
+    }
     const hit = event.button === 0 ? hitAt(pointer) : null;
     if (hit) {
       event.preventDefault();
@@ -458,6 +510,7 @@ export default function HybridPlot({
     clickRef.current = null;
     setDrag(null);
     setPanDrag(null);
+    setPriceDrag(null);
     if (!shouldFollowCrosshair({ tool, dragging: false, overHandle: false }) && !inspectRef.current) {
       paintCursor(null);
     }
@@ -502,7 +555,7 @@ export default function HybridPlot({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${drag ? " is-grabbing" : pointerKind === "grab" ? " is-grab" : pointerKind === "edit" ? " is-edit" : ""}`}
+        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${priceDrag || pointerKind === "price" ? " is-price" : ""}${drag ? " is-grabbing" : pointerKind === "grab" ? " is-grab" : pointerKind === "edit" ? " is-edit" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => {
           if (drag) return;
@@ -513,6 +566,10 @@ export default function HybridPlot({
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onDoubleClick={(event) => {
+          const pointer = locate(event);
+          if (pointer?.inPriceGutter && onPriceReset) onPriceReset();
+        }}
         role="img"
         aria-label={`${quote} hybrid chart`}
       >

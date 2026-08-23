@@ -204,3 +204,48 @@ export function smartView(candles = [], { rangeId = "1M", spread, now = Date.now
     max: max + pad,
   };
 }
+
+export const PRICE_ZOOM_MIN = 0.25;
+export const PRICE_ZOOM_MAX = 8;
+export const PRICE_ZOOM_STEP = 1.18;
+
+export function clampPriceZoom(zoom) {
+  const n = Number(zoom);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return Math.min(PRICE_ZOOM_MAX, Math.max(PRICE_ZOOM_MIN, n));
+}
+
+export function zoomPriceScale(current, direction) {
+  const from = clampPriceZoom(current);
+  const next = Number(direction) > 0 ? from / PRICE_ZOOM_STEP : from * PRICE_ZOOM_STEP;
+  return clampPriceZoom(next);
+}
+
+export function scalePriceView(view, { zoom = 1, shift = 0 } = {}) {
+  if (!view) return view;
+  const z = clampPriceZoom(zoom);
+  const mid = (Number(view.min) + Number(view.max)) / 2;
+  const span = Math.max(1e-12, (Number(view.max) - Number(view.min)) * z);
+  let min = mid - span / 2 + Number(shift || 0);
+  let max = mid + span / 2 + Number(shift || 0);
+  if (min < 0) {
+    max += -min;
+    min = 0;
+  }
+  if (!(max > min)) return view;
+  return { ...view, min, max };
+}
+
+export function shiftAfterPriceZoom({ view, oldZoom, newZoom, anchorPrice, oldShift = 0 } = {}) {
+  const oldZ = clampPriceZoom(oldZoom);
+  const newZ = clampPriceZoom(newZoom);
+  const mid = (Number(view?.min) + Number(view?.max)) / 2;
+  const oldSpan = Math.max(1e-12, (Number(view?.max) - Number(view?.min)) * oldZ);
+  const newSpan = Math.max(1e-12, (Number(view?.max) - Number(view?.min)) * newZ);
+  const oldMin = mid - oldSpan / 2 + Number(oldShift || 0);
+  const oldMax = mid + oldSpan / 2 + Number(oldShift || 0);
+  const anchor = Number(anchorPrice);
+  if (!Number.isFinite(anchor)) return Number(oldShift || 0);
+  const ratio = (oldMax - anchor) / Math.max(1e-12, oldMax - oldMin);
+  return ratio * newSpan - mid - newSpan / 2 + anchor;
+}

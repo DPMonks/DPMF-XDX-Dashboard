@@ -303,6 +303,10 @@
   cursor: pointer;
 }
 
+.hybrid-svg.is-price {
+  cursor: ns-resize;
+}
+
 .hybrid-svg.is-panning,
 .hybrid-svg.is-grabbing {
   cursor: grabbing;

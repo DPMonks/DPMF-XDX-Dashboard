@@ -30,7 +30,7 @@ import {
 } from "../src/chart/candles.js";
 import { bucketTime, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
-import { ammImpact, arbitrageWindow, liquidityPressure, liquidityWalls } from "../src/chart/overlays.js";
+import { ammImpact, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, scalePriceView, shiftAfterPriceZoom, zoomPriceScale } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
@@ -345,6 +345,20 @@ test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail"
   assert.equal(liveSeriesGrew({ prevLen: 100, prevHead: 10, nextLen: 400, nextHead: 1 }), false);
   assert.ok(zoomVisibleBars(280, 1) < 280);
   assert.ok(zoomVisibleBars(280, -1) > 280);
+  assert.equal(clampPriceZoom(0), 1);
+  assert.ok(zoomPriceScale(1, 1) < 1);
+  assert.ok(zoomPriceScale(1, -1) > 1);
+  const priced = scalePriceView({ start: 1, end: 2, min: 1, max: 3 }, { zoom: 0.5, shift: 0 });
+  assert.ok(priced.max - priced.min < 2);
+  const held = shiftAfterPriceZoom({
+    view: { min: 0, max: 10 },
+    oldZoom: 1,
+    newZoom: 0.5,
+    anchorPrice: 8,
+    oldShift: 0,
+  });
+  const after = scalePriceView({ min: 0, max: 10 }, { zoom: 0.5, shift: held });
+  assert.ok(Math.abs(after.max - (after.max - after.min) * ((10 - 8) / 10) - 8) < 1e-9);
   assert.equal(clampVisibleBars(8), 24);
   const kept = panAfterZoom({
     total: 400,

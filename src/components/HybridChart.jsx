@@ -26,7 +26,10 @@ import {
   liquidityPressure,
   liquidityWalls,
   microEvents,
+  scalePriceView,
+  shiftAfterPriceZoom,
   smartView,
+  zoomPriceScale,
 } from "../chart/overlays";
 import { walletChartMarks } from "../chart/walletMarks";
 import { bookHeader } from "../orderbook";
@@ -185,6 +188,8 @@ export default function HybridChart() {
   const [now, setNow] = useState(0);
   const [panOffset, setPanOffset] = useState(0);
   const [barZoom, setBarZoom] = useState(null);
+  const [priceZoom, setPriceZoom] = useState(1);
+  const [priceShift, setPriceShift] = useState(0);
   const [loadedBars, setLoadedBars] = useState(() => visibleBarsForInterval(DEFAULT_INTERVAL) + CHART_MA_PAD);
   const [seriesMeta, setSeriesMeta] = useState({ len: 0, head: 0 });
   const windowKey = `${pair}:${timeframe}`;
@@ -257,6 +262,8 @@ export default function HybridChart() {
     setSeriesMeta({ len: 0, head: 0 });
     setPanOffset(0);
     setBarZoom(null);
+    setPriceZoom(1);
+    setPriceShift(0);
     setLoadedBars(baseVisible + CHART_MA_PAD);
   }
   const wantLoaded = Math.min(4000, visibleCount + panOffset + CHART_MA_PAD + 32);
@@ -307,7 +314,8 @@ export default function HybridChart() {
   const walls = liquidityWalls(book);
   const header = bookHeader(book);
   const arb = arbitrageWindow(ammPrice, header.mid || livePrice);
-  const view = smartView(candles, { rangeId: "Max", spread: bands.spread, now });
+  const autoView = smartView(candles, { rangeId: "Max", spread: bands.spread, now });
+  const view = scalePriceView(autoView, { zoom: priceZoom, shift: priceShift });
   const heat = heatmapDots(trades.filter((row) => !row.pool || String(row.pool).toUpperCase() === pair));
   const trail = ammRebalanceTrail(
     candles.slice(-24).map((row) => ({ t: row.t, price: row.c, timestamp: row.t }))
@@ -425,6 +433,31 @@ export default function HybridChart() {
         anchorRatio,
       })
     );
+  }
+
+  function applyPriceZoom({ direction, anchorPrice } = {}) {
+    const nextZoom = zoomPriceScale(priceZoom, direction);
+    if (nextZoom === priceZoom) return;
+    setPriceShift(
+      shiftAfterPriceZoom({
+        view: autoView,
+        oldZoom: priceZoom,
+        newZoom: nextZoom,
+        anchorPrice,
+        oldShift: priceShift,
+      })
+    );
+    setPriceZoom(nextZoom);
+  }
+
+  function applyPricePan(deltaPrice) {
+    if (!deltaPrice) return;
+    setPriceShift((current) => current + deltaPrice);
+  }
+
+  function resetPriceScale() {
+    setPriceZoom(1);
+    setPriceShift(0);
   }
 
   return (
@@ -650,6 +683,9 @@ export default function HybridChart() {
               setPanOffset((current) => current + steps);
             }}
             onZoom={applyZoom}
+            onPriceZoom={applyPriceZoom}
+            onPricePan={applyPricePan}
+            onPriceReset={resetPriceScale}
           />
           </div>
 
