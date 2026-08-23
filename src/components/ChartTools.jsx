@@ -274,6 +274,7 @@ export default function ChartTools({
 
   return (
     <aside className="hybrid-tools" aria-label={t.chartTools} ref={rail}>
+      <div className="hybrid-tool-stack">
       {TOOL_GROUPS.map((group) => {
         const shown = group.tools.find((row) => row.id === remembered[group.id]) || group.tools[0];
         const active = activeGroup === group.id && (group.id === "pointer" ? tool === "cursor" : tool !== "cursor");
@@ -282,7 +283,7 @@ export default function ChartTools({
             key={group.id}
             type="button"
             className={active ? "hybrid-tool active" : "hybrid-tool"}
-            style={active && shown.colors !== false ? { borderColor: color, color } : undefined}
+            style={active && shown.colors !== false ? { color } : undefined}
             onPointerDown={(event) => {
               event.preventDefault();
               pickRail(shown.id);
@@ -293,6 +294,7 @@ export default function ChartTools({
           </button>
         );
       })}
+      </div>
       {open ? (
         <div className="hybrid-tool-flyout" role="dialog" aria-label={t[flyoutGroup.labelKey] || flyoutGroup.id}>
           <div className="hybrid-flyout-group">
