@@ -223,6 +223,30 @@ export function formatAxisTime(t, { spanMs = 30 * DAY_MS, intervalId = "1D", loc
   return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
 }
 
+export function axisLabelX(x, { min, max } = {}) {
+  const value = Number(x);
+  const lo = Number(min);
+  const hi = Number(max);
+  if (!Number.isFinite(value)) return 0;
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return value;
+  return Math.min(hi, Math.max(lo, value));
+}
+
+export function timeTagWidth(label) {
+  const text = String(label || "");
+  return Math.max(108, Math.ceil(text.length * 6.1 + 16));
+}
+
+export function timeTagOrigin(x, width, { left = 0, right = 0 } = {}) {
+  const tagW = Number(width) || 0;
+  const at = Number(x);
+  const min = Number(left) + tagW / 2;
+  const max = Number(right) - tagW / 2;
+  const center = Number.isFinite(at) ? at : min;
+  const mid = max > min ? Math.min(max, Math.max(min, center)) : center;
+  return { x: mid - tagW / 2, width: tagW, textX: tagW / 2 };
+}
+
 export function formatCursorWhen(t, locale = "en") {
   const date = new Date(t);
   if (Number.isNaN(date.getTime())) return "—";

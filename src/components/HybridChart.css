@@ -533,17 +533,24 @@
 
 .hybrid-chart .pair-chip,
 .hybrid-chart .range {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   height: 24px;
   min-height: 24px;
   padding: 0 8px;
+  margin: 0;
   border-radius: 4px;
   font-size: 11px;
   line-height: 1;
 }
 
 .hybrid-chart .range {
-  min-width: 28px;
-  padding: 0 7px;
+  min-width: 36px;
+  padding: 0 8px;
 }
 
 .hybrid-ranges {
@@ -961,6 +968,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.hybrid-axis.is-time {
+  text-anchor: middle;
+}
+
 .hybrid-cursor-tag rect {
   fill: #1a0530;
   stroke: #00eaff;
@@ -1206,6 +1217,15 @@
 }
 
 @media (pointer: coarse) {
+  .hybrid-chart .range,
+  .hybrid-chart .pair-chip {
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 10px;
+    border-radius: 8px;
+  }
+
   .hybrid-footer .trade-bar .connect-wallet-btn {
     min-height: 44px;
     touch-action: manipulation;

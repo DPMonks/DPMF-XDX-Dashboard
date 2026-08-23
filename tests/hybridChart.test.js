@@ -37,7 +37,7 @@ import { ammImpact, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidit
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { fullViewPriceHeight } from "../src/chart/fullView.js";
-import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTicks } from "../src/chart/axis.js";
+import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTagOrigin, timeTagWidth, timeTicks } from "../src/chart/axis.js";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   applyPlaceOffset,
@@ -602,6 +602,19 @@ test("priceTicks and timeTicks fill left and bottom chart scales", () => {
   assert.equal(formatAxisTime(start, { spanMs: end - start, intervalId: "1D", locale: "en-GB" }), "24 Jul");
   assert.match(formatCursorWhen(start, "en-GB"), /24 Jul 2026/);
   assert.match(formatCursorWhen(start, "en-GB"), /00:00/);
+});
+
+test("chart time labels stay middle-anchored and the tag border is centered", () => {
+  assert.equal(axisLabelX(10, { min: 20, max: 80 }), 20);
+  assert.equal(axisLabelX(90, { min: 20, max: 80 }), 80);
+  assert.equal(axisLabelX(50, { min: 20, max: 80 }), 50);
+  const wide = timeTagWidth("24 Aug 2026, 13:31");
+  const box = timeTagOrigin(200, wide, { left: 84, right: 942 });
+  assert.equal(box.textX, wide / 2);
+  assert.equal(box.x + box.width / 2, 200);
+  const edge = timeTagOrigin(90, 108, { left: 84, right: 942 });
+  assert.equal(edge.x, 84);
+  assert.equal(edge.textX, 54);
 });
 
 test("equalGrid spaces time and price lines the same on every timeframe", () => {
