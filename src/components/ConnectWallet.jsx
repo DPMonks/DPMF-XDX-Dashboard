@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "../context/useWallet";
 import { shortAddress } from "../utils/format";
 import { claimExecutedTrade, claimSignedWallet } from "../xaman/claimSignIn";
-import { canClaimExecutedTrade, clearXamanReturn, peekPendingPayload, peekXamanUuid } from "../xaman/payloadResume";
+import { clearXamanReturn, peekPendingPayload, peekXamanUuid, shouldAutoClaimPendingTrade } from "../xaman/payloadResume";
 import { liveWalletAddress, resolveNeedSignIn } from "../wallet/walletStorage";
 import { WALLET_EVENTS } from "../xaman/tradeTx";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -35,7 +35,7 @@ export default function ConnectWallet() {
     const pendingRecord = peekPendingPayload();
     const pending = peekXamanUuid();
     if (pendingRecord?.watchTrade) {
-      if (!canClaimExecutedTrade(pending, pendingRecord)) return;
+      if (!shouldAutoClaimPendingTrade()) return;
       if (claimingRef.current) return;
       claimingRef.current = true;
       try {

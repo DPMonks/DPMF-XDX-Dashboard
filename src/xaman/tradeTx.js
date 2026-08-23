@@ -18,6 +18,36 @@ import { pendingFromExecution, rememberPending } from "../wallet/ledgerOrders.js
 import { pendingVoteFromExecution } from "../wallet/ammVote.js";
 import { preferMarkWhenPoolInsane } from "../wallet/quoteMarker.js";
 import { liveWalletAddress } from "../wallet/walletStorage.js";
+import { isConsumedUuid, isPayloadUuid, rememberConsumedUuid } from "./payloadResume.js";
+
+export const ACTION_TX_TYPES = {
+  buy: ["Payment", "OfferCreate"],
+  sell: ["Payment", "OfferCreate"],
+  addLp: ["AMMDeposit"],
+  removeLp: ["AMMWithdraw"],
+  createPool: ["AMMCreate"],
+  vote: ["AMMVote"],
+};
+
+export function executionTxType(detail = {}) {
+  return String(
+    detail.txType ||
+      detail.txjson?.TransactionType ||
+      detail.payload?.tx_type ||
+      detail.payload?.request_json?.TransactionType ||
+      detail.result?.payload?.tx_type ||
+      ""
+  ).trim();
+}
+
+export function executionClosesTradeAction(action, detail = {}) {
+  const txType = executionTxType(detail);
+  if (txType === "TrustSet" || txType === "SignIn") return false;
+  const allowed = ACTION_TX_TYPES[action];
+  if (!allowed) return Boolean(action);
+  if (!txType) return true;
+  return allowed.includes(txType);
+}
 
 export const DROPS_PER_XRP = 1_000_000;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
@@ -557,8 +587,11 @@ export function notifyTradeExecuted(detail = {}) {
   if (typeof window === "undefined") return;
   if (detail.executed === false || detail.failed || detail.rejected) return;
   const key = String(detail.uuid || detail.txid || "").trim().toLowerCase();
-  if (key && announcedTrades.has(key)) return;
-  if (key) announcedTrades.add(key);
+  if (key && (announcedTrades.has(key) || isConsumedUuid(key))) return;
+  if (key) {
+    announcedTrades.add(key);
+    if (isPayloadUuid(key)) rememberConsumedUuid(key);
+  }
   rememberConfirmed(detail);
   window.dispatchEvent(new CustomEvent("dpmf-trade-executed", { detail: { ...detail, executed: true } }));
   notifyWalletRefresh();

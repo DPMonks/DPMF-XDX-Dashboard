@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { detectTradeExecution, isTradeTxjson } from "./detectExecution";
 import {
   clearXamanReturn,
+  isConsumedUuid,
   markXamanReturn,
   xamanWebsocketUrl,
 } from "./payloadResume";
@@ -101,6 +102,10 @@ export function useXamanPayload() {
     let latestSocket = null;
     let latestLedger = null;
     let payloadUuid = resumeUuid || null;
+    if (resumeUuid && isConsumedUuid(resumeUuid)) {
+      busyRef.current = false;
+      return;
+    }
     if (!resumeUuid) clearXamanReturn();
 
     const announce = (detection) => {
@@ -161,7 +166,7 @@ export function useXamanPayload() {
       setStatus("waiting");
 
       timeoutRef.current = setTimeout(() => {
-        if (payloadSessionOpen(session, sessionRef.current)) reset({ keepPending: true });
+        if (payloadSessionOpen(session, sessionRef.current)) reset();
       }, 300000);
 
       const finish = async (account, result) => {
@@ -220,7 +225,7 @@ export function useXamanPayload() {
           }
         }
         reset({
-          keepPending: !signedAccount && (detection.signed || payloadLooksSigned(result)),
+          keepPending: watchConfirm && looksSigned && !announced,
         });
         setStatus(looksSigned ? "signed" : "idle");
       };
