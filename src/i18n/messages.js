@@ -117,7 +117,7 @@ const en = {
   chartStyle_solid: "Solid",
   chartStyle_dash: "Dashed",
   chartStyle_dot: "Dotted",
-  chartStayDraw: "Keep drawing",
+  chartStayDraw: "Keep drawing this tool until you pick the pointer",
   chartAllTools: "All tools",
   chartSimulate: "Simulate",
   chartAddLp: "Add LP",

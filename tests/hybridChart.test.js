@@ -692,7 +692,8 @@ test("draw style and extra City Index tools stay available from one toolbox", ()
   assert.equal(canMoveHandle("trend"), false);
   assert.equal(canMoveHandle("cursor"), true);
   assert.equal(toolAfterDrawing(true, "elliottimpulse"), "elliottimpulse");
-  assert.equal(toolAfterDrawing(false, "elliottimpulse"), "cursor");
+  assert.equal(toolAfterDrawing(false, "elliottimpulse"), "elliottimpulse");
+  assert.equal(toolAfterDrawing(false, "cursor"), "cursor");
   assert.equal(toolMeta("pitchfork").clicks, 3);
   const cross = nextDrawingState({
     tool: "crossline",

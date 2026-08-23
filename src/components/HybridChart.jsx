@@ -35,7 +35,7 @@ import { walletOrdersFromBooks } from "../wallet/composeWallet";
 import { useWallet } from "../context/useWallet";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
-import { elliottTools, moveDrawingHandle, nextDrawingState, toolAfterDrawing } from "../chart/drawings";
+import { elliottTools, moveDrawingHandle, nextDrawingState } from "../chart/drawings";
 import ChartTools from "./ChartTools";
 import HybridPlot from "./HybridPlot";
 import "./HybridChart.css";
@@ -330,11 +330,6 @@ export default function HybridChart() {
     setPending(next.pending);
     if (next.drawing) {
       setDrawings((rows) => [...rows, next.drawing]);
-      const nextTool = toolAfterDrawing(stayDraw, tool);
-      if (nextTool === "cursor") {
-        setTool("cursor");
-        setPending(null);
-      }
     }
   }
 
@@ -345,8 +340,10 @@ export default function HybridChart() {
   }
 
   function selectTool(id) {
-    setTool(id);
+    const next = id || "cursor";
+    setTool(next);
     setPending(null);
+    if (next !== "cursor") setStayDraw(true);
   }
 
   function undoDrawing() {

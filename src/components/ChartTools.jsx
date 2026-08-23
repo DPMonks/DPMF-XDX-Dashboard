@@ -392,10 +392,11 @@ export default function ChartTools({
         </button>
         <button
           type="button"
-          className={stay ? "hybrid-tool active" : "hybrid-tool"}
+          className={stay || tool !== "cursor" ? "hybrid-tool active" : "hybrid-tool"}
+          aria-pressed={stay || tool !== "cursor"}
           onPointerDown={(event) => {
             event.preventDefault();
-            onToggleStay();
+            if (!stay) onToggleStay();
           }}
           title={t.chartStayDraw}
         >

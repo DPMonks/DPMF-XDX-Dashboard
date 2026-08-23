@@ -126,8 +126,8 @@ export function canMoveHandle(tool) {
   return tool === "cursor";
 }
 
-export function toolAfterDrawing(stay, tool) {
-  return stay === false ? "cursor" : tool;
+export function toolAfterDrawing(_stay, tool) {
+  return tool && tool !== "cursor" ? tool : "cursor";
 }
 
 export function toggleTool(current, next) {
