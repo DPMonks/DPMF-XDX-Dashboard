@@ -9,6 +9,7 @@ import { useI18n } from "./i18n/useI18n";
 import TokenDetails from "./components/TokenDetails";
 import RichList from "./components/RichList";
 import AmmCard from "./components/AmmCard";
+import CreatePoolCard from "./components/CreatePoolCard";
 import VotingContainer from "./components/governance/VotingContainer";
 import OrderBook from "./components/OrderBook";
 import ConnectedWallet from "./components/ConnectedWallet";
@@ -157,6 +158,28 @@ export default function App() {
     };
   }, []);
 
+  const refreshLists = useCallback(() => {
+    getAmm()
+      .then((next) => setAmmData(Array.isArray(next) ? next : []))
+      .catch(() => {});
+    getTopHolders((rows, meta) => {
+      setHolders(rows);
+      if (meta) setHolderFreshness(meta);
+    })
+      .then((rows) => {
+        if (rows) setHolders(rows);
+      })
+      .catch(() => {});
+    getTopLp((rows, meta) => {
+      setLpHolders(rows);
+      if (meta) setLpFreshness(meta);
+    })
+      .then((rows) => {
+        if (rows) setLpHolders(rows);
+      })
+      .catch(() => {});
+  }, []);
+
   const openTrade = useCallback((detail) => {
     const live = liveWalletAddress(walletAddress);
     const gated = gateUnsignedTrade(detail, live);
@@ -184,6 +207,7 @@ export default function App() {
     }
     function onTradeExecuted() {
       setTradeAction(null);
+      refreshLists();
     }
     window.addEventListener("dpmf-open-trade", onOpen);
     window.addEventListener("dpmf-trade-executed", onTradeExecuted);
@@ -195,7 +219,7 @@ export default function App() {
       window.removeEventListener(WALLET_EVENTS.signedIn, onSignedIn);
       window.removeEventListener(WALLET_EVENTS.signInCancelled, onSignInCancelled);
     };
-  }, [openTrade]);
+  }, [openTrade, refreshLists]);
 
   useEffect(() => {
     let busy = false;
@@ -321,6 +345,8 @@ export default function App() {
             />
           </section>
         </div>
+
+        <CreatePoolCard pools={ammData} onJoinExisting={openTrade} onCreated={refreshLists} />
 
         <section className="dashboard-card neon-card">
           <h2 className="card-title">{t.ammPools}</h2>

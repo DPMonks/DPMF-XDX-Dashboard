@@ -33,10 +33,18 @@ export default function TradeExecuted() {
     >
       <div className="wallet-modal trade-executed-modal" role="alertdialog" aria-labelledby="trade-executed-title">
         <h2 id="trade-executed-title" className="modal-title">
-          {detail.txjson?.TransactionType === "AMMVote" ? t.voteExecuted : t.tradeExecuted}
+          {detail.txjson?.TransactionType === "AMMCreate"
+            ? t.createPoolExecuted
+            : detail.txjson?.TransactionType === "AMMVote"
+              ? t.voteExecuted
+              : t.tradeExecuted}
         </h2>
         <p className="trade-executed-copy">
-          {detail.txjson?.TransactionType === "AMMVote" ? t.voteExecutedHint : t.tradeExecutedHint}
+          {detail.txjson?.TransactionType === "AMMCreate"
+            ? t.createPoolExecutedHint
+            : detail.txjson?.TransactionType === "AMMVote"
+              ? t.voteExecutedHint
+              : t.tradeExecutedHint}
         </p>
         {hash ? <p className="trade-executed-hash">{hash}</p> : null}
         <button type="button" className="connect-wallet-btn" onClick={() => setDetail(null)}>

@@ -383,9 +383,15 @@ export default function ConnectedWallet() {
                   ? (t.votedOnPool || "Voted on {pair} — {fee} fee")
                       .replace("{pair}", row.pair || "")
                       .replace("{fee}", formatFeePercent(row.feePercent, locale))
-                  : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
-                      row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""
-                    }`}
+                  : row.side === "createPool"
+                    ? (t.createdPoolActivity || "Created {pair} pool").replace("{pair}", row.pair || "")
+                    : row.side === "addLp"
+                      ? (t.addedLpActivity || "Added LP to {pair}").replace("{pair}", row.pair || "")
+                      : row.side === "removeLp"
+                        ? (t.removedLpActivity || "Removed LP from {pair}").replace("{pair}", row.pair || "")
+                        : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
+                            row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""
+                          }`}
             </li>
           ))}
         </ol>

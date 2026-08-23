@@ -10,6 +10,11 @@ import {
 } from "../constants/ledger.js";
 import { activityFromAmmVoteTx, pairFromVoteAssets } from "./ammVote.js";
 
+export function amountAsIssue(amount) {
+  if (amount == null || typeof amount === "string") return { currency: "XRP" };
+  return { currency: amount.currency, issuer: amount.issuer };
+}
+
 export const RIPPLE_EPOCH = 946684800;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
 
@@ -228,9 +233,32 @@ export function ordersFromAccountOffers(offers, address) {
     .filter((row) => !address || sameWallet(row.account, address));
 }
 
+export function activityFromAmmCreateTx(row, address) {
+  const { tx, meta, hash, timestamp } = unwrapAccountTx(row);
+  if (tx?.TransactionType !== "AMMCreate") return null;
+  if (address && tx.Account && !sameWallet(tx.Account, address)) return null;
+  const result = meta.TransactionResult || row.TransactionResult || "";
+  if (result && result !== "tesSUCCESS") return null;
+  const pair = pairFromVoteAssets(amountAsIssue(tx.Amount), amountAsIssue(tx.Amount2));
+  return {
+    account: tx.Account || address,
+    side: "createPool",
+    pair,
+    pool: pair,
+    timestamp: timestamp || new Date().toISOString(),
+    txid: hash,
+    status: "filled",
+  };
+}
+
 export function activityFromAccountTx(transactions, address) {
   return (Array.isArray(transactions) ? transactions : [])
-    .map((row) => activityFromOfferTx(row, address) || activityFromAmmVoteTx(row, address))
+    .map(
+      (row) =>
+        activityFromOfferTx(row, address) ||
+        activityFromAmmVoteTx(row, address) ||
+        activityFromAmmCreateTx(row, address)
+    )
     .filter(Boolean)
     .sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
 }
@@ -322,13 +350,17 @@ export function pendingFromExecution(detail = {}, address = "") {
   const txjson = detail.txjson || detail.tx || null;
   const account = address || txjson?.Account || detail.account || null;
   const type = String(txjson?.TransactionType || "");
-  if ((type === "AMMDeposit" || type === "AMMWithdraw") && account) {
-    const pair = pairFromVoteAssets(txjson.Asset, txjson.Asset2);
+  if ((type === "AMMDeposit" || type === "AMMWithdraw" || type === "AMMCreate") && account) {
+    const pair =
+      type === "AMMCreate"
+        ? pairFromVoteAssets(amountAsIssue(txjson.Amount), amountAsIssue(txjson.Amount2))
+        : pairFromVoteAssets(txjson.Asset, txjson.Asset2);
+    const side = type === "AMMCreate" ? "createPool" : type === "AMMDeposit" ? "addLp" : "removeLp";
     return {
       order: null,
       activity: {
         account,
-        side: type === "AMMDeposit" ? "addLp" : "removeLp",
+        side,
         pair,
         pool: pair,
         timestamp: detail.timestamp || new Date().toISOString(),

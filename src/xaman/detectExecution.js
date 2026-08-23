@@ -1,4 +1,4 @@
-export const TRADE_TX_TYPES = new Set(["OfferCreate", "AMMDeposit", "AMMWithdraw", "AMMVote"]);
+export const TRADE_TX_TYPES = new Set(["OfferCreate", "AMMDeposit", "AMMWithdraw", "AMMVote", "AMMCreate"]);
 
 export function isTradeTxjson(txjson) {
   if (TRADE_TX_TYPES.has(txjson?.TransactionType)) return true;
