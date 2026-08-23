@@ -29,6 +29,7 @@ import {
   tradeTotal,
   xdxUnitUsd,
 } from "../xaman/tradeTx";
+import { xdxQuoteSpot } from "../wallet/quoteMarker";
 import { formatPoolPct, normalizePriceBook, priceBookFromPools } from "../utils/poolSplit";
 import { formatToken, formatUsd } from "../utils/format";
 import { shortAddress } from "../utils/format";
@@ -85,7 +86,6 @@ export default function TradePanel({
   const [pools, setPools] = useState(() => (Array.isArray(initialPools) ? initialPools : []));
   const [lineHint, setLineHint] = useState("");
   const [formError, setFormError] = useState("");
-  const [liveSpot, setLiveSpot] = useState(spotPrice);
   const [prices, setPrices] = useState(() => priceBookFromPools(initialPools));
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
@@ -110,10 +110,11 @@ export default function TradePanel({
     !lineHint.includes(String(quote.issuer || "").toUpperCase());
   const reserves = useMemo(() => poolReserves(pools, quote), [pools, quote]);
   const implied = poolPrice(reserves.base, reserves.quote);
+  const markerPx = xdxQuoteSpot({ quoteId, prices, pool: reserves });
   const px =
     orderType === "limit" && Number(price) > 0
       ? Number(price)
-      : Number(liveSpot || spotPrice || implied || price);
+      : markerPx || implied || Number(spotPrice) || 0;
   const linked = linkedDepositAmounts({
     editedSide,
     amount,
@@ -121,9 +122,12 @@ export default function TradePanel({
     price: px,
     reserveBase: reserves.base,
     reserveQuote: reserves.quote,
+    preferMark: !isLp,
   });
   const total = tradeTotal(linked.xdx || amount, px);
-  const quoteHint = predictedQuoteOut(linked.xdx || amount, px, reserves.base, reserves.quote);
+  const quoteHint = predictedQuoteOut(linked.xdx || amount, px, reserves.base, reserves.quote, {
+    preferMark: !isLp,
+  });
   const shownAmount = linked.xdxInput;
   const shownQuoteQty = linked.quoteInput;
   const lpHint = expectedLpTokens(linked.xdx || amount, reserves.base, reserves.lpSupply);
@@ -163,18 +167,9 @@ export default function TradePanel({
     getPrices()
       .then((nextPrices) => {
         if (cancelled) return;
-        setPrices((current) => priceBookFromPools([], { ...current, ...normalizePriceBook(nextPrices || {}) }));
-        const next = Number(
-          quoteId === "XRP"
-            ? nextPrices.xdxXrp || nextPrices.xdxPerXrp
-            : quoteId === "RLUSD"
-              ? nextPrices.xdxRlusd || nextPrices.xdxUsd
-              : 0
+        setPrices((current) =>
+          priceBookFromPools([], { ...current, ...normalizePriceBook(nextPrices || {}) })
         );
-        if (next > 0) {
-          setLiveSpot(next);
-          setPrice((current) => current || String(next));
-        }
       })
       .catch(() => {});
     Promise.all([getAmm().catch(() => []), account ? getWalletLp(account).catch(() => []) : []]).then(
@@ -340,6 +335,7 @@ export default function TradePanel({
               setQuoteId(id);
               setQuoteQty("");
               setEditedSide("xdx");
+              setPrice("");
             }}
             ariaLabel={t.tradePair}
             searchable
@@ -356,7 +352,10 @@ export default function TradePanel({
                 { id: "market", label: t.tradeMarket },
                 { id: "limit", label: t.tradeLimit },
               ]}
-              onChange={setOrderType}
+              onChange={(id) => {
+                setOrderType(id);
+                if (id === "limit" && markerPx > 0) setPrice(String(markerPx));
+              }}
               ariaLabel={t.tradeOrderType}
             />
           </label>

@@ -16,6 +16,7 @@ import {
 import { detectQuoteUsd } from "../utils/poolSplit.js";
 import { pendingFromExecution, rememberPending } from "../wallet/ledgerOrders.js";
 import { pendingVoteFromExecution } from "../wallet/ammVote.js";
+import { preferMarkWhenPoolInsane } from "../wallet/quoteMarker.js";
 import { liveWalletAddress } from "../wallet/walletStorage.js";
 
 export const DROPS_PER_XRP = 1_000_000;
@@ -273,11 +274,12 @@ export function linkedDepositAmounts({
   price,
   reserveBase,
   reserveQuote,
+  preferMark = false,
 } = {}) {
   const side = editedSide === "quote" ? "quote" : "xdx";
   if (side === "quote") {
     const quote = Number(quoteQty);
-    const xdx = predictedXdxFromQuote(quoteQty, price, reserveBase, reserveQuote);
+    const xdx = predictedXdxFromQuote(quoteQty, price, reserveBase, reserveQuote, { preferMark });
     return {
       xdx: xdx > 0 ? xdx : 0,
       quote: quote > 0 ? quote : 0,
@@ -286,7 +288,7 @@ export function linkedDepositAmounts({
     };
   }
   const xdx = Number(amount);
-  const quote = predictedQuoteOut(amount, price, reserveBase, reserveQuote);
+  const quote = predictedQuoteOut(amount, price, reserveBase, reserveQuote, { preferMark });
   return {
     xdx: xdx > 0 ? xdx : 0,
     quote: quote > 0 ? quote : 0,
@@ -295,20 +297,24 @@ export function linkedDepositAmounts({
   };
 }
 
-export function predictedQuoteOut(xdxAmount, price, reserveBase, reserveQuote) {
+export function predictedQuoteOut(xdxAmount, price, reserveBase, reserveQuote, options = {}) {
   const fromPool = recommendedQuote(xdxAmount, reserveBase, reserveQuote);
+  const marked = tradeTotal(xdxAmount, price);
+  if (options.preferMark) return preferMarkWhenPoolInsane(fromPool, marked);
   if (fromPool > 0) return fromPool;
-  return tradeTotal(xdxAmount, price);
+  return marked;
 }
 
-export function predictedXdxFromQuote(quoteAmount, price, reserveBase, reserveQuote) {
+export function predictedXdxFromQuote(quoteAmount, price, reserveBase, reserveQuote, options = {}) {
   const base = Number(reserveBase);
   const quote = Number(reserveQuote);
   const qty = Number(quoteAmount);
-  if (base > 0 && quote > 0 && qty > 0) return (qty / quote) * base;
+  const fromPool = base > 0 && quote > 0 && qty > 0 ? (qty / quote) * base : 0;
   const px = Number(price);
-  if (px > 0 && qty > 0) return qty / px;
-  return 0;
+  const marked = px > 0 && qty > 0 ? qty / px : 0;
+  if (options.preferMark) return preferMarkWhenPoolInsane(fromPool, marked);
+  if (fromPool > 0) return fromPool;
+  return marked;
 }
 
 export function xdxUnitUsd({ pool, prices } = {}) {
