@@ -415,6 +415,19 @@ export async function xummRequest(path, { method = "GET", body, fetchImpl = fetc
   return { ok: true, configured: true, data };
 }
 
+export function xamanAppSummary(ping = {}) {
+  const app = ping.auth?.application || ping.application || {};
+  return {
+    pong: ping.pong === true,
+    name: app.name || null,
+    disabled: app.disabled === 1 || app.disabled === true
+  };
+}
+
+export async function pingXaman({ fetchImpl = fetch } = {}) {
+  return xummRequest("/ping", { method: "POST", body: {}, fetchImpl });
+}
+
 export async function createPayload(txjson, { options = {}, custom_meta, fetchImpl = fetch } = {}) {
   return xummRequest("/payload", {
     method: "POST",

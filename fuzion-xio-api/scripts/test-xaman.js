@@ -18,6 +18,7 @@ import {
   transferFeeFromBps,
   txjsonFor,
   verifySession,
+  xamanAppSummary,
   xamanConfigured,
   xrpDrops
 } from "../lib/xaman.js";
@@ -138,5 +139,13 @@ assert.equal(currency[0].currency, "XRP");
 assert.equal(currency[0].value, "25");
 assert.equal(currency[1].currency, "XIO");
 assert.equal(currency[1].value, "12.4");
+
+const summary = xamanAppSummary({
+  pong: true,
+  auth: { application: { name: "FUZION-XIO", disabled: 0 } }
+});
+assert.equal(summary.pong, true);
+assert.equal(summary.name, "FUZION-XIO");
+assert.equal(summary.disabled, false);
 
 console.log("xaman connect + signing helpers ok");

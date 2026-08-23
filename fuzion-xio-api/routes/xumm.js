@@ -15,6 +15,7 @@ import {
   nftTokenId,
   notConfigured,
   payloadState,
+  pingXaman,
   rememberPayload,
   shapeCreated,
   signSession,
@@ -22,6 +23,7 @@ import {
   txjsonFor,
   verifySession,
   waitForSigned,
+  xamanAppSummary,
   xamanConfigured
 } from "../lib/xaman.js";
 
@@ -124,21 +126,29 @@ async function payloadStatus(req, res) {
   });
 }
 
-router.get("/xumm/status", (_req, res) => {
-  res.json({
-    success: true,
-    configured: xamanConfigured(),
-    implemented: xamanConfigured()
+async function xamanStatus(_req, res) {
+  if (!xamanConfigured()) {
+    return res.json({
+      success: true,
+      configured: false,
+      implemented: false,
+      pong: false
+    });
+  }
+  const ping = await pingXaman();
+  const summary = xamanAppSummary(ping.data || {});
+  return res.status(ping.ok ? 200 : 502).json({
+    success: ping.ok,
+    configured: true,
+    implemented: true,
+    ...summary,
+    message: ping.ok ? undefined : ping.error
   });
-});
+}
 
-router.get("/xaman/status", (_req, res) => {
-  res.json({
-    success: true,
-    configured: xamanConfigured(),
-    implemented: xamanConfigured()
-  });
-});
+router.get("/xumm/status", xamanStatus);
+router.get("/xaman/status", xamanStatus);
+router.post("/xumm/ping", xamanStatus);
 
 router.post("/xumm/connect", async (req, res) => {
   await createSignedPayload("connect", req, res, "Sign in to FUZION-XIO with Xaman");

@@ -56,7 +56,7 @@ Get the pair from [apps.xumm.dev](https://apps.xumm.dev). Add these origins on t
 - `https://fuzion-xio.com`
 
 `GET /api/health` includes `{ xaman: { configured: true|false } }`.  
-`GET /api/xumm/status` is the same flag.
+`GET /api/xumm/status` pings Xaman and returns the app name when keys are valid.
 
 The header already calls `POST /api/xumm/connect` (QR) then `POST /api/xumm/accountDetail` (waits for the signed SignIn and returns a JWT with `ac`). Mint/buy/sell still open a Xaman payload; after the wallet signs, the desk records the fill.
 
