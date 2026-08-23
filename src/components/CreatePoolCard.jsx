@@ -248,15 +248,21 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
 
   return (
     <section className="dashboard-card neon-card create-pool-card">
-      <h2 className="card-title">{t.createPoolTitle}</h2>
-      <p className="create-pool-sub">{t.createPoolSubtitle}</p>
-      <p className="create-pool-sub">{t.createPoolTrustlinesOnly}</p>
-      <p className="create-pool-wallet">
-        {signedIn ? shortAddress(account) : t.createPoolNeedWallet}
-      </p>
+      <div className="create-pool-head">
+        <div>
+          <h2 className="card-title">{t.createPoolTitle}</h2>
+          <p className="create-pool-sub">
+            {t.createPoolSubtitle} {t.createPoolTrustlinesOnly}
+          </p>
+        </div>
+        <p className="create-pool-wallet">
+          {signedIn ? shortAddress(account) : t.createPoolNeedWallet}
+        </p>
+      </div>
 
       <div className="create-pool-grid">
         <div className="create-pool-form">
+          <div className="create-pool-pair-fields">
           <label className="trade-field">
             {t.createPoolPrimary}
             <input type="text" readOnly value={t.createPoolLocked} />
@@ -274,11 +280,13 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
                 setFormError("");
               }}
               ariaLabel={t.createPoolSecondary}
-              searchable
+              searchable={options.length > 6}
               placeholder={t.searchPair || t.createPoolSecondary}
             />
           </label>
+          </div>
 
+          <div className="create-pool-pair-fields">
           <label className="trade-field">
             {t.createPoolXdxAmount}
             <input
@@ -323,6 +331,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
                 .replace("{asset}", quote.label)}
             </span>
           </label>
+          </div>
 
           <div className="create-pool-ratio">
             <span>{t.createPoolRatio}</span>
