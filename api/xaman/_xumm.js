@@ -33,6 +33,44 @@ export function xummConfigured() {
   };
 }
 
+export const PUBLIC_SITE_ORIGIN = "https://xdx-exchange.dpmf.technology";
+
+export function publicSiteOrigin() {
+  const fromEnv = xummCredential("PUBLIC_SITE_URL", "SITE_ORIGIN");
+  return (fromEnv || PUBLIC_SITE_ORIGIN).replace(/\/$/, "");
+}
+
+export function isLocalHost(host) {
+  return /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(String(host || "").trim());
+}
+
+export function isVercelHost(host) {
+  const name = String(host || "").trim().toLowerCase();
+  return name === "vercel.com" || name.endsWith(".vercel.com") || name.endsWith(".vercel.app");
+}
+
+export function isPublicSiteHost(host) {
+  const name = String(host || "").trim().toLowerCase();
+  return name === "xdx-exchange.dpmf.technology" || name.endsWith(".dpmf.technology");
+}
+
+export function siteOriginFrom(value) {
+  const raw = String(value || "").trim().replace(/\/$/, "");
+  if (!raw) return publicSiteOrigin();
+  try {
+    const url = raw.includes("://") ? new URL(raw) : new URL(`https://${raw}`);
+    if (isLocalHost(url.host)) {
+      return `${url.protocol}//${url.host}`.replace(/\/$/, "");
+    }
+    if (isVercelHost(url.host) || !isPublicSiteHost(url.host)) {
+      return publicSiteOrigin();
+    }
+    return `${url.protocol}//${url.host}`.replace(/\/$/, "");
+  } catch {
+    return publicSiteOrigin();
+  }
+}
+
 export function requestOrigin(req) {
   const headers = req?.headers || {};
   const proto = String(headers["x-forwarded-proto"] || "https")
@@ -41,8 +79,11 @@ export function requestOrigin(req) {
   const host = String(headers["x-forwarded-host"] || headers.host || "")
     .split(",")[0]
     .trim();
-  if (!host) return "https://xdx-exchange.dpmf.technology";
-  return `${proto}://${host}`.replace(/\/$/, "");
+  if (isLocalHost(host)) {
+    return `${proto === "https" ? "https" : "http"}://${host}`.replace(/\/$/, "");
+  }
+  if (!host) return publicSiteOrigin();
+  return siteOriginFrom(`${proto}://${host}`);
 }
 
 export function shouldSubmitTxjson(txjson) {
@@ -51,8 +92,7 @@ export function shouldSubmitTxjson(txjson) {
 }
 
 export function xamanReturnUrl(origin) {
-  const web = String(origin || "https://xdx-exchange.dpmf.technology").replace(/\/$/, "");
-  return `${web}/?xaman={id}`;
+  return `${siteOriginFrom(origin)}/?xaman={id}`;
 }
 
 export function buildXamanPayload(origin, txjson, options = {}) {
