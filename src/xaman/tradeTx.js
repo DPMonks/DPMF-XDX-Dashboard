@@ -28,6 +28,58 @@ export function quoteAsset(id) {
   return QUOTE_ASSETS.find((row) => row.id === id) || QUOTE_ASSETS[0];
 }
 
+export function quoteIdFromPair(pair) {
+  const text = String(pair || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  if (!text) return "XRP";
+  if (text.includes("/")) return text.split("/").pop() || "XRP";
+  return text;
+}
+
+export function normalizeTradeRequest(detail) {
+  if (!detail) return null;
+  if (typeof detail === "string") return { action: detail, quote: "XRP" };
+  const action = detail.action || detail.id || null;
+  if (!action) return null;
+  return {
+    action,
+    quote: quoteIdFromPair(detail.quote || detail.pair || detail.pool || "XRP"),
+    quoteIssuer: detail.quoteIssuer || detail.quote_issuer || null,
+    quoteHex: detail.quoteHex || detail.quote_hex || null,
+  };
+}
+
+export function resolveQuote(id, extra = {}) {
+  const key = quoteIdFromPair(id || extra.quote);
+  const known = QUOTE_ASSETS.find((row) => row.id === key);
+  if (known) return { ...known, pair: `XDX/${known.id}` };
+  return {
+    id: key,
+    currency: key === "XRP" ? "XRP" : key,
+    issuer: extra.quoteIssuer || extra.quote_issuer || extra.issuer || null,
+    hex: extra.quoteHex || extra.quote_hex || extra.hex || null,
+    label: key,
+    pair: `XDX/${key}`,
+  };
+}
+
+export function quoteChoices(pools = []) {
+  const ids = QUOTE_ASSETS.map((row) => row.id);
+  for (const row of Array.isArray(pools) ? pools : []) {
+    const id = quoteIdFromPair(row.pool || row.pool_name || row.pair || row.quote);
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+export function quoteLedgerCurrency(quote) {
+  if (!quote || quote.currency === "XRP" || !quote.issuer) return "XRP";
+  const code = String(quote.currency || "");
+  if (code.length <= 3) return code;
+  return quote.hex || code;
+}
+
 export function xrpDrops(xrp) {
   const n = Number(xrp);
   if (!Number.isFinite(n) || n < 0) return "0";
@@ -43,8 +95,8 @@ export function issuedAmount(currency, issuer, value) {
 }
 
 export function quoteAmount(quote, value) {
-  if (!quote || quote.currency === "XRP") return xrpDrops(value);
-  return issuedAmount(quote.currency, quote.issuer, value);
+  if (!quote || quote.currency === "XRP" || !quote.issuer) return xrpDrops(value);
+  return issuedAmount(quoteLedgerCurrency(quote), quote.issuer, value);
 }
 
 export function xdxAmount(value) {
@@ -77,7 +129,10 @@ export function ammDepositTx({ account, quote, xdx, quoteQty } = {}) {
   const txjson = {
     TransactionType: "AMMDeposit",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
-    Asset2: quote?.currency === "XRP" || !quote?.issuer ? { currency: "XRP" } : { currency: quote.currency, issuer: quote.issuer },
+    Asset2:
+      quote?.currency === "XRP" || !quote?.issuer
+        ? { currency: "XRP" }
+        : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
     Amount: xdxAmount(xdx),
     Amount2: quoteAmount(quote, quoteQty),
     Flags: TF_TWO_ASSET,
@@ -98,7 +153,10 @@ export function ammWithdrawTx({ account, quote, lpAmount } = {}) {
   const txjson = {
     TransactionType: "AMMWithdraw",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
-    Asset2: quote?.currency === "XRP" || !quote?.issuer ? { currency: "XRP" } : { currency: quote.currency, issuer: quote.issuer },
+    Asset2:
+      quote?.currency === "XRP" || !quote?.issuer
+        ? { currency: "XRP" }
+        : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
     LPTokenIn: {
       currency: pool.lpCurrency,
       issuer: pool.amm,
@@ -146,6 +204,48 @@ export function expectedLpTokens(xdxAmount, reserveBase, lpSupply) {
   const qty = Number(xdxAmount);
   if (!(base > 0) || !(supply > 0) || !(qty > 0)) return 0;
   return (qty / base) * supply;
+}
+
+export function expectedWithdraw(lpAmount, reserveBase, reserveQuote, lpSupply) {
+  const lp = Number(lpAmount);
+  const supply = Number(lpSupply);
+  if (!(lp > 0) || !(supply > 0)) return { base: 0, quote: 0 };
+  return {
+    base: (lp / supply) * Number(reserveBase || 0),
+    quote: (lp / supply) * Number(reserveQuote || 0),
+  };
+}
+
+export function tradeSides({ action, amount, quoteQty, quoteLabel, total, lpAmount, lpOut, withdraw } = {}) {
+  const label = quoteLabel || "XRP";
+  if (action === "buy") {
+    return {
+      pay: [{ value: Number(total) || 0, asset: label }],
+      receive: [{ value: Number(amount) || 0, asset: "XDX" }],
+    };
+  }
+  if (action === "sell") {
+    return {
+      pay: [{ value: Number(amount) || 0, asset: "XDX" }],
+      receive: [{ value: Number(total) || 0, asset: label }],
+    };
+  }
+  if (action === "addLp") {
+    return {
+      pay: [
+        { value: Number(amount) || 0, asset: "XDX" },
+        { value: Number(quoteQty) || 0, asset: label },
+      ],
+      receive: [{ value: Number(lpOut) || 0, asset: "LP" }],
+    };
+  }
+  return {
+    pay: [{ value: Number(lpAmount) || 0, asset: "LP" }],
+    receive: [
+      { value: Number(withdraw?.base) || 0, asset: "XDX" },
+      { value: Number(withdraw?.quote) || 0, asset: label },
+    ],
+  };
 }
 
 export function notifyWalletRefresh() {

@@ -3,6 +3,7 @@ import { displayPoolSplit, formatPoolPct } from "../utils/poolSplit";
 import { formatNumber, formatToken, formatUsd, formatUsdPrice, formatWhen, shortAddress } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
+import WalletButton from "./WalletButton";
 
 function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
   const split = displayPoolSplit(xdxPct, quotePct);
@@ -47,7 +48,7 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
   );
 }
 
-export default function AmmCard({ pools, loading, error }) {
+export default function AmmCard({ pools, loading, error, onAddLiquidity }) {
   const { t, locale } = useI18n();
 
   if (loading && !pools.length) {
@@ -168,6 +169,15 @@ export default function AmmCard({ pools, loading, error }) {
                 </div>
               ) : null}
             </dl>
+            {onAddLiquidity ? (
+              <div className="pool-card-actions">
+                <WalletButton
+                  label={t.addLiquidity}
+                  title={`${t.addLiquidity} ${pool.pool}`}
+                  onClick={() => onAddLiquidity(pool)}
+                />
+              </div>
+            ) : null}
           </article>
         );
       })}

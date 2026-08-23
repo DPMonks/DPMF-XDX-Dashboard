@@ -16,6 +16,7 @@ import { handshake } from "./api";
 import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
 import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
+import { normalizeTradeRequest } from "./xaman/tradeTx";
 
 const TradingChart = lazy(() => import("./components/TradingChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
@@ -143,7 +144,8 @@ export default function App() {
 
   useEffect(() => {
     function onOpen(event) {
-      if (event.detail) setTradeAction(event.detail);
+      const next = normalizeTradeRequest(event.detail);
+      if (next) setTradeAction(next);
     }
     window.addEventListener("dpmf-open-trade", onOpen);
     return () => window.removeEventListener("dpmf-open-trade", onOpen);
@@ -240,12 +242,34 @@ export default function App() {
 
         <section className="dashboard-card neon-card">
           <h2 className="card-title">{t.ammPools}</h2>
-          <AmmCard pools={ammData} loading={ammLoading} error={errors.amm} />
+          <AmmCard
+            pools={ammData}
+            loading={ammLoading}
+            error={errors.amm}
+            onAddLiquidity={(pool) =>
+              setTradeAction(
+                normalizeTradeRequest({
+                  action: "addLp",
+                  pair: pool.pool || pool.pool_name,
+                  quote_issuer: pool.quote_issuer,
+                  quote_hex: pool.quote_hex,
+                })
+              )
+            }
+          />
         </section>
       </div>
 
       <Footer />
-      {tradeAction ? <TradePanel action={tradeAction} onClose={() => setTradeAction(null)} /> : null}
+      {tradeAction ? (
+        <TradePanel
+          key={`${tradeAction.action}-${tradeAction.quote}`}
+          action={tradeAction.action}
+          initialQuote={tradeAction.quote}
+          quoteExtra={tradeAction}
+          onClose={() => setTradeAction(null)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -178,6 +178,7 @@ function mapPool(row) {
     asset: asset || "XDX",
     quote: pick(row, ["quote"]) || quoteFromName || "XRP",
     quote_issuer: pick(row, ["quote_issuer"]) || null,
+    quote_hex: pick(row, ["quote_hex"]) || null,
     amm_account: ammAccount || null,
     lp_currency: pick(row, ["lp_currency", "lp_currency_hex"]) || null,
     tvl: numberOrNull(pick(row, ["tvl_usd", "tvl", "total_value_locked", "liquidity"])),

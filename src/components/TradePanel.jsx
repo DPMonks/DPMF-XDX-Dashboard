@@ -5,7 +5,6 @@ import { useI18n } from "../i18n/useI18n";
 import { useXamanPayload } from "../xaman/useXamanPayload";
 import {
   LEDGER_FEE_XRP,
-  QUOTE_ASSETS,
   ammDepositTx,
   ammWithdrawTx,
   expectedLpTokens,
@@ -13,30 +12,43 @@ import {
   offerCreateBuyXdx,
   offerCreateSellXdx,
   poolForQuote,
-  quoteAsset,
+  quoteChoices,
+  quoteIdFromPair,
   quoteTrustSetTxjson,
   recommendedQuote,
+  resolveQuote,
+  expectedWithdraw,
+  tradeSides,
   tradeTotal,
 } from "../xaman/tradeTx";
 import { formatToken } from "../utils/format";
 import { shortAddress } from "../utils/format";
 import WalletModal from "./WalletModal";
 
-function poolReserves(pools, quote) {
-  const pair = poolForQuote(quote).pair;
-  const row = (Array.isArray(pools) ? pools : []).find(
+function poolRowForQuote(pools, quote) {
+  const pair = String(quote?.pair || poolForQuote(quote).pair || "").toUpperCase();
+  return (Array.isArray(pools) ? pools : []).find(
     (item) => String(item.pool || item.pool_name || "").toUpperCase() === pair
   );
+}
+
+function poolReserves(pools, quote) {
+  const row = poolRowForQuote(pools, quote);
+  const pair = String(quote?.pair || poolForQuote(quote).pair || "XDX/XRP").toUpperCase();
   return {
     pair,
     base: Number(row?.reserve_xdx ?? row?.reserve_asset ?? 0),
     quote: Number(row?.reserve_currency ?? 0),
     lpSupply: Number(row?.lp_supply ?? 0),
+    issuer: row?.quote_issuer || null,
+    hex: row?.quote_hex || null,
   };
 }
 
 export default function TradePanel({
   action,
+  initialQuote = "XRP",
+  quoteExtra,
   spotPrice = 0,
   onClose,
   onSigned,
@@ -44,9 +56,10 @@ export default function TradePanel({
   const { t, locale } = useI18n();
   const { walletAddress, connectWallet } = useWallet();
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
-  const [quoteId, setQuoteId] = useState("XRP");
+  const [quoteId, setQuoteId] = useState(() => quoteIdFromPair(initialQuote || "XRP"));
   const [orderType, setOrderType] = useState("market");
   const [amount, setAmount] = useState("100000");
+  const [quoteQty, setQuoteQty] = useState("");
   const [price, setPrice] = useState(spotPrice > 0 ? String(spotPrice) : "");
   const [lpAmount, setLpAmount] = useState("");
   const [pools, setPools] = useState([]);
@@ -54,7 +67,12 @@ export default function TradePanel({
   const [formError, setFormError] = useState("");
   const [liveSpot, setLiveSpot] = useState(spotPrice);
 
-  const quote = quoteAsset(quoteId);
+  const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
+  const quote = resolveQuote(quoteId, {
+    ...quoteExtra,
+    quote_issuer: quoteExtra?.quoteIssuer || matched?.quote_issuer,
+    quote_hex: quoteExtra?.quoteHex || matched?.quote_hex,
+  });
   const isLp = action === "addLp" || action === "removeLp";
   const signedIn = Boolean(walletAddress);
   const needTrust =
@@ -66,7 +84,20 @@ export default function TradePanel({
   const total = tradeTotal(amount, px);
   const reserves = useMemo(() => poolReserves(pools, quote), [pools, quote]);
   const quoteHint = recommendedQuote(amount, reserves.base, reserves.quote);
+  if (action === "addLp" && quoteHint > 0 && !quoteQty) {
+    setQuoteQty(String(quoteHint));
+  }
   const lpHint = expectedLpTokens(amount, reserves.base, reserves.lpSupply);
+  const sides = tradeSides({
+    action,
+    amount,
+    quoteQty: quoteQty || quoteHint,
+    quoteLabel: quote.label,
+    total,
+    lpAmount: lpAmount || amount,
+    lpOut: lpHint,
+    withdraw: expectedWithdraw(lpAmount || amount, reserves.base, reserves.quote, reserves.lpSupply),
+  });
   const titles = {
     buy: t.buyXdx,
     sell: t.sellXdx,
@@ -92,7 +123,7 @@ export default function TradePanel({
         if (cancelled) return;
         setPools(Array.isArray(nextPools) ? nextPools : []);
         if (action === "removeLp") {
-          const pair = poolForQuote(quote).pair;
+          const pair = String(quote.pair || poolForQuote(quote).pair || "").toUpperCase();
           const row = (Array.isArray(nextLp) ? nextLp : []).find(
             (item) => String(item.pool_name || item.pool || "").toUpperCase() === pair
           );
@@ -138,7 +169,7 @@ export default function TradePanel({
         account: walletAddress,
         quote,
         xdx: amount,
-        quoteQty: quoteHint || total,
+        quoteQty: quoteQty || quoteHint || total,
       });
     }
     return ammWithdrawTx({
@@ -175,6 +206,14 @@ export default function TradePanel({
     }
     const qty = Number(action === "removeLp" ? lpAmount || amount : amount);
     if (!(qty > 0)) {
+      setFormError(t.tradeNeedAmount);
+      return;
+    }
+    if (action === "addLp" && quote.currency !== "XRP" && !quote.issuer) {
+      setFormError(t.tradeNeedTrustline);
+      return;
+    }
+    if (action === "addLp" && !(Number(quoteQty || quoteHint) > 0)) {
       setFormError(t.tradeNeedAmount);
       return;
     }
@@ -215,10 +254,16 @@ export default function TradePanel({
 
         <label className="trade-field">
           {t.tradePair}
-          <select value={quoteId} onChange={(event) => setQuoteId(event.target.value)}>
-            {QUOTE_ASSETS.map((row) => (
-              <option key={row.id} value={row.id}>
-                XDX / {row.label}
+          <select
+            value={quoteId}
+            onChange={(event) => {
+              setQuoteId(event.target.value);
+              setQuoteQty("");
+            }}
+          >
+            {quoteChoices(pools).map((id) => (
+              <option key={id} value={id}>
+                XDX / {id}
               </option>
             ))}
           </select>
@@ -248,9 +293,39 @@ export default function TradePanel({
         ) : (
           <label className="trade-field">
             {t.xdxAmount}
-            <input type="number" min="0" step="any" value={amount} onChange={(event) => setAmount(event.target.value)} />
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={amount}
+              onChange={(event) => {
+                const next = event.target.value;
+                setAmount(next);
+                const hinted = recommendedQuote(next, reserves.base, reserves.quote);
+                if (hinted > 0) setQuoteQty(String(hinted));
+              }}
+            />
           </label>
         )}
+        {action === "addLp" ? (
+          <label className="trade-field">
+            {quote.label}
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={quoteQty}
+              onChange={(event) => {
+                const next = event.target.value;
+                setQuoteQty(next);
+                if (reserves.quote > 0 && reserves.base > 0) {
+                  const xdx = (Number(next) / reserves.quote) * reserves.base;
+                  if (xdx > 0) setAmount(String(xdx));
+                }
+              }}
+            />
+          </label>
+        ) : null}
 
         {!isLp && orderType === "limit" ? (
           <label className="trade-field">
@@ -260,28 +335,26 @@ export default function TradePanel({
         ) : null}
 
         <dl className="trade-summary">
-          {!isLp ? (
-            <div>
-              <dt>{action === "buy" ? t.tradeCost : t.tradeProceeds}</dt>
-              <dd>
-                {formatToken(total, locale, 6)} {quote.label}
-              </dd>
-            </div>
-          ) : null}
-          {action === "addLp" ? (
-            <>
-              <div>
-                <dt>{t.tradeAlsoAdd}</dt>
-                <dd>
-                  {formatToken(quoteHint, locale, 6)} {quote.label}
-                </dd>
-              </div>
-              <div>
-                <dt>{t.tradeExpectedLp}</dt>
-                <dd>{formatToken(lpHint, locale, 4)}</dd>
-              </div>
-            </>
-          ) : null}
+          <div>
+            <dt>{t.tradeCost}</dt>
+            <dd>
+              {sides.pay.map((row) => (
+                <span key={`pay-${row.asset}`}>
+                  {formatToken(row.value, locale, 6)} {row.asset}
+                </span>
+              ))}
+            </dd>
+          </div>
+          <div>
+            <dt>{t.tradeProceeds}</dt>
+            <dd>
+              {sides.receive.map((row) => (
+                <span key={`get-${row.asset}`}>
+                  {formatToken(row.value, locale, 6)} {row.asset}
+                </span>
+              ))}
+            </dd>
+          </div>
           <div>
             <dt>{t.tradeFee}</dt>
             <dd>~{LEDGER_FEE_XRP} XRP</dd>

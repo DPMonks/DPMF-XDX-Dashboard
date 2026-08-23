@@ -8,11 +8,16 @@ import {
   ammDepositTx,
   ammWithdrawTx,
   expectedLpTokens,
+  expectedWithdraw,
+  normalizeTradeRequest,
   offerCreateBuyXdx,
   offerCreateSellXdx,
   quoteAsset,
+  quoteIdFromPair,
   quoteTrustSetTxjson,
   recommendedQuote,
+  resolveQuote,
+  tradeSides,
   tradeTotal,
   xrpDrops,
 } from "../src/xaman/tradeTx.js";
@@ -84,4 +89,32 @@ test("totals and LP hints stay simple numbers", () => {
   assert.equal(tradeTotal("1000", "0.002"), 2);
   assert.equal(recommendedQuote(100, 1000, 50), 5);
   assert.equal(expectedLpTokens(100, 1000, 200), 20);
+  assert.deepEqual(expectedWithdraw(20, 1000, 50, 200), { base: 100, quote: 5 });
+});
+
+test("opening add LP from a pool card keeps that pair", () => {
+  assert.equal(quoteIdFromPair("XDX/XIO"), "XIO");
+  const opened = normalizeTradeRequest({
+    action: "addLp",
+    pair: "XDX/PLX",
+    quote_issuer: "rPlxIssuer",
+  });
+  assert.equal(opened.action, "addLp");
+  assert.equal(opened.quote, "PLX");
+  const quote = resolveQuote(opened.quote, opened);
+  assert.equal(quote.pair, "XDX/PLX");
+  assert.equal(quote.issuer, "rPlxIssuer");
+});
+
+test("trade windows show pay and receive from the selected pair", () => {
+  const buy = tradeSides({ action: "buy", amount: 1000, quoteLabel: "XIO", total: 4.632 });
+  assert.deepEqual(buy.pay, [{ value: 4.632, asset: "XIO" }]);
+  assert.deepEqual(buy.receive, [{ value: 1000, asset: "XDX" }]);
+  const sell = tradeSides({ action: "sell", amount: 1000, quoteLabel: "XIO", total: 4.632 });
+  assert.deepEqual(sell.pay, [{ value: 1000, asset: "XDX" }]);
+  assert.deepEqual(sell.receive, [{ value: 4.632, asset: "XIO" }]);
+  const add = tradeSides({ action: "addLp", amount: 100, quoteQty: 5, quoteLabel: "XRP", lpOut: 20 });
+  assert.equal(add.pay[0].asset, "XDX");
+  assert.equal(add.pay[1].asset, "XRP");
+  assert.equal(add.receive[0].asset, "LP");
 });
