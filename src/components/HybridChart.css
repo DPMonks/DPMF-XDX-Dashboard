@@ -1181,18 +1181,27 @@
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+    height: 52px;
+    min-height: 52px;
+    max-height: 52px;
     padding: 4px 6px;
     border-right: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
   }
 
   .hybrid-tool-stack,
   .hybrid-tool-group,
   .hybrid-tool-pair {
     flex-direction: row;
+    flex-wrap: nowrap;
+    flex: 0 0 auto;
+    align-items: center;
     width: auto;
+    height: 44px;
     margin: 0;
     padding: 0 6px 0 0;
     border-bottom: 0;
@@ -1201,6 +1210,10 @@
 
   .hybrid-tool-group {
     min-width: 0;
+  }
+
+  .hybrid-tool {
+    flex: 0 0 auto;
   }
 
   .hybrid-tool-flyout {
@@ -1255,6 +1268,16 @@
   .hybrid-tool-group,
   .hybrid-tool-pair {
     width: 44px;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 834px) {
+  .hybrid-tool-stack,
+  .hybrid-tool-group,
+  .hybrid-tool-pair {
+    width: auto;
+    min-width: 0;
+    height: 44px;
   }
 }
 
