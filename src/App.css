@@ -1092,7 +1092,8 @@ body {
   width: 4.75rem;
 }
 
-.rich-list.is-xdx-owners td.col-share {
+.rich-list.is-xdx-owners td.col-share,
+.rich-list.is-lp-holders td.col-share {
   color: var(--dpmf-neon-lime);
   font-weight: 600;
 }
