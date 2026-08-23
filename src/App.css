@@ -105,14 +105,19 @@ body {
 }
 
 .trade-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
   gap: 8px;
+  width: 100%;
 }
 
 .trade-bar .connect-wallet-btn {
+  width: 100%;
+  min-width: 0;
   min-height: 42px;
+  justify-content: center;
+  text-align: center;
 }
 
 .trade-panel {

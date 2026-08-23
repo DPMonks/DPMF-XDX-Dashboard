@@ -976,7 +976,21 @@
 }
 
 .hybrid-footer .trade-bar {
-  justify-content: flex-end;
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.hybrid-footer .trade-bar .connect-wallet-btn {
+  width: 100%;
+  min-height: 42px;
+  height: auto;
+  padding: 0 12px;
+  font-size: 13px;
+  justify-content: center;
+  text-align: center;
+  border: 1px solid var(--dpmf-neon-cyan);
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 12px rgba(0, 234, 255, 0.28);
 }
 
 .hybrid-sim {
@@ -1009,6 +1023,11 @@
 }
 
 @media (max-width: 834px) {
+  .hybrid-footer .trade-bar,
+  .trade-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .hybrid-body {
     grid-template-columns: 1fr;
   }
