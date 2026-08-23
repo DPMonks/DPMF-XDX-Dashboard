@@ -188,24 +188,71 @@ function LpInfographic({ position, locale, t, empty }) {
   );
 }
 
-function LpFeeTracker({ fees, locale, t, empty }) {
-  const blank = empty || fees?.xdx == null;
-  const pct = Number(fees?.pct24h);
+function earnText(value, format, empty) {
+  if (empty || value == null || !Number.isFinite(Number(value))) return "—";
+  return format(Number(value));
+}
+
+function WalletEarnCell({ label, rows, empty }) {
   return (
-    <div className={`wallet-fees${blank ? " is-empty" : " is-filled"}`}>
-      <p className="wallet-fees-label">{t.lpFeeEarnings}</p>
-      <p className="wallet-fees-xdx">{blank ? "—" : `${formatToken(fees.xdx, locale, 4)} ${t.xdx}`}</p>
-      <p className="wallet-fees-usd">{blank ? "—" : formatUsd(fees.usd, locale)}</p>
-      <p className="wallet-fees-pct">
-        {blank || !Number.isFinite(pct) ? (
-          "—"
-        ) : (
-          <>
-            <span className="wallet-fees-pct-value">+{formatSupplySharePercent(pct, locale)}</span>
-            <span className="wallet-fees-pct-range">{t.lpFees24h}</span>
-          </>
-        )}
-      </p>
+    <div className={`wallet-earn-cell${empty ? " is-empty" : " is-filled"}`}>
+      <p className="wallet-earn-label">{label}</p>
+      {rows.map((row) => (
+        <p key={row.range} className="wallet-earn-row">
+          <span className="wallet-earn-range">{row.range}</span>
+          <span className="wallet-earn-value">{row.value}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function WalletEarnBeam({ fees, locale, t, empty }) {
+  const earn = fees?.earnings || {};
+  return (
+    <div className="wallet-earn-beam" aria-label={t.lpFeeEarnings}>
+      <WalletEarnCell
+        label={t.xrpEarnings}
+        empty={empty}
+        rows={[
+          {
+            range: t.lpFees24h,
+            value: earnText(earn.xrp24h, (n) => `${formatToken(n, locale, 4)} ${t.xrp}`, empty),
+          },
+          {
+            range: t.lpFees7d,
+            value: earnText(earn.xrp7d, (n) => `${formatToken(n, locale, 4)} ${t.xrp}`, empty),
+          },
+        ]}
+      />
+      <WalletEarnCell
+        label={t.xdxEarnings}
+        empty={empty}
+        rows={[
+          {
+            range: t.lpFees24h,
+            value: earnText(earn.xdx24h, (n) => `${formatToken(n, locale, 4)} ${t.xdx}`, empty),
+          },
+          {
+            range: t.lpFees7d,
+            value: earnText(earn.xdx7d, (n) => `${formatToken(n, locale, 4)} ${t.xdx}`, empty),
+          },
+        ]}
+      />
+      <WalletEarnCell
+        label={t.totalEarnings}
+        empty={empty}
+        rows={[
+          {
+            range: t.lpFees24h,
+            value: earnText(earn.usd24h, (n) => formatUsd(n, locale), empty),
+          },
+          {
+            range: t.lpFees7d,
+            value: earnText(earn.usd7d, (n) => formatUsd(n, locale), empty),
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -331,17 +378,19 @@ export default function ConnectedWallet() {
                 ? "—"
                 : `#${formatNumber(view.rank, locale, { maximumFractionDigits: 0 })}`}
             </p>
-            <LpFeeTracker fees={view.fees} locale={locale} t={t} empty={empty} />
           </div>
         ) : (
           <p className="wallet-hero-hint">{t.connectWalletHint}</p>
         )}
       </header>
 
-      <div className="wallet-infographics">
-        <XrpBalanceBars xrp={view.xrp} locale={locale} t={t} empty={empty} />
-        <XdxBalancePanel xdx={view.xdx} locale={locale} t={t} empty={empty} />
-        <SupplyShareBars supply={view.supply} locale={locale} t={t} empty={empty} />
+      <div className="wallet-balance-stack">
+        <WalletEarnBeam fees={view.fees} locale={locale} t={t} empty={empty} />
+        <div className="wallet-infographics">
+          <XrpBalanceBars xrp={view.xrp} locale={locale} t={t} empty={empty} />
+          <XdxBalancePanel xdx={view.xdx} locale={locale} t={t} empty={empty} />
+          <SupplyShareBars supply={view.supply} locale={locale} t={t} empty={empty} />
+        </div>
       </div>
 
       <section className="wallet-lp">
