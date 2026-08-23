@@ -11,6 +11,7 @@ import {
   xamanErrorMessage,
   xummHeaders,
 } from "./api/xaman/_xumm.js";
+import { applySecurityHeaders } from "./src/security/headers.js";
 
 function xamanDevPlugin() {
   const middleware = async (req, res, next) => {
@@ -112,6 +113,24 @@ function xamanDevPlugin() {
   };
 }
 
+function securityHeadersPlugin() {
+  const attach = (server, development) => {
+    server.middlewares.use((_req, res, next) => {
+      applySecurityHeaders(res, { development });
+      next();
+    });
+  };
+  return {
+    name: "dpmf-security-headers",
+    configureServer(server) {
+      attach(server, true);
+    },
+    configurePreviewServer(server) {
+      attach(server, false);
+    },
+  };
+}
+
 function indexerDevProxy() {
   return {
     name: "indexer-dev-proxy",
@@ -130,7 +149,7 @@ export default defineConfig(({ mode }) => {
   indexerOrigin(env);
   return {
     envPrefix: ["VITE_", "NEXT_PUBLIC_"],
-    plugins: [react(), xamanDevPlugin(env), indexerDevProxy()],
+    plugins: [securityHeadersPlugin(), react(), xamanDevPlugin(env), indexerDevProxy()],
     server: {
       host: true,
       port: 5173,

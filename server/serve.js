@@ -10,6 +10,7 @@ import {
   proxyResponseHeaders,
 } from "./proxyIndexer.js";
 import { suffixFromPath } from "./attachProxy.js";
+import { applySecurityHeaders } from "../src/security/headers.js";
 
 const dist = join(fileURLToPath(new URL(".", import.meta.url)), "..", "dist");
 const port = Number(process.env.PORT || 4173);
@@ -28,6 +29,7 @@ const types = {
 
 function sendFile(res, file) {
   const type = types[extname(file)] || "application/octet-stream";
+  applySecurityHeaders(res);
   res.setHeader("content-type", type);
   createReadStream(file).pipe(res);
 }
@@ -54,7 +56,7 @@ const server = createServer(async (req, res) => {
 
   if (suffix != null) {
     if (req.method === "OPTIONS") {
-      res.writeHead(204, proxyCorsHeaders());
+      res.writeHead(204, proxyCorsHeaders(req));
       res.end();
       return;
     }
@@ -71,12 +73,12 @@ const server = createServer(async (req, res) => {
         search,
         suffix,
       });
-      res.writeHead(last?.status || 502, proxyResponseHeaders(last));
+      res.writeHead(last?.status || 502, proxyResponseHeaders(last, req));
       res.end(last?.body || JSON.stringify({ error: "Indexer proxy failed" }));
     } catch (error) {
       res.writeHead(502, {
         "content-type": "application/json",
-        ...proxyCorsHeaders(),
+        ...proxyCorsHeaders(req),
       });
       res.end(JSON.stringify({ error: error.message }));
     }

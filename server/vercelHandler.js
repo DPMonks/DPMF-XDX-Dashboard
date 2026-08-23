@@ -32,7 +32,7 @@ export function suffixFromVercelReq(req) {
 }
 
 export async function writeIndexerResponse(req, res, forcedSuffix) {
-  for (const [key, value] of Object.entries(proxyCorsHeaders())) {
+  for (const [key, value] of Object.entries(proxyCorsHeaders(req))) {
     res.setHeader(key, value);
   }
 
@@ -63,7 +63,7 @@ export async function writeIndexerResponse(req, res, forcedSuffix) {
       suffix,
     });
     res.status(last?.status || 502);
-    for (const [key, value] of Object.entries(proxyResponseHeaders(last))) {
+    for (const [key, value] of Object.entries(proxyResponseHeaders(last, req))) {
       res.setHeader(key, value);
     }
     res.setHeader("cache-control", "s-maxage=30, stale-while-revalidate=120");

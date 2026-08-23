@@ -9,6 +9,7 @@ import {
   hasIndexerDatabase,
   readIndexerDb,
 } from "./readIndexerDb.js";
+import { isAllowedDashboardOrigin } from "../src/security/headers.js";
 
 export { DEFAULT_INDEXER_ORIGIN };
 
@@ -248,10 +249,10 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
   return indexerErrorHint(last);
 }
 
-export function proxyResponseHeaders(last) {
+export function proxyResponseHeaders(last, req) {
   return {
     "content-type": last?.contentType || "application/json",
-    ...proxyCorsHeaders(),
+    ...proxyCorsHeaders(req),
     ...(last?.source ? { "x-dpmf-source": last.source } : {}),
   };
 }
@@ -263,10 +264,15 @@ export function handshakePostBody(incoming) {
   return undefined;
 }
 
-export function proxyCorsHeaders() {
+export function proxyCorsHeaders(req) {
+  const origin = String(req?.headers?.origin || "").trim();
+  const allow = isAllowedDashboardOrigin(origin)
+    ? origin
+    : "https://xdx-exchange.dpmf.technology";
   return {
-    "access-control-allow-origin": "*",
+    "access-control-allow-origin": allow,
     "access-control-allow-methods": "GET,POST,OPTIONS",
     "access-control-allow-headers": "accept,content-type",
+    vary: "Origin",
   };
 }
