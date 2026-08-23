@@ -20,6 +20,7 @@ const store = demoSeed();
 
 const hits = discover(store, { q: "Lilly", chain: "xrpl" });
 assert.ok(hits.nfts.some((nft) => nft._id === "seed-lilly-1"));
+assert.ok(hits.nfts.every((nft) => String(nft.name || "").toLowerCase().includes("lilly")));
 assert.deepEqual(hits.filters.chain, ["xrpl"]);
 
 const rails = homeRails(store);

@@ -191,9 +191,17 @@ export function discover(store, query = {}) {
   const max = query.maxPrice != null ? Number(query.maxPrice) : null;
   let nfts = [...(base.nfts || []), ...(store.nfts || [])];
   const seen = new Set();
+  const needle = String(query.q || "").toLowerCase();
   nfts = nfts.filter((nft) => {
     if (seen.has(nft._id)) return false;
     seen.add(nft._id);
+    if (
+      needle &&
+      ![nft.name, nft.collectionName, nft.description, nft.accountNumber, nft.issuer]
+        .some((value) => String(value || "").toLowerCase().includes(needle))
+    ) {
+      return false;
+    }
     if (query.collection && String(nft.collectionName || "").toLowerCase() !== String(query.collection).toLowerCase()) {
       return false;
     }
