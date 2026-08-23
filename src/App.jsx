@@ -42,6 +42,13 @@ export default function App() {
   const [tradeAction, setTradeAction] = useState(null);
 
   useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const embedded = window.self !== window.top;
+    document.documentElement.classList.toggle("is-embedded", embedded);
+    return () => document.documentElement.classList.remove("is-embedded");
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     function applyLink(hs, extra = {}) {
