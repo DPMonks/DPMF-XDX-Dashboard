@@ -23,7 +23,7 @@ import { useWallet } from "./context/useWallet";
 import { liveWalletAddress } from "./wallet/walletStorage";
 import { claimExecutedTrade } from "./xaman/claimSignIn";
 import { clearXamanReturn, peekPendingPayload, peekXamanUuid } from "./xaman/payloadResume";
-import { WALLET_EVENTS, gateUnsignedTrade } from "./xaman/tradeTx";
+import { WALLET_EVENTS, gateUnsignedTrade, normalizeTradeRequest } from "./xaman/tradeTx";
 
 const TradingChart = lazy(() => import("./components/TradingChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
@@ -227,7 +227,13 @@ export default function App() {
     async function claimPendingTrade() {
       const record = peekPendingPayload();
       const uuid = peekXamanUuid();
-      if (!uuid || !record?.watchTrade || busy) return;
+      if (!uuid || !record?.watchTrade || record.uuid !== uuid || busy) return;
+      const trade = normalizeTradeRequest(record.trade);
+      if (trade) {
+        setTradeAction((current) =>
+          current || { ...trade, openId: Date.now(), resumeUuid: record.uuid, resumeTxjson: record.txjson || null }
+        );
+      }
       busy = true;
       try {
         const claimed = await claimExecutedTrade(uuid);
@@ -388,6 +394,8 @@ export default function App() {
           initialQuote={tradeAction.quote}
           quoteExtra={tradeAction}
           initialPools={ammData}
+          resumeUuid={tradeAction.resumeUuid}
+          resumeTxjson={tradeAction.resumeTxjson}
           onClose={() => setTradeAction(null)}
         />
       ) : null}

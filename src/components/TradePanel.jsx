@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getAmm, getPrices, getWalletBalances, getWalletLines, getWalletLp } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
@@ -35,6 +35,7 @@ import { xdxQuoteSpot } from "../wallet/quoteMarker";
 import { formatPoolPct, normalizePriceBook, priceBookFromPools } from "../utils/poolSplit";
 import { formatToken, formatUsd } from "../utils/format";
 import { shortAddress } from "../utils/format";
+import { isPayloadUuid } from "../xaman/payloadResume";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import BrandSelect from "./BrandSelect";
 import WalletModal from "./WalletModal";
@@ -71,6 +72,8 @@ export default function TradePanel({
   quoteExtra,
   initialPools = [],
   spotPrice = 0,
+  resumeUuid = "",
+  resumeTxjson = null,
   onClose,
   onSigned,
 }) {
@@ -92,6 +95,8 @@ export default function TradePanel({
   const [quoteLineReady, setQuoteLineReady] = useState(false);
   const [formError, setFormError] = useState("");
   const [prices, setPrices] = useState(() => priceBookFromPools(initialPools));
+  const startRef = useRef(start);
+  const resumeOnceRef = useRef(false);
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
   const quote = useMemo(
@@ -172,6 +177,10 @@ export default function TradePanel({
     addLp: t.addLiquidity,
     removeLp: t.removeLiquidity,
   };
+
+  useEffect(() => {
+    startRef.current = start;
+  }, [start]);
 
   useEffect(() => {
     if (!action) return undefined;
@@ -260,6 +269,16 @@ export default function TradePanel({
     });
   }
 
+  function tradeIntent() {
+    return {
+      action,
+      quote: quoteId,
+      quoteIssuer: quote.issuer || null,
+      quoteHex: quote.hex || null,
+      pair: quote.pair || `XDX/${quoteId}`,
+    };
+  }
+
   function signIn() {
     const live = liveWalletAddress(walletAddress);
     if (live) {
@@ -286,6 +305,7 @@ export default function TradePanel({
       }
       start({
         body: { txjson: line },
+        trade: tradeIntent(),
         onExecuted: () => {
           setLpLineReady(true);
           notifyWalletRefresh();
@@ -304,6 +324,7 @@ export default function TradePanel({
       const line = quoteTrustSetTxjson(account, quote);
       start({
         body: { txjson: line },
+        trade: tradeIntent(),
         onExecuted: () => {
           setQuoteLineReady(true);
           setLineHint((current) => `${current} ${quote.currency} ${quote.issuer}`.toUpperCase());
@@ -332,6 +353,7 @@ export default function TradePanel({
     }
     start({
       body: { txjson: buildTx() },
+      trade: tradeIntent(),
       onSigned: () => {
         notifyWalletRefresh();
       },
@@ -348,6 +370,54 @@ export default function TradePanel({
       errorMessage: t.tradeSignError,
     });
   }
+
+  useEffect(() => {
+    const id = String(resumeUuid || "").trim();
+    if (!isPayloadUuid(id) || !signedIn || resumeOnceRef.current) return undefined;
+    const timer = window.setTimeout(() => {
+      if (resumeOnceRef.current) return;
+      resumeOnceRef.current = true;
+      startRef.current({
+        resumeUuid: id,
+        body: { txjson: resumeTxjson || { TransactionType: action === "addLp" ? "AMMDeposit" : action === "removeLp" ? "AMMWithdraw" : "Payment" } },
+        trade: {
+          action,
+          quote: quoteId,
+          quoteIssuer: quoteIssuer || null,
+          quoteHex: quoteHex || null,
+          pair: quotePair || `XDX/${quoteId}`,
+        },
+        onSigned: () => {
+          notifyWalletRefresh();
+        },
+        onExecuted: () => {
+          notifyWalletRefresh();
+          onSigned?.();
+          onClose();
+        },
+        onFailed: (detection) => {
+          setFormError(
+            `${t.tradeFailed}${detection?.engineResult ? ` · ${detection.engineResult}` : ""}`
+          );
+        },
+        errorMessage: t.tradeSignError,
+      });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [
+    action,
+    onClose,
+    onSigned,
+    quoteHex,
+    quoteId,
+    quoteIssuer,
+    quotePair,
+    resumeTxjson,
+    resumeUuid,
+    signedIn,
+    t.tradeFailed,
+    t.tradeSignError,
+  ]);
 
   if (!action) return null;
 

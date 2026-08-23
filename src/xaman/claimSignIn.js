@@ -1,6 +1,6 @@
 import { detectTradeExecution } from "./detectExecution.js";
 import { extractSignedAccount, getPayloadResult } from "./xamanClient.js";
-import { isPayloadUuid, peekPendingPayload } from "./payloadResume.js";
+import { canClaimExecutedTrade, isPayloadUuid, peekPendingPayload } from "./payloadResume.js";
 import { notifyTradeExecuted, notifyTradeFailed } from "./tradeTx.js";
 
 export async function claimSignedWallet(
@@ -29,7 +29,9 @@ export async function claimExecutedTrade(
   const id = String(uuid || "").trim();
   if (!isPayloadUuid(id)) return null;
   const pending = peekPendingPayload();
-  const txjson = pending?.txjson || null;
+  if (pending?.uuid && pending.uuid !== id) return null;
+  if (pending && !canClaimExecutedTrade(id, pending)) return null;
+  const txjson = pending?.uuid === id ? pending.txjson || null : null;
 
   for (let attempt = 0; attempt < tries; attempt += 1) {
     const result = await fetchResult(id).catch(() => null);

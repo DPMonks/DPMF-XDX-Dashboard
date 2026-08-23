@@ -23,12 +23,14 @@ import {
   extractSignedAccount,
   isClassicAddress,
   isPhoneDevice,
+  launchXamanSign,
   normalizePayload,
   payloadLooksSigned,
   xamanAppUrl,
   xamanSignUrl,
 } from "../src/xaman/xamanClient.js";
 import {
+  canClaimExecutedTrade,
   clearPendingPayload,
   isPayloadUuid,
   peekPendingPayload,
@@ -295,6 +297,74 @@ test("a new Xaman sign-in still resumes after iOS drops sessionStorage", () => {
     if (previous.localStorage === undefined) delete globalThis.localStorage;
     else globalThis.localStorage = previous.localStorage;
   }
+});
+
+test("a stale Xaman return uuid does not claim a newer pending trade", async () => {
+  const oldUuid = "11111111-2222-4333-a444-555555555555";
+  const newUuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const previous = {
+    sessionStorage: globalThis.sessionStorage,
+    localStorage: globalThis.localStorage,
+  };
+  globalThis.sessionStorage = memoryStore();
+  globalThis.localStorage = memoryStore();
+  try {
+    rememberPendingPayload(newUuid, {
+      watchTrade: true,
+      txjson: { TransactionType: "AMMDeposit" },
+      trade: { action: "addLp", quote: "XRP" },
+    });
+    assert.equal(peekXamanUuid(`?xaman=${oldUuid}`), newUuid);
+    assert.equal(canClaimExecutedTrade(oldUuid), false);
+    assert.equal(canClaimExecutedTrade(newUuid), true);
+    assert.equal(takeXamanReturnUuid(`?xaman=${oldUuid}`), newUuid);
+    assert.equal(peekPendingPayload()?.txjson?.TransactionType, "AMMDeposit");
+
+    let fetched = 0;
+    const claimed = await claimExecutedTrade(oldUuid, {
+      waitMs: 0,
+      tries: 1,
+      fetchResult: async () => {
+        fetched += 1;
+        return {
+          meta: { signed: true, submitted: true },
+          response: { dispatched_result: "tesSUCCESS", txid: "B".repeat(64), account: "rA" },
+        };
+      },
+    });
+    assert.equal(claimed, null);
+    assert.equal(fetched, 0);
+  } finally {
+    clearPendingPayload();
+    if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
+    else globalThis.sessionStorage = previous.sessionStorage;
+    if (previous.localStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous.localStorage;
+  }
+});
+
+test("opening Xaman for a sign keeps the dashboard tab", () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const opened = [];
+  const nodes = [];
+  const result = launchXamanSign(uuid, {
+    openWindow: (href, target) => {
+      opened.push({ href, target });
+      return { ok: true };
+    },
+    createFrame: () => {
+      const node = { src: "", style: { cssText: "" }, setAttribute() {} };
+      return node;
+    },
+    appendNode: (node) => nodes.push(node),
+    removeNode: () => {},
+  });
+  assert.equal(result.opened, true);
+  assert.equal(result.web, `https://xumm.app/sign/${uuid}`);
+  assert.equal(opened[0].href, result.web);
+  assert.equal(opened[0].target, "_blank");
+  assert.equal(nodes.length, 1);
+  assert.match(String(nodes[0].src || ""), /xumm:\/\//);
 });
 
 test("cancelled Xaman sessions do not stay open after reset", () => {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "../context/useWallet";
 import { shortAddress } from "../utils/format";
 import { claimExecutedTrade, claimSignedWallet } from "../xaman/claimSignIn";
-import { clearXamanReturn, peekPendingPayload, peekXamanUuid } from "../xaman/payloadResume";
+import { canClaimExecutedTrade, clearXamanReturn, peekPendingPayload, peekXamanUuid } from "../xaman/payloadResume";
 import { liveWalletAddress, resolveNeedSignIn } from "../wallet/walletStorage";
 import { WALLET_EVENTS } from "../xaman/tradeTx";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -34,7 +34,8 @@ export default function ConnectWallet() {
   const completePendingSignIn = useCallback(async () => {
     const pendingRecord = peekPendingPayload();
     const pending = peekXamanUuid();
-    if (pending && pendingRecord?.watchTrade) {
+    if (pendingRecord?.watchTrade) {
+      if (!canClaimExecutedTrade(pending, pendingRecord)) return;
       if (claimingRef.current) return;
       claimingRef.current = true;
       try {
@@ -143,7 +144,7 @@ export default function ConnectWallet() {
         visible={waiting}
         qrUrl={qr}
         mobileUrl={mobileUrl}
-        uuid={uuid || peekXamanUuid()}
+        uuid={uuid}
         status={claiming && status === "idle" ? "loading" : status}
         preparingLabel={t.preparing}
         onClose={cancelSignIn}
