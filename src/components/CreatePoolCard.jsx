@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getPrices, getWalletBalances, getWalletLines } from "../api/indexer";
+import { getPrices, getWalletAccount, getWalletBalances, getWalletLines } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import {
@@ -47,11 +47,20 @@ function mergeWalletLines(balances, lines) {
 }
 
 async function loadCreatePoolAssets(account) {
-  const [balances, lines] = await Promise.all([
-    getWalletBalances(account),
+  const [balances, lines, accountInfo] = await Promise.all([
+    getWalletBalances(account).catch(() => ({})),
     getWalletLines(account).catch(() => []),
+    getWalletAccount(account).catch(() => ({})),
   ]);
-  return mergeWalletLines(balances, lines);
+  const drops = Number(accountInfo?.balance_drops);
+  const liveXrp = Number.isFinite(drops) ? drops / 1_000_000 : null;
+  return mergeWalletLines(
+    {
+      ...balances,
+      xrp: Number.isFinite(Number(balances.xrp)) && Number(balances.xrp) > 0 ? Number(balances.xrp) : liveXrp,
+    },
+    lines
+  );
 }
 
 export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }) {

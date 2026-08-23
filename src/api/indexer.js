@@ -651,9 +651,13 @@ export async function getWalletBalances(address) {
     payload = await getJsonAlias(address);
   }
 
+  const drops = numberOrNull(payload?.balance_drops ?? payload?.Balance ?? payload?.account?.balance_drops);
   return {
     raw: payload,
-    xrp: numberOrNull(payload?.xrp) ?? amountFromBalances(payload, ["XRP"]),
+    xrp:
+      numberOrNull(payload?.xrp) ??
+      (drops != null ? drops / 1_000_000 : null) ??
+      amountFromBalances(payload, ["XRP"]),
     xdx:
       numberOrNull(payload?.xdx) ??
       amountFromBalances(payload, ["XDX", "5844580000000000000000000000000000000000"]),

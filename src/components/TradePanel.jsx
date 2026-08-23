@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getAmm, getPrices, getWalletBalances, getWalletLines, getWalletLp } from "../api/indexer";
+import { getAmm, getPrices, getWalletAccount, getWalletBalances, getWalletLines, getWalletLp } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -35,6 +35,7 @@ import {
   tradeTotal,
   xdxUnitUsd,
 } from "../xaman/tradeTx";
+import { walletAvailableAmounts } from "../wallet/composeWallet";
 import { xdxQuoteSpot } from "../wallet/quoteMarker";
 import { formatPoolPct, normalizePriceBook, priceBookFromPools } from "../utils/poolSplit";
 import { formatToken, formatUsd } from "../utils/format";
@@ -95,6 +96,8 @@ export default function TradePanel({
   const [lpAmount, setLpAmount] = useState("");
   const [walletLp, setWalletLp] = useState([]);
   const [walletLines, setWalletLines] = useState([]);
+  const [walletHold, setWalletHold] = useState({});
+  const [walletAccount, setWalletAccount] = useState({});
   const [pools, setPools] = useState(() => (Array.isArray(initialPools) ? initialPools : []));
   const [lineHint, setLineHint] = useState("");
   const [lpLineReady, setLpLineReady] = useState(false);
@@ -200,6 +203,12 @@ export default function TradePanel({
       });
   const splitReady = Boolean(deposit.measured);
   const lpHeld = lpHeldForPair(walletLp, quotePair, quoteId);
+  const available = walletAvailableAmounts({
+    balances: walletHold,
+    account: walletAccount,
+    lines: walletLines,
+    quote,
+  });
   const sides = tradeSides({
     action,
     amount: action === "addLp" ? addXdx : linked.xdx || amount,
@@ -236,27 +245,24 @@ export default function TradePanel({
       getAmm().catch(() => []),
       account ? getWalletLp(account).catch(() => []) : [],
       account ? getWalletLines(account).catch(() => []) : [],
-    ]).then(([nextPools, nextLp, nextLines]) => {
+      account ? getWalletBalances(account).catch(() => ({})) : {},
+      account ? getWalletAccount(account).catch(() => ({})) : {},
+    ]).then(([nextPools, nextLp, nextLines, nextHold, nextAccount]) => {
       if (cancelled) return;
       setPools(Array.isArray(nextPools) ? nextPools : []);
       setPrices((current) => priceBookFromPools(nextPools, current));
       const rows = Array.isArray(nextLp) ? nextLp : [];
       setWalletLp(rows);
       setWalletLines(Array.isArray(nextLines) ? nextLines : []);
+      setWalletHold(nextHold && typeof nextHold === "object" ? nextHold : {});
+      setWalletAccount(nextAccount && typeof nextAccount === "object" ? nextAccount : {});
+      setLineHint(JSON.stringify(nextHold?.raw || {}).toUpperCase());
       setLoadedFor(`${account || ""}:${action || ""}:${quoteId}`);
       if (action === "removeLp") {
         const have = lpHeldForPair(rows, quotePair, quoteId);
         if (have > 0) setLpAmount((current) => current || String(have));
       }
     });
-    if (account && quoteIssuer) {
-      getWalletBalances(account)
-        .then((balances) => {
-          if (cancelled) return;
-          setLineHint(JSON.stringify(balances.raw || {}).toUpperCase());
-        })
-        .catch(() => {});
-    }
     return () => {
       cancelled = true;
     };
@@ -640,9 +646,19 @@ export default function TradePanel({
               }}
             />
             {action === "addLp" ? (
-              <span className="trade-field-usd">
-                {xdxUsd > 0 && typedXdx > 0 ? formatUsd(typedXdx * xdxUsd, locale) : "—"}
-              </span>
+              <>
+                <span className="trade-field-usd">
+                  {xdxUsd > 0 && typedXdx > 0 ? formatUsd(typedXdx * xdxUsd, locale) : "—"}
+                </span>
+                <span className="trade-field-usd">
+                  {(t.createPoolAvailable || "Available {amount} {asset}")
+                    .replace(
+                      "{amount}",
+                      signedIn && available.xdx != null ? formatToken(available.xdx, locale, 6) : "—"
+                    )
+                    .replace("{asset}", "XDX")}
+                </span>
+              </>
             ) : null}
           </label>
         )}
@@ -724,9 +740,19 @@ export default function TradePanel({
               }}
             />
             {action === "addLp" ? (
-              <span className="trade-field-usd">
-                {quoteUsd > 0 && typedQuote > 0 ? formatUsd(typedQuote * quoteUsd, locale) : "—"}
-              </span>
+              <>
+                <span className="trade-field-usd">
+                  {quoteUsd > 0 && typedQuote > 0 ? formatUsd(typedQuote * quoteUsd, locale) : "—"}
+                </span>
+                <span className="trade-field-usd">
+                  {(t.createPoolAvailable || "Available {amount} {asset}")
+                    .replace(
+                      "{amount}",
+                      signedIn && available.quote != null ? formatToken(available.quote, locale, 6) : "—"
+                    )
+                    .replace("{asset}", quote.label)}
+                </span>
+              </>
             ) : null}
           </label>
         )}

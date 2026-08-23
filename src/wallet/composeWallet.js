@@ -16,6 +16,12 @@ export function dropsToXrp(drops) {
   return n / DROPS;
 }
 
+function dropsOrNull(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function xrpReserveBreakdown({
   balance,
   balanceDrops,
@@ -23,7 +29,8 @@ export function xrpReserveBreakdown({
   reserveBaseDrops = DEFAULT_RESERVE_BASE_DROPS,
   reserveIncDrops = DEFAULT_RESERVE_INC_DROPS,
 } = {}) {
-  const fromAccount = Number.isFinite(Number(balanceDrops)) ? Number(balanceDrops) / DROPS : null;
+  const drops = dropsOrNull(balanceDrops);
+  const fromAccount = drops != null ? drops / DROPS : null;
   const fromBalances = num(balance);
   const total = fromAccount != null ? fromAccount : fromBalances;
   if (total == null) {
@@ -384,6 +391,38 @@ export function lpFeeEarnings(
   };
 }
 
+export function walletAvailableAmounts({ balances = {}, account = {}, lines = [], quote } = {}) {
+  const xrp = xrpReserveBreakdown({
+    balance: balances.xrp ?? balances.raw?.xrp,
+    balanceDrops: account.balance_drops ?? account.Balance ?? balances.raw?.balance_drops,
+    ownerCount: account.owner_count ?? account.OwnerCount,
+    reserveBaseDrops: account.reserve_base_drops,
+    reserveIncDrops: account.reserve_inc_drops,
+  });
+  const xdx = num(balances.xdx);
+  const quoteIsXrp = !quote?.issuer || quote?.currency === "XRP";
+  const lineRows = Array.isArray(lines) && lines.length ? lines : balances.raw?.lines || [];
+  const quoteAmt = quoteIsXrp
+    ? xrp.spendable ?? xrp.balance
+    : num(
+        lineRows.find((row) => {
+          const currency = String(row.currency || row.ticker || "").toUpperCase();
+          const issuer = String(row.issuer || row.account || "").toUpperCase();
+          const wantIss = String(quote?.issuer || "").toUpperCase();
+          const names = [quote?.currency, quote?.hex, quote?.id, quote?.label]
+            .filter(Boolean)
+            .map((name) => String(name).toUpperCase());
+          if (wantIss && issuer && issuer !== wantIss) return false;
+          return names.some((name) => currency === name || currency.includes(name));
+        })?.balance
+      );
+  return {
+    xrp: xrp.spendable ?? xrp.balance,
+    xdx,
+    quote: quoteAmt,
+  };
+}
+
 export function emptyWalletSnapshot(address = null) {
   return {
     address,
@@ -431,9 +470,9 @@ export function composeWalletSnapshot({
   if (!address) return emptyWalletSnapshot(null);
 
   const xrp = xrpReserveBreakdown({
-    balance: balances.xrp,
-    balanceDrops: account.balance_drops,
-    ownerCount: account.owner_count,
+    balance: balances.xrp ?? balances.raw?.xrp,
+    balanceDrops: account.balance_drops ?? account.Balance ?? balances.raw?.balance_drops,
+    ownerCount: account.owner_count ?? account.OwnerCount,
     reserveBaseDrops: account.reserve_base_drops,
     reserveIncDrops: account.reserve_inc_drops,
   });
