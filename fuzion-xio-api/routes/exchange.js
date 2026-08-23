@@ -9,7 +9,8 @@ import {
   templateCards
 } from "../lib/collections.js";
 import { xioRank, vScoreBadge } from "../lib/governance.js";
-import { indexerGet, tokenCatalog, walletTokenData } from "../lib/indexer.js";
+import { indexerGet, walletTokenData } from "../lib/indexer.js";
+import { tradeCatalog } from "../lib/assets.js";
 import {
   enrichAddress,
   vScoreDashboardRows,
@@ -72,8 +73,16 @@ router.get("/capabilities", (_req, res) => {
   });
 });
 
-router.get("/tokens", async (_req, res) => {
-  res.json(await tokenCatalog());
+router.get("/tokens", async (req, res) => {
+  const book = await tradeCatalog(req.query.address);
+  res.json({
+    ok: true,
+    source: book.source,
+    tokens: book.assets,
+    count: book.count,
+    prices: book.prices,
+    indexerStatus: book.source?.indexer
+  });
 });
 
 router.get("/indexer", async (_req, res) => {

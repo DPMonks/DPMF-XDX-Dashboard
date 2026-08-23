@@ -42,6 +42,8 @@ function Capabilities() {
               {" · "}
               <a href="/activity">Activity</a>
               {" · "}
+              <a href="/assets">Assets</a>
+              {" · "}
               <a href="/rankings">Rankings</a>
             </p>
 
@@ -105,27 +107,33 @@ function Capabilities() {
             <p className="dpmf-muted">{ranks.join(" → ")}</p>
 
             <h3>Settlement assets</h3>
+            <p className="dpmf-muted">
+              Trade any XRPL issued asset. Full book and multi-asset offers live
+              on <a href="/assets">Assets</a>.
+            </p>
             <table className="dpmf-table">
               <thead>
                 <tr>
                   <th>Token</th>
                   <th>Role</th>
                   <th>Issuer</th>
+                  <th>Source</th>
                 </tr>
               </thead>
               <tbody>
-                {(tokens?.tokens || []).map((token) => (
-                  <tr key={token.currency}>
-                    <td>{token.name}</td>
+                {(tokens?.tokens || []).slice(0, 12).map((token) => (
+                  <tr key={token.key || `${token.currency}:${token.issuer || ""}`}>
+                    <td>{token.name || token.currency}</td>
                     <td>{token.role}</td>
-                    <td>{token.issuer}</td>
+                    <td>{token.issuer ? `${token.issuer.slice(0, 8)}…` : "—"}</td>
+                    <td>{token.source}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <p className="dpmf-muted">
-              Indexer source: {tokens?.source || "loading"} ·{" "}
-              {tokens?.indexerStatus || ""}
+              {tokens?.count || tokens?.tokens?.length || 0} assets · indexer{" "}
+              {tokens?.indexerStatus || tokens?.source?.indexer || "loading"}
             </p>
           </Container>
         </div>

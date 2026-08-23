@@ -56,6 +56,10 @@ export function capabilityMap() {
       sweep: true,
       watchlist: true,
       multiCurrency: true,
+      multiAssetOffers: true,
+      xrplNftOffers: true,
+      xrplAccountTape: true,
+      tradeCatalog: true,
       zeroPlatformFee: true
     },
     next: {

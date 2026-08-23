@@ -4,6 +4,7 @@ import { Container } from "react-bootstrap";
 import Header from "../common/header";
 import Footer from "../common/footer";
 import configData from "../../config.json";
+import { assetsLabel, optionLabel } from "../../helper/assets";
 
 const DEMO_BIDDER = "rFuzionXioDemoBidder1111111111111";
 
@@ -17,6 +18,8 @@ function CollectionDesk() {
   const [sort, setSort] = useState("price_asc");
   const [sweepCount, setSweepCount] = useState(5);
   const [offerAmt, setOfferAmt] = useState("0.75");
+  const [extraLegs, setExtraLegs] = useState([]);
+  const [catalog, setCatalog] = useState([]);
   const [note, setNote] = useState("");
 
   const query = useMemo(() => {
@@ -37,6 +40,13 @@ function CollectionDesk() {
   useEffect(() => {
     load();
   }, [slug, query]);
+
+  useEffect(() => {
+    fetch(`${configData.LOCAL_API_URL}assets/catalog`)
+      .then((res) => res.json())
+      .then((body) => setCatalog(body.data?.assets || []))
+      .catch(() => setCatalog([]));
+  }, []);
 
   const stats = payload?.stats || {};
   const data = payload?.data || {};
@@ -61,6 +71,14 @@ function CollectionDesk() {
   };
 
   const collectionOffer = async () => {
+    const first = catalog.find((row) => row.currency === (stats.currency || "XIO")) || {
+      currency: stats.currency || "XIO",
+      issuer: ""
+    };
+    const assets = [
+      { currency: first.currency, issuer: first.issuer || "", amount: offerAmt },
+      ...extraLegs.filter((leg) => leg.amount && leg.currency)
+    ];
     const res = await fetch(`${configData.LOCAL_API_URL}market/offer`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -68,13 +86,16 @@ function CollectionDesk() {
         kind: "collection",
         collectionName: stats.name,
         collectionSlug: slug,
-        amount: offerAmt,
-        currency: stats.currency,
+        assets,
         from: DEMO_BIDDER
       })
     });
     const body = await res.json();
-    setNote(body.ok ? `Collection offer ${offerAmt} ${stats.currency}` : body.error);
+    setNote(
+      body.ok
+        ? `Collection offer ${body.offer?.label || assetsLabel({ assets })}`
+        : body.error
+    );
     load();
   };
 
@@ -162,11 +183,71 @@ function CollectionDesk() {
               </div>
               <div className="dpmf-card">
                 <h3>Collection offer</h3>
-                <p>Bid the whole drop in {stats.currency || "XIO"}.</p>
+                <p>
+                  Bid the drop in {stats.currency || "XIO"} and add more XRPL
+                  assets.
+                </p>
                 <input
                   value={offerAmt}
                   onChange={(e) => setOfferAmt(e.target.value)}
                 />
+                {extraLegs.map((leg, index) => (
+                  <div key={`extra-${index}`}>
+                    <select
+                      value={leg.key || `${leg.currency}:${leg.issuer || ""}`}
+                      onChange={(e) => {
+                        const asset = catalog.find((row) => row.key === e.target.value);
+                        if (!asset) return;
+                        setExtraLegs((prev) =>
+                          prev.map((item, i) =>
+                            i === index
+                              ? {
+                                  ...item,
+                                  currency: asset.currency,
+                                  issuer: asset.issuer || "",
+                                  key: asset.key
+                                }
+                              : item
+                          )
+                        );
+                      }}
+                    >
+                      {catalog.map((row) => (
+                        <option key={row.key} value={row.key}>
+                          {optionLabel(row)}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={leg.amount}
+                      placeholder="Amount"
+                      onChange={(e) =>
+                        setExtraLegs((prev) =>
+                          prev.map((item, i) =>
+                            i === index ? { ...item, amount: e.target.value } : item
+                          )
+                        )
+                      }
+                    />
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="lgOut11"
+                  onClick={() =>
+                    setExtraLegs((prev) => [
+                      ...prev,
+                      {
+                        currency: "XRP",
+                        issuer: "",
+                        amount: "",
+                        key: "XRP"
+                      }
+                    ])
+                  }
+                >
+                  Add asset
+                </button>
                 <button
                   type="button"
                   className="lgOut11"

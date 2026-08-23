@@ -67,9 +67,11 @@ Items are **template + virtual index**. Paged APIs materialise 12 rows at a time
 ## Indexer + XRPL
 
 - Indexer: `https://dpmf-xdx-indexer-production.up.railway.app` (`/`, `/health`, `/api/overview`, `/api/prices`, `/api/wallet/balances/:address`, `/api/pools`)
-- XRPL: `https://xrplcluster.com` (`account_nfts`, `nft_info`, `account_lines`)
+- XRPL: `https://xrplcluster.com` (`account_nfts`, `nft_info`, `account_lines`, `nft_buy_offers`, `nft_sell_offers`, `account_tx`, `account_info`, `book_offers`)
 
-Local routes: `/api/tokens`, `/api/indexer/*`, `/api/xrpl/*`, `/api/governance/:address`.
+Local routes: `/api/tokens`, `/api/assets/*`, `/api/indexer/*`, `/api/xrpl/*`, `/api/governance/:address`.
+
+Tradeable assets are the native XRP plus issued IOUs. The catalog cannot enumerate every IOU on the ledger in one RPC; it merges XRP, XIO/XDX/XSQUAD/RLUSD, indexer tokens, the connected wallet’s `account_lines`, and any currency+issuer looked up on the ledger. Offers can carry **multiple assets**. Live buy/sell offers and NFT offer history are read from the XRP Ledger and shown next to desk records.
 
 When the indexer 429s, the API serves cached / static XDX·XIO·XSQUAD constants from this repo.
 

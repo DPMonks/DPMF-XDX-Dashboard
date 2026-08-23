@@ -24,7 +24,8 @@ const empty = () => ({
   auctions: [],
   activity: [],
   watchlist: [],
-  listingOverrides: {}
+  listingOverrides: {},
+  knownAssets: []
 });
 
 function ensure() {

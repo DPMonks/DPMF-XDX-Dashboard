@@ -10,6 +10,8 @@ export const XDX_ISSUER = "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo";
 export const XDX_CURRENCY = "XDX";
 export const XSQUAD_ISSUER = "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg";
 export const XSQUAD_CURRENCY = "XSQUAD";
+export const RLUSD_ISSUER = "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De";
+export const RLUSD_CURRENCY = "RLUSD";
 
 export const THREE_D_TYPES = ["glb", "gltf", "fbx", "usdz", "obj"];
 export const MODEL_MIMES = {

@@ -6,6 +6,7 @@ import { demoSeed, STORE_VERSION } from "./lib/seed.js";
 import exchange from "./routes/exchange.js";
 import market from "./routes/market.js";
 import mint, { uploadDir } from "./routes/mint.js";
+import assets from "./routes/assets.js";
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
@@ -21,6 +22,7 @@ if (!store.nfts.length || store.version !== STORE_VERSION) {
 app.use("/api/uploads", express.static(uploadDir));
 app.use("/uploads", express.static(uploadDir));
 app.use("/api/market", market);
+app.use("/api/assets", assets);
 app.use("/api", mint);
 app.use(mint);
 app.use("/api", exchange);

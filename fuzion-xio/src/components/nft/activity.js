@@ -4,19 +4,31 @@ import { Container } from "react-bootstrap";
 import Header from "../common/header";
 import Footer from "../common/footer";
 import configData from "../../config.json";
+import { assetsLabel } from "../../helper/assets";
 
 function Activity() {
   const [searchKey, setSearchKey] = useState(true);
   const [rows, setRows] = useState([]);
   const [type, setType] = useState("");
+  const [address, setAddress] = useState("");
+  const [ledgerRows, setLedgerRows] = useState([]);
 
   useEffect(() => {
-    const q = type ? `?type=${encodeURIComponent(type)}` : "";
+    const params = new URLSearchParams();
+    if (type) params.set("type", type);
+    if (address) params.set("address", address);
+    const q = params.toString() ? `?${params}` : "";
     fetch(`${configData.LOCAL_API_URL}market/activity${q}`)
       .then((res) => res.json())
-      .then((body) => setRows(body.data?.docs || []))
-      .catch(() => setRows([]));
-  }, [type]);
+      .then((body) => {
+        setRows(body.data?.docs || []);
+        setLedgerRows(body.ledger?.activity || []);
+      })
+      .catch(() => {
+        setRows([]);
+        setLedgerRows([]);
+      });
+  }, [type, address]);
 
   return (
     <>
@@ -27,8 +39,18 @@ function Activity() {
             <p className="dpmf-kicker">Tape</p>
             <h1>Activity</h1>
             <p className="dpmf-muted">
-              Lists, sales, offers, collection bids, auctions, and sweeps.
+              Desk tape plus NFT/offer rows read from the XRP Ledger when you
+              enter an r-address. Offers can be several assets at once.
             </p>
+            <p>
+              <Link to="/assets">Asset book</Link>
+            </p>
+            <input
+              type="text"
+              placeholder="Ledger address for XRPL tape"
+              value={address}
+              onChange={(e) => setAddress(e.target.value.trim())}
+            />
             <select value={type} onChange={(e) => setType(e.target.value)}>
               <option value="">All</option>
               <option value="sale">Sales</option>
@@ -44,8 +66,9 @@ function Activity() {
                 <tr>
                   <th>Type</th>
                   <th>Item</th>
-                  <th>Amount</th>
+                  <th>Assets</th>
                   <th>From</th>
+                  <th>Source</th>
                 </tr>
               </thead>
               <tbody>
@@ -59,14 +82,44 @@ function Activity() {
                         row.name || row.collectionName
                       )}
                     </td>
-                    <td>
-                      {row.amount || "—"} {row.currency || ""}
-                    </td>
+                    <td>{assetsLabel(row)}</td>
                     <td>{row.from ? `${row.from.slice(0, 8)}…` : "—"}</td>
+                    <td>{row.source || "desk"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {ledgerRows.length > 0 && (
+              <>
+                <h3>From the XRP Ledger</h3>
+                <table className="dpmf-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>NFT</th>
+                      <th>Assets</th>
+                      <th>Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ledgerRows.map((row) => (
+                      <tr key={row.hash || `${row.type}-${row.date}`}>
+                        <td>{row.type}</td>
+                        <td>
+                          {row.nftId ? `${String(row.nftId).slice(0, 10)}…` : "—"}
+                        </td>
+                        <td>
+                          {row.amount
+                            ? `${row.amount.amount} ${row.amount.currency}`
+                            : "—"}
+                        </td>
+                        <td>{row.source || "xrpl"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </Container>
         </div>
       )}

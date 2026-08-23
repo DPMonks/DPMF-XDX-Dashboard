@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { readStore, update } from "../lib/store.js";
 import { findTemplate, resolveNft } from "../lib/collections.js";
+import { ledgerAccountTape, ledgerNftOffers } from "../lib/assets.js";
 import {
   acceptOffer,
   activityFeed,
@@ -46,8 +47,13 @@ router.get("/rankings", (_req, res) => {
   res.json({ success: true, data: rankings(readStore()) });
 });
 
-router.get("/activity", (req, res) => {
-  res.json({ success: true, data: activityFeed(readStore(), req.query) });
+router.get("/activity", async (req, res) => {
+  const desk = activityFeed(readStore(), req.query);
+  let ledger = null;
+  if (req.query.address) {
+    ledger = await ledgerAccountTape(req.query.address);
+  }
+  res.json({ success: true, data: desk, ledger });
 });
 
 router.get("/search", (req, res) => {
@@ -105,15 +111,19 @@ router.get("/collection/:name/stats", (req, res) => {
   res.json({ success: true, data: collectionStats(store, template) });
 });
 
-router.get("/nft/:id", (req, res) => {
+router.get("/nft/:id", async (req, res) => {
   const store = readStore();
   const nft = resolveNft(store, req.params.id);
   if (!nft) return res.status(404).json({ success: false, message: "NFT not found" });
+  const ledgerId = String(nft.NFTokenID || "");
+  const onLedger = /^[0-9A-Fa-f]{64}$/.test(ledgerId);
+  const ledger = onLedger ? await ledgerNftOffers(ledgerId) : null;
   res.json({
     success: true,
     data: nft,
     offers: openOffers(store, { nftId: nft._id }),
-    activity: activityFeed(store, { nftId: nft._id, size: 20 }).docs
+    activity: activityFeed(store, { nftId: nft._id, size: 20 }).docs,
+    ledger
   });
 });
 

@@ -27,6 +27,7 @@ import {
   isAllowedFile,
   mimeFromFile
 } from "../../const/filetypes";
+import { findTicker, mergeTickers, optionLabel } from "../../helper/assets";
 import { ProgressBar, OverlayTrigger, Tooltip } from "react-bootstrap";
 // import { create as ipfsHttpClient } from 'kubo-rpc-client';
 import {
@@ -112,6 +113,7 @@ const Createnft = () => {
   const [isMintOffer, setIsMintOffer] = useState(false);
   const [offerData, setOfferData] = useState({ currency: "", amount: "" });
   const [currencyList, setCurrencyList] = useState([]);
+  const [catalogAssets, setCatalogAssets] = useState([]);
   const [onlyXrpFlag, setOnlyXrpFlag] = useState(false);
   const [DNFTMutableFlag, setDNFTMutableFlag] = useState(false);
   const [burnFlag, setBurnFlag] = useState(false);
@@ -254,8 +256,11 @@ const Createnft = () => {
       return;
     }
 
+    const selected = findTicker(currencyList, currency);
+    const ticker = selected?.currency || currency.split(":")[0];
     const data = {
-      currency,
+      currency: ticker,
+      issuerAdd: ticker === "XRP" ? "" : selected?.issuer || "",
       amount,
       flag: flagHandler(),
       transferFee: royaltyPerc * 1000,
@@ -531,11 +536,21 @@ const Createnft = () => {
   }, [mintedOffers]);
 
   useEffect(() => {
-    if (walletBalance) {
-      const { currency: walletdata } = walletBalance;
-      setCurrencyList(walletdata);
-    }
-  }, [walletBalance]);
+    const q = myDecodedToken?.ac
+      ? `?address=${encodeURIComponent(myDecodedToken.ac)}`
+      : "";
+    fetch(`${configData.LOCAL_API_URL}assets/catalog${q}`)
+      .then((res) => res.json())
+      .then((body) => setCatalogAssets(body.data?.assets || []))
+      .catch(() => setCatalogAssets([]));
+  }, [myDecodedToken?.ac]);
+
+  useEffect(() => {
+    const walletRows = Array.isArray(walletBalance)
+      ? walletBalance
+      : walletBalance?.currency || [];
+    setCurrencyList(mergeTickers(catalogAssets, walletRows));
+  }, [walletBalance, catalogAssets]);
 
   useEffect(() => {
     if (showModel === false) {
@@ -1515,10 +1530,10 @@ const Createnft = () => {
                           id="currency-dropdown"
                         >
                           <option value="">Select Currency</option>
-                          {currencyList.map((item, index) => {
+                          {(currencyList || []).map((item, index) => {
                             return (
-                              <option value={item.currency} key={index}>
-                                {item.currency}
+                              <option value={item.curr || item.currency} key={item.curr || index}>
+                                {optionLabel(item)}
                               </option>
                             );
                           })}

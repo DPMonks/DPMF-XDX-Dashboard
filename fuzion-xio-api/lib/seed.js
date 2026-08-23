@@ -1,6 +1,6 @@
-import { DEMO_GLB, XDX_CURRENCY, XIO_CURRENCY } from "./constants.js";
+import { DEMO_GLB, XDX_CURRENCY, XDX_ISSUER, XIO_CURRENCY, XIO_ISSUER } from "./constants.js";
 
-export const STORE_VERSION = 5;
+export const STORE_VERSION = 6;
 
 export const DEMO_ISSUER = "rFuzionXioDemoIssuer1111111111111";
 export const DEMO_OWNER = "rFuzionXioDemoOwner11111111111111";
@@ -235,8 +235,12 @@ export function demoSeed() {
         name: "Lilly #1",
         amount: "10",
         currency: "XRP",
+        issuer: "",
+        assets: [{ currency: "XRP", issuer: "", amount: "10" }],
+        label: "10 XRP",
         from: DEMO_BIDDER,
         status: "open",
+        source: "desk",
         createdAt: now
       },
       {
@@ -248,8 +252,33 @@ export function demoSeed() {
         collectionSlug: "fuzion-3d",
         amount: "0.8",
         currency: XIO_CURRENCY,
+        issuer: XIO_ISSUER,
+        assets: [
+          { currency: XIO_CURRENCY, issuer: XIO_ISSUER, amount: "0.8" }
+        ],
+        label: "0.8 XIO",
         from: DEMO_BIDDER,
         status: "open",
+        source: "desk",
+        createdAt: now
+      },
+      {
+        _id: "off-multi-lilly",
+        kind: "item",
+        nftId: "seed-lilly-1",
+        name: "Lilly #1",
+        amount: "5",
+        currency: "XRP",
+        issuer: "",
+        assets: [
+          { currency: "XRP", issuer: "", amount: "5" },
+          { currency: XIO_CURRENCY, issuer: XIO_ISSUER, amount: "1" },
+          { currency: XDX_CURRENCY, issuer: XDX_ISSUER, amount: "20" }
+        ],
+        label: "5 XRP + 1 XIO + 20 XDX",
+        from: DEMO_BIDDER,
+        status: "open",
+        source: "desk",
         createdAt: now
       }
     ],
@@ -328,7 +357,28 @@ export function demoSeed() {
         collectionSlug: "fuzion-3d",
         amount: "0.8",
         currency: XIO_CURRENCY,
+        issuer: XIO_ISSUER,
+        assets: [{ currency: XIO_CURRENCY, issuer: XIO_ISSUER, amount: "0.8" }],
+        label: "0.8 XIO",
         from: DEMO_BIDDER,
+        source: "desk",
+        createdAt: now
+      },
+      {
+        _id: "act-offer-multi",
+        type: "offer",
+        nftId: "seed-lilly-1",
+        name: "Lilly #1",
+        amount: "5",
+        currency: "XRP",
+        assets: [
+          { currency: "XRP", issuer: "", amount: "5" },
+          { currency: XIO_CURRENCY, issuer: XIO_ISSUER, amount: "1" },
+          { currency: XDX_CURRENCY, issuer: XDX_ISSUER, amount: "20" }
+        ],
+        label: "5 XRP + 1 XIO + 20 XDX",
+        from: DEMO_BIDDER,
+        source: "desk",
         createdAt: now
       },
       {
@@ -354,6 +404,7 @@ export function demoSeed() {
     ],
     watchlist: [],
     listingOverrides: {},
+    knownAssets: [],
     xumms: [],
     leaderboards: [
       { wAddress: DEMO_ISSUER, totalVPoint: 10050, pName: "XIO Issuer" },

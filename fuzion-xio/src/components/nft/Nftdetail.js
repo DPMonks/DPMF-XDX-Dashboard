@@ -39,6 +39,7 @@ import {
 import { getBalanceAction } from "../../store/actions/wallet";
 import Accordion from "react-bootstrap/Accordion";
 import configData from "../../config.json";
+import { assetsLabel, findTicker, mergeTickers, optionLabel } from "../../helper/assets";
 import * as Spinners from "react-loader-spinner";
 import { isMobile, isIOS } from "react-device-detect";
 
@@ -103,6 +104,9 @@ function Nftdetail() {
   const [isSpinner, setIsSpinner] = useState(true);
   const [currency, setCurrency] = useState("");
   const [tokenTicker, setTokenTicker] = useState(null);
+  const [catalogTicker, setCatalogTicker] = useState([]);
+  const [ledgerOffers, setLedgerOffers] = useState(null);
+  const [deskOffers, setDeskOffers] = useState([]);
   const [onlyXrpFlag, setOnlyXrpFlag] = useState(false);
   const [DNFTMutableFlag, setDNFTMutableFlag] = useState(false);
   const [burnFlag, setBurnFlag] = useState(false);
@@ -144,10 +148,10 @@ function Nftdetail() {
 
     const issuedCurrencies = Array.isArray(tokenTicker)
       ? tokenTicker
-          .filter((curr) => curr?.curr && curr?.currency && curr.currency !== "XRP")
+          .filter((curr) => curr?.currency && curr.currency !== "XRP")
           .map((curr) => ({
-            value: curr.curr,
-            label: curr.currency
+            value: curr.curr || curr.currency,
+            label: optionLabel(curr)
           }))
       : [];
 
@@ -1038,12 +1042,14 @@ function Nftdetail() {
       });
       return;
     }
-    if (currency === "XRP" && !decimalregex.test(saleAmountModel)) {
+    const saleTicker = findTicker(tokenTicker, currency);
+    const saleCode = saleTicker?.currency || currency.split(":")[0];
+    if (saleCode === "XRP" && !decimalregex.test(saleAmountModel)) {
       return toast.warn(MessageConst.XRP_WRONG_DECIMAL, {
         toastId: "wrongdecimal" + Date.now()
       });
     }
-    if (currency !== "XRP" && !decimalregex1.test(saleAmountModel)) {
+    if (saleCode !== "XRP" && !decimalregex1.test(saleAmountModel)) {
       return toast.warn(MessageConst.ISSUED_WRONG_DECIMAL, {
         toastId: "wrongdecimal1" + Date.now()
       });
@@ -1051,12 +1057,11 @@ function Nftdetail() {
 
     // call api
     try {
-      const finalCurr = tokenTicker?.find((tok) => tok.curr === currency);
       let data = {
         _id: nft._id,
         amount: saleAmountModel,
-        currency: currency,
-        issuerAdd: currency === "XRP" ? "" : finalCurr?.issuer
+        currency: saleCode,
+        issuerAdd: saleCode === "XRP" ? "" : saleTicker?.issuer || ""
       };
       dispatch(saleNftAction({ data, loader: true }));
     } catch (error) {
@@ -1334,14 +1339,36 @@ function Nftdetail() {
   };
 
   useEffect(() => {
-    if (balance?.currency !== null) {
-      if (balance?.currency?.currency) {
-        setTokenTicker(balance?.currency?.currency);
-      } else {
-        setTokenTicker([]);
-      }
+    fetch(`${configData.LOCAL_API_URL}assets/catalog`)
+      .then((res) => res.json())
+      .then((body) => setCatalogTicker(body.data?.assets || []))
+      .catch(() => setCatalogTicker([]));
+  }, []);
+
+  useEffect(() => {
+    const walletRows = Array.isArray(balance?.currency)
+      ? balance.currency
+      : balance?.currency?.currency || [];
+    setTokenTicker(mergeTickers(catalogTicker, walletRows));
+  }, [balance, catalogTicker]);
+
+  useEffect(() => {
+    const nftId = nft?.NFTokenID;
+    if (nftId && /^[0-9A-Fa-f]{64}$/.test(nftId)) {
+      fetch(`${configData.LOCAL_API_URL}assets/ledger/nft/${encodeURIComponent(nftId)}/offers`)
+        .then((res) => res.json())
+        .then((body) => setLedgerOffers(body.data || null))
+        .catch(() => setLedgerOffers(null));
+    } else {
+      setLedgerOffers(null);
     }
-  }, [balance]); // eslint-disable-line
+    if (nft?._id) {
+      fetch(`${configData.LOCAL_API_URL}market/offers?nftId=${encodeURIComponent(nft._id)}`)
+        .then((res) => res.json())
+        .then((body) => setDeskOffers(body.data || []))
+        .catch(() => setDeskOffers([]));
+    }
+  }, [nft?._id, nft?.NFTokenID]);
 
   useEffect(() => {
     try {
@@ -1597,12 +1624,14 @@ function Nftdetail() {
       });
       return;
     }
-    if (currency === "XRP" && !decimalregex.test(moreOfferAmount)) {
+    const offerTicker = findTicker(tokenTicker, currency);
+    const offerCode = offerTicker?.currency || currency.split(":")[0];
+    if (offerCode === "XRP" && !decimalregex.test(moreOfferAmount)) {
       return toast.warn(MessageConst.XRP_WRONG_DECIMAL, {
         toastId: "wrongdecimal" + Date.now()
       });
     }
-    if (currency !== "XRP" && !decimalregex1.test(moreOfferAmount)) {
+    if (offerCode !== "XRP" && !decimalregex1.test(moreOfferAmount)) {
       return toast.warn(MessageConst.ISSUED_WRONG_DECIMAL, {
         toastId: "wrongdecimal1" + Date.now()
       });
@@ -1610,12 +1639,11 @@ function Nftdetail() {
 
     // call api
     try {
-      const finalCurr = tokenTicker?.find((tok) => tok.curr === currency);
       let data = {
         _id: nft._id,
         amount: moreOfferAmount,
-        currency: currency,
-        issuerAdd: currency === "XRP" ? "" : finalCurr?.issuer
+        currency: offerCode,
+        issuerAdd: offerCode === "XRP" ? "" : offerTicker?.issuer || ""
       };
       //   // call api
       dispatch(placeMoreOfferAction({ data, loader: true }));
@@ -2492,6 +2520,67 @@ function Nftdetail() {
                                         </td>
                                       </tr>
                                     )}
+                                  </tbody>
+                                </Table>
+                              </div>
+                            </Accordion.Body>
+                          </Accordion.Item>
+                          <Accordion.Item eventKey="ledger-offers">
+                            <Accordion.Header>XRPL ledger offers</Accordion.Header>
+                            <Accordion.Body>
+                              <div className="history_detail">
+                                <p className="dpmf-muted">
+                                  Open buy and sell offers from `nft_buy_offers`
+                                  / `nft_sell_offers`. Desk multi-asset offers
+                                  are recorded separately.
+                                </p>
+                                <Table bordered hover className="mb-0">
+                                  <thead>
+                                    <tr>
+                                      <th>Side</th>
+                                      <th>Assets</th>
+                                      <th>Owner</th>
+                                      <th>Source</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(ledgerOffers?.offers || []).length ? (
+                                      ledgerOffers.offers.map((row) => (
+                                        <tr key={row.offerId}>
+                                          <td>{row.side}</td>
+                                          <td>
+                                            {row.amount} {row.currency}
+                                          </td>
+                                          <td>
+                                            {row.owner
+                                              ? `${row.owner.slice(0, 8)}…`
+                                              : "—"}
+                                          </td>
+                                          <td>{row.source}</td>
+                                        </tr>
+                                      ))
+                                    ) : (
+                                      <tr>
+                                        <td colSpan={4} align="center">
+                                          {nft?.NFTokenID &&
+                                          /^[0-9A-Fa-f]{64}$/.test(nft.NFTokenID)
+                                            ? "No open offers on the XRP Ledger"
+                                            : "Demo token — enter a live NFTokenID on Assets"}
+                                        </td>
+                                      </tr>
+                                    )}
+                                    {deskOffers.map((row) => (
+                                      <tr key={row._id}>
+                                        <td>{row.kind || "desk"}</td>
+                                        <td>{assetsLabel(row)}</td>
+                                        <td>
+                                          {row.from
+                                            ? `${row.from.slice(0, 8)}…`
+                                            : "—"}
+                                        </td>
+                                        <td>{row.source || "desk"}</td>
+                                      </tr>
+                                    ))}
                                   </tbody>
                                 </Table>
                               </div>

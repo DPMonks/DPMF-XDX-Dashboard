@@ -33,3 +33,31 @@ export async function accountLines(account) {
 export async function serverInfo() {
   return rpc("server_info");
 }
+
+export async function nftBuyOffers(nftId) {
+  return rpc("nft_buy_offers", [{ nft_id: nftId, limit: 200 }]);
+}
+
+export async function nftSellOffers(nftId) {
+  return rpc("nft_sell_offers", [{ nft_id: nftId, limit: 200 }]);
+}
+
+export async function accountTx(account, limit = 20) {
+  return rpc("account_tx", [{ account, limit, forward: false }]);
+}
+
+export async function accountCurrencies(account) {
+  return rpc("account_currencies", [{ account, ledger_index: "validated" }]);
+}
+
+export async function accountInfo(account) {
+  return rpc("account_info", [{ account, ledger_index: "validated" }]);
+}
+
+export async function gatewayBalances(account) {
+  return rpc("gateway_balances", [{ account, ledger_index: "validated", strict: true }]);
+}
+
+export async function bookOffers(takerGets, takerPays, limit = 5) {
+  return rpc("book_offers", [{ taker_gets: takerGets, taker_pays: takerPays, limit }]);
+}

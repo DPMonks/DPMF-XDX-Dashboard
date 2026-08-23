@@ -8,6 +8,7 @@ import {
   resolveNft,
   templates
 } from "./collections.js";
+import { assetsLabel, offerAssets } from "./currency.js";
 
 export const PLATFORM_FEE_BPS = 0;
 export const DEFAULT_ROYALTY_BPS = 500;
@@ -28,6 +29,7 @@ export function ensureMarket(store) {
   store.watchlist = store.watchlist || [];
   store.listingOverrides = store.listingOverrides || {};
   store.tradehistories = store.tradehistories || [];
+  store.knownAssets = store.knownAssets || [];
   return store;
 }
 
@@ -294,6 +296,9 @@ export function placeOffer(store, body) {
   const kind = body.kind === "collection" ? "collection" : "item";
   const nft = body.nftId ? resolveNft(store, body.nftId) : null;
   if (kind === "item" && !nft) return { ok: false, error: "NFT not found" };
+  const assets = offerAssets(body, nft?.currency || "XRP");
+  if (!assets.length) return { ok: false, error: "amount required" };
+  const first = assets[0];
   const offer = {
     _id: id("off"),
     kind,
@@ -301,10 +306,14 @@ export function placeOffer(store, body) {
     name: nft?.name || body.collectionName,
     collectionName: nft?.collectionName || body.collectionName,
     collectionSlug: nft?.collectionSlug || body.collectionSlug,
-    amount: String(body.amount),
-    currency: body.currency || nft?.currency || "XRP",
+    amount: first.amount,
+    currency: first.currency,
+    issuer: first.issuer || "",
+    assets,
+    label: assetsLabel({ assets }),
     from: body.from || "rFuzionXioDemoBidder1111111111111",
     status: "open",
+    source: body.source || "desk",
     createdAt: nowIso()
   };
   store.offers.unshift(offer);
@@ -316,7 +325,11 @@ export function placeOffer(store, body) {
     collectionSlug: offer.collectionSlug,
     amount: offer.amount,
     currency: offer.currency,
-    from: offer.from
+    issuer: offer.issuer,
+    assets,
+    label: offer.label,
+    from: offer.from,
+    source: offer.source
   });
   return { ok: true, offer };
 }
