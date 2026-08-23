@@ -187,7 +187,7 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
     console.error(dbHint);
   }
 
-  if (method === "GET" && /^wallet\/(offers|activity)\//.test(suffix)) {
+  if (method === "GET" && (/^wallet\/(offers|activity|votes)\//.test(suffix) || suffix === "amm/governance")) {
     const ledger = await readIndexerDb(suffix, search);
     if (ledger && ledger.status < 400) return withSource(ledger, "xrpl");
   }

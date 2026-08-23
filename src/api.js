@@ -475,6 +475,17 @@ export const api = {
       queue: false,
       cache: false,
     }),
+  walletVotes: (address) =>
+    getJson(`/wallet/votes/${encodeURIComponent(address)}`, {
+      retries: 1,
+      queue: false,
+      cache: false,
+    }),
+  ammGovernance: (pair, account) => {
+    const search = new URLSearchParams({ pair: pair || "XDX/XRP" });
+    if (account) search.set("account", account);
+    return getJson(`/amm/governance?${search}`, { retries: 1, queue: false, cache: false });
+  },
   prices: () => getJson(endpoint("prices"), { queue: false }),
   change24h: () => getJson(endpoint("change24h"), { queue: false }),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),

@@ -8,6 +8,7 @@ import {
   XSQUAD_HEX,
   XSQUAD_ISSUER,
 } from "../constants/ledger.js";
+import { activityFromAmmVoteTx } from "./ammVote.js";
 
 export const RIPPLE_EPOCH = 946684800;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
@@ -188,7 +189,7 @@ export function ordersFromAccountOffers(offers, address) {
 
 export function activityFromAccountTx(transactions, address) {
   return (Array.isArray(transactions) ? transactions : [])
-    .map((row) => activityFromOfferTx(row, address))
+    .map((row) => activityFromOfferTx(row, address) || activityFromAmmVoteTx(row, address))
     .filter(Boolean)
     .sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
 }

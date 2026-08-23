@@ -21,6 +21,7 @@ import {
   sortWalletPairs,
   xrpBarPercents,
 } from "../wallet/composeWallet";
+import { formatFeePercent } from "../wallet/ammVote";
 import { useMorph } from "../wallet/useMorph";
 import { mergeWalletActivity, mergeWalletOrders, pendingFromExecution } from "../wallet/ledgerOrders";
 
@@ -378,9 +379,13 @@ export default function ConnectedWallet() {
             <li key={row?.timestamp || index}>
               {empty || !row
                 ? "—"
-                : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
-                    row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""
-                  }`}
+                : row.kind === "vote"
+                  ? (t.votedOnPool || "Voted on {pair} — {fee} fee")
+                      .replace("{pair}", row.pair || "")
+                      .replace("{fee}", formatFeePercent(row.feePercent, locale))
+                  : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
+                      row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""
+                    }`}
             </li>
           ))}
         </ol>

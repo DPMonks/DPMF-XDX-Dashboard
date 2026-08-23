@@ -9,6 +9,7 @@ import { useI18n } from "./i18n/useI18n";
 import TokenDetails from "./components/TokenDetails";
 import RichList from "./components/RichList";
 import AmmCard from "./components/AmmCard";
+import VotingContainer from "./components/governance/VotingContainer";
 import OrderBook from "./components/OrderBook";
 import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
@@ -292,6 +293,11 @@ export default function App() {
               })
             }
           />
+        </section>
+
+        <section className="dashboard-card neon-card governance-card">
+          <h2 className="card-title">{t.poolGovernance}</h2>
+          <VotingContainer />
         </section>
       </div>
 

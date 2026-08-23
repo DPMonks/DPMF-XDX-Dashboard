@@ -15,6 +15,7 @@ import {
 } from "../constants/ledger.js";
 import { detectQuoteUsd } from "../utils/poolSplit.js";
 import { pendingFromExecution, rememberPending } from "../wallet/ledgerOrders.js";
+import { pendingVoteFromExecution } from "../wallet/ammVote.js";
 
 export const DROPS_PER_XRP = 1_000_000;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
@@ -412,7 +413,7 @@ export function notifyWalletRefresh() {
 export function notifyTradeExecuted(detail = {}) {
   if (typeof window === "undefined") return;
   const account = detail.account || detail.txjson?.Account || null;
-  const pending = pendingFromExecution(detail, account);
+  const pending = pendingFromExecution(detail, account) || pendingVoteFromExecution(detail, account);
   if (pending) rememberPending(pending.activity.account, pending);
   window.dispatchEvent(new CustomEvent("dpmf-trade-executed", { detail }));
   notifyWalletRefresh();

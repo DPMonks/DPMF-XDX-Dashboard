@@ -59,6 +59,7 @@ import {
   normalizeWalletPair,
 } from "../src/wallet/composeWallet.js";
 import { loadWalletActivity, loadWalletOffers } from "./walletLedger.js";
+import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
 
 let pool = null;
 
@@ -99,6 +100,8 @@ const CATALOG = {
     walletAccount: "/api/wallet/account/:address",
     walletOffers: "/api/wallet/offers/:address",
     walletActivity: "/api/wallet/activity/:address",
+    walletVotes: "/api/wallet/votes/:address",
+    ammGovernance: "/api/amm/governance",
     walletLp: "/api/wallet/lp/:address",
     walletRank: "/api/wallet/rank/:address",
     prices: "/api/prices",
@@ -2121,7 +2124,7 @@ async function buildSnapshot(db) {
   };
 }
 
-function walletLedgerResult(suffix) {
+function walletLedgerResult(suffix, search = "") {
   const offers = String(suffix || "").match(/^wallet\/offers\/([^/]+)$/);
   if (offers) {
     return loadWalletOffers(decodeURIComponent(offers[1])).then((body) => ok(body));
@@ -2130,11 +2133,21 @@ function walletLedgerResult(suffix) {
   if (activity) {
     return loadWalletActivity(decodeURIComponent(activity[1])).then((body) => ok(body));
   }
+  const votes = String(suffix || "").match(/^wallet\/votes\/([^/]+)$/);
+  if (votes) {
+    return loadWalletVotes(decodeURIComponent(votes[1])).then((body) => ok(body));
+  }
+  if (suffix === "amm/governance") {
+    const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+    return loadPoolGovernance(params.get("pair") || "XDX/XRP", params.get("account") || "").then((body) =>
+      ok(body)
+    );
+  }
   return null;
 }
 
 export async function readIndexerDb(suffix, search = "") {
-  const ledger = walletLedgerResult(suffix);
+  const ledger = walletLedgerResult(suffix, search);
   if (ledger) return ledger;
 
   const db = getPool();

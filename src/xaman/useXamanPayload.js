@@ -61,7 +61,7 @@ export function useXamanPayload() {
     busyRef.current = true;
     const session = nextPayloadSession(sessionRef.current);
     sessionRef.current = session;
-    const watchTrade = isTradeTxjson(body?.txjson);
+    const watchTrade = isTradeTxjson(body?.txjson) || body?.txjson?.TransactionType === "AMMVote";
     let announced = false;
     let finishing = false;
     let latestPayload = null;
