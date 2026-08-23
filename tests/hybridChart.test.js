@@ -59,6 +59,7 @@ import {
   rangeStats,
   snapPoint,
   toggleTool,
+  TOOL_GROUPS,
   toolMeta,
 } from "../src/chart/drawings.js";
 
@@ -666,6 +667,7 @@ test("draw style and extra City Index tools stay available from one toolbox", ()
     lineStyle: "dash",
     dasharray: "7 4",
   });
+  assert.equal(TOOL_GROUPS.find((group) => group.id === "lines").tools[0].id, "trend");
   assert.equal(toolMeta("crossline").clicks, 1);
   assert.equal(toolMeta("infoline").clicks, 2);
   assert.equal(toolMeta("fibext").clicks, 3);

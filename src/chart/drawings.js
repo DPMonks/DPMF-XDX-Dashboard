@@ -51,11 +51,11 @@ export const TOOL_GROUPS = [
     id: "lines",
     labelKey: "chartLines",
     tools: [
+      { id: "trend", labelKey: "chartTrend", clicks: 2, icon: "trend" },
       { id: "hline", labelKey: "chartHLine", clicks: 1, icon: "hline" },
       { id: "vline", labelKey: "chartVLine", clicks: 1, icon: "vline" },
       { id: "hray", labelKey: "chartHRay", clicks: 1, icon: "hray" },
       { id: "crossline", labelKey: "chartCrossLine", clicks: 1, icon: "crossline" },
-      { id: "trend", labelKey: "chartTrend", clicks: 2, icon: "trend" },
       { id: "ray", labelKey: "chartRay", clicks: 2, icon: "ray" },
       { id: "extended", labelKey: "chartExtended", clicks: 2, icon: "extended" },
       { id: "infoline", labelKey: "chartInfoLine", clicks: 2, icon: "infoline" },
