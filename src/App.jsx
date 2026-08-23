@@ -242,6 +242,7 @@ export default function App() {
           <section className="dashboard-card neon-card">
             <h2 className="card-title">{t.topHolders}</h2>
             <RichList
+              className="is-xdx-owners"
               rows={holders}
               loading={holdersLoading}
               error={errors.holders}

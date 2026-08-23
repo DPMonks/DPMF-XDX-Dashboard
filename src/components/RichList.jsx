@@ -143,6 +143,7 @@ export default function RichList({
   searchPlaceholder,
   freshness = null,
   shareTotal = null,
+  className,
 }) {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
@@ -279,7 +280,7 @@ export default function RichList({
   }
 
   return (
-    <div className="rich-list">
+    <div className={["rich-list", className].filter(Boolean).join(" ")}>
       <div className="rich-list-toolbar">
         {showPair ? (
           <PairSelect

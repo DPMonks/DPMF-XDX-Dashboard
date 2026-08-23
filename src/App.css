@@ -1092,6 +1092,11 @@ body {
   width: 4.75rem;
 }
 
+.rich-list.is-xdx-owners td.col-share {
+  color: var(--dpmf-neon-lime);
+  font-weight: 600;
+}
+
 .col-copy {
   width: 3.75rem;
 }
