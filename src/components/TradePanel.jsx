@@ -301,6 +301,11 @@ export default function TradePanel({
         onSigned?.();
         onClose();
       },
+      onFailed: (detection) => {
+        setFormError(
+          `${t.tradeFailed}${detection?.engineResult ? ` · ${detection.engineResult}` : ""}`
+        );
+      },
       errorMessage: t.tradeSignError,
     });
   }

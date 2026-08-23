@@ -738,6 +738,14 @@ body {
   box-shadow: 0 0 28px rgba(0, 255, 106, 0.22);
 }
 
+.trade-executed-modal.is-failed {
+  box-shadow: 0 0 28px rgba(255, 107, 107, 0.28);
+}
+
+.trade-executed-modal.is-unconfirmed {
+  box-shadow: 0 0 28px rgba(255, 179, 107, 0.28);
+}
+
 .trade-executed-copy,
 .trade-executed-hash {
   margin: 0 0 12px;

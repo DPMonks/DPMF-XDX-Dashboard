@@ -23,9 +23,9 @@ import {
   ratioDeltaPct,
 } from "../src/wallet/ammCreate.js";
 import { feeUnitsFromPercent } from "../src/wallet/ammVote.js";
-import { activityFromAmmCreateTx, pendingFromExecution } from "../src/wallet/ledgerOrders.js";
+import { activityFromAmmCreateTx, activityFromAmmLpTx, pendingFromExecution } from "../src/wallet/ledgerOrders.js";
 import { isTradeTxjson } from "../src/xaman/detectExecution.js";
-import { quoteAsset, xrpDrops } from "../src/xaman/tradeTx.js";
+import { ammWithdrawTx, quoteAsset, xrpDrops } from "../src/xaman/tradeTx.js";
 
 test("ammCreateTxjson deposits XDX plus XRP drops at 0.25%", () => {
   const tx = ammCreateTxjson({
@@ -83,14 +83,31 @@ test("fee units never exceed 1 percent", () => {
   assert.equal(ammCreateTxjson({ quote: quoteAsset("XRP"), xdx: 1, quoteQty: 1, tradingFee: 5 }).TradingFee, 1000);
 });
 
-test("existing pool detection skips XDX/XRP and prefers a new quote", () => {
+test("existing pool detection skips XDX/XRP and prefers a trustline quote", () => {
   const pools = [{ pool: "XDX/XRP" }, { pool_name: "XDX / RLUSD" }];
+  const raw = {
+    lines: [
+      { currency: "XIO", issuer: XIO_ISSUER, value: "12" },
+      { currency: RLUSD_HEX, issuer: RLUSD_ISSUER, value: "4" },
+    ],
+  };
   assert.equal(existingPoolForQuote(pools, "XRP")?.pool, "XDX/XRP");
   assert.equal(existingPoolForQuote(pools, "XIO"), null);
-  assert.equal(defaultCreateQuoteId(pools), "XIO");
-  const options = createQuoteOptions(pools);
+  assert.equal(defaultCreateQuoteId(pools, raw), "XIO");
+  const options = createQuoteOptions(pools, raw);
   assert.equal(options.find((row) => row.id === "XRP").exists, true);
   assert.equal(options.find((row) => row.id === "XIO").exists, false);
+  assert.ok(!options.some((row) => row.id === "XSQUAD"));
+});
+
+test("secondary quotes come from wallet trustlines, never a hardcoded catalogue", () => {
+  const empty = createQuoteOptions([{ pool: "XDX/XRP" }]);
+  assert.deepEqual(empty.map((row) => row.id), ["XRP"]);
+  const lined = createQuoteOptions([], {
+    balances: [{ currency: "USD", issuer: "rExampleIssuer1111111111111111111", value: "8" }],
+  });
+  assert.ok(lined.some((row) => row.id === "USD" && row.issuer === "rExampleIssuer1111111111111111111"));
+  assert.ok(!lined.some((row) => row.id === "XDX"));
 });
 
 test("deposit ratio warns when the mark is 20 percent off", () => {
@@ -199,4 +216,33 @@ test("AMMCreate is a signed trade and records create-pool activity", () => {
   );
   assert.equal(history.side, "createPool");
   assert.equal(history.pair, "XDX/XRP");
+});
+
+test("a successful AMMWithdraw records removed LP on recent activity", () => {
+  const txjson = ammWithdrawTx({
+    account: "rLp",
+    quote: quoteAsset("XRP"),
+    lpAmount: "2500",
+  });
+  const pending = pendingFromExecution({ txjson, txid: "C".repeat(64) }, "rLp");
+  assert.equal(pending.activity.side, "removeLp");
+  assert.equal(pending.activity.pair, "XDX/XRP");
+  assert.equal(pending.activity.lp, 2500);
+  const history = activityFromAmmLpTx(
+    {
+      hash: "D".repeat(64),
+      tx: txjson,
+      meta: { TransactionResult: "tesSUCCESS" },
+    },
+    "rLp"
+  );
+  assert.equal(history.side, "removeLp");
+  assert.equal(history.lp, 2500);
+  assert.equal(
+    activityFromAmmLpTx(
+      { tx: txjson, meta: { TransactionResult: "tecUNFUNDED_AMM" } },
+      "rLp"
+    ),
+    null
+  );
 });

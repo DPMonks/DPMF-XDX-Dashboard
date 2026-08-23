@@ -388,7 +388,11 @@ export default function ConnectedWallet() {
                     : row.side === "addLp"
                       ? (t.addedLpActivity || "Added LP to {pair}").replace("{pair}", row.pair || "")
                       : row.side === "removeLp"
-                        ? (t.removedLpActivity || "Removed LP from {pair}").replace("{pair}", row.pair || "")
+                        ? (t.removedLpActivity || "Removed {amount} LP from {pair}")
+                            .replace("{amount}", row.lp != null ? formatNumber(row.lp, locale, { maximumFractionDigits: 4 }) : "")
+                            .replace("{pair}", row.pair || "")
+                            .replace(/\s+/g, " ")
+                            .trim()
                         : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
                             row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""
                           }`}

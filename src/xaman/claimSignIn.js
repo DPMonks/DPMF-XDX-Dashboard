@@ -1,7 +1,7 @@
 import { detectTradeExecution } from "./detectExecution.js";
-import { extractSignedAccount, getPayloadResult, payloadLooksSigned } from "./xamanClient.js";
+import { extractSignedAccount, getPayloadResult } from "./xamanClient.js";
 import { isPayloadUuid, peekPendingPayload } from "./payloadResume.js";
-import { notifyTradeExecuted } from "./tradeTx.js";
+import { notifyTradeExecuted, notifyTradeFailed } from "./tradeTx.js";
 
 export async function claimSignedWallet(
   uuid,
@@ -35,9 +35,13 @@ export async function claimExecutedTrade(
     const result = await fetchResult(id).catch(() => null);
     if (result?.meta?.cancelled === true || result?.meta?.expired === true) return null;
     const detection = detectTradeExecution({ payload: result });
+    if (detection.failed) {
+      const account = extractSignedAccount(result) || detection.account || null;
+      notifyTradeFailed({ ...detection, uuid: id, account, txjson });
+      return { ...detection, executed: false, account, result };
+    }
     if (detection.rejected) return null;
-    const signed = detection.executed || detection.signed || payloadLooksSigned(result);
-    if (signed) {
+    if (detection.executed) {
       const account = extractSignedAccount(result) || detection.account || null;
       notifyTradeExecuted({
         ...detection,

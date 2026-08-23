@@ -53,17 +53,20 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
 
   const account = liveWalletAddress(walletAddress);
   const signedIn = Boolean(account);
-  const existing = existingPoolForQuote(pools, quoteId);
+  const options = useMemo(() => createQuoteOptions(pools, balances.raw), [pools, balances.raw]);
+  const selected = options.find((row) => row.id === quoteId) || options[0];
+  const existing = existingPoolForQuote(pools, selected?.id || quoteId);
   const quote = useMemo(
     () =>
-      resolveCreateQuote(quoteId, {
-        quote_issuer: existing?.quote_issuer,
-        quote_hex: existing?.quote_hex,
+      resolveCreateQuote(selected?.id || quoteId, {
+        issuer: selected?.issuer,
+        hex: selected?.hex,
+        quote_issuer: selected?.issuer || existing?.quote_issuer,
+        quote_hex: selected?.hex || existing?.quote_hex,
       }),
-    [quoteId, existing]
+    [quoteId, selected, existing]
   );
   const quoteIsXrp = !quote.issuer || quote.currency === "XRP";
-  const options = useMemo(() => createQuoteOptions(pools, balances.raw), [pools, balances.raw]);
   const xdxBal = Number(balances.xdx);
   const xrpBal = Number(balances.xrp);
   const quoteBal = quoteIsXrp ? xrpBal : issuedBalance(balances.raw, quote);
@@ -110,11 +113,11 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
 
   useEffect(() => {
     if (quoteTouchedRef.current) return undefined;
-    const next = defaultCreateQuoteId(pools);
+    const next = defaultCreateQuoteId(pools, balances.raw);
     if (!next || next === quoteId) return undefined;
     const timer = window.setTimeout(() => setQuoteId(next), 0);
     return () => window.clearTimeout(timer);
-  }, [pools, quoteId]);
+  }, [pools, quoteId, balances.raw]);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,6 +250,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
     <section className="dashboard-card neon-card create-pool-card">
       <h2 className="card-title">{t.createPoolTitle}</h2>
       <p className="create-pool-sub">{t.createPoolSubtitle}</p>
+      <p className="create-pool-sub">{t.createPoolTrustlinesOnly}</p>
       <p className="create-pool-wallet">
         {signedIn ? shortAddress(account) : t.createPoolNeedWallet}
       </p>
@@ -411,6 +415,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
             </div>
           </dl>
 
+          {signedIn && options.length <= 1 ? <p className="create-pool-note">{t.createPoolNoLines}</p> : null}
           {existing || blockerCopy ? <p className="create-pool-note">{blockerCopy || t.createPoolExists}</p> : null}
           {formError ? <p className="wallet-error">{formError}</p> : null}
           {error ? <p className="wallet-error">{error}</p> : null}
