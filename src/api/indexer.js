@@ -707,6 +707,13 @@ export async function getWalletOffers(address) {
   return asArray(body?.orders || body);
 }
 
+export async function getWalletLines(address) {
+  const name = String(address || "").trim();
+  if (!name) return [];
+  const body = await api.walletLines(name);
+  return asArray(body?.lines || body);
+}
+
 export async function getWalletVotes(address) {
   const name = String(address || "").trim();
   if (!name) return [];

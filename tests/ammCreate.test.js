@@ -96,7 +96,11 @@ test("existing pool detection skips XDX/XRP and prefers a trustline quote", () =
   assert.equal(defaultCreateQuoteId(pools, raw), "XIO");
   const options = createQuoteOptions(pools, raw);
   assert.equal(options.find((row) => row.id === "XRP").exists, true);
+  assert.equal(options.find((row) => row.id === "XRP").label, "XRP");
   assert.equal(options.find((row) => row.id === "XIO").exists, false);
+  assert.equal(options.find((row) => row.id === "XIO").label, "XIO");
+  assert.ok(!options.some((row) => /XDX\s*\//.test(row.label)));
+  assert.ok(!options.some((row) => /exists/i.test(row.label)));
   assert.ok(!options.some((row) => row.id === "XSQUAD"));
 });
 
@@ -108,6 +112,32 @@ test("secondary quotes come from wallet trustlines, never a hardcoded catalogue"
   });
   assert.ok(lined.some((row) => row.id === "USD" && row.issuer === "rExampleIssuer1111111111111111111"));
   assert.ok(!lined.some((row) => row.id === "XDX"));
+});
+
+test("secondary picker lists every account_lines trustline as a singular asset", () => {
+  const raw = {
+    lines: [
+      { currency: "XIO", account: XIO_ISSUER, balance: "0" },
+      { currency: RLUSD_HEX, account: RLUSD_ISSUER, balance: "4" },
+      { currency: "XDX", account: XDX_ISSUER, balance: "9" },
+      { currency: "03BCD44104644B711C58CD14CD13CBA65757CFBE", account: "rAmmLpTokenIssuer11111111111111111", balance: "1" },
+      { currency: "USD", account: "rGateUsdIssuer11111111111111111111", balance: "2" },
+      { currency: "USD", issuer: "rBitstampUsdIssuer111111111111111", balance: "0" },
+    ],
+  };
+  const options = createQuoteOptions([{ pool: "XDX/XRP" }], raw);
+  assert.deepEqual(
+    options.map((row) => row.ticker),
+    ["XRP", "XIO", "RLUSD", "USD", "USD"]
+  );
+  assert.equal(options.find((row) => row.ticker === "XIO").label, "XIO");
+  assert.equal(options.find((row) => row.ticker === "RLUSD").label, "RLUSD");
+  assert.ok(options.every((row) => !/XDX\s*\//.test(row.label)));
+  assert.ok(!options.some((row) => row.ticker === "XDX"));
+  const usd = options.filter((row) => row.ticker === "USD");
+  assert.equal(usd.length, 2);
+  assert.ok(usd.every((row) => row.id.startsWith("USD:")));
+  assert.ok(usd.every((row) => row.label.startsWith("USD · ")));
 });
 
 test("deposit ratio warns when the mark is 20 percent off", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getPrices, getWalletBalances } from "../api/indexer";
+import { getPrices, getWalletBalances, getWalletLines } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import {
@@ -36,6 +36,24 @@ import { useXamanPayload } from "../xaman/useXamanPayload";
 import BrandSelect from "./BrandSelect";
 import WalletModal from "./WalletModal";
 
+function mergeWalletLines(balances, lines) {
+  return {
+    ...(balances || {}),
+    raw: {
+      ...((balances && balances.raw) || {}),
+      lines: Array.isArray(lines) ? lines : [],
+    },
+  };
+}
+
+async function loadCreatePoolAssets(account) {
+  const [balances, lines] = await Promise.all([
+    getWalletBalances(account),
+    getWalletLines(account).catch(() => []),
+  ]);
+  return mergeWalletLines(balances, lines);
+}
+
 export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }) {
   const { t, locale } = useI18n();
   const { walletAddress, connectWallet } = useWallet();
@@ -55,10 +73,13 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
   const signedIn = Boolean(account);
   const options = useMemo(() => createQuoteOptions(pools, balances.raw), [pools, balances.raw]);
   const selected = options.find((row) => row.id === quoteId) || options[0];
-  const existing = existingPoolForQuote(pools, selected?.id || quoteId);
+  const existing = existingPoolForQuote(pools, selected?.ticker || selected?.id || quoteId);
   const quote = useMemo(
     () =>
-      resolveCreateQuote(selected?.id || quoteId, {
+      resolveCreateQuote(selected?.ticker || selected?.id || quoteId, {
+        ticker: selected?.ticker,
+        label: selected?.label,
+        currency: selected?.currency,
         issuer: selected?.issuer,
         hex: selected?.hex,
         quote_issuer: selected?.issuer || existing?.quote_issuer,
@@ -67,16 +88,17 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
     [quoteId, selected, existing]
   );
   const quoteIsXrp = !quote.issuer || quote.currency === "XRP";
+  const quoteTicker = selected?.ticker || quote.id || quoteId;
   const xdxBal = Number(balances.xdx);
   const xrpBal = Number(balances.xrp);
   const quoteBal = quoteIsXrp ? xrpBal : issuedBalance(balances.raw, quote);
   const book = normalizePriceBook(prices);
-  const market = xdxQuoteSpot({ quoteId, prices: book });
+  const market = xdxQuoteSpot({ quoteId: quoteTicker, prices: book });
   const xdxXrp = xdxXrpSpot(book);
   const quoteXrp = quoteIsXrp
     ? 1
     : (() => {
-        const quoteUsd = detectQuoteUsd({ quoteId, prices: book, allowImplied: true });
+        const quoteUsd = detectQuoteUsd({ quoteId: quoteTicker, prices: book, allowImplied: true });
         const xrpUsd = Number(book.xrpUsd);
         return quoteUsd > 0 && xrpUsd > 0 ? quoteUsd / xrpUsd : 0;
       })();
@@ -92,7 +114,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
   const xdxUsd = Number(book.xdxUsd) || 0;
   const quoteUsd = quoteIsXrp
     ? Number(book.xrpUsd) || 0
-    : detectQuoteUsd({ quoteId, prices: book, allowImplied: true }) || 0;
+    : detectQuoteUsd({ quoteId: quoteTicker, prices: book, allowImplied: true }) || 0;
   const poolUsd =
     (Number(xdx) > 0 && xdxUsd > 0 ? Number(xdx) * xdxUsd : 0) +
     (Number(quoteQty) > 0 && quoteUsd > 0 ? Number(quoteQty) * quoteUsd : 0);
@@ -139,7 +161,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
       return () => window.clearTimeout(timer);
     }
     let cancelled = false;
-    getWalletBalances(account)
+    loadCreatePoolAssets(account)
       .then((next) => {
         if (!cancelled) setBalances(next || {});
       })
@@ -160,7 +182,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
         if (signedAccount) connectWallet(signedAccount);
         notifyWalletRefresh();
         if (account) {
-          getWalletBalances(account)
+          loadCreatePoolAssets(account)
             .then((next) => setBalances(next || {}))
             .catch(() => {});
         }
@@ -178,7 +200,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
     if (existing) {
       onJoinExisting?.({
         action: "addLp",
-        pair: existing.pool || existing.pool_name || `XDX/${quoteId}`,
+        pair: existing.pool || existing.pool_name || `XDX/${quoteTicker}`,
         quote_issuer: existing.quote_issuer || quote.issuer,
         quote_hex: existing.quote_hex || quote.hex,
       });

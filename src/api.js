@@ -469,6 +469,12 @@ export const api = {
       queue: false,
       cache: false,
     }),
+  walletLines: (address) =>
+    getJson(`/wallet/lines/${encodeURIComponent(address)}`, {
+      retries: 1,
+      queue: false,
+      cache: false,
+    }),
   walletActivity: (address) =>
     getJson(`/wallet/activity/${encodeURIComponent(address)}`, {
       retries: 1,

@@ -31,7 +31,11 @@ export default function BrandSelect({
     const rows = Array.isArray(options) ? options : [];
     const q = query.trim().toUpperCase();
     if (!q) return rows;
-    return rows.filter((row) => String(row.label || row.id || "").toUpperCase().includes(q));
+    return rows.filter((row) =>
+      [row.label, row.id, row.ticker, row.issuer]
+        .filter(Boolean)
+        .some((part) => String(part).toUpperCase().includes(q))
+    );
   }, [options, query]);
 
   function openMenu() {
