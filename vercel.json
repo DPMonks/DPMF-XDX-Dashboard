@@ -7,6 +7,7 @@
     "api/top-holders.js": { "maxDuration": 20 },
     "api/xaman/create-payload.js": { "maxDuration": 15 },
     "api/xaman/payload-result.js": { "maxDuration": 15 },
+    "api/xaman/tx-status.js": { "maxDuration": 15 },
     "api/chart/candles.js": { "maxDuration": 15 }
   },
   "rewrites": [

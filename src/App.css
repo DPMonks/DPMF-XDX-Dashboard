@@ -586,6 +586,23 @@ body {
   border-radius: 12px;
 }
 
+.trade-executed-modal {
+  box-shadow: 0 0 28px rgba(0, 255, 106, 0.22);
+}
+
+.trade-executed-copy,
+.trade-executed-hash {
+  margin: 0 0 12px;
+  color: var(--dpmf-text-muted);
+  font-size: 14px;
+}
+
+.trade-executed-hash {
+  color: var(--dpmf-neon-lime);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
 .modal-title {
   font-size: 1.25rem;
   margin: 0 0 16px;
@@ -2183,6 +2200,10 @@ body {
   .wallet-fees {
     align-items: center;
     text-align: center;
+  }
+
+  .wallet-fees-pct {
+    justify-content: center;
   }
 
   .header-actions {

@@ -115,6 +115,8 @@ test("xaman sign links stay on the payload uuid and phones are detected", () => 
   assert.equal(xamanSignUrl("abc-1"), "https://xumm.app/sign/abc-1");
   assert.equal(xamanAppUrl("abc-1"), "xumm://xumm.app/sign/abc-1");
   assert.equal(isPhoneDevice("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), true);
+  assert.equal(isPhoneDevice("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)"), true);
+  assert.equal(isPhoneDevice("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)", { platform: "MacIntel", maxTouchPoints: 5 }), true);
   assert.equal(isPhoneDevice("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), false);
 });
 

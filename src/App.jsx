@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import "./App.css";
 
 import ConnectWallet from "./components/ConnectWallet";
+import TradeExecuted from "./components/TradeExecuted";
 import TradePanel from "./components/TradePanel";
 import XdxTrustline from "./components/XdxTrustline";
 import { useI18n } from "./i18n/useI18n";
@@ -305,6 +306,7 @@ export default function App() {
           onClose={() => setTradeAction(null)}
         />
       ) : null}
+      <TradeExecuted />
     </div>
   );
 }

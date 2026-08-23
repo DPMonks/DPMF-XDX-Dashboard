@@ -52,6 +52,28 @@ function xamanDevPlugin() {
         return;
       }
 
+      if (req.url?.startsWith("/api/xaman/tx-status") && req.method === "GET") {
+        const hash = new URL(req.url, "http://localhost").searchParams.get("hash") || "";
+        if (!/^[A-Fa-f0-9]{64}$/.test(hash)) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Invalid transaction hash" }));
+          return;
+        }
+        const { xrplRpc } = await import("./server/xrplBookOffers.js");
+        try {
+          const data = await xrplRpc("tx", { transaction: hash, binary: false });
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(data || { found: false }));
+        } catch (error) {
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ found: false, error: error.message }));
+        }
+        return;
+      }
+
       if (req.url?.startsWith("/api/xaman/payload-result") && req.method === "GET") {
         const uuid = new URL(req.url, "http://localhost").searchParams.get("uuid");
         const response = await fetch(

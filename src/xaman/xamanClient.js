@@ -44,8 +44,13 @@ export function xamanAppUrl(uuid) {
   return id ? `xumm://xumm.app/sign/${encodeURIComponent(id)}` : "";
 }
 
-export function isPhoneDevice(userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "") {
-  return /Android|iPhone|iPod/i.test(String(userAgent || ""));
+export function isPhoneDevice(
+  userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "",
+  extras = typeof navigator !== "undefined" ? navigator : {}
+) {
+  const ua = String(userAgent || "");
+  if (/Android|iPhone|iPod|iPad|Mobile|Tablet/i.test(ua)) return true;
+  return extras.platform === "MacIntel" && Number(extras.maxTouchPoints) > 1;
 }
 
 export async function createPayload(body = {}) {
@@ -99,4 +104,18 @@ export function extractSignedAccount(result) {
     result?.payload?.response?.account ||
     null
   );
+}
+
+export async function getLedgerTx(hash) {
+  const id = String(hash || "").trim();
+  if (!/^[A-Fa-f0-9]{64}$/.test(id)) return null;
+  try {
+    const response = await fetch(`/api/xaman/tx-status?hash=${encodeURIComponent(id)}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
 }

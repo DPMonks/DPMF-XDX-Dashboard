@@ -407,3 +407,9 @@ export function notifyWalletRefresh() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent("dpmf-wallet-refresh"));
 }
+
+export function notifyTradeExecuted(detail = {}) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("dpmf-trade-executed", { detail }));
+  notifyWalletRefresh();
+}

@@ -293,6 +293,9 @@ export default function TradePanel({
       body: { txjson: buildTx() },
       onSigned: () => {
         notifyWalletRefresh();
+      },
+      onExecuted: () => {
+        notifyWalletRefresh();
         onSigned?.();
         onClose();
       },
@@ -533,6 +536,8 @@ export default function TradePanel({
         mobileUrl={mobileUrl}
         uuid={uuid}
         status={status}
+        preparingLabel={t.preparingTrade}
+        scanLabel={t.scanTrade}
         onClose={reset}
       />
     </div>,
