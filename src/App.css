@@ -4,6 +4,9 @@
   --dpmf-border-soft: rgba(255, 255, 255, 0.06);
   --dpmf-neon-violet: #c770ff;
   --dpmf-neon-violet-soft: rgba(199, 112, 255, 0.5);
+  --dpmf-scroll-thumb: rgba(199, 112, 255, 0.78);
+  --dpmf-scroll-thumb-hover: #d28fff;
+  --dpmf-scroll-track: #101018;
   --dpmf-neon-cyan: #00eaff;
   --dpmf-neon-lime: #98f050;
   --dpmf-neon-lime-soft: rgba(152, 240, 80, 0.45);
@@ -229,7 +232,7 @@ body {
   box-shadow:
     0 0 18px rgba(0, 234, 255, 0.28),
     0 16px 36px rgba(0, 0, 0, 0.6);
-  scrollbar-color: #c770ff #101018;
+  scrollbar-color: var(--dpmf-scroll-thumb) var(--dpmf-scroll-track);
   scrollbar-width: thin;
   overflow-y: auto;
 }
