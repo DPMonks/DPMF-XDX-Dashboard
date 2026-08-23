@@ -1708,7 +1708,11 @@ async function tokenBalanceFor(db, address) {
   return Number(history.rows[0]?.balance || 0);
 }
 
-let xrpQuote = { at: 0, usd: 0, gbp: 0 };
+let xrpQuote = { at: 0, usd: 0, gbp: 0, eur: 0, jpy: 0 };
+
+function xdxFxFromXrp(xdxUsd, xrpUsd, xrpFx) {
+  return xdxUsd > 0 && xrpFx && xrpUsd > 0 ? xdxUsd * (Number(xrpFx) / Number(xrpUsd)) : 0;
+}
 
 async function loadXrpQuote(db) {
   if (Date.now() - xrpQuote.at < 300_000 && xrpQuote.usd) return xrpQuote;
@@ -1735,21 +1739,25 @@ async function loadXrpQuote(db) {
   const row = latest.rows[0] || all.rows[0] || {};
   let usd = Number(row.price_usd || hist.rows[0]?.price_usd || 0);
   let gbp = Number(row.price_gbp || 0);
+  let eur = Number(xrpQuote.eur || 0);
+  let jpy = Number(xrpQuote.jpy || 0);
   if (!looksLikeXrpUsd(usd)) usd = 0;
-  if (!usd) {
+  if (!usd || !gbp || !eur || !jpy) {
     try {
       const res = await fetch(
-        "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd,gbp",
+        "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd,gbp,eur,jpy",
         { signal: AbortSignal.timeout(2500) }
       );
       const body = await res.json();
-      usd = Number(body?.ripple?.usd || 0);
-      gbp = Number(body?.ripple?.gbp || 0);
+      usd = Number(body?.ripple?.usd || usd || 0);
+      gbp = Number(body?.ripple?.gbp || gbp || 0);
+      eur = Number(body?.ripple?.eur || eur || 0);
+      jpy = Number(body?.ripple?.jpy || jpy || 0);
     } catch {
       usd = usd || 0;
     }
   }
-  xrpQuote = { at: Date.now(), usd, gbp };
+  xrpQuote = { at: Date.now(), usd, gbp, eur, jpy };
   return xrpQuote;
 }
 
@@ -1975,9 +1983,13 @@ async function buildPrices(db) {
     {
       xrpUsd,
       xrpGbp: Number(quote.gbp || 0),
+      xrpEur: Number(quote.eur || 0),
+      xrpJpy: Number(quote.jpy || 0),
       xdxUsd,
       recorded_price: xdxUsd,
-      xdxGbp: xdxUsd > 0 && quote.gbp && xrpUsd > 0 ? xdxUsd * (quote.gbp / xrpUsd) : 0,
+      xdxGbp: xdxFxFromXrp(xdxUsd, xrpUsd, quote.gbp),
+      xdxEur: xdxFxFromXrp(xdxUsd, xrpUsd, quote.eur),
+      xdxJpy: xdxFxFromXrp(xdxUsd, xrpUsd, quote.jpy),
       quotes,
       ...quotes,
       source: "db",
@@ -2015,9 +2027,13 @@ async function buildTokenOverview(db) {
     price: xdxUsd,
     xdxUsd,
     recorded_price: xdxUsd,
-    xdxGbp: xdxUsd > 0 && quote.gbp && xrpUsd > 0 ? xdxUsd * (quote.gbp / xrpUsd) : 0,
+    xdxGbp: xdxFxFromXrp(xdxUsd, xrpUsd, quote.gbp),
+    xdxEur: xdxFxFromXrp(xdxUsd, xrpUsd, quote.eur),
+    xdxJpy: xdxFxFromXrp(xdxUsd, xrpUsd, quote.jpy),
     xrpUsd,
     xrpGbp: Number(quote.gbp || 0),
+    xrpEur: Number(quote.eur || 0),
+    xrpJpy: Number(quote.jpy || 0),
     xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd),
     xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd),
     apr: Number(amm.apr || 0),
@@ -2086,9 +2102,13 @@ async function buildSnapshot(db) {
     price: xdxUsd,
     xdxUsd,
     recorded_price: xdxUsd,
-    xdxGbp: xdxUsd > 0 && quote.gbp && xrpUsd > 0 ? xdxUsd * (quote.gbp / xrpUsd) : 0,
+    xdxGbp: xdxFxFromXrp(xdxUsd, xrpUsd, quote.gbp),
+    xdxEur: xdxFxFromXrp(xdxUsd, xrpUsd, quote.eur),
+    xdxJpy: xdxFxFromXrp(xdxUsd, xrpUsd, quote.jpy),
     xrpUsd,
     xrpGbp: Number(quote.gbp || 0),
+    xrpEur: Number(quote.eur || 0),
+    xrpJpy: Number(quote.jpy || 0),
     xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd),
     xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd),
     apr: Number(amm.apr || 0),

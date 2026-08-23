@@ -108,6 +108,21 @@ export function formatGbp(value, locale) {
   return formatFiat(value, locale, "GBP");
 }
 
+export function formatEur(value, locale) {
+  return formatFiat(value, locale, "EUR");
+}
+
+export function formatJpy(value, locale) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "—";
+  return amount.toLocaleString(localeOf(locale), {
+    style: "currency",
+    currency: "JPY",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
 export function formatSharePercent(value, locale) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";

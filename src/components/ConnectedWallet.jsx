@@ -3,7 +3,9 @@ import { getConnectedWallet } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import {
+  formatEur,
   formatGbp,
+  formatJpy,
   formatNumber,
   formatQuotePerBase,
   formatSharePercent,
@@ -80,18 +82,24 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
 }
 
 function XdxBalancePanel({ xdx, locale, t, empty }) {
+  const rows = [
+    { id: "xdx", label: t.xdx, value: empty ? "—" : `${formatToken(xdx.xdx, locale, 2)} ${t.xdx}` },
+    { id: "xrp", label: t.xrp, value: empty ? "—" : formatXrpPrice(xdx.xrp, locale) },
+    { id: "usd", label: t.usd, value: empty ? "—" : formatUsd(xdx.usd, locale) },
+    { id: "gbp", label: t.gbp, value: empty ? "—" : formatGbp(xdx.gbp, locale) },
+    { id: "eur", label: t.eur, value: empty ? "—" : formatEur(xdx.eur, locale) },
+    { id: "jpy", label: t.jpy, value: empty ? "—" : formatJpy(xdx.jpy, locale) },
+  ];
   return (
     <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
       <p className="wallet-panel-title">{t.xdxValue}</p>
       <dl className="wallet-mini-list">
-        <div>
-          <dt>{t.xdx}</dt>
-          <dd>{empty ? "—" : formatToken(xdx.xdx, locale, 2)}</dd>
-        </div>
-        <div>
-          <dt>{t.xrp}</dt>
-          <dd>{empty ? "—" : formatXrpPrice(xdx.xrp, locale)}</dd>
-        </div>
+        {rows.map((row) => (
+          <div key={row.id}>
+            <dt>{row.label}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        ))}
       </dl>
     </div>
   );
@@ -274,12 +282,23 @@ export default function ConnectedWallet() {
         <div className="wallet-hero-brand">
           <img src="/favicon.png" alt="" className="wallet-mark" />
           <div>
-            <p className="wallet-hero-label">{t.xdxValue}</p>
+            <p className="wallet-hero-label">
+              {t.xdxValue}{" "}
+              <span className={`wallet-hero-qty${empty ? " is-empty" : " is-filled"}`}>
+                {empty ? "—" : `${formatToken(view.xdx.xdx, locale, 2)} ${t.xdx}`}
+              </span>
+            </p>
             <p className={`wallet-hero-usd${empty ? " is-empty" : " is-filled"}`}>
               {empty ? "—" : formatUsd(view.xdx.usd, locale)}
             </p>
             <p className={`wallet-hero-gbp${empty ? " is-empty" : " is-filled"}`}>
               {empty ? "—" : formatGbp(view.xdx.gbp, locale)}
+            </p>
+            <p className={`wallet-hero-eur${empty ? " is-empty" : " is-filled"}`}>
+              {empty ? "—" : formatEur(view.xdx.eur, locale)}
+            </p>
+            <p className={`wallet-hero-jpy${empty ? " is-empty" : " is-filled"}`}>
+              {empty ? "—" : formatJpy(view.xdx.jpy, locale)}
             </p>
           </div>
         </div>
