@@ -23,6 +23,7 @@ html,
 body,
 #root {
   min-height: 100%;
+  min-height: 100dvh;
 }
 
 html,
@@ -122,7 +123,7 @@ body {
 
 .trade-panel {
   max-width: 420px;
-  width: min(420px, calc(100vw - 32px));
+  width: min(420px, calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
   align-items: stretch;
   text-align: left;
 }
@@ -152,6 +153,7 @@ body {
   background: rgba(0, 0, 0, 0.45);
   color: #fff;
   color-scheme: dark;
+  font-size: 16px;
 }
 
 .trade-panel .brand-select,
@@ -560,7 +562,16 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 24px;
+  min-height: 100%;
+  min-height: 100dvh;
+  padding: max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: rgba(5, 5, 8, 0.82);
   isolation: isolate;
   transform: translateZ(0);
@@ -573,7 +584,8 @@ body {
   border-radius: 16px;
   padding: 28px 24px 22px;
   text-align: center;
-  width: min(400px, calc(100vw - 32px));
+  width: min(400px, calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-width: 100%;
   box-shadow: 0 0 28px rgba(0, 255, 255, 0.22);
 }
 
@@ -884,7 +896,7 @@ body {
   border-radius: 10px;
   padding: 8px 6px 8px 10px;
   font: inherit;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .pair-select-input:focus {
@@ -1402,7 +1414,7 @@ body {
   background: var(--dpmf-bg-elevated);
   color: var(--dpmf-text-main);
   font: inherit;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .orderbook-search-list {
@@ -2218,12 +2230,8 @@ body {
     align-items: center;
   }
 
-  .wallet-modal-overlay {
-    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
-  }
-
   .wallet-modal {
-    width: min(400px, calc(100vw - 24px));
+    width: min(400px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
     padding: 32px 20px 20px;
   }
 
@@ -2378,6 +2386,16 @@ body {
   }
 }
 
+@media (max-height: 720px) {
+  .wallet-modal-overlay {
+    align-items: flex-start;
+  }
+
+  .wallet-modal {
+    margin: auto 0;
+  }
+}
+
 @media (max-height: 500px) and (orientation: landscape) {
   .activity-plot {
     height: 170px;
@@ -2385,6 +2403,38 @@ body {
 
   .pool-card {
     min-height: 0;
+  }
+
+  .wallet-modal-overlay {
+    align-items: flex-start;
+    padding: 8px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px));
+  }
+
+  .wallet-modal,
+  .trade-panel {
+    width: min(420px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+    padding: 16px 14px 14px;
+  }
+
+  .qr-image {
+    width: min(160px, 36vw);
+    margin: 0.25rem auto 0.6rem;
+  }
+}
+
+@media (min-width: 835px) and (max-width: 1180px) and (orientation: landscape) {
+  .wallet-token-row > .dashboard-card {
+    min-height: 0;
+  }
+
+  .lists-row > .dashboard-card {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .lists-row .rich-table-wrap {
+    max-height: 380px;
   }
 }
 
@@ -2395,8 +2445,26 @@ body {
   .pagination button,
   .connect-wallet-btn,
   .mobile-link-btn,
-  .cancel-wallet-btn {
+  .cancel-wallet-btn,
+  .pool-card-actions .connect-wallet-btn,
+  .trade-field input,
+  .trade-field select,
+  .trade-panel .pair-select-control,
+  .pair-select-control,
+  .brand-select-list button {
     min-height: 44px;
+  }
+
+  .tab,
+  .range,
+  .pair-chip,
+  .pagination button,
+  .connect-wallet-btn,
+  .mobile-link-btn,
+  .cancel-wallet-btn,
+  .pool-card-actions .connect-wallet-btn,
+  .brand-select-list button {
+    touch-action: manipulation;
   }
 
   .neon-card:hover {

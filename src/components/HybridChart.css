@@ -1046,6 +1046,8 @@
   color: #fff;
   border-radius: 8px;
   padding: 4px 8px;
+  font-size: 16px;
+  min-height: 36px;
 }
 
 .hybrid-sim button,
@@ -1060,6 +1062,24 @@
   cursor: pointer;
 }
 
+@media (max-width: 1180px) and (min-width: 835px) {
+  .hybrid-body {
+    grid-template-columns: 44px 1fr;
+    min-height: 420px;
+  }
+
+  .hybrid-tool-stack,
+  .hybrid-tool-group,
+  .hybrid-tool-pair {
+    width: 36px;
+  }
+
+  .hybrid-tool {
+    width: 36px;
+    height: 36px;
+  }
+}
+
 @media (max-width: 834px) {
   .hybrid-footer .trade-bar,
   .trade-bar {
@@ -1068,6 +1088,7 @@
 
   .hybrid-body {
     grid-template-columns: 1fr;
+    min-height: 380px;
   }
 
   .hybrid-topbar {
@@ -1104,5 +1125,50 @@
     left: 8px;
     top: calc(100% + 8px);
     width: min(228px, calc(100vw - 24px));
+  }
+}
+
+@media (max-width: 700px) {
+  .hybrid-body {
+    min-height: 300px;
+  }
+
+  .hybrid-plot-error {
+    min-height: 220px;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .hybrid-body {
+    min-height: 220px;
+  }
+
+  .hybrid-plot-error {
+    min-height: 180px;
+  }
+}
+
+@media (pointer: coarse) {
+  .hybrid-footer .trade-bar .connect-wallet-btn {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .hybrid-tool {
+    width: 44px;
+    height: 44px;
+    touch-action: manipulation;
+  }
+
+  .hybrid-tool-stack,
+  .hybrid-tool-group,
+  .hybrid-tool-pair {
+    width: 44px;
+  }
+}
+
+@media (pointer: coarse) and (min-width: 835px) {
+  .hybrid-body {
+    grid-template-columns: 52px 1fr;
   }
 }
