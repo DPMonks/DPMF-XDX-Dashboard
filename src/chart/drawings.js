@@ -154,19 +154,19 @@ export function toggleTool(current, next) {
   return next === current ? "cursor" : next;
 }
 
-// TradingView default Fib retracement colors (dark theme).
+// City Index / TradingView default Fib retracement colours.
 export const FIB_LEVELS = [
-  { level: 0, color: "#787B86" },
+  { level: 0, color: "#808080" },
   { level: 0.236, color: "#F23645" },
   { level: 0.382, color: "#FF9800" },
-  { level: 0.5, color: "#26C6DA" },
+  { level: 0.5, color: "#4CAF50" },
   { level: 0.618, color: "#089981" },
-  { level: 0.786, color: "#2962FF" },
-  { level: 1, color: "#787B86" },
-  { level: 1.618, color: "#F23645" },
-  { level: 2.618, color: "#9C27B0" },
-  { level: 3.618, color: "#FF9800" },
-  { level: 4.236, color: "#E040FB" },
+  { level: 0.786, color: "#00BCD4" },
+  { level: 1, color: "#808080" },
+  { level: 1.618, color: "#2962FF" },
+  { level: 2.618, color: "#F23645" },
+  { level: 3.618, color: "#9C27B0" },
+  { level: 4.236, color: "#E91E63" },
 ];
 
 export function fibPrice(a, b, level) {
@@ -228,13 +228,13 @@ export function fibToolLabelPlacement(xLeft, xRight, { padLeft = 88, padRight = 
 }
 
 export const FIB_EXT_LEVELS = [
-  { level: 0, color: "#787B86" },
+  { level: 0, color: "#808080" },
   { level: 0.382, color: "#FF9800" },
   { level: 0.618, color: "#089981" },
-  { level: 1, color: "#3179F5" },
-  { level: 1.272, color: "#2962FF" },
-  { level: 1.618, color: "#F23645" },
-  { level: 2.618, color: "#9C27B0" },
+  { level: 1, color: "#808080" },
+  { level: 1.272, color: "#FF9800" },
+  { level: 1.618, color: "#2962FF" },
+  { level: 2.618, color: "#F23645" },
 ];
 
 export function fibExtensionBands(a, b, c) {
