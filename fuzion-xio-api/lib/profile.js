@@ -50,8 +50,12 @@ export async function enrichAddress(store, address) {
     tokens = wallet.ok ? wallet.data : null;
   }
 
+  if (address === XIO_ISSUER) {
+    xioBalance = Math.abs(Number(xioBalance) || 0);
+  }
+
   const vScore = localVScore(store, address);
-  const rank = xioRank(xioBalance);
+  const rank = address === XIO_ISSUER ? "Master Validator" : xioRank(xioBalance);
   return {
     ...profile,
     xioBalance,

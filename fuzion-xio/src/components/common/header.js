@@ -602,15 +602,17 @@ const Header = ({ setSearchKey, setIsActiveWallet, setIsPaid, isPaid }) => {
               </Dropdown.Menu>
             </Dropdown>
           ) : (
-            <Link to="/" className="home-class">
-              Home
-            </Link>
-            <Link to="/market" className="home-class">
-              Market
-            </Link>
-            <Link to="/Xiodashboard" className="home-class">
-              XIO
-            </Link>
+            <>
+              <Link to="/" className="home-class">
+                Home
+              </Link>
+              <Link to="/market" className="home-class">
+                Market
+              </Link>
+              <Link to="/Xiodashboard" className="home-class">
+                XIO
+              </Link>
+            </>
           )}
 
           <Navbar.Toggle aria-controls="responsive-navbar-nav" />
