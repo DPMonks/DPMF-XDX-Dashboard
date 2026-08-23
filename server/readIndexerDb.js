@@ -2173,6 +2173,22 @@ function walletLedgerResult(suffix, search = "") {
       ok(body)
     );
   }
+  const account = String(suffix || "").match(/^wallet\/account\/([^/]+)$/);
+  if (account) {
+    return loadWalletAccount(decodeURIComponent(account[1])).then((body) => ok(body));
+  }
+  const balances = String(suffix || "").match(/^(?:wallet\/)?balances\/([^/]+)$/);
+  if (balances && !getPool()) {
+    return loadWalletAccount(decodeURIComponent(balances[1])).then((live) =>
+      ok({
+        xrp: Number.isFinite(Number(live?.balance_drops)) ? Number(live.balance_drops) / 1_000_000 : null,
+        xdx: null,
+        lp: 0,
+        source: "xrpl",
+        balance_drops: live?.balance_drops ?? null,
+      })
+    );
+  }
   return null;
 }
 
@@ -2444,11 +2460,19 @@ export async function readIndexerDb(suffix, search = "") {
         "SELECT lp_balance FROM lp_holders_latest WHERE account = $1 LIMIT 1",
         [address]
       );
+      let xrpAmt = xrp.rows[0] != null ? Number(xrp.rows[0].balance) : null;
+      if (!Number.isFinite(xrpAmt) || xrpAmt === 0) {
+        const live = await loadWalletAccount(address);
+        if (Number.isFinite(Number(live?.balance_drops))) {
+          xrpAmt = Number(live.balance_drops) / 1_000_000;
+        }
+      }
       return ok({
-        xrp: Number(xrp.rows[0]?.balance || 0),
+        xrp: Number.isFinite(xrpAmt) ? xrpAmt : null,
         xdx: xdxBalance,
         lp: Number(lp.rows[0]?.lp_balance || 0),
         source: "db",
+        ...(Number.isFinite(xrpAmt) ? { balance_drops: Math.round(xrpAmt * 1_000_000) } : {}),
       });
     }
 

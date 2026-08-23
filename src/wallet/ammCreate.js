@@ -185,7 +185,7 @@ export function issuedBalance(raw, quote) {
       ? raw.lines
       : [];
   for (const row of list) {
-    const currency = String(row.currency || row.code || "").toUpperCase();
+    const currency = String(row.currency || row.code || row.ticker || "").toUpperCase();
     const who = String(row.issuer || row.account || "").toUpperCase();
     if (who && who !== issuer) continue;
     if (names.some((name) => currency === name || currency.includes(name))) {

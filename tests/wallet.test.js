@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   composeWalletSnapshot,
   emptyWalletSnapshot,
+  walletAvailableAmounts,
   lpFeeEarnings,
   lpPositionFromPool,
   normalizeWalletPair,
@@ -52,6 +53,14 @@ test("xrpReserveBreakdown prefers ledger drops and does not reserve more than th
   assert.equal(emptyHold.reserved, 0);
   assert.equal(emptyHold.spendable, 0);
   assert.equal(emptyHold.required, 6);
+
+  const missingLedger = xrpReserveBreakdown({
+    balance: 18.5,
+    balanceDrops: null,
+    ownerCount: 4,
+  });
+  assert.equal(missingLedger.balance, 18.5);
+  assert.equal(missingLedger.spendable, 16.7);
 });
 
 test("xrpBarPercents keeps total XRP as a full reference bar", () => {
@@ -202,6 +211,36 @@ test("composeWalletSnapshot keeps every LP pair and the rich-list rank", () => {
   );
   const rlusd = filled.lp.find((row) => row.pool === "XDX/RLUSD");
   assert.equal(rlusd.withdraw_estimate_xdx, 800);
+});
+
+test("composeWalletSnapshot keeps DB XRP when ledger drops are missing", () => {
+  const filled = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 18.5, xdx: 5000 },
+    account: { balance_drops: null, owner_count: 4 },
+    prices: { xdxUsd: 0.00004, xrpUsd: 2 },
+    token: { circulating: 10_000_000_000 },
+  });
+  assert.equal(filled.xrp.balance, 18.5);
+  assert.ok(filled.xrp.spendable > 0);
+});
+
+test("walletAvailableAmounts reports spendable XRP and issued quote", () => {
+  const hold = walletAvailableAmounts({
+    balances: { xrp: 10, xdx: 2000 },
+    account: { balance_drops: 12_000_000, owner_count: 5 },
+    quote: { currency: "XRP" },
+  });
+  assert.equal(hold.xrp, 10);
+  assert.equal(hold.xdx, 2000);
+  assert.equal(hold.quote, 10);
+
+  const rlusd = walletAvailableAmounts({
+    balances: { xrp: 4, xdx: 100 },
+    lines: [{ currency: "RLUSD", issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", balance: "12.5" }],
+    quote: { currency: "RLUSD", issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", id: "RLUSD" },
+  });
+  assert.equal(rlusd.quote, 12.5);
 });
 
 test("composeWalletSnapshot stays blank until an address is signed in", () => {
