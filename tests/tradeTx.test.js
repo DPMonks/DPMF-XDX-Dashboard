@@ -17,6 +17,8 @@ import {
   quoteTrustSetTxjson,
   recommendedQuote,
   resolveQuote,
+  predictedQuoteOut,
+  predictedXdxFromQuote,
   tradeSides,
   tradeTotal,
   xrpDrops,
@@ -107,12 +109,14 @@ test("opening add LP from a pool card keeps that pair", () => {
 });
 
 test("trade windows show pay and receive from the selected pair", () => {
-  const buy = tradeSides({ action: "buy", amount: 1000, quoteLabel: "XIO", total: 4.632 });
+  const buy = tradeSides({ action: "buy", amount: 1000, quoteQty: 4.632, quoteLabel: "XIO", total: 4.632 });
   assert.deepEqual(buy.pay, [{ value: 4.632, asset: "XIO" }]);
   assert.deepEqual(buy.receive, [{ value: 1000, asset: "XDX" }]);
-  const sell = tradeSides({ action: "sell", amount: 1000, quoteLabel: "XIO", total: 4.632 });
+  const sell = tradeSides({ action: "sell", amount: 1000, quoteQty: 4.632, quoteLabel: "XIO", total: 4.632 });
   assert.deepEqual(sell.pay, [{ value: 1000, asset: "XDX" }]);
   assert.deepEqual(sell.receive, [{ value: 4.632, asset: "XIO" }]);
+  assert.equal(predictedQuoteOut(100, 0, 1000, 50), 5);
+  assert.equal(predictedXdxFromQuote(5, 0, 1000, 50), 100);
   const add = tradeSides({ action: "addLp", amount: 100, quoteQty: 5, quoteLabel: "XRP", lpOut: 20 });
   assert.equal(add.pay[0].asset, "XDX");
   assert.equal(add.pay[1].asset, "XRP");

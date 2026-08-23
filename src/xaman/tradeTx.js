@@ -190,6 +190,29 @@ export function tradeTotal(amount, price) {
   return qty * px;
 }
 
+export function poolPrice(reserveBase, reserveQuote) {
+  const base = Number(reserveBase);
+  const quote = Number(reserveQuote);
+  if (!(base > 0) || !(quote > 0)) return 0;
+  return quote / base;
+}
+
+export function predictedQuoteOut(xdxAmount, price, reserveBase, reserveQuote) {
+  const fromPool = recommendedQuote(xdxAmount, reserveBase, reserveQuote);
+  if (fromPool > 0) return fromPool;
+  return tradeTotal(xdxAmount, price);
+}
+
+export function predictedXdxFromQuote(quoteAmount, price, reserveBase, reserveQuote) {
+  const base = Number(reserveBase);
+  const quote = Number(reserveQuote);
+  const qty = Number(quoteAmount);
+  if (base > 0 && quote > 0 && qty > 0) return (qty / quote) * base;
+  const px = Number(price);
+  if (px > 0 && qty > 0) return qty / px;
+  return 0;
+}
+
 export function recommendedQuote(xdxAmount, reserveBase, reserveQuote) {
   const base = Number(reserveBase);
   const quote = Number(reserveQuote);
@@ -220,14 +243,14 @@ export function tradeSides({ action, amount, quoteQty, quoteLabel, total, lpAmou
   const label = quoteLabel || "XRP";
   if (action === "buy") {
     return {
-      pay: [{ value: Number(total) || 0, asset: label }],
+      pay: [{ value: Number(quoteQty || total) || 0, asset: label }],
       receive: [{ value: Number(amount) || 0, asset: "XDX" }],
     };
   }
   if (action === "sell") {
     return {
       pay: [{ value: Number(amount) || 0, asset: "XDX" }],
-      receive: [{ value: Number(total) || 0, asset: label }],
+      receive: [{ value: Number(quoteQty || total) || 0, asset: label }],
     };
   }
   if (action === "addLp") {

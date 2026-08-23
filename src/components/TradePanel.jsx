@@ -15,9 +15,11 @@ import {
   quoteChoices,
   quoteIdFromPair,
   quoteTrustSetTxjson,
-  recommendedQuote,
   resolveQuote,
   expectedWithdraw,
+  poolPrice,
+  predictedQuoteOut,
+  predictedXdxFromQuote,
   tradeSides,
   tradeTotal,
 } from "../xaman/tradeTx";
@@ -79,12 +81,15 @@ export default function TradePanel({
     Boolean(quote.issuer) &&
     !lineHint.includes(String(quote.currency || "").toUpperCase()) &&
     !lineHint.includes(String(quote.issuer || "").toUpperCase());
-  const px =
-    orderType === "market" && Number(liveSpot || spotPrice) > 0 ? Number(liveSpot || spotPrice) : Number(price);
-  const total = tradeTotal(amount, px);
   const reserves = useMemo(() => poolReserves(pools, quote), [pools, quote]);
-  const quoteHint = recommendedQuote(amount, reserves.base, reserves.quote);
-  if (action === "addLp" && quoteHint > 0 && !quoteQty) {
+  const implied = poolPrice(reserves.base, reserves.quote);
+  const px =
+    orderType === "limit" && Number(price) > 0
+      ? Number(price)
+      : Number(liveSpot || spotPrice || implied || price);
+  const total = tradeTotal(amount, px);
+  const quoteHint = predictedQuoteOut(amount, px, reserves.base, reserves.quote);
+  if ((action === "addLp" || !isLp) && quoteHint > 0 && !quoteQty) {
     setQuoteQty(String(quoteHint));
   }
   const lpHint = expectedLpTokens(amount, reserves.base, reserves.lpSupply);
@@ -111,7 +116,13 @@ export default function TradePanel({
     getPrices()
       .then((prices) => {
         if (cancelled) return;
-        const next = Number(quoteId === "XRP" ? prices.xdxXrp || prices.xdxPerXrp : prices.xdxRlusd || prices.xdxUsd);
+        const next = Number(
+          quoteId === "XRP"
+            ? prices.xdxXrp || prices.xdxPerXrp
+            : quoteId === "RLUSD"
+              ? prices.xdxRlusd || prices.xdxUsd
+              : 0
+        );
         if (next > 0) {
           setLiveSpot(next);
           setPrice((current) => current || String(next));
@@ -151,7 +162,7 @@ export default function TradePanel({
         account: walletAddress,
         quote,
         xdx: amount,
-        cost: total,
+        cost: quoteQty || total,
         market: orderType === "market",
       });
     }
@@ -301,13 +312,13 @@ export default function TradePanel({
               onChange={(event) => {
                 const next = event.target.value;
                 setAmount(next);
-                const hinted = recommendedQuote(next, reserves.base, reserves.quote);
+                const hinted = predictedQuoteOut(next, px, reserves.base, reserves.quote);
                 if (hinted > 0) setQuoteQty(String(hinted));
               }}
             />
           </label>
         )}
-        {action === "addLp" ? (
+        {action !== "removeLp" ? (
           <label className="trade-field">
             {quote.label}
             <input
@@ -318,10 +329,8 @@ export default function TradePanel({
               onChange={(event) => {
                 const next = event.target.value;
                 setQuoteQty(next);
-                if (reserves.quote > 0 && reserves.base > 0) {
-                  const xdx = (Number(next) / reserves.quote) * reserves.base;
-                  if (xdx > 0) setAmount(String(xdx));
-                }
+                const xdx = predictedXdxFromQuote(next, px, reserves.base, reserves.quote);
+                if (xdx > 0) setAmount(String(xdx));
               }}
             />
           </label>
