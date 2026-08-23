@@ -1,5 +1,6 @@
 import { INDEXER_ORIGIN, THREE_D_TYPES, XIO_CURRENCY, XIO_ISSUER, XRPL_RPC } from "./constants.js";
 import { feePolicy } from "./fees.js";
+import { xamanConfigured } from "./xaman.js";
 
 export function capabilityMap() {
   const fee = feePolicy();
@@ -44,7 +45,9 @@ export function capabilityMap() {
         status: "partial",
         points: [
           "XLS-46 path for metadata that can evolve",
-          "URI update signing lands with Xaman keys"
+          xamanConfigured()
+            ? "URI update signing uses the same Xaman keys as connect"
+            : "URI update signing lands when Xaman keys are set"
         ]
       },
       {
@@ -230,11 +233,12 @@ export function capabilityMap() {
       governanceVotes: true,
       fiatRampSlot: true,
       onboarding: true,
+      xamanConnect: xamanConfigured(),
       zeroPlatformFee: false
     },
     fee,
     next: {
-      xamanSigning: false,
+      xamanSigning: xamanConfigured(),
       dNftUriUpdate: false,
       feeCollectorAddress: !fee.collector,
       yemRewards: true

@@ -38,6 +38,24 @@ npm run reset
 - Image proxy `GET /api/assets?url=`
 - Frontend same-origin `/api` via the Vite proxy
 
-## Signing (not wired)
+## Xaman / Xumm
 
-Xaman connect / mint / buy / sell still return `{ implemented: false }` until `xumm-sdk` keys are added.
+Connect, balances, free profile registration, and mint/buy/sell/burn/send QR flows use the Xumm Platform API.
+
+Set these in `fuzion-xio-api/.env` (never commit them):
+
+```
+XUMM_API_KEY=
+XUMM_API_SECRET=
+```
+
+Get the pair from [apps.xumm.dev](https://apps.xumm.dev). Add these origins on the app:
+
+- `http://127.0.0.1:5174`
+- `http://localhost:5174`
+- `https://fuzion-xio.com`
+
+`GET /api/health` includes `{ xaman: { configured: true|false } }`.  
+`GET /api/xumm/status` is the same flag.
+
+The header already calls `POST /api/xumm/connect` (QR) then `POST /api/xumm/accountDetail` (waits for the signed SignIn and returns a JWT with `ac`). Mint/buy/sell still open a Xaman payload; after the wallet signs, the desk records the fill.

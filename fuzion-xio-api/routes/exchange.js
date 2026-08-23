@@ -32,16 +32,9 @@ import {
   snapshotFromBody
 } from "../lib/profileNfts.js";
 import { rememberWalletNfts, walletNftDesk } from "../lib/walletNfts.js";
+import { xamanConfigured } from "../lib/xaman.js";
 
 const router = Router();
-
-function notReady(feature) {
-  return {
-    success: false,
-    implemented: false,
-    message: `${feature} is not wired yet. The local exchange is a fresh foundation; Xaman/ledger signing comes next.`
-  };
-}
 
 function nftById(store, id) {
   return resolveNft(store, id);
@@ -78,7 +71,8 @@ router.get("/health", (_req, res) => {
     nfts: store.nfts.length,
     profiles: store.profiles.length,
     collections: (store.collectionTemplates || []).length,
-    virtualSupply
+    virtualSupply,
+    xaman: { configured: xamanConfigured() }
   });
 });
 
@@ -662,26 +656,5 @@ router.post("/xrpl/getAllOffers", (req, res) => {
 router.post("/nft/totalTradeHistory", (_req, res) => {
   res.json({ success: true, data: readStore().activity || [] });
 });
-
-const stubPosts = [
-  "xumm/connect",
-  "xumm/accountDetail",
-  "xumm/getBalance",
-  "xumm/disConnect",
-  "xumm/registrationFee",
-  "xumm/checkRegistrationFee",
-  "xrpl/mintNft",
-  "xrpl/mintNftOffer",
-  "xrpl/saleNft",
-  "xrpl/buyNft",
-  "xrpl/burnNft",
-  "xrpl/sendNft"
-];
-
-for (const pathName of stubPosts) {
-  router.post(`/${pathName}`, (_req, res) => {
-    res.status(200).json(notReady(pathName));
-  });
-}
 
 export default router;

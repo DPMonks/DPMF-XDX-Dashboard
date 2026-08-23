@@ -111,7 +111,7 @@ export function demoSeed() {
       _id: "seed-signal-4",
       name: "Signal Mark",
       category: "Utility",
-      description: "Xaman mint/buy routes are stubbed until keys are added.",
+      description: "Xaman connect and ledger signing use XUMM_API_KEY and XUMM_API_SECRET.",
       image: images[3],
       currency: "XRP",
       amount: "3.5",
