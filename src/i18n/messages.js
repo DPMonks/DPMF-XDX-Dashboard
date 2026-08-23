@@ -114,6 +114,8 @@ const en = {
   chartElliottTriple: "Elliott Triple Combo Wave",
   chartLineWidth: "Width",
   chartLineStyle: "Style",
+  chartEditDrawing: "Edit drawing",
+  chartDeleteDrawing: "Delete drawing",
   chartStyle_solid: "Solid",
   chartStyle_dash: "Dashed",
   chartStyle_dot: "Dotted",

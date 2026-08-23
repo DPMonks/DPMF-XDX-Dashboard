@@ -299,9 +299,34 @@
   cursor: grab;
 }
 
+.hybrid-svg.is-edit {
+  cursor: pointer;
+}
+
 .hybrid-svg.is-panning,
 .hybrid-svg.is-grabbing {
   cursor: grabbing;
+}
+
+.hybrid-candle,
+.hybrid-grid,
+.hybrid-sma,
+.hybrid-sma-glow,
+.hybrid-volume,
+.hybrid-rsi,
+.hybrid-band,
+.hybrid-spread,
+.hybrid-wall,
+.hybrid-trail,
+.hybrid-mid,
+.hybrid-ghost,
+.hybrid-wallet-order,
+.hybrid-wallet-fill,
+.hybrid-heat,
+.hybrid-axis,
+.hybrid-pane-label,
+.hybrid-place-layer {
+  pointer-events: none;
 }
 
 .hybrid-candle.is-enter {
@@ -870,6 +895,53 @@
 
 .hybrid-events {
   margin: 0;
+}
+
+.hybrid-edit-bar {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(7, 7, 8, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.hybrid-edit-bar .hybrid-style-row,
+.hybrid-edit-bar .hybrid-colors {
+  margin: 0;
+}
+
+.hybrid-edit-bar .hybrid-colors.is-docked {
+  width: auto;
+  padding: 0;
+}
+
+.hybrid-edit-delete {
+  width: 28px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 93, 115, 0.35);
+  background: #000;
+  color: #ff5d73;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.hybrid-edit-delete svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .hybrid-ohlc {

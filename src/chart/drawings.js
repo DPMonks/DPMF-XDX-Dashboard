@@ -449,6 +449,230 @@ export function hitDrawingHandle(drawings = [], scale, x, y, radius = HANDLE_HIT
   return null;
 }
 
+export const DRAWING_HIT_R = 10;
+
+function distPointToSeg(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (!len2) return Math.hypot(px - x1, py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+function nearSeg(x, y, a, b, scale, radius) {
+  if (!a || !b) return false;
+  const x1 = plotX(a, scale);
+  const y1 = plotY(a, scale);
+  const x2 = plotX(b, scale);
+  const y2 = plotY(b, scale);
+  if (![x1, y1, x2, y2].every(Number.isFinite)) return false;
+  return distPointToSeg(x, y, x1, y1, x2, y2) <= radius;
+}
+
+function pointInTriangle(px, py, row, scale) {
+  const ax = plotX(row.a, scale);
+  const ay = plotY(row.a, scale);
+  const bx = plotX(row.b, scale);
+  const by = plotY(row.b, scale);
+  const cx = plotX(row.c, scale);
+  const cy = plotY(row.c, scale);
+  const d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+  if (!d) return false;
+  const wa = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / d;
+  const wb = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / d;
+  const wc = 1 - wa - wb;
+  return wa >= 0 && wb >= 0 && wc >= 0;
+}
+
+export function hitDrawingBody(row, scale, x, y, opts = {}) {
+  if (!row || row.preview || !scale) return false;
+  const radius = Number.isFinite(Number(opts.radius)) ? Number(opts.radius) : DRAWING_HIT_R;
+  const pad = opts.pad || {};
+  const width = Number(opts.width);
+  const plotBottom = Number(opts.plotBottom);
+  const left = Number(pad.l) || 0;
+  const right = Number.isFinite(width) ? width - (Number(pad.r) || 0) : Infinity;
+  const top = Number(pad.t) || 0;
+  const bottom = Number.isFinite(plotBottom) ? plotBottom : Infinity;
+  const kind = row.kind;
+  if (kind === "hline" || kind === "hray" || kind === "crossline" || kind === "pricelabel") {
+    const py = scale.y?.(row.price);
+    const nearH = Number.isFinite(py) && Math.abs(py - y) <= radius && x >= left && x <= right;
+    if (kind === "hray" && Number(row.t) > 0) {
+      const startX = scale.x?.(row.t);
+      return nearH && (!Number.isFinite(startX) || x >= startX - radius);
+    }
+    if (kind === "crossline") {
+      const px = Number.isFinite(Number(row.t)) ? scale.x?.(row.t) : null;
+      const nearV = Number.isFinite(px) && Math.abs(px - x) <= radius && y >= top && y <= bottom;
+      return nearH || nearV;
+    }
+    if (kind === "pricelabel") {
+      const px = Number(row.t) > 0 ? scale.x?.(row.t) : left + 80;
+      return nearH && Number.isFinite(px) && Math.abs(px - x) <= 48;
+    }
+    return nearH;
+  }
+  if (kind === "vline") {
+    const px = scale.x?.(row.t);
+    return Number.isFinite(px) && Math.abs(px - x) <= radius && y >= top && y <= bottom;
+  }
+  if (kind === "text") {
+    return Math.hypot((scale.x?.(row.t) || 0) - x, (scale.y?.(row.price) || 0) - y) <= 16;
+  }
+  if ((kind === "trend" || kind === "infoline" || kind === "arrow") && row.a && row.b) {
+    return nearSeg(x, y, row.a, row.b, scale, radius);
+  }
+  if (kind === "ray" && row.a && row.b) {
+    const [a, b] = raySegment(row.a, row.b, scale.start, scale.end);
+    return nearSeg(x, y, a, b, scale, radius);
+  }
+  if (kind === "extended" && row.a && row.b) {
+    const [a, b] = extendSegment(row.a, row.b, scale.start, scale.end);
+    return nearSeg(x, y, a, b, scale, radius);
+  }
+  if ((kind === "rect" || kind === "range") && row.a && row.b) {
+    const x0 = Math.min(plotX(row.a, scale), plotX(row.b, scale));
+    const y0 = Math.min(plotY(row.a, scale), plotY(row.b, scale));
+    const w = Math.abs(plotX(row.b, scale) - plotX(row.a, scale));
+    const h = Math.abs(plotY(row.b, scale) - plotY(row.a, scale));
+    return x >= x0 - radius && x <= x0 + w + radius && y >= y0 - radius && y <= y0 + h + radius;
+  }
+  if (kind === "channel" && row.a && row.b) {
+    if (nearSeg(x, y, row.a, row.b, scale, radius)) return true;
+    if (!row.c) return false;
+    const offset = channelOffset(row.a, row.b, row.c);
+    return nearSeg(
+      x,
+      y,
+      { t: row.a.t, price: row.a.price + offset },
+      { t: row.b.t, price: row.b.price + offset },
+      scale,
+      radius
+    );
+  }
+  if (kind === "fib" && row.a && row.b) {
+    const span = fibExtent(row.a, row.b);
+    if (span) {
+      const x0 = scale.x(span.t0);
+      const x1 = scale.x(span.t1);
+      const insideX = x >= Math.min(x0, x1) - radius && x <= Math.max(x0, x1) + radius;
+      const bands = fibBands(row.a, row.b);
+      const ys = bands.map((band) => scale.y(band.price)).filter(Number.isFinite);
+      if (insideX && ys.length) {
+        const y0 = Math.min(...ys);
+        const y1 = Math.max(...ys);
+        if (y >= y0 - radius && y <= y1 + radius) return true;
+      }
+    }
+    return nearSeg(x, y, row.a, row.b, scale, radius);
+  }
+  if (kind === "fibext" && row.a && row.b && row.c) {
+    const bands = fibExtensionBands(row.a, row.b, row.c);
+    const x0 = scale.x(row.c.t);
+    if (
+      bands.some(
+        (band) =>
+          Math.abs(scale.y(band.price) - y) <= radius && x >= x0 - radius && x <= right + radius
+      )
+    ) {
+      return true;
+    }
+    return nearSeg(x, y, row.a, row.b, scale, radius);
+  }
+  if (kind === "pitchfork" && row.a && row.b && row.c) {
+    return pitchforkRays(row.a, row.b, row.c, scale.start, scale.end).some((seg) =>
+      nearSeg(x, y, seg[0], seg[1], scale, radius)
+    );
+  }
+  if ((kind === "ellipse" || kind === "circle") && row.a && row.b) {
+    const x1 = plotX(row.a, scale);
+    const y1 = plotY(row.a, scale);
+    const x2 = plotX(row.b, scale);
+    const y2 = plotY(row.b, scale);
+    const cx = kind === "circle" ? x1 : (x1 + x2) / 2;
+    const cy = kind === "circle" ? y1 : (y1 + y2) / 2;
+    const rx = kind === "circle" ? Math.hypot(x2 - x1, y2 - y1) : Math.max(1, Math.abs(x2 - x1) / 2);
+    const ry = kind === "circle" ? rx : Math.max(1, Math.abs(y2 - y1) / 2);
+    const nx = (x - cx) / (rx + radius);
+    const ny = (y - cy) / (ry + radius);
+    return nx * nx + ny * ny <= 1;
+  }
+  if (String(kind).startsWith("elliott") && Array.isArray(row.points)) {
+    for (let index = 1; index < row.points.length; index += 1) {
+      if (nearSeg(x, y, row.points[index - 1], row.points[index], scale, radius)) return true;
+    }
+    return false;
+  }
+  if (kind === "triangle" && row.a && row.b && row.c) {
+    return (
+      nearSeg(x, y, row.a, row.b, scale, radius) ||
+      nearSeg(x, y, row.b, row.c, scale, radius) ||
+      nearSeg(x, y, row.c, row.a, scale, radius) ||
+      pointInTriangle(x, y, row, scale)
+    );
+  }
+  return false;
+}
+
+export function hitPlacedDrawing(drawings = [], scale, x, y, opts = {}) {
+  const handle = hitDrawingHandle(drawings, scale, x, y, opts.handleRadius ?? HANDLE_HIT_R);
+  if (handle) return { ...handle, handle: true };
+  for (let index = drawings.length - 1; index >= 0; index -= 1) {
+    if (hitDrawingBody(drawings[index], scale, x, y, opts)) {
+      return { index, key: null, handle: false };
+    }
+  }
+  return null;
+}
+
+export function patchDrawingStyle(row, patch = {}) {
+  if (!row) return row;
+  const style = drawingStyle({
+    strokeWidth: patch.strokeWidth ?? row.strokeWidth,
+    lineStyle: patch.lineStyle ?? row.lineStyle,
+  });
+  return {
+    ...row,
+    ...style,
+    color: patch.color ?? row.color,
+  };
+}
+
+export function drawingToolbarAnchor(row, scale, opts = {}) {
+  if (!row || !scale) return null;
+  const fallback = Number.isFinite(scale.min) && Number.isFinite(scale.max) ? (scale.min + scale.max) / 2 : 0;
+  const xs = [];
+  const ys = [];
+  for (const handle of drawingHandles(row, fallback)) {
+    const px = plotX(handle, scale);
+    const py = plotY(handle, scale);
+    if (Number.isFinite(px) && Number.isFinite(py)) {
+      xs.push(px);
+      ys.push(py);
+    }
+  }
+  if (row.kind === "fib" && row.a && row.b) {
+    const span = fibExtent(row.a, row.b);
+    if (span) {
+      xs.push(scale.x(span.t0), scale.x(span.t1));
+      const bands = fibBands(row.a, row.b);
+      for (const band of bands) {
+        const py = scale.y(band.price);
+        if (Number.isFinite(py)) ys.push(py);
+      }
+    }
+  }
+  if (!xs.length || !ys.length) return null;
+  const padTop = Number(opts.pad?.t) || 0;
+  return {
+    x: (Math.min(...xs) + Math.max(...xs)) / 2,
+    y: Math.max(padTop + 8, Math.min(...ys) - 10),
+    below: Math.min(...ys) < padTop + 36,
+  };
+}
+
 export function plotX(point, scale) {
   if (Number.isFinite(Number(point?.x)) && (!point.viewKey || !scale?.viewKey || String(point.viewKey) === String(scale.viewKey))) {
     return Number(point.x);

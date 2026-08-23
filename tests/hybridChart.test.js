@@ -50,8 +50,12 @@ import {
   fibPrice,
   flyoutSections,
   PLACE_OFFSET,
+  drawingToolbarAnchor,
+  hitDrawingBody,
   hitDrawingHandle,
+  hitPlacedDrawing,
   moveDrawingHandle,
+  patchDrawingStyle,
   nextDrawingState,
   pitchforkRays,
   plotX,
@@ -607,6 +611,40 @@ test("horizontal line trails under the cursor and drops on one click", () => {
   assert.equal(placed.drawing.kind, "hline");
   assert.equal(placed.drawing.price, 0.4);
   assert.equal(toolMeta("hline").clicks, 1);
+});
+
+test("selecting a placed drawing exposes style edits and hit tests", () => {
+  const scale = { x: (t) => t * 10, y: (p) => 200 - p, start: 0, end: 20, min: 0, max: 200 };
+  const fib = nextDrawingState({
+    tool: "fib",
+    color: "#3d8bff",
+    pending: { tool: "fib", color: "#3d8bff", points: [{ t: 2, price: 180 }] },
+    point: { t: 12, price: 40 },
+  }).drawing;
+  assert.equal(hitDrawingBody(fib, scale, 70, 110), true);
+  assert.equal(hitDrawingBody(fib, scale, 400, 10), false);
+  const body = hitPlacedDrawing([fib], scale, 70, 110);
+  assert.equal(body.index, 0);
+  assert.equal(body.handle, false);
+  const handle = hitPlacedDrawing([fib], scale, scale.x(12), scale.y(40));
+  assert.equal(handle.handle, true);
+  assert.equal(handle.key, "b");
+  const styled = patchDrawingStyle(fib, { color: "#ff5d73", strokeWidth: 3, lineStyle: "dash" });
+  assert.equal(styled.color, "#ff5d73");
+  assert.equal(styled.strokeWidth, 3);
+  assert.equal(styled.lineStyle, "dash");
+  assert.equal(styled.dasharray, "7 4");
+  const anchor = drawingToolbarAnchor(fib, scale, { pad: { t: 16 } });
+  assert.ok(Number.isFinite(anchor.x));
+  assert.ok(Number.isFinite(anchor.y));
+  const line = nextDrawingState({
+    tool: "trend",
+    color: "#98f050",
+    pending: { tool: "trend", color: "#98f050", points: [{ t: 1, price: 10 }] },
+    point: { t: 8, price: 80 },
+  }).drawing;
+  assert.equal(hitDrawingBody(line, scale, 45, scale.y(45), { radius: 12 }), true);
+  assert.equal(hitPlacedDrawing([line], scale, 400, 10), null);
 });
 
 test("placed drawings keep white handles that can be moved", () => {

@@ -34,7 +34,7 @@ import { walletOrdersFromBooks } from "../wallet/composeWallet";
 import { useWallet } from "../context/useWallet";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
-import { elliottTools, moveDrawingHandle, nextDrawingState, toolAfterDrawing } from "../chart/drawings";
+import { elliottTools, moveDrawingHandle, nextDrawingState, patchDrawingStyle, toolAfterDrawing } from "../chart/drawings";
 import ChartTools from "./ChartTools";
 import HybridPlot from "./HybridPlot";
 import TradeBar from "./TradeBar";
@@ -179,6 +179,7 @@ export default function HybridChart() {
   const [trades, setTrades] = useState([]);
   const [sparkline, setSparkline] = useState([]);
   const [drawings, setDrawings] = useState([]);
+  const [selected, setSelected] = useState(null);
   const [pending, setPending] = useState(null);
   const [ghost, setGhost] = useState(null);
   const [now, setNow] = useState(0);
@@ -331,7 +332,9 @@ export default function HybridChart() {
     const next = nextDrawingState({ tool, color: drawColor, pending, point, strokeWidth, lineStyle });
     setPending(next.pending);
     if (next.drawing) {
+      const index = drawings.length;
       setDrawings((rows) => [...rows, next.drawing]);
+      setSelected(index);
       const nextTool = toolAfterDrawing(stayDraw, tool);
       setTool(nextTool);
       if (nextTool === "cursor") setPending(null);
@@ -344,31 +347,59 @@ export default function HybridChart() {
     );
   }
 
+  function editDrawing(index, patch) {
+    setDrawings((rows) =>
+      rows.map((row, current) => (current === index ? patchDrawingStyle(row, patch) : row))
+    );
+  }
+
+  function deleteDrawing(index) {
+    setDrawings((rows) => rows.filter((_, current) => current !== index));
+    setSelected(null);
+  }
+
   function selectTool(id) {
     setTool(id || "cursor");
     setPending(null);
+    if (id && id !== "cursor") setSelected(null);
   }
 
   function undoDrawing() {
     setPending(null);
     setDrawings((rows) => rows.slice(0, -1));
+    setSelected(null);
   }
 
   function clearDrawings() {
     setDrawings([]);
+    setSelected(null);
     setPending(null);
     setGhost(null);
   }
 
+  if (selected != null && selected >= drawings.length) {
+    setSelected(null);
+  }
+
   useEffect(() => {
     function onKey(event) {
-      if (event.key === "Escape") setPending(null);
+      if (event.key === "Escape") {
+        setPending(null);
+        setSelected(null);
+        return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && selected != null) {
+        const tag = String(event.target?.tagName || "");
+        if (tag === "INPUT" || tag === "TEXTAREA" || event.target?.isContentEditable) return;
+        event.preventDefault();
+        deleteDrawing(selected);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, []);
+  }, [selected]);
 
   function applyZoom(directionOrEvent, maybeRatio) {
     const fromEvent = directionOrEvent && typeof directionOrEvent === "object";
@@ -607,8 +638,13 @@ export default function HybridChart() {
             showArb={showArb}
             showLedgerOrders={showLedgerOrders}
             locale={locale}
+            t={t}
+            selectedIndex={selected}
             onDraw={addDrawing}
             onMoveHandle={moveHandle}
+            onSelect={setSelected}
+            onEditDrawing={editDrawing}
+            onDeleteDrawing={deleteDrawing}
             onPan={(steps) => {
               if (!steps) return;
               setPanOffset((current) => current + steps);

@@ -77,7 +77,7 @@ function FibRetracement({ row, scale, pad, plotBottom, clipId, dashed }) {
                 x2={x1}
                 y1={y}
                 y2={y}
-                style={paint(band.color)}
+                style={paint(band.color, row)}
                 vectorEffect="non-scaling-stroke"
               />
             </g>
@@ -131,6 +131,7 @@ export default function ChartDrawings({
   plotBottom,
   clipId,
   activeHandle,
+  selectedIndex = null,
 }) {
   const tMin = scale.start;
   const tMax = scale.end;
@@ -410,16 +411,18 @@ export default function ChartDrawings({
         }
         return null;
       })}
-      {drawings.map((row, index) => (
-        <g key={`handles-${index}`}>
-          <Handles
-            row={row}
-            scale={scale}
-            fallbackPrice={(scale.min + scale.max) / 2}
-            activeKey={activeHandle?.index === index ? activeHandle.key : null}
-          />
-        </g>
-      ))}
+      {drawings.map((row, index) =>
+        selectedIndex === index ? (
+          <g key={`handles-${index}`}>
+            <Handles
+              row={row}
+              scale={scale}
+              fallbackPrice={(scale.min + scale.max) / 2}
+              activeKey={activeHandle?.index === index ? activeHandle.key : null}
+            />
+          </g>
+        ) : null
+      )}
     </g>
   );
 }

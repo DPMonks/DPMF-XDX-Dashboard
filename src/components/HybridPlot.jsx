@@ -4,9 +4,10 @@ import { barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, form
 import { candleBodyBox, candleBodyWidth, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
-import { applyPlaceOffset, canMoveHandle, clickIsPan, hitDrawingHandle, shouldFollowCrosshair, snapPoint, toggleInspect } from "../chart/drawings";
+import { applyPlaceOffset, canMoveHandle, clickIsPan, drawingToolbarAnchor, hitPlacedDrawing, shouldFollowCrosshair, snapPoint, toggleInspect } from "../chart/drawings";
 import { hideToolPreview, paintPlaceMark, paintToolPreview } from "../chart/paintPreview";
 import ChartDrawings from "./ChartDrawings";
+import ChartEditBar from "./ChartEditBar";
 
 const PRICE_H = 348;
 const VOL_H = 72;
@@ -47,8 +48,13 @@ export default function HybridPlot({
   showArb = false,
   showLedgerOrders = false,
   locale,
+  t,
+  selectedIndex = null,
   onDraw,
   onMoveHandle,
+  onSelect,
+  onEditDrawing,
+  onDeleteDrawing,
   onPan,
   onZoom,
 }) {
@@ -60,16 +66,18 @@ export default function HybridPlot({
   const timeTextRef = useRef(null);
   const priceTagRef = useRef(null);
   const priceTextRef = useRef(null);
-  const hoverRef = useRef(null);
   const inspectRef = useRef(null);
   const clickRef = useRef(null);
-  const rafRef = useRef(0);
+  const pointerKindRef = useRef("pan");
+  const moveQ = useRef(null);
+  const moveRaf = useRef(0);
+  const onMoveHandleRef = useRef(onMoveHandle);
   const placeMarkRef = useRef(null);
   const previewRef = useRef(null);
-  const [hover, setHover] = useState(null);
   const [inspect, setInspect] = useState(null);
   const [drag, setDrag] = useState(null);
   const [panDrag, setPanDrag] = useState(null);
+  const [pointerKind, setPointerKind] = useState("pan");
   const [enterTs, setEnterTs] = useState([]);
   const [seenTs, setSeenTs] = useState([]);
   const [maDraw, setMaDraw] = useState({ ready: [], armed: [] });
@@ -140,6 +148,14 @@ export default function HybridPlot({
   useEffect(() => {
     onZoomRef.current = onZoom;
   }, [onZoom]);
+  useEffect(() => {
+    onMoveHandleRef.current = onMoveHandle;
+  }, [onMoveHandle]);
+  useEffect(() => {
+    return () => {
+      if (moveRaf.current) cancelAnimationFrame(moveRaf.current);
+    };
+  }, []);
   useEffect(() => {
     if (tool === "cursor") hideToolPreview(previewRef.current, placeMarkRef.current);
   }, [tool]);
@@ -303,21 +319,46 @@ export default function HybridPlot({
     });
   }
 
-  function queueHover(next) {
-    hoverRef.current = next;
-    if (tool !== "cursor") return;
-    if (rafRef.current) return;
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = 0;
-      setHover(hoverRef.current);
+  function hitAt(pointer) {
+    if (!pointer || !canMoveHandle(tool)) return null;
+    return hitPlacedDrawing(drawings, scale, pointer.x, pointer.y, {
+      pad: PAD,
+      width,
+      plotBottom,
+    });
+  }
+
+  function setPointerFromHit(hit) {
+    const next = hit?.handle ? "grab" : hit ? "edit" : "pan";
+    if (pointerKindRef.current === next) return;
+    pointerKindRef.current = next;
+    setPointerKind(next);
+  }
+
+  function queueHandleMove(index, key, pointer) {
+    moveQ.current = { index, key, pointer };
+    if (moveRaf.current) return;
+    moveRaf.current = requestAnimationFrame(() => {
+      moveRaf.current = 0;
+      const next = moveQ.current;
+      moveQ.current = null;
+      if (next && onMoveHandleRef.current) onMoveHandleRef.current(next.index, next.key, next.pointer);
     });
   }
 
   function onMove(event) {
     let livePan = panDrag;
-    if (clickRef.current && !panDrag && !drag && tool === "cursor" && clickIsPan(clickRef.current.clientX, event.clientX)) {
+    if (
+      clickRef.current &&
+      !clickRef.current.drawing &&
+      !panDrag &&
+      !drag &&
+      tool === "cursor" &&
+      clickIsPan(clickRef.current.clientX, event.clientX)
+    ) {
       livePan = { x: clickRef.current.clientX };
       setPanDrag(livePan);
+      if (onSelect) onSelect(null);
       clickRef.current = null;
     }
     if (livePan) {
@@ -336,30 +377,38 @@ export default function HybridPlot({
     const pointer = locate(event);
     const placing = tool !== "cursor";
     const next = placing && !drag ? locate(event, { place: true }) : pointer;
-    const overHandle = Boolean(canMoveHandle(tool) && pointer && hitDrawingHandle(drawings, scale, pointer.x, pointer.y));
+    const hit = drag ? { ...drag, handle: true } : hitAt(pointer);
+    const overHandle = Boolean(hit?.handle);
     if (shouldFollowCrosshair({ tool, dragging: Boolean(drag), overHandle })) {
       paintCursor(pointer);
     } else {
       paintCursor(null);
     }
     paintPlacement(placing && !drag ? next : null);
-    queueHover(pointer);
-    if (drag && pointer && Number.isFinite(pointer.t) && Number.isFinite(pointer.price) && onMoveHandle) {
-      onMoveHandle(drag.index, drag.key, pointer);
+    if (!drag && !livePan) setPointerFromHit(hit);
+    if (drag && pointer && Number.isFinite(pointer.t) && Number.isFinite(pointer.price)) {
+      queueHandleMove(drag.index, drag.key, pointer);
     }
   }
 
   function onPointerDown(event) {
     const pointer = locate(event);
     if (!pointer) return;
-    const hit = event.button === 0 && canMoveHandle(tool) ? hitDrawingHandle(drawings, scale, pointer.x, pointer.y) : null;
+    const hit = event.button === 0 ? hitAt(pointer) : null;
     if (hit) {
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
-      clickRef.current = null;
-      setDrag(hit);
-      paintCursor(pointer);
-      if (onMoveHandle) onMoveHandle(hit.index, hit.key, pointer);
+      inspectRef.current = null;
+      setInspect(null);
+      if (onSelect) onSelect(hit.index);
+      if (hit.handle) {
+        clickRef.current = null;
+        setDrag(hit);
+        paintCursor(pointer);
+        queueHandleMove(hit.index, hit.key, pointer);
+      } else {
+        clickRef.current = { clientX: event.clientX, pointer, drawing: true };
+      }
       return;
     }
     if (event.button === 1) {
@@ -374,7 +423,7 @@ export default function HybridPlot({
       if (!pointer.inPrice) return;
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
-      clickRef.current = { clientX: event.clientX, pointer };
+      clickRef.current = { clientX: event.clientX, pointer, drawing: false };
       return;
     }
     const next = locate(event, { place: true });
@@ -383,11 +432,28 @@ export default function HybridPlot({
     onDraw(next);
   }
 
+  function flushHandleMove() {
+    if (moveRaf.current) {
+      cancelAnimationFrame(moveRaf.current);
+      moveRaf.current = 0;
+    }
+    const next = moveQ.current;
+    moveQ.current = null;
+    if (next && onMoveHandleRef.current) onMoveHandleRef.current(next.index, next.key, next.pointer);
+  }
+
   function onPointerUp() {
+    flushHandleMove();
     if (clickRef.current && tool === "cursor") {
-      const next = toggleInspect(inspectRef.current, clickRef.current.pointer);
-      inspectRef.current = next;
-      setInspect(next);
+      if (clickRef.current.drawing) {
+        inspectRef.current = null;
+        setInspect(null);
+      } else {
+        if (onSelect) onSelect(null);
+        const next = toggleInspect(inspectRef.current, clickRef.current.pointer);
+        inspectRef.current = next;
+        setInspect(next);
+      }
     }
     clickRef.current = null;
     setDrag(null);
@@ -397,10 +463,10 @@ export default function HybridPlot({
     }
   }
 
-  const overHandle = Boolean(
-    canMoveHandle(tool) && hover && hitDrawingHandle(drawings, scale, hover.x, hover.y)
-  );
+  const overHandle = pointerKind === "grab" || Boolean(drag);
   const liveHair = shouldFollowCrosshair({ tool, dragging: Boolean(drag), overHandle });
+  const selected = Number.isInteger(selectedIndex) ? drawings[selectedIndex] : null;
+  const editAnchor = selected && tool === "cursor" ? drawingToolbarAnchor(selected, scale, { pad: PAD }) : null;
   const inspectX = inspect ? Math.min(width - PAD.r, Math.max(PAD.l, scale.x(inspect.t))) : null;
   const inspectY = inspect ? Math.min(plotBottom - 1, Math.max(PAD.t + 1, scale.y(inspect.price))) : null;
   const hoverCandle = inspect?.candle;
@@ -436,14 +502,13 @@ export default function HybridPlot({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${drag ? " is-grabbing" : overHandle ? " is-grab" : ""}`}
+        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${drag ? " is-grabbing" : pointerKind === "grab" ? " is-grab" : pointerKind === "edit" ? " is-edit" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => {
           if (drag) return;
           paintCursor(null);
           hideToolPreview(previewRef.current, placeMarkRef.current);
-          hoverRef.current = null;
-          setHover(null);
+          setPointerFromHit(null);
         }}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
@@ -719,6 +784,7 @@ export default function HybridPlot({
           plotBottom={plotBottom}
           clipId={clipId}
           activeHandle={drag}
+          selectedIndex={tool === "cursor" ? selectedIndex : null}
         />
         <g className="hybrid-place-layer" pointerEvents="none">
           <g ref={previewRef} clipPath={`url(#${clipId})`} />
@@ -819,6 +885,20 @@ export default function HybridPlot({
           </g>
         ) : null}
       </svg>
+
+      {editAnchor && selected && t ? (
+        <ChartEditBar
+          drawing={selected}
+          t={t}
+          style={{
+            left: `${Math.min(92, Math.max(8, (editAnchor.x / width) * 100))}%`,
+            top: `${Math.min(88, Math.max(4, (editAnchor.y / height) * 100))}%`,
+            transform: editAnchor.below ? "translate(-50%, 12px)" : "translate(-50%, calc(-100% - 10px))",
+          }}
+          onPatch={(patch) => onEditDrawing?.(selectedIndex, patch)}
+          onDelete={() => onDeleteDrawing?.(selectedIndex)}
+        />
+      ) : null}
 
       {hoverCandle ? (
         <div className="hybrid-ohlc">
