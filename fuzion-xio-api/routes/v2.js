@@ -3,6 +3,7 @@ import { readStore, update } from "../lib/store.js";
 import { findTemplate, resolveNft, templates } from "../lib/collections.js";
 import { activityFeed } from "../lib/market.js";
 import { recentLedgerMints } from "../lib/ledgerMints.js";
+import { rememberWalletNfts, walletNftDesk } from "../lib/walletNfts.js";
 import { addressValidation, nftValidation } from "../lib/validation.js";
 import {
   addComment,
@@ -55,6 +56,15 @@ router.get("/ledger-mints", async (_req, res) => {
 
 router.get("/validation/:address", (req, res) => {
   res.json({ success: true, data: addressValidation(readStore(), req.params.address) });
+});
+
+router.get("/wallet/:address/nfts", async (req, res) => {
+  const desk = await walletNftDesk(readStore(), req.params.address, req.query);
+  update((current) => {
+    rememberWalletNfts(current, desk.docs);
+    return current;
+  });
+  res.json({ success: true, data: desk });
 });
 
 router.get("/nft/:id/validation", (req, res) => {

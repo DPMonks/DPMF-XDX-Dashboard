@@ -5,8 +5,8 @@ import {
   templates,
   virtualId
 } from "./collections.js";
-import { accountNfts } from "./xrpl.js";
 import { nftValidation } from "./validation.js";
+import { ledgerNftsCached } from "./walletNfts.js";
 
 function looksLikeXrpl(address) {
   return typeof address === "string" && /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(address);
@@ -262,25 +262,13 @@ export async function profileNftDesk(store, address) {
   }
   let ledger = [];
   if (looksLikeXrpl(address)) {
-    const nfts = await accountNfts(address).catch(() => ({ ok: false }));
-    if (nfts.ok) {
-      ledger = (nfts.result.account_nfts || []).map((row) => {
-        const match =
-          resolveNft(store, row.NFTokenID) ||
-          (store.nfts || []).find((item) => item.NFTokenID === row.NFTokenID);
-        return card(
-          store,
-          match || {
-            _id: row.NFTokenID,
-            name: `XRPL NFT ${String(row.NFTokenID).slice(0, 8)}…`,
-            NFTokenID: row.NFTokenID,
-            fileType: "image",
-            contentType: "image"
-          },
-          { source: "xrpl", found: true }
-        );
-      });
-    }
+    const scan = await ledgerNftsCached(address).catch(() => ({ rows: [] }));
+    ledger = (scan.rows || []).map((row) => {
+      const match =
+        resolveNft(store, row.NFTokenID) ||
+        (store.nfts || []).find((item) => item.NFTokenID === row.NFTokenID);
+      return card(store, match || row, { source: "xrpl", found: true });
+    });
   }
 
   const map = new Map();

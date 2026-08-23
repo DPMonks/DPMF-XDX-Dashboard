@@ -266,6 +266,35 @@ export function listForSale(store, { nftId, amount, currency, seller }) {
   return { ok: true, nft: hydrate(store, { ...nft, ...patch }), activity };
 }
 
+export function burnNft(store, { nftId, from }) {
+  ensureMarket(store);
+  const nft = resolveNft(store, nftId);
+  if (!nft) return { ok: false, error: "NFT not found" };
+  if (
+    from &&
+    nft.accountNumber !== from &&
+    nft.issuer !== from &&
+    nft.Issuer !== from
+  ) {
+    return { ok: false, error: "not the owner or issuer" };
+  }
+  const patch = { status: "burned" };
+  if (nft.virtual) {
+    store.listingOverrides[nft._id] = { ...store.listingOverrides[nft._id], ...patch };
+  } else {
+    const row = store.nfts.find((item) => item._id === nft._id);
+    if (row) Object.assign(row, patch);
+  }
+  const activity = pushActivity(store, {
+    type: "burn",
+    nftId: nft._id,
+    name: nft.name,
+    collectionName: nft.collectionName,
+    from: from || nft.accountNumber
+  });
+  return { ok: true, nft: { ...nft, ...patch }, activity };
+}
+
 export function delist(store, { nftId }) {
   ensureMarket(store);
   const nft = resolveNft(store, nftId);

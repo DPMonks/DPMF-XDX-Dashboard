@@ -12,6 +12,7 @@ import {
   collectionStats,
   delist,
   exploreCollections,
+  burnNft,
   listForSale,
   openOffers,
   placeOffer,
@@ -144,6 +145,10 @@ router.post("/list", (req, res) => {
 
 router.post("/delist", (req, res) => {
   mutate(res, (store) => delist(store, req.body || {}));
+});
+
+router.post("/burn", (req, res) => {
+  mutate(res, (store) => burnNft(store, req.body || {}));
 });
 
 router.post("/buy", (req, res) => {

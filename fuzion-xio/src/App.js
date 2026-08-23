@@ -111,6 +111,8 @@ function App() {
           <Route element={<PrivateRoute />}>
             <Route path="/Createnft" element={<Createnft />} />
             <Route path="/MyNFT" element={<Ownnft />} />
+            <Route path="/myNFT" element={<Ownnft />} />
+            <Route path="/mynft" element={<Ownnft />} />
             <Route path="/DeclinedSendNFT" element={<DeclinedSendNFT />} />
             <Route path="/ramp" element={<Ramp />} />
             <Route path="/Cancelplacedoffer" element={<CancelPlacedOffer />} />

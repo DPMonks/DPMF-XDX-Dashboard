@@ -31,6 +31,7 @@ import {
   removePin,
   snapshotFromBody
 } from "../lib/profileNfts.js";
+import { rememberWalletNfts, walletNftDesk } from "../lib/walletNfts.js";
 
 const router = Router();
 
@@ -519,6 +520,29 @@ router.post("/nft/getSingleUserNftsByCollections", async (req, res) => {
     return res.status(400).json({ success: false, message: "walletAddress required" });
   }
   const desk = await profileNftDesk(readStore(), address);
+  res.json({ success: true, data: desk });
+});
+
+router.post("/nft/getSingleUserNfts", async (req, res) => {
+  const address =
+    req.body?.wAddress || req.body?.walletAddress || validatorFromReq(req);
+  if (!address) {
+    return res.status(400).json({ success: false, message: "wallet required" });
+  }
+  const desk = await walletNftDesk(readStore(), address, req.body || req.query);
+  update((current) => {
+    rememberWalletNfts(current, desk.docs);
+    return current;
+  });
+  res.json({ success: true, data: desk });
+});
+
+router.get("/nft/getSingleUserNfts", async (req, res) => {
+  const address = req.query.wAddress || req.query.walletAddress || validatorFromReq(req);
+  if (!address) {
+    return res.status(400).json({ success: false, message: "wallet required" });
+  }
+  const desk = await walletNftDesk(readStore(), address, req.query);
   res.json({ success: true, data: desk });
 });
 
