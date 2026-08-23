@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { RLUSD_HEX, RLUSD_ISSUER, XDX_ISSUER, XIO_ISSUER } from "../src/constants/ledger.js";
 import { linesFromAccountLines, loadWalletLines, mapAccountLine } from "../server/walletLedger.js";
 
-test("mapAccountLine keeps every IOU line and drops XDX plus LP tokens", () => {
+test("mapAccountLine keeps every IOU and LP line and drops XDX", () => {
   assert.deepEqual(
     mapAccountLine({
       account: XIO_ISSUER,
@@ -19,6 +19,7 @@ test("mapAccountLine keeps every IOU line and drops XDX plus LP tokens", () => {
       balance: "0",
       limit: "1000000000",
       noRipple: true,
+      lp: false,
     }
   );
   assert.equal(
@@ -30,13 +31,21 @@ test("mapAccountLine keeps every IOU line and drops XDX plus LP tokens", () => {
     "RLUSD"
   );
   assert.equal(mapAccountLine({ account: XDX_ISSUER, currency: "XDX", balance: "9" }), null);
-  assert.equal(
+  assert.deepEqual(
     mapAccountLine({
       account: "rAmmLp",
       currency: "03BCD44104644B711C58CD14CD13CBA65757CFBE",
       balance: "1",
     }),
-    null
+    {
+      currency: "03BCD44104644B711C58CD14CD13CBA65757CFBE",
+      ticker: "LP",
+      issuer: "rAmmLp",
+      balance: "1",
+      limit: "",
+      noRipple: false,
+      lp: true,
+    }
   );
 });
 

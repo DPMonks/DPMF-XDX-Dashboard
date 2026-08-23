@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { getAmm, getPrices, getWalletBalances, getWalletLp } from "../api/indexer";
+import { getAmm, getPrices, getWalletBalances, getWalletLines, getWalletLp } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -9,6 +9,8 @@ import {
   ammDepositTx,
   ammWithdrawTx,
   expectedLpTokens,
+  hasLpTrustline,
+  lpTrustSetTxjson,
   notifyWalletRefresh,
   offerCreateBuyXdx,
   offerCreateSellXdx,
@@ -83,8 +85,11 @@ export default function TradePanel({
   const [price, setPrice] = useState(spotPrice > 0 ? String(spotPrice) : "");
   const [lpAmount, setLpAmount] = useState("");
   const [walletLp, setWalletLp] = useState([]);
+  const [walletLines, setWalletLines] = useState([]);
   const [pools, setPools] = useState(() => (Array.isArray(initialPools) ? initialPools : []));
   const [lineHint, setLineHint] = useState("");
+  const [lpLineReady, setLpLineReady] = useState(false);
+  const [quoteLineReady, setQuoteLineReady] = useState(false);
   const [formError, setFormError] = useState("");
   const [prices, setPrices] = useState(() => priceBookFromPools(initialPools));
 
@@ -104,8 +109,15 @@ export default function TradePanel({
   const isLp = action === "addLp" || action === "removeLp";
   const account = liveWalletAddress(walletAddress);
   const signedIn = Boolean(account);
-  const needTrust =
+  const lpSpec = useMemo(() => poolForQuote(quote, pools), [quote, pools]);
+  const haveLpLine =
+    lpLineReady ||
+    hasLpTrustline(walletLines, lpSpec) ||
+    lpHeldForPair(walletLp, quotePair, quoteId) > 0;
+  const needLpLine = isLp && signedIn && Boolean(lpSpec.lpCurrency && lpSpec.amm) && !haveLpLine;
+  const needQuoteTrust =
     Boolean(quote.issuer) &&
+    !quoteLineReady &&
     !lineHint.includes(String(quote.currency || "").toUpperCase()) &&
     !lineHint.includes(String(quote.issuer || "").toUpperCase());
   const reserves = useMemo(() => poolReserves(pools, quote), [pools, quote]);
@@ -172,19 +184,22 @@ export default function TradePanel({
         );
       })
       .catch(() => {});
-    Promise.all([getAmm().catch(() => []), account ? getWalletLp(account).catch(() => []) : []]).then(
-      ([nextPools, nextLp]) => {
-        if (cancelled) return;
-        setPools(Array.isArray(nextPools) ? nextPools : []);
-        setPrices((current) => priceBookFromPools(nextPools, current));
-        const rows = Array.isArray(nextLp) ? nextLp : [];
-        setWalletLp(rows);
-        if (action === "removeLp") {
-          const have = lpHeldForPair(rows, quotePair, quoteId);
-          if (have > 0) setLpAmount((current) => current || String(have));
-        }
+    Promise.all([
+      getAmm().catch(() => []),
+      account ? getWalletLp(account).catch(() => []) : [],
+      account ? getWalletLines(account).catch(() => []) : [],
+    ]).then(([nextPools, nextLp, nextLines]) => {
+      if (cancelled) return;
+      setPools(Array.isArray(nextPools) ? nextPools : []);
+      setPrices((current) => priceBookFromPools(nextPools, current));
+      const rows = Array.isArray(nextLp) ? nextLp : [];
+      setWalletLp(rows);
+      setWalletLines(Array.isArray(nextLines) ? nextLines : []);
+      if (action === "removeLp") {
+        const have = lpHeldForPair(rows, quotePair, quoteId);
+        if (have > 0) setLpAmount((current) => current || String(have));
       }
-    );
+    });
     if (account && quoteIssuer) {
       getWalletBalances(account)
         .then((balances) => {
@@ -241,6 +256,7 @@ export default function TradePanel({
       account,
       quote,
       lpAmount: lpAmount || amount,
+      pools,
     });
   }
 
@@ -262,11 +278,34 @@ export default function TradePanel({
       signIn();
       return;
     }
-    if (needTrust && quote.issuer) {
+    if (needLpLine) {
+      const line = lpTrustSetTxjson(account, lpSpec);
+      if (!line) {
+        setFormError(t.needLpTrustline);
+        return;
+      }
+      start({
+        body: { txjson: line },
+        onExecuted: () => {
+          setLpLineReady(true);
+          notifyWalletRefresh();
+          getWalletLines(account, { fresh: true })
+            .then((rows) => setWalletLines(Array.isArray(rows) ? rows : []))
+            .catch(() => {});
+        },
+        onFailed: () => {
+          setFormError(t.lpTrustlineError);
+        },
+        errorMessage: t.lpTrustlineError,
+      });
+      return;
+    }
+    if (needQuoteTrust && quote.issuer) {
       const line = quoteTrustSetTxjson(account, quote);
       start({
         body: { txjson: line },
-        onSigned: () => {
+        onExecuted: () => {
+          setQuoteLineReady(true);
           setLineHint((current) => `${current} ${quote.currency} ${quote.issuer}`.toUpperCase());
           notifyWalletRefresh();
         },
@@ -323,13 +362,14 @@ export default function TradePanel({
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id="trade-panel-title" className="modal-title">
-          {titles[action] || t.tradeActions}
+          {needLpLine ? t.lpTrustline : titles[action] || t.tradeActions}
         </h2>
         {signedIn ? (
           <p className="trade-panel-account">{shortAddress(account)}</p>
         ) : (
           <p className="trade-panel-hint">{t.signInToTrade}</p>
         )}
+        {needLpLine ? <p className="trade-panel-hint">{t.needLpTrustline}</p> : null}
 
         <label className="trade-field">
           {t.tradePair}
@@ -341,6 +381,8 @@ export default function TradePanel({
               setQuoteQty("");
               setEditedSide("xdx");
               setPrice("");
+              setLpLineReady(false);
+              setQuoteLineReady(false);
             }}
             ariaLabel={t.tradePair}
             searchable
@@ -348,7 +390,7 @@ export default function TradePanel({
           />
         </label>
 
-        {!isLp ? (
+        {needLpLine ? null : !isLp ? (
           <label className="trade-field">
             {t.tradeOrderType}
             <BrandSelect
@@ -366,6 +408,8 @@ export default function TradePanel({
           </label>
         ) : null}
 
+        {needLpLine ? null : (
+        <>
         {action === "removeLp" ? (
           <label className="trade-field">
             {t.tradeLpTokens}
@@ -527,14 +571,24 @@ export default function TradePanel({
             <dd>~{LEDGER_FEE_XRP} XRP</dd>
           </div>
         </dl>
+        </>
+        )}
 
-        {needTrust && quote.issuer && signedIn ? <p className="trade-panel-hint">{t.tradeNeedTrustline}</p> : null}
+        {needLpLine ? null : needQuoteTrust && quote.issuer && signedIn ? (
+          <p className="trade-panel-hint">{t.tradeNeedTrustline}</p>
+        ) : null}
         {formError ? <p className="wallet-error">{formError}</p> : null}
         {error ? <p className="wallet-error">{error}</p> : null}
 
         <div className="trade-panel-actions">
           <button type="button" className="connect-wallet-btn" onClick={submit}>
-            {!signedIn ? t.signInToTrade : needTrust && quote.issuer ? t.xdxTrustline : t.tradeSign}
+            {!signedIn
+              ? t.signInToTrade
+              : needLpLine
+                ? t.lpTrustline
+                : needQuoteTrust && quote.issuer
+                  ? t.quoteTrustline.replace("{asset}", quote.label)
+                  : t.tradeSign}
           </button>
           <button type="button" className="cancel-wallet-btn" onClick={close}>
             {t.cancel}
@@ -542,13 +596,31 @@ export default function TradePanel({
         </div>
       </div>
       <WalletModal
-        visible={status === "loading" || status === "waiting"}
+        visible={status === "loading" || status === "waiting" || status === "confirming"}
         qrUrl={qr}
         mobileUrl={mobileUrl}
         uuid={uuid}
         status={status}
-        preparingLabel={t.preparingTrade}
-        scanLabel={t.scanTrade}
+        preparingLabel={
+          needLpLine
+            ? t.preparingLpTrustline
+            : needQuoteTrust && quote.issuer
+              ? t.preparingTrustline
+              : t.preparingTrade
+        }
+        scanLabel={
+          status === "confirming"
+            ? needLpLine
+              ? t.confirmingLpTrustline
+              : needQuoteTrust && quote.issuer
+                ? t.confirmingTrustline
+                : t.confirmingTrade
+            : needLpLine
+              ? t.scanLpTrustline
+              : needQuoteTrust && quote.issuer
+                ? t.scanTrustline
+                : t.scanTrade
+        }
         onClose={reset}
       />
     </div>,

@@ -227,15 +227,60 @@ export function ammDepositTx({ account, quote, xdx, quoteQty } = {}) {
   return txjson;
 }
 
-export function poolForQuote(quote) {
-  if (quote?.currency === "RLUSD") {
+export function poolForQuote(quote, pools = []) {
+  const pair = String(quote?.pair || `XDX/${quote?.id || quote?.currency || "XRP"}`)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const row = (Array.isArray(pools) ? pools : []).find((item) => {
+    const name = String(item?.pool || item?.pool_name || item?.pair || "")
+      .replace(/\s+/g, "")
+      .toUpperCase();
+    return name === pair || name.endsWith(`/${pair.split("/")[1] || ""}`);
+  });
+  const amm = row?.amm_account || row?.amm || null;
+  const lpCurrency = row?.lp_currency || row?.lp_currency_hex || null;
+  if (amm && lpCurrency) return { amm, lpCurrency, pair };
+  if (quote?.currency === "RLUSD" || pair === "XDX/RLUSD") {
     return { amm: XDX_RLUSD_AMM, lpCurrency: XDX_RLUSD_LP_HEX, pair: "XDX/RLUSD" };
   }
-  return { amm: XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX, pair: "XDX/XRP" };
+  if (quote?.currency === "XRP" || pair === "XDX/XRP" || !quote?.issuer) {
+    return { amm: XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX, pair: pair || "XDX/XRP" };
+  }
+  return { amm: null, lpCurrency: null, pair };
 }
 
-export function ammWithdrawTx({ account, quote, lpAmount } = {}) {
-  const pool = poolForQuote(quote);
+export function lpTrustSetTxjson(account, spec = {}) {
+  const currency = String(spec.lpCurrency || spec.currency || "").trim();
+  const issuer = String(spec.amm || spec.issuer || "").trim();
+  if (!currency || !issuer) return null;
+  const txjson = {
+    TransactionType: "TrustSet",
+    Flags: TF_SET_NO_RIPPLE,
+    LimitAmount: {
+      currency,
+      issuer,
+      value: "100000000000",
+    },
+  };
+  if (account) txjson.Account = account;
+  return txjson;
+}
+
+export function hasLpTrustline(lines, spec = {}) {
+  const currency = String(spec.lpCurrency || spec.currency || "").toUpperCase();
+  const issuer = String(spec.amm || spec.issuer || "").toUpperCase();
+  if (!currency && !issuer) return false;
+  return (Array.isArray(lines) ? lines : []).some((row) => {
+    const who = String(row?.issuer || row?.account || "").toUpperCase();
+    if (issuer && who && who !== issuer) return false;
+    const code = String(row?.currency || row?.hex || "").toUpperCase();
+    if (currency && code === currency) return true;
+    return Boolean(row?.lp) && Boolean(issuer) && who === issuer;
+  });
+}
+
+export function ammWithdrawTx({ account, quote, lpAmount, pools } = {}) {
+  const pool = poolForQuote(quote, pools);
   const txjson = {
     TransactionType: "AMMWithdraw",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },

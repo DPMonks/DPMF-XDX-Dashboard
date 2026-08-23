@@ -19,12 +19,15 @@ export default function WalletModal({
   const appHref = xamanAppUrl(uuid) || mobileUrl;
   const webHref = xamanSignUrl(uuid) || mobileUrl;
   const connectLabel = t.connectXaman || t.openApp;
+  const confirming = status === "confirming";
   const heading =
     status === "loading"
       ? preparingLabel || t.preparing
-      : phone
-        ? connectLabel
-        : scanLabel || t.scan;
+      : confirming
+        ? scanLabel || t.scan
+        : phone
+          ? connectLabel
+          : scanLabel || t.scan;
 
   function closeOverlay(event) {
     event.preventDefault();
@@ -60,11 +63,11 @@ export default function WalletModal({
           {heading}
         </h2>
 
-        {!phone && qrUrl && status !== "loading" ? (
+        {!phone && qrUrl && status !== "loading" && !confirming ? (
           <img src={qrUrl} alt={t.xamanQr || t.scan} className="qr-image" />
         ) : null}
 
-        {phone && status !== "loading" && (appHref || webHref) ? (
+        {phone && status !== "loading" && !confirming && (appHref || webHref) ? (
           <>
             {appHref ? (
               <button type="button" className="mobile-link-btn" onClick={openXamanApp}>

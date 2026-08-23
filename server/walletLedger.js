@@ -58,14 +58,16 @@ export function mapAccountLine(line) {
   const issuer = String(line?.account || line?.issuer || "").trim();
   const currency = String(line?.currency || "").trim();
   if (!issuer || !currency) return null;
-  if (XDX_CURRENCY_RE.test(currency) || LP_CURRENCY_RE.test(currency)) return null;
+  if (XDX_CURRENCY_RE.test(currency)) return null;
+  const lp = LP_CURRENCY_RE.test(currency);
   return {
     currency,
-    ticker: decodeLineCurrency(currency),
+    ticker: lp ? "LP" : decodeLineCurrency(currency),
     issuer,
     balance: String(line?.balance ?? "0"),
     limit: String(line?.limit ?? ""),
     noRipple: Boolean(line?.no_ripple),
+    lp,
   };
 }
 
