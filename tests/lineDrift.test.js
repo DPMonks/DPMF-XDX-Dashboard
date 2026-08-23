@@ -48,3 +48,36 @@ test("ease and lerp helpers stay in range", () => {
   assert.equal(lerp(10, 20, 0.5), 15);
   assert.deepEqual(lerpPair([0, 10], [10, 20], 0.5), [5, 15]);
 });
+
+test("resamplePlot does not overshoot a stepped series", () => {
+  const rows = [
+    { ts: 0, plot: 10 },
+    { ts: 10, plot: 10 },
+    { ts: 11, plot: 20 },
+    { ts: 20, plot: 20 },
+  ];
+  const sampled = resamplePlot(rows, 40);
+  assert.ok(sampled.every((point) => Number.isFinite(point.plot)));
+  assert.ok(sampled.every((point) => point.plot >= 10 - 1e-9 && point.plot <= 20 + 1e-9));
+});
+
+test("driftPlot keeps a range change on a smooth curve", () => {
+  const week = [
+    { ts: 100, plot: 10 },
+    { ts: 140, plot: 10 },
+    { ts: 150, plot: 12 },
+    { ts: 200, plot: 12 },
+  ];
+  const month = [
+    { ts: 0, plot: 8 },
+    { ts: 80, plot: 9 },
+    { ts: 160, plot: 11 },
+    { ts: 200, plot: 12 },
+  ];
+  const mid = driftPlot(week, month, 0.4, 24);
+  assert.equal(mid.length, 24);
+  assert.ok(mid.every((point) => Number.isFinite(point.ts) && Number.isFinite(point.plot)));
+  const plots = mid.map((point) => point.plot);
+  const jumps = plots.slice(1).filter((value, index) => Math.abs(value - plots[index]) > 2);
+  assert.equal(jumps.length, 0);
+});

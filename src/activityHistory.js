@@ -134,6 +134,21 @@ export function carryActivityMetrics(rows = []) {
   });
 }
 
+export function collapseUnchangedPlot(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (list.length < 3) return list;
+  const out = [list[0]];
+  for (let i = 1; i < list.length - 1; i += 1) {
+    const prev = list[i - 1];
+    const cur = list[i];
+    const next = list[i + 1];
+    if (cur?.plot === prev?.plot && cur?.plot === next?.plot) continue;
+    out.push(cur);
+  }
+  out.push(list[list.length - 1]);
+  return out;
+}
+
 export function downsampleSeries(rows, maxPoints = ACTIVITY_PLOT_POINTS) {
   const list = Array.isArray(rows) ? rows : [];
   if (list.length <= maxPoints) return list;

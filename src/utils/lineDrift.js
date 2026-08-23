@@ -1,5 +1,5 @@
-export const DRIFT_MS = 900;
-export const DRIFT_POINTS = 80;
+export const DRIFT_MS = 1100;
+export const DRIFT_POINTS = 200;
 
 export function easeInOutCubic(t) {
   const x = Math.min(1, Math.max(0, Number(t) || 0));
@@ -27,8 +27,8 @@ function tsOf(row) {
   return Number.isFinite(value) ? value : null;
 }
 
-export function resamplePlot(rows, count = DRIFT_POINTS) {
-  const list = (Array.isArray(rows) ? rows : [])
+function cleanPlot(rows) {
+  return (Array.isArray(rows) ? rows : [])
     .map((row) => {
       const ts = tsOf(row);
       const plot = plotOf(row);
@@ -36,12 +36,60 @@ export function resamplePlot(rows, count = DRIFT_POINTS) {
     })
     .filter(Boolean)
     .sort((a, b) => a.ts - b.ts);
+}
+
+// Fritsch–Carlson slopes so the morph stays monotone and does not overshoot.
+function monotoneSlopes(list) {
+  const n = list.length;
+  const delta = [];
+  for (let i = 0; i < n - 1; i += 1) {
+    const dx = list[i + 1].ts - list[i].ts || 1;
+    delta[i] = (list[i + 1].plot - list[i].plot) / dx;
+  }
+  const m = new Array(n);
+  m[0] = delta[0];
+  m[n - 1] = delta[n - 2];
+  for (let i = 1; i < n - 1; i += 1) {
+    m[i] = delta[i - 1] * delta[i] <= 0 ? 0 : (delta[i - 1] + delta[i]) / 2;
+  }
+  for (let i = 0; i < n - 1; i += 1) {
+    if (Math.abs(delta[i]) < 1e-12) {
+      m[i] = 0;
+      m[i + 1] = 0;
+      continue;
+    }
+    const a = m[i] / delta[i];
+    const b = m[i + 1] / delta[i];
+    const ss = a * a + b * b;
+    if (ss > 9) {
+      const tau = 3 / Math.sqrt(ss);
+      m[i] = tau * a * delta[i];
+      m[i + 1] = tau * b * delta[i];
+    }
+  }
+  return m;
+}
+
+function hermiteY(y0, y1, m0, m1, dx, u) {
+  const u2 = u * u;
+  const u3 = u2 * u;
+  return (
+    (2 * u3 - 3 * u2 + 1) * y0 +
+    (u3 - 2 * u2 + u) * dx * m0 +
+    (-2 * u3 + 3 * u2) * y1 +
+    (u3 - u2) * dx * m1
+  );
+}
+
+export function resamplePlot(rows, count = DRIFT_POINTS) {
+  const list = cleanPlot(rows);
   const size = Math.max(2, Number(count) || DRIFT_POINTS);
   if (!list.length) return [];
   if (list.length === 1) {
     return Array.from({ length: size }, () => ({ ...list[0] }));
   }
 
+  const slopes = monotoneSlopes(list);
   const start = list[0].ts;
   const end = list[list.length - 1].ts;
   const span = Math.max(end - start, 1);
@@ -54,7 +102,10 @@ export function resamplePlot(rows, count = DRIFT_POINTS) {
     const b = list[Math.min(j + 1, list.length - 1)];
     const dt = b.ts - a.ts || 1;
     const u = Math.min(1, Math.max(0, (ts - a.ts) / dt));
-    out.push({ ts, plot: lerp(a.plot, b.plot, u) });
+    const raw = hermiteY(a.plot, b.plot, slopes[j], slopes[j + 1] ?? slopes[j], dt, u);
+    const lo = Math.min(a.plot, b.plot);
+    const hi = Math.max(a.plot, b.plot);
+    out.push({ ts, plot: Math.min(hi, Math.max(lo, raw)) });
   }
   return out;
 }

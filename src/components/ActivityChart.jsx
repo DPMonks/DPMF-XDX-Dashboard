@@ -8,7 +8,12 @@ import {
   YAxis,
 } from "recharts";
 import { getChartHistory, getXdxFlows } from "../api/indexer";
-import { dailyLastPoints, downsampleSeries, metricNumber } from "../activityHistory";
+import {
+  collapseUnchangedPlot,
+  dailyLastPoints,
+  downsampleSeries,
+  metricNumber,
+} from "../activityHistory";
 import { XDX_ISSUED_AT } from "../constants/ledger";
 import { formatDay, formatNumber, formatWhen, shortAddress } from "../utils/format";
 import { DRIFT_MS, driftPlot, easeInOutCubic, lerpPair } from "../utils/lineDrift";
@@ -75,7 +80,7 @@ function windowedSeries(rows, range, now, metric) {
   if (last && last.ts < now) {
     out.push({ ...last, timestamp: new Date(now).toISOString(), ts: now });
   }
-  return out.filter((row) => Number.isFinite(row.plot));
+  return collapseUnchangedPlot(out.filter((row) => Number.isFinite(row.plot)));
 }
 
 function yDomain(values) {
@@ -357,10 +362,12 @@ export default function ActivityChart() {
                 <Line
                   type="monotone"
                   dataKey="plot"
-                  stroke="#98f050"
+                  stroke="#00ff6a"
                   strokeWidth={2.4}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                   dot={false}
-                  activeDot={{ r: 5, fill: "#98f050", stroke: "#c770ff", strokeWidth: 2 }}
+                  activeDot={{ r: 5, fill: "#00ff6a", stroke: "#c770ff", strokeWidth: 2 }}
                   connectNulls
                   isAnimationActive={false}
                   className="activity-line"

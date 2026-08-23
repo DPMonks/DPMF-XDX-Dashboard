@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  collapseUnchangedPlot,
   dailyLastPoints,
   downsampleSeries,
   carryActivityMetrics,
@@ -115,6 +116,21 @@ test("carryActivityMetrics fills holders, trustlines, and traders forward", () =
   assert.equal(rows[1].traders, 410);
   assert.equal(rows[2].traders, 410);
   assert.equal(rows[2].trustlines, 19977);
+});
+
+test("collapseUnchangedPlot keeps the ends of a flat run", () => {
+  const rows = collapseUnchangedPlot([
+    { ts: 1, plot: 10 },
+    { ts: 2, plot: 10 },
+    { ts: 3, plot: 10 },
+    { ts: 4, plot: 12 },
+    { ts: 5, plot: 12 },
+    { ts: 6, plot: 12 },
+  ]);
+  assert.deepEqual(
+    rows.map((row) => row.ts),
+    [1, 3, 4, 6]
+  );
 });
 
 test("dailyLastPoints keeps one row per UTC day", () => {

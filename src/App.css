@@ -745,22 +745,24 @@ body {
 
 .activity-plot .recharts-line-curve,
 .activity-plot .activity-line {
-  stroke: var(--dpmf-neon-lime) !important;
+  stroke: #00ff6a !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .activity-plot.is-live .recharts-line-curve,
 .activity-plot.is-live .activity-line {
-  filter: drop-shadow(0 0 5px var(--dpmf-neon-lime)) drop-shadow(0 0 12px var(--dpmf-neon-lime-soft));
+  filter: drop-shadow(0 0 5px #00ff6a) drop-shadow(0 0 12px rgba(0, 255, 106, 0.4));
   animation: activity-glow 2.8s ease-in-out infinite;
 }
 
 @keyframes activity-glow {
   0%,
   100% {
-    filter: drop-shadow(0 0 4px var(--dpmf-neon-lime)) drop-shadow(0 0 8px var(--dpmf-neon-lime-soft));
+    filter: drop-shadow(0 0 4px #00ff6a) drop-shadow(0 0 8px rgba(0, 255, 106, 0.35));
   }
   50% {
-    filter: drop-shadow(0 0 10px var(--dpmf-neon-lime)) drop-shadow(0 0 16px var(--dpmf-neon-lime-soft));
+    filter: drop-shadow(0 0 10px #00ff6a) drop-shadow(0 0 16px rgba(0, 255, 106, 0.45));
   }
 }
 
