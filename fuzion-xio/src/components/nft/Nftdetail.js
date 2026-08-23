@@ -1862,7 +1862,14 @@ function Nftdetail() {
       return;
     }
     const Id = getParams.id;
-    dispatch(addCollection({ nftDetail: null, Id, loader: true }));
+    dispatch(
+      addCollection({
+        nftDetail: nft,
+        Id,
+        wAddress: decodedToken.ac,
+        loader: true
+      })
+    );
   };
 
   // DFTToken Case
@@ -1950,7 +1957,15 @@ function Nftdetail() {
       return;
     }
 
-    dispatch(deleteCollection({ walletAddress: null, id, loader: true }));
+    dispatch(
+      deleteCollection({
+        walletAddress: decodedToken?.ac,
+        wAddress: decodedToken?.ac,
+        id,
+        Id: collectVal?.nftId || nft?._id || id,
+        loader: true
+      })
+    );
   };
 
   // const getIpfsImage = (img) => {

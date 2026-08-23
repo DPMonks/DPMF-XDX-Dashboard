@@ -322,6 +322,12 @@ a:hover {
   border-bottom: 1px solid var(--dpmf-border-soft);
 }
 
+.dpmf-profile-nfts-title {
+  color: var(--dpmf-neon-lime);
+  font-size: 1.1rem;
+  margin: 0;
+}
+
 .dpmf-profile-avatar {
   width: 64px;
   height: 64px;

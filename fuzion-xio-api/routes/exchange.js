@@ -18,6 +18,12 @@ import {
 } from "../lib/profile.js";
 import { accountLines, accountNfts, nftInfo, serverInfo } from "../lib/xrpl.js";
 import { browseCollection, activityFeed, openOffers } from "../lib/market.js";
+import {
+  addPin,
+  pinsForNft,
+  profileNftDesk,
+  removePin
+} from "../lib/profileNfts.js";
 
 const router = Router();
 
@@ -405,31 +411,58 @@ router.get("/governance/:address", async (req, res) => {
 
 router.post("/collection/create", (req, res) => {
   const body = req.body || {};
-  const store = update((current) => {
-    current.collections = current.collections || [];
-    current.collections.push({
-      _id: `saved-${Date.now()}`,
-      ...body,
-      createdAt: new Date().toISOString()
-    });
+  const nftId = body.Id || body.nftId || body.nftDetail?._id;
+  const address = body.wAddress || body.walletAddress || body.walletAddr;
+  if (!nftId || !address) {
+    return res.status(400).json({ success: false, message: "nft id and wAddress required" });
+  }
+  let pinned = null;
+  update((current) => {
+    const nft = resolveNft(current, nftId);
+    if (!nft) return current;
+    pinned = addPin(current, address, nft);
     return current;
   });
-  res.json({ success: true, data: store.collections });
+  if (!pinned) {
+    return res.status(404).json({ success: false, message: "NFT not found" });
+  }
+  res.json({
+    success: true,
+    message: "NFT added to profile",
+    data: null
+  });
 });
 
-router.post("/collection/get/:page", (req, res) => {
+router.post("/collection/get/:page", async (req, res) => {
   const store = readStore();
+  const key = req.body?.walletAddress || req.body?.Id || req.body?.nftId;
+  if (key && resolveNft(store, key)) {
+    return res.json({
+      success: true,
+      data: { docs: pinsForNft(store, key) }
+    });
+  }
+  if (key) {
+    const desk = await profileNftDesk(store, key);
+    return res.json({ success: true, data: desk });
+  }
   const page = Number(req.params.page || 1);
   const size = 12;
-  const cards = [
-    ...templateCards(store),
-    ...(store.collections || [])
-  ];
+  const cards = [...templateCards(store), ...(store.collections || [])];
   const start = (page - 1) * size;
   res.json({
     success: true,
     data: pageShape(cards.slice(start, start + size), page, size, cards.length)
   });
+});
+
+router.post("/nft/getSingleUserNftsByCollections", async (req, res) => {
+  const address = req.body?.walletAddress || req.body?.wAddress;
+  if (!address) {
+    return res.status(400).json({ success: false, message: "walletAddress required" });
+  }
+  const desk = await profileNftDesk(readStore(), address);
+  res.json({ success: true, data: desk });
 });
 
 router.get("/collection/get/:name", (req, res) => {
@@ -449,13 +482,41 @@ router.delete("/collection/delete/:payload", (req, res) => {
   } catch {
     parsed = { Id: req.params.payload };
   }
-  const store = update((current) => {
+  const nftId = parsed.Id || parsed.id || parsed.nftId;
+  const address = parsed.wAddress || parsed.walletAddress;
+  if (nftId) {
+    update((current) => {
+      if (address) {
+        removePin(current, address, nftId);
+        return current;
+      }
+      for (const profile of current.profiles || []) {
+        const hit = (profile.profileNfts || []).some(
+          (pin) => pin._id === nftId || pin.nftId === nftId || pin.NFTokenID === nftId
+        );
+        if (hit) removePin(current, profile.wAddress, nftId);
+      }
+      return current;
+    });
+    return res.json({
+      success: true,
+      message: "NFT removed from profile",
+      deleted: true,
+      data: null
+    });
+  }
+  update((current) => {
     current.collections = (current.collections || []).filter(
       (row) => row._id !== parsed.Id && row._id !== parsed.id
     );
     return current;
   });
-  res.json({ success: true, data: store.collections });
+  res.json({
+    success: true,
+    message: "NFT removed from profile",
+    deleted: true,
+    data: null
+  });
 });
 
 router.get("/xrpl/allMintedNft", (_req, res) => {

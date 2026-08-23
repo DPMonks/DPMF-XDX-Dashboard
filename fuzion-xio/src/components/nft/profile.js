@@ -186,6 +186,7 @@ const Profile = () => {
   const [isLoader, setIsLoader] = useState(false);
   const [isValid, setIsValid] = useState(false);
   const [profileCollections, setProfileCollections] = useState(null);
+  const [profileNfts, setProfileNfts] = useState(null);
   const [collectionsViewPage, setCollectionsViewPage] = useState(0);
   const [mobileActiveModelCount, setMobileActiveModelCount] = useState(0);
   const [fourthCurr, setFourthCurr] = useState(null);
@@ -369,22 +370,28 @@ const Profile = () => {
 
       const data = { walletAddress: wToken };
 
-      const res = await axios.post(
-        `${configData.LOCAL_API_URL}nft/getSingleUserNftsByCollections`,
-        data,
-        config
-      );
+      const [byCollection, desk] = await Promise.all([
+        axios.post(
+          `${configData.LOCAL_API_URL}nft/getSingleUserNftsByCollections`,
+          data,
+          config
+        ),
+        axios.get(`${configData.LOCAL_API_URL}profiles/${encodeURIComponent(wToken)}/nfts`)
+      ]);
 
-      if (res.data?.success) {
-        setProfileCollections(
-          (res.data.data.docs || []).map((doc) => ({
-            ...doc,
-            contentType: normalizeCollectionContentType(doc.contentType)
-          }))
-        );
+      const docs = (desk.data?.data?.docs || byCollection.data?.data?.docs || []).map(
+        (doc) => ({
+          ...doc,
+          contentType: normalizeCollectionContentType(doc.contentType)
+        })
+      );
+      setProfileNfts(docs);
+      if (byCollection.data?.success) {
+        setProfileCollections(docs);
       }
     } catch (error) {
-      // console.log(error, "check the error");
+      setProfileNfts([]);
+      setProfileCollections([]);
       toast.error(error?.response?.data?.message || "Something went wrong", {
         toastId: "updateProfile3" + Date.now()
       });
@@ -1650,6 +1657,65 @@ const Profile = () => {
                     </Row>
                     <Row className="mt-3 pb-3">
                       <Col className="text-start collection">
+                        <div className="collections-header mt-5">
+                          <h3 className="dpmf-profile-nfts-title">NFTs</h3>
+                        </div>
+                        {!profileNfts ? (
+                          <Row className="loader-class">
+                            <div className="dot-loader">
+                              <span />
+                              <span />
+                              <span />
+                            </div>
+                          </Row>
+                        ) : profileNfts.length === 0 ? (
+                          <p className="dpmf-muted">
+                            No NFTs on this profile yet. Open an NFT and use
+                            Add NFT to Profile.
+                          </p>
+                        ) : (
+                          <Row className="ownNft prof-collect m-md-0 mt-20 collections-grid">
+                            {profileNfts.map((item) => (
+                              <Col
+                                lg={3}
+                                md={3}
+                                sm={6}
+                                xs={4}
+                                key={item._id || item.NFTokenID}
+                                className="mb-4 collections-grid-col"
+                              >
+                                <Link
+                                  to={`/Nftdetail/${item._id}`}
+                                  className="dpmf-card-link"
+                                >
+                                  <div className="carousel-item-wrapper collection-tile-card">
+                                    <div className="onwfilea profile-nft">
+                                      <Filetype
+                                        fileType={item.contentType || item.fileType}
+                                        image={
+                                          item.image
+                                            ? replaceHost(item.image)
+                                            : item.previewImage
+                                        }
+                                        height={180}
+                                      />
+                                    </div>
+                                    <p className="mb-0 mt-2">
+                                      {item.name || "NFT"}
+                                    </p>
+                                    <small className="dpmf-muted">
+                                      {item.source === "xrpl"
+                                        ? "XRP Ledger"
+                                        : item.pinned
+                                        ? "Pinned"
+                                        : "Found"}
+                                    </small>
+                                  </div>
+                                </Link>
+                              </Col>
+                            ))}
+                          </Row>
+                        )}
                         <div className="collections-header mt-5">
                           <Button
                             variant="primary"

@@ -65,7 +65,12 @@ export const addCollectionService = async (data) => {
       Authorization: `Basic ${token}`
     },
     method: "post",
-    data: { Id: data.Id, nftDetail: data.nftDetail },
+    data: {
+      Id: data.Id,
+      nftDetail: data.nftDetail,
+      wAddress: data.wAddress,
+      walletAddress: data.wAddress
+    },
     url: `collection/create`
   };
   try {

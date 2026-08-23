@@ -62,6 +62,7 @@ export function capabilityMap() {
       tradeCatalog: true,
       personalProfiles: true,
       profileOpenGraph: true,
+      profileNfts: true,
       zeroPlatformFee: true
     },
     next: {

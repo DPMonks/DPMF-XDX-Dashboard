@@ -32,6 +32,7 @@ xrp.cafe is the strongest XRPL peer: non-custodial XLS-20, auctions, bulk mint, 
 
 - Multi-currency NFT-Fi on XRPL (fixed price + P2P, thousands of issued assets)
 - Free profiles as their own option (`/profiles`), avatar + background banners, Open Graph image when a profile link is shared
+- NFTs found for a wallet (store + ledger) display on the profile; NFT details has Add / Remove NFT to Profile
 - Decentralised validation, blue/gold checkmarks
 - XIO (`rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU`) is the governance asset
 - XIO ranks: New → Beginner → Basic → Validator → Active → Trusted → Master

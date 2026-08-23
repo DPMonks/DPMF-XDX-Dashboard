@@ -5,6 +5,7 @@ import {
   findProfile,
   listProfiles
 } from "../lib/profile.js";
+import { profileNftDesk } from "../lib/profileNfts.js";
 import {
   fallbackCardSvg,
   profileImageSrc,
@@ -86,6 +87,11 @@ router.get("/profiles/:address", async (req, res) => {
     data: findProfile(store, address) || { wAddress: address },
     governance: await enrichAddress(store, address)
   });
+});
+
+router.get("/profiles/:address/nfts", async (req, res) => {
+  const desk = await profileNftDesk(readStore(), req.params.address);
+  res.json({ success: true, data: desk, count: desk.count });
 });
 
 router.post("/profile/createprofile", (req, res, next) => {

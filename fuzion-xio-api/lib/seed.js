@@ -1,6 +1,6 @@
 import { DEMO_GLB, XDX_CURRENCY, XDX_ISSUER, XIO_CURRENCY, XIO_ISSUER } from "./constants.js";
 
-export const STORE_VERSION = 7;
+export const STORE_VERSION = 8;
 
 export const DEMO_ISSUER = "rFuzionXioDemoIssuer1111111111111";
 export const DEMO_OWNER = "rFuzionXioDemoOwner11111111111111";
@@ -209,7 +209,24 @@ export function demoSeed() {
         location: "Ledger",
         website: "https://fuzion-xio.com",
         bio: "Collector profile. Validation and XIO rank drive the checkmark.",
-        createdAt: now
+        createdAt: now,
+        profileNfts: [
+          {
+            _id: "pin-demo-lilly",
+            nftId: "seed-lilly-1",
+            NFTokenID: "00080000FUZIONXIODEMO0000000000000000000000000000000001",
+            name: "Lilly #1",
+            addedAt: now
+          },
+          {
+            _id: "pin-demo-3d",
+            nftId: "seed-fuzion-3d-hero",
+            NFTokenID: "00080000FUZION3D00000000000000000000000000000000000001",
+            name: "FUZION 3D #1",
+            addedAt: now
+          }
+        ],
+        profileHiddenNfts: []
       },
       {
         _id: "seed-profile-issuer",
@@ -224,7 +241,9 @@ export function demoSeed() {
         location: "FUZION-XIO",
         website: "https://www.dpmf.technology/FUZION-XIO",
         bio: "Governance issuer profile. Master Validator when XIO ≥ 100.",
-        createdAt: now
+        createdAt: now,
+        profileNfts: [],
+        profileHiddenNfts: []
       },
       {
         _id: "seed-profile-bidder",
@@ -239,7 +258,9 @@ export function demoSeed() {
         location: "Market desk",
         website: "https://fuzion-xio.com/assets",
         bio: "Makes collection offers and auction bids on the local desk.",
-        createdAt: now
+        createdAt: now,
+        profileNfts: [],
+        profileHiddenNfts: []
       }
     ],
     likes: [],
