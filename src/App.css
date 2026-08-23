@@ -1919,6 +1919,10 @@ body {
   color: var(--dpmf-text-muted);
 }
 
+.wallet-panel-title {
+  text-align: center;
+}
+
 .wallet-panel-title.is-center {
   text-align: center;
 }

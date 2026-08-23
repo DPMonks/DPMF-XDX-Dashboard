@@ -2145,18 +2145,23 @@ async function buildSnapshot(db) {
   };
 }
 
+function walletFresh(search) {
+  return new URLSearchParams(String(search || "").replace(/^\?/, "")).get("fresh") === "1";
+}
+
 function walletLedgerResult(suffix, search = "") {
+  const fresh = { fresh: walletFresh(search) };
   const offers = String(suffix || "").match(/^wallet\/offers\/([^/]+)$/);
   if (offers) {
-    return loadWalletOffers(decodeURIComponent(offers[1])).then((body) => ok(body));
+    return loadWalletOffers(decodeURIComponent(offers[1]), fresh).then((body) => ok(body));
   }
   const lines = String(suffix || "").match(/^wallet\/lines\/([^/]+)$/);
   if (lines) {
-    return loadWalletLines(decodeURIComponent(lines[1])).then((body) => ok(body));
+    return loadWalletLines(decodeURIComponent(lines[1]), fresh).then((body) => ok(body));
   }
   const activity = String(suffix || "").match(/^wallet\/activity\/([^/]+)$/);
   if (activity) {
-    return loadWalletActivity(decodeURIComponent(activity[1])).then((body) => ok(body));
+    return loadWalletActivity(decodeURIComponent(activity[1]), fresh).then((body) => ok(body));
   }
   const votes = String(suffix || "").match(/^wallet\/votes\/([^/]+)$/);
   if (votes) {
@@ -2455,17 +2460,17 @@ export async function readIndexerDb(suffix, search = "") {
 
     const walletOffers = suffix.match(/^wallet\/offers\/([^/]+)$/);
     if (walletOffers) {
-      return ok(await loadWalletOffers(decodeURIComponent(walletOffers[1])));
+      return ok(await loadWalletOffers(decodeURIComponent(walletOffers[1]), { fresh: walletFresh(search) }));
     }
 
     const walletLines = suffix.match(/^wallet\/lines\/([^/]+)$/);
     if (walletLines) {
-      return ok(await loadWalletLines(decodeURIComponent(walletLines[1])));
+      return ok(await loadWalletLines(decodeURIComponent(walletLines[1]), { fresh: walletFresh(search) }));
     }
 
     const walletActivity = suffix.match(/^wallet\/activity\/([^/]+)$/);
     if (walletActivity) {
-      return ok(await loadWalletActivity(decodeURIComponent(walletActivity[1])));
+      return ok(await loadWalletActivity(decodeURIComponent(walletActivity[1]), { fresh: walletFresh(search) }));
     }
 
     const walletLp = suffix.match(/^wallet\/lp\/([^/]+)$/);

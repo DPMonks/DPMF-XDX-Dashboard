@@ -17,9 +17,18 @@ function cached(key, loader) {
   });
 }
 
-export async function loadWalletOffers(address) {
+export function invalidateWalletLedger(address) {
+  const name = String(address || "").trim();
+  if (!name) return;
+  cache.delete(`offers:${name}`);
+  cache.delete(`activity:${name}`);
+  cache.delete(`lines:${name}`);
+}
+
+export async function loadWalletOffers(address, options = {}) {
   const name = String(address || "").trim();
   if (!name) return { account: null, orders: [], source: "empty" };
+  if (options.fresh) cache.delete(`offers:${name}`);
   return cached(`offers:${name}`, async () => {
     try {
       const result = await xrplRpc("account_offers", {
@@ -72,6 +81,7 @@ export function linesFromAccountLines(rows = []) {
 export async function loadWalletLines(address, options = {}) {
   const name = String(address || "").trim();
   if (!name) return { account: null, lines: [], source: "empty" };
+  if (options.fresh) cache.delete(`lines:${name}`);
   return cached(`lines:${name}`, async () => {
     try {
       const lines = [];
@@ -95,9 +105,10 @@ export async function loadWalletLines(address, options = {}) {
   });
 }
 
-export async function loadWalletActivity(address) {
+export async function loadWalletActivity(address, options = {}) {
   const name = String(address || "").trim();
   if (!name) return { account: null, activity: [], source: "empty" };
+  if (options.fresh) cache.delete(`activity:${name}`);
   return cached(`activity:${name}`, async () => {
     try {
       const result = await xrplRpc("account_tx", {
