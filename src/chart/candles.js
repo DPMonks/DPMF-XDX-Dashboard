@@ -333,12 +333,22 @@ export function averagesForWindow({
 }
 
 export function candleBodyWidth({ innerW, candles = [], start, end, stepMs = 86_400_000, extra = 0 } = {}) {
+  const rows = Array.isArray(candles) ? candles : [];
   const width = Number(innerW) || 0;
   const pad = Math.max(0, Math.trunc(Number(extra) || 0));
-  const count = Math.max(1, (Array.isArray(candles) ? candles : []).length + pad);
+  const real = rows.length;
+  const count = Math.max(1, real + pad);
   const slot = width / count;
-  if (count >= 2 && Number(end) > Number(start) && Number(stepMs) > 0) {
-    const dt = (Number(candles[count - 1].t) - Number(candles[0].t)) / (count - 1);
+  const firstT = Number(rows[0]?.t);
+  const lastT = Number(rows[real - 1]?.t);
+  if (
+    real >= 2 &&
+    Number.isFinite(firstT) &&
+    Number.isFinite(lastT) &&
+    Number(end) > Number(start) &&
+    Number(stepMs) > 0
+  ) {
+    const dt = (lastT - firstT) / (real - 1);
     const timeSlot = (dt / Math.max(Number(end) - Number(start), 1)) * width;
     if (timeSlot > 0 && timeSlot < slot * 1.35) {
       return Math.max(1.3, Math.min(Math.min(slot, timeSlot) * 0.42, width * 0.08));
@@ -400,21 +410,24 @@ export function panAfterZoom({
   const oldV = Math.max(1, Math.trunc(Number(oldVisible) || 1));
   const newV = Math.max(1, Math.trunc(Number(newVisible) || 1));
   const oldP = clampPanOffset(oldPan, size, oldV);
-  const ratio = Math.min(1, Math.max(0, Number(anchorRatio)));
+  const ratio = Number.isFinite(Number(anchorRatio))
+    ? Math.min(1, Math.max(0, Number(anchorRatio)))
+    : 1;
   const right = size - oldP;
   const left = right - oldV;
   const anchorIndex = left + ratio * oldV;
   const nextPan = size - newV - (anchorIndex - ratio * newV);
-  return clampPanOffset(nextPan, size, newV);
+  return clampPanOffset(Number.isFinite(nextPan) ? nextPan : 0, size, newV);
 }
 
 export function clampPanOffset(offset, total, visible, futureMax) {
   const count = Math.max(1, Math.trunc(Number(visible) || 1));
   const size = Array.isArray(total) ? total.length : Math.max(0, Math.trunc(Number(total) || 0));
   const max = Math.max(0, size - count);
-  const min = -Math.max(0, Math.trunc(futureMax ?? futureBarLimit(count)));
-  const n = Math.trunc(Number(offset) || 0);
-  return Math.min(max, Math.max(min, n));
+  const min = -Math.max(0, Math.trunc(Number.isFinite(Number(futureMax)) ? Number(futureMax) : futureBarLimit(count)));
+  const n = Number.isFinite(Number(offset)) ? Math.trunc(Number(offset)) : 0;
+  const clamped = Math.min(max, Math.max(min, n));
+  return Number.isFinite(clamped) ? clamped : 0;
 }
 
 export function windowBars(candles = [], { bars = CHART_VISIBLE_BARS, offset = 0 } = {}) {

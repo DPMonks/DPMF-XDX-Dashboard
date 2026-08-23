@@ -506,6 +506,40 @@
   position: relative;
 }
 
+.hybrid-plot-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 360px;
+  margin: 0 8px 8px;
+  padding: 24px;
+  color: #d1d4dc;
+  background: #000000;
+  border: 1px solid rgba(0, 234, 255, 0.28);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.hybrid-plot-error p {
+  margin: 0;
+  max-width: 28em;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.hybrid-plot-error button {
+  appearance: none;
+  border: 1px solid rgba(0, 234, 255, 0.45);
+  background: #0a0a12;
+  color: #00eaff;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .hybrid-zoom {
   position: absolute;
   top: 8px;

@@ -83,6 +83,8 @@ const en = {
   chartZoom: "Zoom",
   chartZoomIn: "Zoom in",
   chartZoomOut: "Zoom out",
+  chartCrashed: "Chart failed to render. Reload to keep trading.",
+  chartReload: "Reload chart",
   chartSma: "Simple Moving Average",
   chartEma: "Exponential Moving Average",
   chartWma: "Weighted Moving Average",

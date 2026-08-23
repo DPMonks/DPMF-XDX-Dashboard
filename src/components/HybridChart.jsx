@@ -39,6 +39,7 @@ import { useWallet } from "../context/useWallet";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import { elliottTools, moveDrawingHandle, nextDrawingState, patchDrawingStyle, toolAfterDrawing } from "../chart/drawings";
+import ChartErrorBoundary from "./ChartErrorBoundary";
 import ChartTools from "./ChartTools";
 import HybridPlot from "./HybridPlot";
 import TradeBar from "./TradeBar";
@@ -267,8 +268,8 @@ export default function HybridChart() {
     setPriceShift(0);
     setLoadedBars(baseVisible + CHART_MA_PAD);
   }
-  const wantLoaded = Math.min(4000, visibleCount + Math.max(0, panOffset) + CHART_MA_PAD + 32);
-  if (wantLoaded > loadedBars) setLoadedBars(wantLoaded);
+  const wantLoaded = Math.min(4000, visibleCount + Math.max(0, Number(panOffset) || 0) + CHART_MA_PAD + 32);
+  if (Number.isFinite(wantLoaded) && wantLoaded > loadedBars) setLoadedBars(wantLoaded);
   const seriesHead = Number(series[0]?.t) || 0;
   if (series.length !== seriesMeta.len || seriesHead !== seriesMeta.head) {
     const appended = liveSeriesGrew({
@@ -283,7 +284,7 @@ export default function HybridChart() {
     }
   }
   const clampedPan = clampPanOffset(panOffset, series.length, visibleCount);
-  if (clampedPan !== panOffset) setPanOffset(clampedPan);
+  if (Number.isFinite(clampedPan) && clampedPan !== panOffset) setPanOffset(clampedPan);
   const futureBars = futureBarsFromPan(clampedPan);
   const candles = useMemo(
     () => windowBars(series, { bars: visibleCount, offset: clampedPan }),
@@ -640,6 +641,7 @@ export default function HybridChart() {
                 +
               </button>
             </div>
+          <ChartErrorBoundary message={t.chartCrashed} retryLabel={t.chartReload}>
           <HybridPlot
             key={windowKey}
             candles={candles}
@@ -687,6 +689,7 @@ export default function HybridChart() {
             onPricePan={applyPricePan}
             onPriceReset={resetPriceScale}
           />
+          </ChartErrorBoundary>
           </div>
 
           <div className="hybrid-ranges" role="tablist" aria-label={t.chartTimeframes || "Candle size"}>

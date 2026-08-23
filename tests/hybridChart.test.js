@@ -311,6 +311,19 @@ test("candle bodies sit in equal slots so short timeframes stay side by side", (
   assert.ok(width > 1.3);
   assert.ok(width < slot * 0.6);
   assert.equal(visibleBarsForInterval("15m"), 96);
+  const padded = candleBodyWidth({
+    innerW,
+    candles: bars,
+    start: bars[0].t,
+    end: bars[39].t + 20 * hour,
+    stepMs: hour,
+    extra: 20,
+  });
+  assert.ok(Number.isFinite(padded));
+  assert.ok(padded > 0);
+  assert.ok(padded <= width);
+  assert.doesNotThrow(() => candleBodyWidth({ innerW, candles: [], extra: 48 }));
+  assert.ok(Number.isFinite(candleBodyWidth({ innerW, candles: [], extra: 48 })));
 });
 
 test("hollow candle boxes keep the slot width so packed 15m bars do not merge", () => {
@@ -357,6 +370,19 @@ test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail"
     anchorRatio: 1,
   });
   assert.equal(heldFuture, -20);
+  assert.ok(Number.isFinite(clampPanOffset(Number.NaN, 100, 20)));
+  assert.ok(Number.isFinite(clampPanOffset(Number.POSITIVE_INFINITY, 100, 20)));
+  assert.ok(
+    Number.isFinite(
+      panAfterZoom({
+        total: 400,
+        oldVisible: 100,
+        newVisible: 50,
+        oldPan: -20,
+        anchorRatio: Number.NaN,
+      })
+    )
+  );
   assert.equal(wheelPanSteps(40, 0, 0, 36).steps, 1);
   assert.equal(wheelPanSteps(0, -40, 0, 36).steps, -1);
   assert.equal(wheelZoomSteps(80, 0, 56).steps, 1);

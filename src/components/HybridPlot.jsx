@@ -89,6 +89,8 @@ export default function HybridPlot({
   const wheelLeft = useRef(0);
   const wheelZoomLeft = useRef(0);
   const wheelPriceLeft = useRef(0);
+  const wheelRaf = useRef(0);
+  const wheelPend = useRef(null);
   const onPanRef = useRef(onPan);
   const onZoomRef = useRef(onZoom);
   const onPriceZoomRef = useRef(onPriceZoom);
@@ -139,10 +141,12 @@ export default function HybridPlot({
   const xTicks = useMemo(() => scale.ticks(6), [scale]);
   const volumes = useMemo(() => volumeWaveValues(candles), [candles]);
   const seenSet = new Set(seenTs);
-  const freshBars = candles.map((row) => row.t).filter((stamp) => !seenSet.has(stamp) && !enterTs.includes(stamp));
+  const freshBars = candles
+    .map((row) => row.t)
+    .filter((stamp) => Number.isFinite(stamp) && !seenSet.has(stamp) && !enterTs.includes(stamp));
   if (freshBars.length) {
-    setSeenTs((current) => [...current, ...freshBars]);
-    setEnterTs((current) => [...current, ...freshBars]);
+    setSeenTs((current) => [...current, ...freshBars].slice(-2000));
+    setEnterTs((current) => [...current, ...freshBars].slice(-240));
   }
 
   const maIds = averages.map((row) => row.id);
@@ -178,6 +182,7 @@ export default function HybridPlot({
   useEffect(() => {
     return () => {
       if (moveRaf.current) cancelAnimationFrame(moveRaf.current);
+      if (wheelRaf.current) cancelAnimationFrame(wheelRaf.current);
     };
   }, []);
   useEffect(() => {
@@ -193,6 +198,40 @@ export default function HybridPlot({
     const node = svgRef.current;
     if (!node) return undefined;
     const inner = width - PAD.l - PAD.r;
+    function flushWheel() {
+      wheelRaf.current = 0;
+      const job = wheelPend.current;
+      wheelPend.current = null;
+      if (!job) return;
+      if (job.pan && onPanRef.current) onPanRef.current(job.pan);
+      if (job.price && onPriceZoomRef.current) {
+        onPriceZoomRef.current({
+          direction: job.price > 0 ? 1 : -1,
+          anchorPrice: job.priceAnchor,
+        });
+      }
+      if (job.zoom && onZoomRef.current) {
+        onZoomRef.current({
+          direction: job.zoom > 0 ? 1 : -1,
+          anchorRatio: job.zoomRatio,
+        });
+      }
+    }
+    function queueWheel(patch) {
+      const prev = wheelPend.current || { pan: 0, zoom: 0, zoomRatio: 0.5, price: 0, priceAnchor: null };
+      if (patch.pan) prev.pan += patch.pan;
+      if (patch.zoom) {
+        prev.zoom += patch.zoom;
+        prev.zoomRatio = patch.zoomRatio;
+      }
+      if (patch.price) {
+        prev.price += patch.price;
+        prev.priceAnchor = patch.priceAnchor;
+      }
+      wheelPend.current = prev;
+      if (wheelRaf.current) return;
+      wheelRaf.current = requestAnimationFrame(flushWheel);
+    }
     function onWheel(event) {
       event.preventDefault();
       try {
@@ -200,7 +239,7 @@ export default function HybridPlot({
         if (horizontal) {
           const next = wheelPanSteps(event.deltaX, event.shiftKey ? event.deltaY : 0, wheelLeft.current);
           wheelLeft.current = next.leftover;
-          if (next.steps && onPanRef.current) onPanRef.current(next.steps);
+          if (next.steps) queueWheel({ pan: next.steps });
           return;
         }
         const mapped = clientToSvg(node, event.clientX, event.clientY, width, height);
@@ -210,10 +249,10 @@ export default function HybridPlot({
           const anchorPrice = Number(live?.max) - ((mapped.y - PAD.t) / PRICE_H) * span;
           const next = wheelZoomSteps(event.deltaY, wheelPriceLeft.current);
           wheelPriceLeft.current = next.leftover;
-          if (next.steps && onPriceZoomRef.current) {
-            onPriceZoomRef.current({
-              direction: next.steps > 0 ? 1 : -1,
-              anchorPrice,
+          if (next.steps) {
+            queueWheel({
+              price: next.steps > 0 ? 1 : -1,
+              priceAnchor: Number.isFinite(anchorPrice) ? anchorPrice : null,
             });
           }
           return;
@@ -221,20 +260,28 @@ export default function HybridPlot({
         const ratio = mapped ? (mapped.x - PAD.l) / Math.max(1, inner) : 0.5;
         const next = wheelZoomSteps(event.deltaY, wheelZoomLeft.current);
         wheelZoomLeft.current = next.leftover;
-        if (next.steps && onZoomRef.current) {
-          onZoomRef.current({
-            direction: next.steps > 0 ? -1 : 1,
-            anchorRatio: Math.min(1, Math.max(0, Number.isFinite(ratio) ? ratio : 0.5)),
+        if (next.steps) {
+          queueWheel({
+            zoom: next.steps > 0 ? -1 : 1,
+            zoomRatio: Math.min(1, Math.max(0, Number.isFinite(ratio) ? ratio : 0.5)),
           });
         }
       } catch {
         wheelLeft.current = 0;
         wheelZoomLeft.current = 0;
         wheelPriceLeft.current = 0;
+        wheelPend.current = null;
+        if (wheelRaf.current) cancelAnimationFrame(wheelRaf.current);
+        wheelRaf.current = 0;
       }
     }
     node.addEventListener("wheel", onWheel, { passive: false });
-    return () => node.removeEventListener("wheel", onWheel);
+    return () => {
+      node.removeEventListener("wheel", onWheel);
+      if (wheelRaf.current) cancelAnimationFrame(wheelRaf.current);
+      wheelRaf.current = 0;
+      wheelPend.current = null;
+    };
   }, [height]);
 
   const candleW = candleBodyWidth({
