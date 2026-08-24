@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getConnectedWallet } from "../api/indexer";
+import { startVisiblePoll } from "../utils/visiblePoll";
 import { pendingVoteFromExecution } from "../wallet/ammVote";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
@@ -381,7 +382,7 @@ export default function ConnectedWallet() {
     }
 
     load();
-    const id = setInterval(load, 30000);
+    const stopPoll = startVisiblePoll(load, 30000);
     const retries = [];
     function refreshConfirmed() {
       load(true);
@@ -415,7 +416,7 @@ export default function ConnectedWallet() {
     window.addEventListener("dpmf-function-confirmed", onTrade);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stopPoll();
       for (const timer of retries) window.clearTimeout(timer);
       window.removeEventListener("dpmf-wallet-refresh", onRefresh);
       window.removeEventListener("dpmf-trade-executed", onTrade);

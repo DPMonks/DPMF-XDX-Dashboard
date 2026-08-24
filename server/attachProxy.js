@@ -69,7 +69,7 @@ export function attachIndexerProxy(server) {
         suffix,
       });
       res.statusCode = last?.status || 502;
-      for (const [key, value] of Object.entries(proxyResponseHeaders(last, req))) {
+      for (const [key, value] of Object.entries(proxyResponseHeaders(last, req, suffix))) {
         res.setHeader(key, value);
       }
       res.end(last?.body || JSON.stringify({ error: "Indexer proxy failed" }));

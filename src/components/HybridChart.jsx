@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getAmm, getOrderbooks, getPrices, getWalletActivity, getWalletOffers, getXdxFlows } from "../api/indexer";
+import { startVisiblePoll } from "../utils/visiblePoll";
 import { api } from "../api";
 import { CHART_MA_PAD, CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, visibleBarsForInterval } from "../chart/intervals";
 import {
@@ -180,13 +181,13 @@ export default function HybridChart() {
       }
     }
     const start = setTimeout(load, 0);
-    const id = setInterval(load, 30000);
+    const stopPoll = startVisiblePoll(load, 30000);
     window.addEventListener("dpmf-wallet-refresh", load);
     return () => {
       cancelled = true;
       window.removeEventListener("dpmf-wallet-refresh", load);
       clearTimeout(start);
-      clearInterval(id);
+      stopPoll();
     };
   }, []);
 
@@ -209,7 +210,7 @@ export default function HybridChart() {
       setLedgerFills(activity);
     }
     const start = setTimeout(loadLedger, 0);
-    const id = setInterval(loadLedger, 15000);
+    const stopPoll = startVisiblePoll(loadLedger, 30000);
     function onTrade(event) {
       const pending = pendingFromExecution(event.detail, walletAddress);
       if (pending?.order) {
@@ -227,7 +228,7 @@ export default function HybridChart() {
     return () => {
       cancelled = true;
       clearTimeout(start);
-      clearInterval(id);
+      stopPoll();
       window.removeEventListener("dpmf-trade-executed", onTrade);
       window.removeEventListener("dpmf-wallet-refresh", loadLedger);
     };

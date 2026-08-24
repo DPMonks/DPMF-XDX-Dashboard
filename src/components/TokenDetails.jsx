@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getTokenDetails } from "../api/indexer";
+import { startVisiblePoll } from "../utils/visiblePoll";
 import {
   formatDay,
   formatNumber,
@@ -77,10 +78,10 @@ export default function TokenDetails() {
     }
 
     load();
-    const id = setInterval(load, 30000);
+    const stopPoll = startVisiblePoll(load, 30000);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stopPoll();
     };
   }, []);
 

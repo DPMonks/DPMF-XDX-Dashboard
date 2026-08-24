@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getAmm, getLiveLpReserves, getPrices, getWalletAccount, getWalletBalances, getWalletLines, getWalletLp } from "../api/indexer";
+import { startVisiblePoll } from "../utils/visiblePoll";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -314,10 +315,10 @@ export default function TradePanel({
         });
     }
     pull();
-    const timer = window.setInterval(pull, 10_000);
+    const stopPoll = startVisiblePoll(pull, 10_000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPoll();
     };
   }, [action, quotePair, quoteId, quoteIssuer, quoteHex, lpSpec.amm, matched?.amm_account]);
 

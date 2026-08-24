@@ -9,6 +9,7 @@ import {
   VERSION,
 } from "./handshake/contract";
 import { createRequestScheduler } from "./utils/requestScheduler";
+import { cacheTtlMs, LIVE_CACHE_MS } from "./api/cacheTtl";
 
 function resolveRemoteOrigin() {
   const candidates = [
@@ -40,8 +41,10 @@ const API = REQUEST_ORIGIN
 
 const inflight = new Map();
 const responseCache = new Map();
-const CACHE_MS = 15_000;
+const CACHE_MS = LIVE_CACHE_MS;
 const scheduleRequest = createRequestScheduler({ concurrency: 2 });
+
+export { cacheTtlMs };
 
 let handshakePromise = null;
 let handshakeState = {
@@ -156,15 +159,15 @@ function requestUrl(path) {
 function cacheGet(url) {
   const hit = responseCache.get(url);
   if (!hit) return null;
-  if (Date.now() - hit.at > CACHE_MS) {
+  if (Date.now() - hit.at > (hit.ttl ?? CACHE_MS)) {
     responseCache.delete(url);
     return null;
   }
   return hit.data;
 }
 
-function cacheSet(url, data) {
-  responseCache.set(url, { at: Date.now(), data });
+function cacheSet(url, data, ttl = CACHE_MS) {
+  responseCache.set(url, { at: Date.now(), data, ttl });
 }
 
 async function fetchJson(url, { method = "GET", body } = {}) {
@@ -240,7 +243,7 @@ async function getJson(path, options = {}) {
     for (let attempt = 0; attempt < retries; attempt += 1) {
       try {
         const data = await getJsonOnce(path, { method, body });
-        if (cache) cacheSet(cacheKey, data);
+        if (cache) cacheSet(cacheKey, data, cacheTtlMs(url));
         return data;
       } catch (error) {
         lastError = error;
