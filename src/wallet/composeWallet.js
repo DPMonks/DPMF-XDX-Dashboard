@@ -305,18 +305,25 @@ export function volume24hByPool(flows = [], now = Date.now()) {
   return volumeByPool(flows, DAY_MS, now);
 }
 
-function quoteIsXrp(row) {
-  const quote = String(row?.quote || normalizeWalletPair(row?.pool || row?.pool_name || "").split("/")[1] || "")
+function poolQuoteId(row) {
+  return String(row?.quote || normalizeWalletPair(row?.pool || row?.pool_name || "").split("/")[1] || "")
     .trim()
     .toUpperCase();
-  return quote === "XRP";
 }
 
-function xrpPerXdx(row, xdxXrp) {
+function quoteIsXrp(row) {
+  return poolQuoteId(row) === "XRP";
+}
+
+function quoteIsRlusd(row) {
+  return poolQuoteId(row) === "RLUSD";
+}
+
+function quotePerXdx(row, fallback) {
   const reserveXdx = num(row?.reserve_asset ?? row?.reserve_xdx);
   const reserveQuote = num(row?.reserve_currency ?? row?.reserve_quote);
-  if (quoteIsXrp(row) && reserveXdx > 0 && reserveQuote > 0) return reserveQuote / reserveXdx;
-  return num(xdxXrp);
+  if (reserveXdx > 0 && reserveQuote > 0) return reserveQuote / reserveXdx;
+  return num(fallback);
 }
 
 function volumeForWindow(row, flowVol, windowMs) {
@@ -330,33 +337,40 @@ function volumeForWindow(row, flowVol, windowMs) {
 }
 
 function emptyEarnings() {
-  return { xdx: 0, xrp: 0, usd: null };
+  return { xdx: 0, xrp: 0, rlusd: 0, usd: null };
 }
 
-function earningsForWindow(positions, flowVol, windowMs, { xdxUsd, xrpUsd, xdxXrp }) {
+function earningsForWindow(positions, flowVol, windowMs, { xdxUsd, xrpUsd, rlusdUsd, xdxXrp }) {
   const next = emptyEarnings();
   for (const row of Array.isArray(positions) ? positions : []) {
     const share = (num(row.lp_share_percent) || 0) / 100;
     if (!(share > 0)) continue;
     const feeXdx = volumeForWindow(row, flowVol, windowMs) * tradingFeeRate(row.trading_fee) * share;
     if (!(feeXdx > 0)) continue;
-    const px = xrpPerXdx(row, xdxXrp);
-    if (quoteIsXrp(row) && px > 0) {
+    if (quoteIsXrp(row)) {
+      const px = quotePerXdx(row, xdxXrp);
       next.xdx += feeXdx / 2;
-      next.xrp += (feeXdx / 2) * px;
+      if (px > 0) next.xrp += (feeXdx / 2) * px;
+    } else if (quoteIsRlusd(row)) {
+      const px = quotePerXdx(row, null);
+      next.xdx += feeXdx / 2;
+      if (px > 0) next.rlusd += (feeXdx / 2) * px;
     } else {
       next.xdx += feeXdx;
     }
   }
   const xdxPart = num(xdxUsd) != null ? next.xdx * Number(xdxUsd) : null;
   const xrpPart = num(xrpUsd) != null ? next.xrp * Number(xrpUsd) : null;
-  if (xdxPart != null || xrpPart != null) next.usd = (xdxPart || 0) + (xrpPart || 0);
+  const rlusdPart = num(rlusdUsd) != null ? next.rlusd * Number(rlusdUsd) : next.rlusd > 0 ? next.rlusd : null;
+  if (xdxPart != null || xrpPart != null || rlusdPart != null) {
+    next.usd = (xdxPart || 0) + (xrpPart || 0) + (rlusdPart || 0);
+  }
   return next;
 }
 
 export function lpFeeEarnings(
   positions = [],
-  { flows = [], xdxUsd = null, xrpUsd = null, xdxXrp = null, now = Date.now() } = {}
+  { flows = [], xdxUsd = null, xrpUsd = null, rlusdUsd = 1, xdxXrp = null, now = Date.now() } = {}
 ) {
   const vol24h = volumeByPool(flows, DAY_MS, now);
   const vol7d = volumeByPool(flows, DAY_MS * 7, now);
@@ -371,6 +385,7 @@ export function lpFeeEarnings(
   const prices = {
     xdxUsd,
     xrpUsd: num(xrpUsd) ?? (num(xdxUsd) > 0 && num(xdxXrp) > 0 ? Number(xdxUsd) / Number(xdxXrp) : null),
+    rlusdUsd: num(rlusdUsd) ?? 1,
     xdxXrp,
   };
   const day = earningsForWindow(positions, vol24h, DAY_MS, prices);
@@ -383,9 +398,11 @@ export function lpFeeEarnings(
     earnings: {
       xdx24h: day.xdx,
       xrp24h: day.xrp,
+      rlusd24h: day.rlusd,
       usd24h: day.usd,
       xdx7d: week.xdx,
       xrp7d: week.xrp,
+      rlusd7d: week.rlusd,
       usd7d: week.usd,
     },
   };
@@ -438,9 +455,11 @@ export function emptyWalletSnapshot(address = null) {
       earnings: {
         xdx24h: null,
         xrp24h: null,
+        rlusd24h: null,
         usd24h: null,
         xdx7d: null,
         xrp7d: null,
+        rlusd7d: null,
         usd7d: null,
       },
     },
@@ -538,6 +557,7 @@ export function composeWalletSnapshot({
       flows,
       xdxUsd: num(prices.xdxUsd ?? prices.recorded_price ?? token.xdxUsd),
       xrpUsd: num(prices.xrpUsd),
+      rlusdUsd: num(prices.RLUSD ?? prices.quotes?.RLUSD) ?? 1,
       xdxXrp: xdxPerXrp,
     }),
     lp,
