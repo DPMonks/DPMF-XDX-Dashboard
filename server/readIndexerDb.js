@@ -292,10 +292,18 @@ function connectHint(error) {
   return "Postgres connect failed. Check host acela.proxy.rlwy.net:48994, user postgres, database railway, and the current password. Password is not logged.";
 }
 
+export function postgresOutageBody() {
+  return {
+    error: "Postgres temporarily unreachable",
+    source: "db",
+  };
+}
+
 function logDbError(error) {
   console.error("Indexer Postgres failed (password redacted)", {
     code: error?.code || null,
     message: safePgMessage(error),
+    hint: connectHint(error),
   });
 }
 
@@ -2214,11 +2222,7 @@ export async function readIndexerDb(suffix, search = "") {
     return {
       status: 503,
       contentType: "application/json",
-      body: JSON.stringify({
-        error: "Postgres temporarily unreachable",
-        source: "db",
-        hint: connectHint({ message: "timeout" }),
-      }),
+      body: JSON.stringify(postgresOutageBody()),
       source: "postgres",
     };
   }
@@ -2621,13 +2625,11 @@ export async function readIndexerDb(suffix, search = "") {
     logDbError(error);
     if (isConnectError(error)) markPostgresDown();
     return {
-      status: 500,
+      status: isConnectError(error) ? 503 : 500,
       contentType: "application/json",
-      body: JSON.stringify({
-        error: safePgMessage(error),
-        source: "db",
-        hint: connectHint(error),
-      }),
+      body: JSON.stringify(
+        isConnectError(error) ? postgresOutageBody() : { error: "Indexer query failed", source: "db" }
+      ),
       source: "postgres",
     };
   }
