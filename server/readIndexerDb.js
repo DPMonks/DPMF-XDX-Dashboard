@@ -50,7 +50,7 @@ import {
   blackholeAtFromTransactions,
   issuerBlackholeFromAccount,
 } from "../src/utils/blackhole.js";
-import { poolReservesFromAmmInfo } from "../src/utils/ammInfo.js";
+import { overlayLiveAmmReserves, poolReservesFromAmmInfo } from "../src/utils/ammInfo.js";
 import {
   indexPoolsByPair,
   lookupLpPool,
@@ -1359,25 +1359,10 @@ async function loadAmmReserves(ammAccount) {
 async function fillWalletLpFromLedger(positions) {
   return Promise.all(
     (positions || []).map(async (row) => {
-      const needsSupply = !(Number(row.lp_supply) > 0);
-      const needsReserves =
-        !(Number(row.reserve_asset) > 0) || !(Number(row.reserve_currency) > 0);
-      if (!row.amm_account || (!needsSupply && !needsReserves)) return row;
+      if (!row.amm_account) return row;
       const live = await loadAmmReserves(row.amm_account);
       if (!live) return row;
-      return (
-        lpPositionFromPool(
-          row.lp_balance,
-          {
-            ...row,
-            lp_supply: Number(row.lp_supply) > 0 ? row.lp_supply : live.lp_supply,
-            reserve_asset: Number(row.reserve_asset) > 0 ? row.reserve_asset : live.reserve_asset,
-            reserve_currency:
-              Number(row.reserve_currency) > 0 ? row.reserve_currency : live.reserve_currency,
-          },
-          row.pool
-        ) || row
-      );
+      return lpPositionFromPool(row.lp_balance, overlayLiveAmmReserves(row, live), row.pool) || row;
     })
   );
 }
@@ -1490,9 +1475,8 @@ async function loadXdxLpPools(db) {
     xrpUsd
   );
 
-  return {
-    count: stored.rows.length,
-    pools: stored.rows.map((row) => {
+  const pools = await Promise.all(
+    stored.rows.map(async (row) => {
       const extra =
         reserves.byAmm.get(row.amm_account) ||
         reserves.byName.get(String(row.pool_name || "").toUpperCase()) ||
@@ -1512,15 +1496,7 @@ async function loadXdxLpPools(db) {
         measuredQuote ||
         inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) ||
         null;
-      const split = resolvePoolSplit({
-        reserveXdx,
-        reserveQuote: measuredQuote || reserveQuote,
-        lpSupply,
-        price: extra.price,
-        xdxUsd,
-        quoteUsd,
-      });
-      return {
+      const built = {
         pool_name: row.pool_name,
         pool: row.pool_name,
         amm_account: row.amm_account,
@@ -1533,14 +1509,31 @@ async function loadXdxLpPools(db) {
         reserve_currency: reserveQuote,
         xdxUsd,
         quote_usd: quoteUsd || null,
-        xdx_pct: split?.xdxPct ?? null,
-        quote_pct: split?.quotePct ?? null,
-        lead: split?.lead || null,
         lp_supply: lpSupply,
         trading_fee: Number.isFinite(Number(extra.trading_fee)) ? Number(extra.trading_fee) : 0,
         updated: extra.timestamp || row.updated_at,
       };
-    }),
+      const overlaid = overlayLiveAmmReserves(built, await loadAmmReserves(row.amm_account));
+      const split = resolvePoolSplit({
+        reserveXdx: overlaid.reserve_xdx,
+        reserveQuote: overlaid.reserve_currency,
+        lpSupply: overlaid.lp_supply,
+        price: extra.price,
+        xdxUsd,
+        quoteUsd,
+      });
+      return {
+        ...overlaid,
+        xdx_pct: split?.xdxPct ?? null,
+        quote_pct: split?.quotePct ?? null,
+        lead: split?.lead || null,
+      };
+    })
+  );
+
+  return {
+    count: pools.length,
+    pools,
     catching_up: false,
     source: "db",
   };

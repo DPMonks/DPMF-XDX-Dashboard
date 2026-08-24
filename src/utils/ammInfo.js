@@ -25,6 +25,47 @@ export function issuedAmountValue(amount) {
   return n / 1_000_000;
 }
 
+function positive(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+export function overlayLiveAmmReserves(row = {}, live = null) {
+  if (!live) return row;
+  const reserveXdx =
+    positive(live.reserve_xdx ?? live.reserve_asset) ||
+    positive(row.reserve_xdx ?? row.reserve_asset);
+  const reserveQuote =
+    positive(live.reserve_currency ?? live.reserve_quote) ||
+    positive(row.reserve_currency ?? row.reserve_quote);
+  const lpSupply = positive(live.lp_supply) || positive(row.lp_supply);
+  const liveHit = Boolean(
+    positive(live.reserve_xdx ?? live.reserve_asset) ||
+      positive(live.reserve_currency ?? live.reserve_quote) ||
+      positive(live.lp_supply)
+  );
+  return {
+    ...row,
+    reserve_xdx: reserveXdx || row.reserve_xdx || null,
+    reserve_asset: reserveXdx || row.reserve_asset || null,
+    reserve_currency: reserveQuote || row.reserve_currency || null,
+    reserve_quote: reserveQuote || row.reserve_quote || null,
+    lp_supply: lpSupply || row.lp_supply || null,
+    trading_fee: live.trading_fee ?? row.trading_fee,
+    reserve_source: liveHit ? "amm_info" : row.reserve_source,
+  };
+}
+
+export function lpShareAmounts(lpAmount, reserveBase, reserveQuote, lpSupply) {
+  const lp = Number(lpAmount);
+  const supply = Number(lpSupply);
+  if (!(lp > 0) || !(supply > 0)) return { base: 0, quote: 0 };
+  return {
+    base: (lp / supply) * Number(reserveBase || 0),
+    quote: (lp / supply) * Number(reserveQuote || 0),
+  };
+}
+
 export function poolReservesFromAmmInfo(result) {
   const amm = result?.amm || result;
   if (!amm || (amm.amount == null && amm.amount2 == null && !amm.lp_token)) return null;

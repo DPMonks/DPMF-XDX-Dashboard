@@ -613,9 +613,15 @@ export function expectedWithdraw(lpAmount, reserveBase, reserveQuote, lpSupply, 
   const lp = Number(lpAmount);
   const supply = Number(lpSupply);
   if (!(lp > 0) || !(supply > 0)) return { base: 0, quote: 0 };
-  const quoteReserve = options.preferMark
-    ? saneOpposingReserve(reserveBase, reserveQuote, options.price)
-    : Number(reserveQuote || 0);
+  // LP share is always the pool ratio. preferMark is only a last-resort
+  // stand-in when the opposing reserve is missing, not a cross-market rewrite.
+  const measured = Number(reserveQuote || 0);
+  const quoteReserve =
+    measured > 0
+      ? measured
+      : options.preferMark
+        ? saneOpposingReserve(reserveBase, reserveQuote, options.price)
+        : 0;
   return {
     base: (lp / supply) * Number(reserveBase || 0),
     quote: (lp / supply) * Number(quoteReserve || 0),

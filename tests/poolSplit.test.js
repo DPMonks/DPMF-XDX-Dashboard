@@ -156,6 +156,15 @@ test("detectQuoteUsd prefers live USD then XDX pool implied for any quote", () =
     }),
     26.4
   );
+  assert.equal(
+    detectQuoteUsd({
+      quoteId: "XIO",
+      pool: { reserve_xdx: 52286366, reserve_currency: 59.94, xdxUsd: 0.000063 },
+      prices: { XIO: 869, xioXrp: 27.81, xrpUsd: 1 },
+      allowImplied: false,
+    }),
+    27.81
+  );
   const book = normalizePriceBook({ quotes: { PLX: 0.012 }, xdxUsd: 0.00004, xrpUsd: 2.8 });
   assert.equal(book.quotes.PLX, 0.012);
   assert.equal(

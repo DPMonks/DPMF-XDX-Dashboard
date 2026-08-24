@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { XDX_ISSUER } from "../src/constants/ledger.js";
-import { issuedAmountValue, poolReservesFromAmmInfo } from "../src/utils/ammInfo.js";
+import {
+  issuedAmountValue,
+  lpShareAmounts,
+  overlayLiveAmmReserves,
+  poolReservesFromAmmInfo,
+} from "../src/utils/ammInfo.js";
 
 test("issuedAmountValue reads IOU value and XRP drops", () => {
   assert.equal(issuedAmountValue({ value: "12.5" }), 12.5);
@@ -22,6 +27,29 @@ test("poolReservesFromAmmInfo reads XDX/USDC ledger reserves", () => {
   assert.equal(row.lp_supply, 284023);
   assert.equal(row.reserve_xdx, 80000);
   assert.equal(row.reserve_currency, 250);
+});
+
+test("overlayLiveAmmReserves replaces leftover quote reserves and LP supply", () => {
+  const row = overlayLiveAmmReserves(
+    {
+      pool: "XDX/XIO",
+      reserve_xdx: 52286366,
+      reserve_asset: 52286366,
+      reserve_currency: 1947.36782,
+      lp_supply: 220280408.7293996,
+    },
+    {
+      reserve_xdx: 52286366.55495586,
+      reserve_currency: 59.93807084355173,
+      lp_supply: 44936.64667926788,
+      trading_fee: 1000,
+    }
+  );
+  assert.equal(row.reserve_currency, 59.93807084355173);
+  assert.equal(row.lp_supply, 44936.64667926788);
+  assert.equal(row.reserve_source, "amm_info");
+  const share = lpShareAmounts(4493.664667926788, row.reserve_xdx, row.reserve_currency, row.lp_supply);
+  assert.ok(Math.abs(share.quote - 5.993807084355173) < 1e-9);
 });
 
 test("poolReservesFromAmmInfo treats XRP drops as the quote reserve", () => {
