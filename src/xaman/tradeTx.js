@@ -198,6 +198,17 @@ export function xrplIssuedValue(value) {
   return n.toFixed(decimals).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "") || "0";
 }
 
+export function xrplIssuedFloor(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  const canon = xrplIssuedValue(n);
+  if (Number(canon) <= n) return canon;
+  const abs = Math.abs(n);
+  const decimals = abs >= 1 ? Math.min(8, Math.max(0, 15 - String(Math.trunc(abs)).length)) : 10;
+  const stepped = n - 10 ** -decimals;
+  return stepped > 0 ? xrplIssuedValue(stepped) : "0";
+}
+
 export function xrpDrops(xrp) {
   const n = Number(xrp);
   if (!Number.isFinite(n) || n < 0) return "0";
@@ -365,7 +376,6 @@ export function ammWithdrawTx({
   pools,
   mode = "double",
   singleAsset = "xdx",
-  amountOut,
 } = {}) {
   const pool = poolForQuote(quote, pools);
   const txjson = {
@@ -378,17 +388,15 @@ export function ammWithdrawTx({
     LPTokenIn: {
       currency: pool.lpCurrency,
       issuer: pool.amm,
-      value: xrplIssuedValue(lpAmount),
+      value: xrplIssuedFloor(lpAmount),
     },
     Flags: TF_LP_TOKEN,
   };
   if (mode === "single") {
-    const maxOut = Number(amountOut);
-    if (maxOut > 0) {
-      // tfOneAssetLPToken: Amount is a maximum of one asset, plus LPTokenIn.
-      txjson.Flags = TF_ONE_ASSET_LP_TOKEN;
-      txjson.Amount = singleAsset === "quote" ? quoteAmount(quote, maxOut) : xdxAmount(maxOut);
-    }
+    // tfOneAssetLPToken: Amount is a *minimum*. 0 means accept any
+    // positive output so the AMM trading fee cannot trigger tecAMM_FAILED.
+    txjson.Flags = TF_ONE_ASSET_LP_TOKEN;
+    txjson.Amount = singleAsset === "quote" ? quoteAmount(quote, 0) : xdxAmount(0);
   }
   if (account) txjson.Account = account;
   return txjson;
@@ -603,13 +611,19 @@ export function expectedWithdraw(lpAmount, reserveBase, reserveQuote, lpSupply) 
   };
 }
 
-export function expectedSingleWithdraw(lpAmount, reserve, lpSupply) {
+export function expectedSingleWithdraw(lpAmount, reserve, lpSupply, tradingFee = 0) {
   const lp = Number(lpAmount);
   const pool = Number(reserve);
   const supply = Number(lpSupply);
   if (!(lp > 0) || !(pool > 0) || !(supply > 0) || lp > supply) return 0;
-  const remain = 1 - lp / supply;
-  return pool * (1 - remain * remain);
+  const t1 = lp / supply;
+  const fee = Math.min(Math.max(Number(tradingFee) || 0, 0), 1000) / 100_000;
+  const denom = t1 * fee - 1;
+  if (denom === 0) return 0;
+  // rippled ammAssetOut (equation 8), including the trading fee.
+  const frac = (t1 * t1 - t1 * (2 - fee)) / denom;
+  if (!(frac > 0)) return 0;
+  return pool * frac;
 }
 
 export function tradeSides({

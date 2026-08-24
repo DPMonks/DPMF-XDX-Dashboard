@@ -61,6 +61,7 @@ function poolReserves(pools, quote) {
     base: Number(row?.reserve_xdx ?? row?.reserve_asset ?? 0),
     quote: Number(row?.reserve_currency ?? 0),
     lpSupply: Number(row?.lp_supply ?? 0),
+    tradingFee: Number(row?.trading_fee ?? 0),
     issuer: row?.quote_issuer || null,
     hex: row?.quote_hex || null,
     xdxUsd: Number(row?.xdxUsd || 0),
@@ -195,7 +196,8 @@ export default function TradePanel({
     ? expectedSingleWithdraw(
         withdrawLp,
         singleAsset === "quote" ? reserves.quote : reserves.base,
-        reserves.lpSupply
+        reserves.lpSupply,
+        reserves.tradingFee
       )
     : 0;
   const withdraw = isSingleRemove
@@ -339,7 +341,6 @@ export default function TradePanel({
       pools,
       mode: lpMode,
       singleAsset: isSingleRemove ? singleAsset : undefined,
-      amountOut: isSingleRemove ? singleOut : undefined,
     });
   }
 
@@ -417,6 +418,10 @@ export default function TradePanel({
     }
     if (isSingleRemove && !(singleOut > 0)) {
       setFormError(t.tradeNeedAmount);
+      return;
+    }
+    if (action === "removeLp" && !isSingleRemove && (!(withdraw.base > 0) || !(withdraw.quote > 0))) {
+      setFormError(t.lpTooSmall || t.tradeNeedAmount);
       return;
     }
     if (action === "addLp") {
