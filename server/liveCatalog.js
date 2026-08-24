@@ -18,10 +18,14 @@ import {
   loadXrplToFlows,
   loadXrplToHolderGraph,
   loadXrplToHolders,
+  loadXrplToLpChart,
+  loadXrplToLpCounts,
+  loadXrplToLpOwners,
   loadXrplToRank,
+  loadXrpSparkline,
 } from "./xrplToCatalog.js";
 
-let xrpFx = { at: 0, usd: 0, gbp: 0, eur: 0, jpy: 0 };
+let xrpFx = { at: 0, usd: 0, gbp: 0, eur: 0, jpy: 0, change24h: 0 };
 let marketCache = { at: 0, prices: null, pools: null, overview: null };
 let tokenCache = { at: 0, body: null };
 let issuerLockedCache = { at: 0, body: null };
@@ -39,7 +43,7 @@ export async function loadLiveXrpQuote(options = {}) {
   if (!options.fresh && now - xrpFx.at < 300_000 && xrpFx.usd) return xrpFx;
   try {
     const res = await (options.fetchImpl || fetch)(
-      "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd,gbp,eur,jpy",
+      "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd,gbp,eur,jpy&include_24hr_change=true",
       { headers: FREE_API_HEADERS, signal: AbortSignal.timeout(4000) }
     );
     if (!res.ok) throw new Error(`coingecko ${res.status}`);
@@ -50,6 +54,7 @@ export async function loadLiveXrpQuote(options = {}) {
       gbp: Number(body?.ripple?.gbp || xrpFx.gbp || 0),
       eur: Number(body?.ripple?.eur || xrpFx.eur || 0),
       jpy: Number(body?.ripple?.jpy || xrpFx.jpy || 0),
+      change24h: Number(body?.ripple?.usd_24h_change ?? xrpFx.change24h ?? 0),
     };
   } catch {
     xrpFx = { ...xrpFx, at: now };
@@ -81,6 +86,7 @@ function poolRowFromLive(spec, live, prices) {
     trading_fee: live?.trading_fee ?? null,
     xdxUsd: prices?.xdxUsd || null,
     xrpUsd: prices?.xrpUsd || null,
+    volume24h: spec.pair === "XDX/XRP" ? prices?.volume24h || null : null,
     source: "xrpl",
   };
 }
@@ -202,6 +208,7 @@ export async function loadLiveMarket(options = {}) {
   const burned = Number(issuerLocked.issuer_locked || 0);
   const circulating = Number(issuerLocked.circulating || XDX_TOTAL_SUPPLY);
   const volume24h = num(token.vol24hXrp) && xrpUsd ? token.vol24hXrp * xrpUsd : num(token.vol24hXrp);
+  if (pools[0]) pools[0].volume24h = volume24h;
   const overview = {
     pool: "XDX/XRP",
     tvl: tvlUsd || reserveXrp || 0,
@@ -244,7 +251,14 @@ export async function loadLiveMarket(options = {}) {
     source: "xrpl",
     catching_up: !num(token.holders),
   };
-  marketCache = { at: now, prices, pools, overview, token, change: { xdx: Number(token.change24h) || 0, xrp: 0 } };
+  marketCache = {
+    at: now,
+    prices,
+    pools,
+    overview,
+    token,
+    change: { xdx: Number(token.change24h) || 0, xrp: Number(quote.change24h) || 0 },
+  };
   return marketCache;
 }
 
@@ -339,8 +353,12 @@ export async function liveCatalogPayload(suffix, options = {}) {
     };
   }
   if (path === "prices/change24h" || path === "change24h") {
-    const market = await loadXrplToMarket(options);
-    return { xdx: Number(market.change?.xdx) || 0, xrp: 0, source: "xrpl.to" };
+    const [market, quote] = await Promise.all([loadXrplToMarket(options), loadLiveXrpQuote(options)]);
+    return {
+      xdx: Number(market.change?.xdx) || 0,
+      xrp: Number(quote.change24h) || 0,
+      source: "xrpl.to",
+    };
   }
   if (path === "issuer-locked") {
     return loadIssuerLockedLive(options);
@@ -354,12 +372,28 @@ export async function liveCatalogPayload(suffix, options = {}) {
     return { count: token.trustlines || null, source: token.source, catching_up: !token.trustlines };
   }
   if (path === "lp-holders/count") {
+    const params = new URLSearchParams(String(options.search || "").replace(/^\?/, ""));
+    const counts = await loadXrplToLpCounts({
+      ...options,
+      pool: params.get("pool") || params.get("pair") || "all",
+    }).catch(() => null);
+    if (counts && !counts.catching_up) {
+      return { count: counts.holders, pool: counts.pool, source: "xrpl.to", catching_up: false };
+    }
     const token = await loadXrplToToken(options);
     return { count: token.lpHolders || null, pool: "all", source: token.source, catching_up: !token.lpHolders };
   }
   if (path === "lp-trustlines/count") {
+    const params = new URLSearchParams(String(options.search || "").replace(/^\?/, ""));
+    const counts = await loadXrplToLpCounts({
+      ...options,
+      pool: params.get("pool") || params.get("pair") || "all",
+    }).catch(() => null);
+    if (counts?.trustlines) {
+      return { count: counts.trustlines, pool: counts.pool, source: "xrpl.to", catching_up: false };
+    }
     const token = await loadXrplToToken(options);
-    return { count: token.lpHolders || null, pool: "all", source: token.source, catching_up: true };
+    return { count: token.lpHolders || null, pool: "all", source: token.source, catching_up: !token.trustlines };
   }
   if (path === "orderbook") {
     const market = await loadLiveMarket(options);
@@ -428,6 +462,8 @@ export async function liveCatalogPayload(suffix, options = {}) {
     return rows.length ? rows : { rows: [], source: "xrpl.to", catching_up: true };
   }
   if (path.startsWith("sparkline/")) {
+    const asset = decodeURIComponent(path.split("/")[1] || "XDX").toUpperCase();
+    if (asset === "XRP") return loadXrpSparkline(options).catch(() => []);
     return loadXrplToCandles(options).catch(() => []);
   }
   if (path === "chart/candles" || path === "charts/candles") {
@@ -440,8 +476,41 @@ export async function liveCatalogPayload(suffix, options = {}) {
       rows: candles,
     };
   }
-  if (path === "charts/tvl" || path === "charts/lp-holders" || path === "charts/lp-trustlines" || path === "top-lp") {
-    return { rows: [], holders: [], count: null, source: "xrpl.to", catching_up: true };
+  if (path === "top-lp") {
+    const params = new URLSearchParams(String(options.search || "").replace(/^\?/, ""));
+    return loadXrplToLpOwners({
+      ...options,
+      pool: params.get("pool") || params.get("pair") || "all",
+      limit: params.get("limit"),
+      offset: params.get("offset"),
+    }).catch(() => ({ holders: [], rows: [], count: null, source: "xrpl.to", catching_up: true }));
+  }
+  if (path === "charts/lp-holders" || path === "charts/lp-trustlines") {
+    const params = new URLSearchParams(String(options.search || "").replace(/^\?/, ""));
+    const rows = await loadXrplToLpChart({
+      ...options,
+      pool: params.get("pool") || params.get("pair") || "XDX/XRP",
+    }).catch(() => []);
+    return rows.length ? rows : { rows: [], source: "xrpl.to", catching_up: true };
+  }
+  if (path === "charts/tvl") {
+    try {
+      const market = await loadLiveMarket(options);
+      const tvl = num(market.overview?.tvl_usd) || num(market.overview?.tvl) || num(market.token?.tvl);
+      if (tvl > 0) {
+        return [
+          {
+            timestamp: new Date().toISOString(),
+            tvl,
+            tvl_usd: tvl,
+            source: "xrpl",
+          },
+        ];
+      }
+    } catch {
+      // last-good catalog memory covers a blip
+    }
+    return { rows: [], source: "xrpl.to", catching_up: true };
   }
   return null;
 }

@@ -96,6 +96,23 @@ test("a down database still has a live token and price payload", async () => {
         json: async () => ({ ohlc: [[Date.now(), 0.00004, 0.00005, 0.00003, 0.000046, 12]] }),
       };
     }
+    if (target.includes("xrpl.to/v1/holders/list")) {
+      return {
+        ok: true,
+        json: async () => ({
+          length: 67,
+          richList: [{ account: "rLpOwner11111111111111111111111111", balance: 12.5, rank: 1 }],
+        }),
+      };
+    }
+    if (target.includes("xrpl.to/v1/holders/graph")) {
+      return {
+        ok: true,
+        json: async () => ({
+          history: [{ time: Date.now(), holders: 58, length: 67, active24H: 4 }],
+        }),
+      };
+    }
     if (target.includes("xrpl.to")) {
       return {
         ok: true,
@@ -142,11 +159,21 @@ test("a down database still has a live token and price payload", async () => {
   const counts = await liveCatalogPayload("holders/count", { fetchImpl, fresh: true, now });
   assert.equal(counts.count, 15941);
   const charts = await liveCatalogPayload("charts/activity", { fetchImpl, fresh: true, now });
-  assert.equal(charts.catching_up, true);
-  assert.ok(Array.isArray(charts.rows));
+  assert.ok(Array.isArray(charts));
+  assert.equal(charts[0].holders, 58);
   const flows = await liveCatalogPayload("xdx-flows", { fetchImpl, fresh: true, now });
   assert.deepEqual(flows, []);
   const spark = await liveCatalogPayload("sparkline/XDX", { fetchImpl, fresh: true, now });
   assert.equal(Array.isArray(spark), true);
   assert.equal(spark[0].price_usd, 0.000046);
+  const lp = await liveCatalogPayload("top-lp", { fetchImpl, fresh: true, now, search: "?pool=all" });
+  assert.equal(lp.catching_up, false);
+  assert.ok(lp.holders.length > 0);
+  assert.equal(lp.holders[0].lp_balance, 12.5);
+  const tvl = await liveCatalogPayload("charts/tvl", { fetchImpl, fresh: true, now });
+  assert.ok(Array.isArray(tvl));
+  assert.ok(Number(tvl[0].tvl) > 0);
+  const lpChart = await liveCatalogPayload("charts/lp-holders", { fetchImpl, fresh: true, now });
+  assert.ok(Array.isArray(lpChart));
+  assert.equal(lpChart[0].lp_holder_count, 58);
 });

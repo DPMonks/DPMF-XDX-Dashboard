@@ -30,6 +30,8 @@ export function payloadUsable(suffix, body) {
   if (Number(body.rank) > 0) return true;
   if (Number(body.totalUsd) > 0) return true;
   if (Number(body.issued) > 0 || Number(body.issuer_locked) > 0) return true;
+  if (Number(body.tvl) > 0 || Number(body.tvl_usd) > 0) return true;
+  if (Number(body.lp_balance) > 0) return true;
   return false;
 }
 

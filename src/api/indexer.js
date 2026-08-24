@@ -1,5 +1,9 @@
 import { api, INDEXER_ORIGIN } from "../api";
-import { pairFromRow } from "../constants/ledger";
+import {
+  pairFromRow,
+  XDX_RLUSD_LP_XRPL_TO_MD5,
+  XDX_XRP_LP_XRPL_TO_MD5,
+} from "../constants/ledger";
 import { keepLastGoodOwners } from "../todayOwners";
 import {
   carryActivityMetrics,
@@ -500,8 +504,30 @@ export async function getTopHolders(onPage) {
   });
 }
 
+async function fetchXrplToLpOwners() {
+  const pages = await Promise.all(
+    [
+      ["XDX/XRP", XDX_XRP_LP_XRPL_TO_MD5],
+      ["XDX/RLUSD", XDX_RLUSD_LP_XRPL_TO_MD5],
+    ].map(async ([pool, md5]) => {
+      const response = await fetch(`https://api.xrpl.to/v1/holders/list/${md5}?limit=200&offset=0`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!response.ok) return [];
+      const body = await response.json();
+      return (Array.isArray(body.richList) ? body.richList : []).map((row) => ({
+        ...row,
+        pool_name: pool,
+        lp_balance: Number(row.balance) || 0,
+      }));
+    })
+  );
+  return { holders: pages.flat(), rows: pages.flat(), present: true, catching_up: false, source: "xrpl.to" };
+}
+
 export async function getTopLp(onPage) {
-  return loadPagedOwners({
+  const rows = await loadPagedOwners({
     cacheKey: "lpHolders",
     requestFirst: () => api.topLp(FIRST_LP, 0, { snapshot: "today", pool: "all" }),
     requestRest: (limit, offset) =>
@@ -514,6 +540,15 @@ export async function getTopLp(onPage) {
     firstSize: FIRST_LP,
     restPageSize: 50,
   });
+  if (rows.length) return rows;
+  try {
+    const payload = await fetchXrplToLpOwners();
+    const mapped = finishLp(asArray(payload));
+    if (mapped.length) onPage?.(mapped, pickFreshness(payload, mapped));
+    return mapped;
+  } catch {
+    return rows;
+  }
 }
 
 const XRPL_TO_TOKEN_TTL_MS = 60_000;

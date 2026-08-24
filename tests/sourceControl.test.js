@@ -15,6 +15,9 @@ import {
   flowsFromXrplToHistory,
   candlesFromOhlc,
   loadXrplToHolders,
+  lpOwnersFromXrplTo,
+  lpChartFromGraph,
+  xrpSparkFromCoinGecko,
 } from "../server/xrplToCatalog.js";
 
 test("last-good catalog memory keeps a usable free-API payload", () => {
@@ -85,4 +88,22 @@ test("free API fetches send a dashboard User-Agent so Cloudflare does not 403", 
   });
   assert.equal(headers["user-agent"], "DPMF-XDX-Dashboard/1.1");
   assert.equal(page.holders[0].account, "r1");
+});
+
+test("LP rich lists and CoinGecko XRP sparks map onto indexer shapes", () => {
+  const page = lpOwnersFromXrplTo(
+    { length: 67, richList: [{ account: "rLp1", balance: 12.5, rank: 1 }] },
+    { pool: "XDX/XRP" }
+  );
+  assert.equal(page.holders[0].lp_balance, 12.5);
+  assert.equal(page.holders[0].pool_name, "XDX/XRP");
+  assert.equal(page.catching_up, false);
+  const chart = lpChartFromGraph([
+    { timestamp: "2026-08-24T00:00:00.000Z", holders: 58, trustlines: 67 },
+  ]);
+  assert.equal(chart[0].lp_holder_count, 58);
+  assert.equal(chart[0].lp_trustline_count, 67);
+  const spark = xrpSparkFromCoinGecko({ prices: [[1_787_526_000_000, 1.48]] });
+  assert.equal(spark[0].asset, "XRP");
+  assert.equal(spark[0].price_usd, 1.48);
 });
