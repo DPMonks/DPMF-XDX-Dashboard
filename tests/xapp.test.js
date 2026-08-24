@@ -56,9 +56,11 @@ test("xApp launch reads the one-time token and style from the URL", () => {
 test("xApp host is remembered in sessionStorage after the token is stripped", () => {
   withStores(() => {
     rememberXappHost(true, "DARK");
-    assert.equal(isXappHost(""), true);
+    assert.equal(isXappHost(""), false);
     assert.equal(globalThis.sessionStorage.getItem("dpmf-xapp-host"), "1");
     assert.equal(globalThis.localStorage.getItem("dpmf-xapp-host"), null);
+    const webview = { ReactNativeWebView: { postMessage() {} } };
+    assert.equal(isXappHost("", webview), true);
     rememberXappHost(false);
     assert.equal(isXappHost(""), false);
   });

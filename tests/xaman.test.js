@@ -29,6 +29,7 @@ import {
   isTelegramWebView,
   isReusableUnsignedPayload,
   launchXamanSign,
+  shouldCancelConnectNavigation,
   normalizePayload,
   payloadLooksSigned,
   payloadQrUrl,
@@ -634,6 +635,28 @@ test("in-app browsers open the Xaman app, not the hosted console", () => {
   assert.equal(assigned.length, 1);
   assert.equal(assigned[0], `xumm://xumm.app/sign/${uuid}`);
   assert.doesNotMatch(String(assigned[0] || ""), /^https:\/\/xumm\.app\/sign\//);
+});
+
+test("iPhone Safari keeps the Connect href so the tap can open Xaman", () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const assigned = [];
+  const result = launchXamanSign(uuid, {
+    createFrame: () => {
+      const node = { src: "", style: { cssText: "" }, setAttribute() {} };
+      return node;
+    },
+    appendNode: () => {},
+    removeNode: () => {},
+    assignLocation: (href) => assigned.push(href),
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+  });
+  assert.equal(result.opened, false);
+  assert.equal(result.web, `https://xumm.app/sign/${uuid}`);
+  assert.equal(assigned.length, 0);
+  assert.equal(shouldCancelConnectNavigation(result), false);
+  assert.equal(shouldCancelConnectNavigation({ telegram: true, opened: true }), true);
+  assert.equal(shouldCancelConnectNavigation({ telegram: true, opened: false }), false);
 });
 
 test("cancelled Xaman sessions do not stay open after reset", () => {

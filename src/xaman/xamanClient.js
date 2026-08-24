@@ -153,6 +153,10 @@ export function launchXamanSign(
   return { opened, web, app };
 }
 
+export function shouldCancelConnectNavigation(result) {
+  return Boolean(result?.telegram && result?.opened);
+}
+
 export function isPhoneDevice(
   userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "",
   extras = typeof navigator !== "undefined" ? navigator : {}

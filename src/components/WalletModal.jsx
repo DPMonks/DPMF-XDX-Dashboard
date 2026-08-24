@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import xamanLogo from "../assets/XAMAN.jpg";
 import {
   isInAppBrowser,
   isPhoneDevice,
   isTelegramWebView,
   launchXamanSign,
+  shouldCancelConnectNavigation,
   xamanAppUrl,
   xamanSignUrl,
 } from "../xaman/xamanClient";
@@ -24,16 +25,14 @@ export default function WalletModal({
   const { t } = useI18n();
   const xapp = isXappHost();
   const telegram = isTelegramWebView();
-  const inApp = xapp || isInAppBrowser();
-  const phone = xapp || isPhoneDevice() || inApp;
+  const phone = isPhoneDevice() || isInAppBrowser();
   const appHref = xamanAppUrl(uuid) || mobileUrl;
   const webHref = xamanSignUrl(uuid);
-  const connectHref = telegram ? webHref || appHref : appHref || webHref;
+  const connectHref = webHref || appHref;
   const connectLabel = xapp ? t.xappApprove || t.connectXaman || t.openApp : t.connectXaman || t.openApp;
   const confirming = status === "confirming";
   const showQr = Boolean(!xapp && qrUrl && status !== "loading" && !confirming);
-  const lastOpen = useRef(0);
-  const showConnect = Boolean(!xapp && phone && status !== "loading" && !confirming && (connectHref || uuid));
+  const showConnect = Boolean(!xapp && status !== "loading" && !confirming && (connectHref || uuid));
   const heading =
     status === "loading"
       ? preparingLabel || t.preparing
@@ -65,14 +64,10 @@ export default function WalletModal({
       event.preventDefault();
       return;
     }
-    const now = Date.now();
-    if (now - lastOpen.current < 400) {
-      event.preventDefault();
-      return;
-    }
-    lastOpen.current = now;
     const result = launchXamanSign(uuid);
-    if (result.opened) event.preventDefault();
+    // Telegram already left via openLink. A phone tap must still
+    // follow https://xumm.app/sign so Connect is not a no-op.
+    if (shouldCancelConnectNavigation(result)) event.preventDefault();
   }
 
   return (
@@ -101,10 +96,9 @@ export default function WalletModal({
             <a
               className="mobile-link-btn"
               href={connectHref}
-              target={telegram ? "_blank" : undefined}
+              target={phone ? undefined : "_blank"}
               rel="noopener noreferrer"
               onClick={openXamanApp}
-              onTouchEnd={openXamanApp}
             >
               {connectLabel}
             </a>

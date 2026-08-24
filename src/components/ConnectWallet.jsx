@@ -6,6 +6,7 @@ import { clearXamanReturn, peekPendingPayload, peekXamanUuid, shouldAutoClaimPen
 import { liveWalletAddress, resolveNeedSignIn } from "../wallet/walletStorage";
 import { WALLET_EVENTS } from "../xaman/tradeTx";
 import { useXamanPayload } from "../xaman/useXamanPayload";
+import { isXappHost } from "../xaman/xappHost";
 import { useI18n } from "../i18n/useI18n";
 import WalletButton from "./WalletButton";
 import WalletModal from "./WalletModal";
@@ -135,7 +136,7 @@ export default function ConnectWallet() {
     <div className="wallet-control">
       <WalletButton
         onClick={startConnection}
-        disabled={waiting || Boolean(xappBooting)}
+        disabled={waiting || (Boolean(xappBooting) && isXappHost())}
         connected={Boolean(walletAddress)}
         address={shortAddress(walletAddress)}
       />
