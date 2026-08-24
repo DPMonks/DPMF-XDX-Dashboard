@@ -27,21 +27,6 @@ export function pageSlice(rows, page, pageSize = LIST_PAGE_SIZE) {
   };
 }
 
-export function shouldSkipOwnerRestPages(existingCount, firstSize) {
-  return Number(existingCount) > Number(firstSize);
-}
-
-export function mergeOwnerPage(existing, firstPage) {
-  const top = Array.isArray(firstPage) ? firstPage : [];
-  const seen = new Set(
-    top.map((row) => String(row.account || "").toLowerCase()).filter(Boolean)
-  );
-  const rest = (Array.isArray(existing) ? existing : []).filter(
-    (row) => !seen.has(String(row.account || "").toLowerCase())
-  );
-  return [...top, ...rest];
-}
-
 export function shouldFetchMoreRows(loaded, pageSize = LIST_PAGE_SIZE, knownTotal = null) {
   const have = Number(loaded) || 0;
   if (have <= 0) return false;

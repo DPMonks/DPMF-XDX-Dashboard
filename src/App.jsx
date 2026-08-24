@@ -15,9 +15,8 @@ import OrderBook from "./components/OrderBook";
 import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
-import { getHandshakeState, handshake } from "./api";
+import { handshake } from "./api";
 import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
-import { startVisiblePoll } from "./utils/visiblePoll";
 import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 import { useWallet } from "./context/useWallet";
@@ -141,8 +140,7 @@ export default function App() {
     }
 
     async function load() {
-      const already = getHandshakeState();
-      const hsPromise = already.ok ? Promise.resolve(already) : handshake();
+      const hsPromise = handshake();
       hsPromise.then((hs) => applyLink(hs)).catch(() => {});
 
       const [holderErr, lpErr, ammErr] = await Promise.all([
@@ -163,10 +161,12 @@ export default function App() {
     }
 
     load().catch(() => {});
-    const stopPoll = startVisiblePoll(() => load().catch(() => {}), 60000);
+    const id = setInterval(() => {
+      load().catch(() => {});
+    }, 60000);
     return () => {
       cancelled = true;
-      stopPoll();
+      clearInterval(id);
     };
   }, []);
 

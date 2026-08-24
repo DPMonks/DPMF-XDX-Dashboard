@@ -11,7 +11,7 @@ import {
 } from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
 import { detectQuoteUsd, preferUsdPoolSplit } from "../utils/poolSplit";
-import { LIST_PAGE_SIZE, mergeOwnerPage, shouldFetchMoreRows, shouldSkipOwnerRestPages } from "../utils/pagination";
+import { LIST_PAGE_SIZE, shouldFetchMoreRows } from "../utils/pagination";
 import {
   composeAmmBook,
   emptyOrderbook,
@@ -21,12 +21,6 @@ import {
   FEATURED_ORDERBOOK_PAIRS,
 } from "../orderbook";
 import { composeWalletSnapshot, emptyWalletSnapshot } from "../wallet/composeWallet";
-import {
-  freshMarket,
-  freshTokenCounts,
-  rememberMarket,
-  rememberTokenCounts,
-} from "./marketReuse";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -326,14 +320,12 @@ export async function getAmm() {
   if (catchingUp) return [];
   const xdxUsd = numberOrNull(prices?.xdxUsd ?? prices?.recorded_price);
   const xrpUsd = numberOrNull(prices?.xrpUsd);
-  const pools = uniquePools(
+  return uniquePools(
     asArray(body)
       .map(mapPool)
       .filter(Boolean)
       .map((row) => withPoolSplit(row, row.xdxUsd || xdxUsd, xrpUsd, prices))
   );
-  rememberMarket({ pools, prices });
-  return pools;
 }
 
 let lastOrderbooks = null;
@@ -386,7 +378,6 @@ function ingestOrderbooks(body, pairHint = "XDX/XRP") {
       default_pair: body.default_pair || "XDX/XRP",
       books,
     });
-    rememberMarket({ books: lastOrderbooks });
     return lastOrderbooks;
   }
 
@@ -396,7 +387,6 @@ function ingestOrderbooks(body, pairHint = "XDX/XRP") {
   lastOrderbooks = mergeOrderbookPayloads(lastOrderbooks || emptyCatalog(), {
     books: { [name]: book },
   });
-  rememberMarket({ books: lastOrderbooks });
   return lastOrderbooks;
 }
 
@@ -465,14 +455,12 @@ async function loadPagedOwners({
   }
 
   const firstMapped = finish(first);
-  const skipRest = shouldSkipOwnerRestPages(lastGood?.rows?.length, firstSize);
-  const painted = skipRest ? mergeOwnerPage(lastGood.rows, firstMapped) : firstMapped;
-  const kept = keepLastGoodOwners(lastGood, { rows: painted, freshness });
+  const kept = keepLastGoodOwners(lastGood, { rows: firstMapped, freshness });
   lastOwnerLists.set(cacheKey, kept);
   onPage?.(kept.rows, kept.freshness);
   sessionWrite(cacheKey, kept);
 
-  if (!firstMapped.length || !shouldFetchMoreRows(first.length, firstSize, freshness.count) || skipRest) {
+  if (!firstMapped.length || !shouldFetchMoreRows(first.length, firstSize, freshness.count)) {
     return kept.rows;
   }
 
@@ -535,30 +523,22 @@ export async function getTokenDetails(onPartial) {
   ]);
   const core = composeTokenDetails({ overview, prices, change });
   onPartial?.(core);
-  rememberMarket({ prices, token: core });
 
-  let counts = freshTokenCounts();
-  if (!counts) {
-    const [holders, trustlines, lpHolders, lpTrustlines] = await Promise.all([
-      api.holdersCount({ snapshot: "today" }).catch(() => ({})),
-      api.trustlinesCount().catch(() => ({})),
-      api.lpHoldersCount({ pool: "all" }).catch(() => ({})),
-      api.lpTrustlinesCount({ pool: "all" }).catch(() => ({})),
-    ]);
-    counts = { holders, trustlines, lpHolders, lpTrustlines };
-    rememberTokenCounts(counts);
-  }
-  const next = composeTokenDetails({
+  const [holders, trustlines, lpHolders, lpTrustlines] = await Promise.all([
+    api.holdersCount({ snapshot: "today" }).catch(() => ({})),
+    api.trustlinesCount().catch(() => ({})),
+    api.lpHoldersCount({ pool: "all" }).catch(() => ({})),
+    api.lpTrustlinesCount({ pool: "all" }).catch(() => ({})),
+  ]);
+  return composeTokenDetails({
     overview,
     prices,
     change,
-    holders: counts.holders,
-    trustlines: counts.trustlines,
-    lpHolders: counts.lpHolders,
-    lpTrustlines: counts.lpTrustlines,
+    holders,
+    trustlines,
+    lpHolders,
+    lpTrustlines,
   });
-  rememberMarket({ prices, token: next });
-  return next;
 }
 
 const XRPL_TO_TTL_MS = 5 * 60_000;
@@ -626,7 +606,8 @@ export async function getXdxFlows() {
   } catch {
     payload = await api.trades().catch(() => []);
   }
-  const rows = asArray(payload)
+  const rows = asArray(payload);
+  return rows
     .map((row) => ({
       timestamp: rowTimestamp(row),
       account: row.account || row.address || row.wallet || null,
@@ -638,8 +619,6 @@ export async function getXdxFlows() {
     }))
     .filter((row) => row.timestamp)
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  rememberMarket({ flows: rows });
-  return rows;
 }
 
 export async function getTradeHistory() {
@@ -725,9 +704,7 @@ export async function getWalletRank(address) {
 }
 
 export async function getPrices() {
-  const prices = await api.prices();
-  rememberMarket({ prices });
-  return prices;
+  return api.prices();
 }
 
 export async function getWalletOffers(address, extra = {}) {
@@ -771,11 +748,6 @@ export async function getConnectedWallet(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return emptyWalletSnapshot(null);
 
-  const reusedPrices = freshMarket("prices");
-  const reusedToken = freshMarket("token");
-  const reusedPools = freshMarket("pools");
-  const reusedBooks = freshMarket("books");
-  const reusedFlows = freshMarket("flows");
   const [balances, networth, account, lpRows, rank, prices, token, pools, books, flows, offers, ledgerActivity] =
     await Promise.all([
       getWalletBalances(name).catch(() => ({})),
@@ -783,11 +755,11 @@ export async function getConnectedWallet(address, extra = {}) {
       getWalletAccount(name).catch(() => ({})),
       getWalletLp(name).catch(() => []),
       getWalletRank(name).catch(() => null),
-      reusedPrices != null ? Promise.resolve(reusedPrices) : getPrices().catch(() => ({})),
-      reusedToken != null ? Promise.resolve(reusedToken) : getTokenDetails().catch(() => ({})),
-      reusedPools != null ? Promise.resolve(reusedPools) : getAmm().catch(() => []),
-      reusedBooks != null ? Promise.resolve(reusedBooks) : getOrderbooks().catch(() => null),
-      reusedFlows != null ? Promise.resolve(reusedFlows) : getXdxFlows().catch(() => []),
+      getPrices().catch(() => ({})),
+      getTokenDetails().catch(() => ({})),
+      getAmm().catch(() => []),
+      getOrderbooks().catch(() => null),
+      getXdxFlows().catch(() => []),
       getWalletOffers(name, extra).catch(() => []),
       getWalletActivity(name, extra).catch(() => []),
     ]);

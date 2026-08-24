@@ -63,9 +63,10 @@ export async function writeIndexerResponse(req, res, forcedSuffix) {
       suffix,
     });
     res.status(last?.status || 502);
-    for (const [key, value] of Object.entries(proxyResponseHeaders(last, req, suffix))) {
+    for (const [key, value] of Object.entries(proxyResponseHeaders(last, req))) {
       res.setHeader(key, value);
     }
+    res.setHeader("cache-control", "s-maxage=30, stale-while-revalidate=120");
     res.send(last?.body || JSON.stringify({ error: "Indexer proxy failed" }));
   } catch (error) {
     res.status(502).json({ error: error.message || "Indexer proxy failed" });

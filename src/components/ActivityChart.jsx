@@ -8,7 +8,6 @@ import {
   YAxis,
 } from "recharts";
 import { getChartHistory, getXdxFlows } from "../api/indexer";
-import { startVisiblePoll } from "../utils/visiblePoll";
 import {
   collapseUnchangedPlot,
   dailyLastPoints,
@@ -164,11 +163,11 @@ export default function ActivityChart() {
     }
 
     const timeout = setTimeout(load, 800);
-    const stopPoll = startVisiblePoll(load, 60000);
+    const id = setInterval(load, 60000);
     return () => {
       cancelled = true;
       clearTimeout(timeout);
-      stopPoll();
+      clearInterval(id);
     };
   }, [t.noHistory]);
 

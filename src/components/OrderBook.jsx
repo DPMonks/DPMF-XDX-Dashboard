@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getOrderbooks } from "../api/indexer";
-import { startVisiblePoll } from "../utils/visiblePoll";
+import { getOrderbook, getOrderbooks } from "../api/indexer";
 import {
   bookHeader,
   emptyOrderbook,
@@ -107,28 +106,33 @@ export default function OrderBook() {
     let cancelled = false;
 
     async function load() {
-      try {
-        const next = await getOrderbooks();
-        if (cancelled) return;
-        if (next) {
-          setBooks((current) => mergeOrderbookPayloads(current, next));
-          setError(null);
-          return;
-        }
-        setError(t.emptyOrderbook);
-      } catch (err) {
-        if (!cancelled) setError(err.message || t.emptyOrderbook);
+      const [one, all] = await Promise.allSettled([
+        getOrderbook(pair),
+        getOrderbooks(),
+      ]);
+      if (cancelled) return;
+      const next =
+        all.status === "fulfilled"
+          ? all.value
+          : one.status === "fulfilled"
+            ? one.value
+            : null;
+      if (next) {
+        setBooks((current) => mergeOrderbookPayloads(current, next));
+        setError(null);
+        return;
       }
+      setError(all.reason?.message || one.reason?.message || t.emptyOrderbook);
     }
 
     const timeout = setTimeout(load, 50);
-    const stopPoll = startVisiblePoll(load, 30000);
+    const id = setInterval(load, 30000);
     return () => {
       cancelled = true;
       clearTimeout(timeout);
-      stopPoll();
+      clearInterval(id);
     };
-  }, [t.emptyOrderbook]);
+  }, [pair, t.emptyOrderbook]);
 
   const pairs = books?.pairs || FEATURED_ORDERBOOK_PAIRS;
   const matches = useMemo(
