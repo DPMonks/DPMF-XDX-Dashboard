@@ -212,6 +212,7 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
   return (
     <div className="wallet-earn-beam" aria-label={t.lpFeeEarnings}>
       <WalletEarnCell
+        className="wallet-earn-xrp"
         label={t.xrpEarnings}
         empty={empty}
         rows={[
@@ -226,6 +227,7 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
         ]}
       />
       <WalletEarnCell
+        className="wallet-earn-xdx"
         label={t.xdxEarnings}
         empty={empty}
         rows={[
