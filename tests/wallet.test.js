@@ -105,6 +105,7 @@ test("xdxFiatValues keeps USD and GBP from recorded prices", () => {
   assert.ok(Math.abs(fiat.usd - 0.04) < 1e-12);
   assert.ok(Math.abs(fiat.gbp - 0.03) < 1e-12);
   assert.ok(Math.abs(fiat.xrp - 0.03) < 1e-12);
+  assert.ok(Math.abs(fiat.rlusd - 0.04) < 1e-12);
 });
 
 test("xdxFiatValues fills EUR and JPY from XRP FX when those marks are missing", () => {
@@ -248,6 +249,7 @@ test("composeWalletSnapshot stays blank until an address is signed in", () => {
   assert.equal(empty.signedIn, false);
   assert.equal(empty.filled, false);
   assert.equal(empty.xdx.usd, null);
+  assert.equal(empty.xdx.rlusd, null);
 
   const filled = composeWalletSnapshot({
     address: "rExample",
@@ -265,6 +267,7 @@ test("composeWalletSnapshot stays blank until an address is signed in", () => {
   assert.equal(filled.signedIn, true);
   assert.equal(filled.filled, true);
   assert.equal(filled.xdx.usd, 0.2);
+  assert.equal(filled.xdx.rlusd, 0.2);
   assert.equal(filled.xdx.gbp, 0.15);
   assert.ok(Math.abs(filled.xdx.eur - 0.18) < 1e-12);
   assert.ok(Math.abs(filled.xdx.jpy - 30) < 1e-12);

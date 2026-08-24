@@ -2310,6 +2310,10 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.wallet-mini-list dd {
+  text-align: end;
+}
+
 .wallet-micro {
   display: grid;
   grid-template-columns: minmax(92px, auto) 1fr minmax(88px, auto);
@@ -2436,6 +2440,73 @@ body {
 .wallet-activity li {
   margin-left: auto;
   color: var(--dpmf-text-main);
+}
+
+.wallet-income-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.wallet-income-head h3 {
+  margin: 0;
+}
+
+.wallet-income-copy {
+  flex-shrink: 0;
+}
+
+.wallet-income-scroll {
+  max-height: 168px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.wallet-income-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wallet-income-table th,
+.wallet-income-table td {
+  padding: 4px 6px 4px 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.wallet-income-table th:last-child,
+.wallet-income-table td:last-child {
+  text-align: right;
+  padding-right: 0;
+}
+
+.wallet-income-table th {
+  color: var(--dpmf-text-muted);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.wallet-income-table td {
+  color: var(--dpmf-text-main);
+}
+
+.wallet-income-end,
+.wallet-income-more {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  color: var(--dpmf-text-muted);
+}
+
+.wallet-income-more {
+  height: 8px;
 }
 
 .governance-card {
