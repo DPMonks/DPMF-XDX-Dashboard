@@ -13,7 +13,6 @@ import {
   formatSupplySharePercent,
   formatToken,
   formatUsd,
-  formatXrpPrice,
   shortAddress,
 } from "../utils/format";
 import { copyToClipboard } from "../utils/copy";
@@ -91,8 +90,9 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
 
 function XdxBalancePanel({ xdx, locale, t, empty }) {
   const rows = [
-    { id: "xdx", label: t.xdx, value: empty ? "—" : `${formatToken(xdx.xdx, locale, 2)} ${t.xdx}` },
-    { id: "xrp", label: t.xrp, value: empty ? "—" : formatXrpPrice(xdx.xrp, locale) },
+    { id: "xdx", label: t.xdx, value: empty ? "—" : formatToken(xdx.xdx, locale, 2) },
+    { id: "xrp", label: t.xrp, value: empty ? "—" : formatToken(xdx.xrp, locale, 8) },
+    { id: "rlusd", label: t.rlusd || "RLUSD", value: empty ? "—" : formatToken(xdx.rlusd, locale, 2) },
     { id: "usd", label: t.usd, value: empty ? "—" : formatUsd(xdx.usd, locale) },
     { id: "gbp", label: t.gbp, value: empty ? "—" : formatGbp(xdx.gbp, locale) },
     { id: "eur", label: t.eur, value: empty ? "—" : formatEur(xdx.eur, locale) },
@@ -299,11 +299,11 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
         rows={[
           {
             range: t.lpFees24h,
-            value: earnText(earn.xrp24h, (n) => `${formatToken(n, locale, 4)} ${t.xrp}`, empty),
+            value: earnText(earn.xrp24h, (n) => formatToken(n, locale, 4), empty),
           },
           {
             range: t.lpFees7d,
-            value: earnText(earn.xrp7d, (n) => `${formatToken(n, locale, 4)} ${t.xrp}`, empty),
+            value: earnText(earn.xrp7d, (n) => formatToken(n, locale, 4), empty),
           },
         ]}
       />
@@ -314,11 +314,11 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
         rows={[
           {
             range: t.lpFees24h,
-            value: earnText(earn.xdx24h, (n) => `${formatToken(n, locale, 4)} ${t.xdx}`, empty),
+            value: earnText(earn.xdx24h, (n) => formatToken(n, locale, 4), empty),
           },
           {
             range: t.lpFees7d,
-            value: earnText(earn.xdx7d, (n) => `${formatToken(n, locale, 4)} ${t.xdx}`, empty),
+            value: earnText(earn.xdx7d, (n) => formatToken(n, locale, 4), empty),
           },
         ]}
       />
@@ -344,19 +344,11 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
         rows={[
           {
             range: t.lpFees24h,
-            value: earnText(
-              earn.rlusd24h,
-              (n) => `${formatToken(n, locale, 4)} ${t.rlusd || "RLUSD"}`,
-              empty
-            ),
+            value: earnText(earn.rlusd24h, (n) => formatToken(n, locale, 4), empty),
           },
           {
             range: t.lpFees7d,
-            value: earnText(
-              earn.rlusd7d,
-              (n) => `${formatToken(n, locale, 4)} ${t.rlusd || "RLUSD"}`,
-              empty
-            ),
+            value: earnText(earn.rlusd7d, (n) => formatToken(n, locale, 4), empty),
           },
         ]}
       />

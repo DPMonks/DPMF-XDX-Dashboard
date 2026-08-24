@@ -145,15 +145,18 @@ export function xdxFiatValues(xdx, prices = {}) {
   const usd = num(prices.xdxUsd ?? prices.recorded_price);
   const xrp = num(prices.xdxXrp ?? prices.xdxPerXrp);
   if (bal == null) {
-    return { xdx: null, usd: null, gbp: null, eur: null, jpy: null, xrp: null };
+    return { xdx: null, usd: null, gbp: null, eur: null, jpy: null, xrp: null, rlusd: null };
   }
+  const usdValue = usd != null ? bal * usd : null;
+  const rlusdUsd = num(prices.rlusdUsd ?? prices.RLUSD) || 1;
   return {
     xdx: bal,
-    usd: usd != null ? bal * usd : null,
+    usd: usdValue,
     gbp: fiatAmount(bal, prices.xdxGbp, usd, prices.xrpUsd, prices.xrpGbp),
     eur: fiatAmount(bal, prices.xdxEur, usd, prices.xrpUsd, prices.xrpEur),
     jpy: fiatAmount(bal, prices.xdxJpy, usd, prices.xrpUsd, prices.xrpJpy),
     xrp: xrp != null ? bal * xrp : null,
+    rlusd: usdValue != null ? usdValue / rlusdUsd : null,
   };
 }
 
@@ -516,6 +519,7 @@ export function composeWalletSnapshot({
     xrpEur: prices.xrpEur,
     xrpJpy: prices.xrpJpy,
     xdxXrp: xdxPerXrp,
+    rlusdUsd: prices.RLUSD ?? prices.quotes?.RLUSD ?? 1,
   });
   if (fiat.usd == null && num(networth.totalUsd)) fiat.usd = Number(networth.totalUsd);
   if (fiat.gbp == null && num(networth.totalGbp)) fiat.gbp = Number(networth.totalGbp);

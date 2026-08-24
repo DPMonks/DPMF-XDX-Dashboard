@@ -2310,6 +2310,10 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.wallet-mini-list dd {
+  text-align: end;
+}
+
 .wallet-micro {
   display: grid;
   grid-template-columns: minmax(92px, auto) 1fr minmax(88px, auto);
