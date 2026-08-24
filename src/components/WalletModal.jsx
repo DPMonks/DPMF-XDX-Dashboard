@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import xamanLogo from "../assets/XAMAN.jpg";
-import { isPhoneDevice, launchXamanSign, xamanAppUrl, xamanSignUrl } from "../xaman/xamanClient";
+import { isPhoneDevice, launchXamanSign, xamanAppUrl } from "../xaman/xamanClient";
 import { isXappHost } from "../xaman/xappHost";
 import { useI18n } from "../i18n/useI18n";
 
@@ -18,9 +18,9 @@ export default function WalletModal({
   const xapp = isXappHost();
   const phone = xapp || isPhoneDevice();
   const appHref = xamanAppUrl(uuid) || mobileUrl;
-  const webHref = xamanSignUrl(uuid) || mobileUrl;
   const connectLabel = xapp ? t.xappApprove || t.connectXaman || t.openApp : t.connectXaman || t.openApp;
   const confirming = status === "confirming";
+  const showQr = Boolean(!xapp && qrUrl && status !== "loading" && !confirming);
   const heading =
     status === "loading"
       ? preparingLabel || t.preparing
@@ -28,9 +28,9 @@ export default function WalletModal({
         ? scanLabel || t.scan
         : xapp
           ? connectLabel
-          : phone
-            ? connectLabel
-            : scanLabel || t.scan;
+          : showQr
+            ? scanLabel || t.scan
+            : connectLabel;
 
   useEffect(() => {
     if (!visible || !xapp || !uuid || status === "loading" || confirming) return undefined;
@@ -49,15 +49,8 @@ export default function WalletModal({
   function openXamanApp(event) {
     event.preventDefault();
     event.stopPropagation();
-    if (!uuid && !appHref && !webHref) return;
+    if (!uuid && !appHref) return;
     launchXamanSign(uuid);
-  }
-
-  function openXamanWeb(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!webHref) return;
-    window.open(webHref, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -75,24 +68,17 @@ export default function WalletModal({
           {heading}
         </h2>
 
-        {!phone && !xapp && qrUrl && status !== "loading" && !confirming ? (
-          <img src={qrUrl} alt={t.xamanQr || t.scan} className="qr-image" />
-        ) : null}
+        {showQr ? <img src={qrUrl} alt={t.xamanQr || t.scan} className="qr-image" /> : null}
 
         {xapp && status !== "loading" && !confirming ? (
           <p className="wallet-modal-hint">{t.xappApproveHint || t.waitingXaman}</p>
         ) : null}
 
-        {phone && !xapp && status !== "loading" && !confirming && (appHref || webHref) ? (
+        {!xapp && status !== "loading" && !confirming && (appHref || uuid) ? (
           <>
-            {appHref ? (
+            {phone ? (
               <button type="button" className="mobile-link-btn" onClick={openXamanApp}>
                 {connectLabel}
-              </button>
-            ) : null}
-            {webHref ? (
-              <button type="button" className="mobile-link-btn is-web" onClick={openXamanWeb}>
-                {t.openXamanWeb || t.openApp}
               </button>
             ) : null}
             <p className="wallet-modal-hint">{t.waitingXaman}</p>
