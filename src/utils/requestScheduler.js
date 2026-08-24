@@ -17,7 +17,8 @@ export function createRequestScheduler({ concurrency = 2 } = {}) {
         .finally(() => {
           active -= 1;
           pump();
-        });
+        })
+        .catch(() => {});
     }
   }
 

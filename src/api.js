@@ -10,6 +10,12 @@ import {
 } from "./handshake/contract";
 import { createRequestScheduler } from "./utils/requestScheduler";
 import { cacheTtlMs, LIVE_CACHE_MS } from "./api/cacheTtl";
+import {
+  catalogFetchBlocked,
+  isPostgresOutageStatus,
+  markCatalogDown,
+  publicApiErrorMessage,
+} from "./api/publicError";
 
 function resolveRemoteOrigin() {
   const candidates = [
@@ -201,10 +207,11 @@ async function fetchJson(url, { method = "GET", body } = {}) {
         : res.status === 404
           ? "This host has no /api function. Open the PR #4 preview or promote that branch to Production — env vars do nothing on the old production deploy."
         : `${res.status} ${res.statusText}`;
-    const error = new Error(
-      [data.error || data.detail || fallback, data.hint].filter(Boolean).join(" — ")
-    );
+    const error = new Error(publicApiErrorMessage(data, res.status) || fallback);
     error.status = res.status;
+    if (isPostgresOutageStatus(res.status, data.error || data.detail || data.hint)) {
+      markCatalogDown();
+    }
     throw error;
   }
   return data;
@@ -239,6 +246,11 @@ async function getJson(path, options = {}) {
   }
 
   const run = async () => {
+    if (catalogFetchBlocked(url)) {
+      const error = new Error("Market data is temporarily unavailable.");
+      error.status = 503;
+      throw error;
+    }
     let lastError;
     for (let attempt = 0; attempt < retries; attempt += 1) {
       try {
@@ -258,7 +270,7 @@ async function getJson(path, options = {}) {
 
   if (cache) {
     inflight.set(cacheKey, task);
-    task.finally(() => inflight.delete(cacheKey));
+    task.finally(() => inflight.delete(cacheKey)).catch(() => {});
   }
   task.catch(() => {});
   return task;
