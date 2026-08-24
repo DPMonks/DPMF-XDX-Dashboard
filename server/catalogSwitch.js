@@ -1,0 +1,281 @@
+function asObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+export function isBlankAmount(value) {
+  if (value == null || value === "") return true;
+  const n = Number(value);
+  return !Number.isFinite(n) || n === 0;
+}
+
+export function catalogSource(dbUsed, liveUsed) {
+  if (dbUsed && liveUsed) return "hybrid";
+  if (liveUsed) return "xrpl";
+  if (dbUsed) return "db";
+  return "empty";
+}
+
+const LIVE_PRICE_KEYS = [
+  "xdxUsd",
+  "recorded_price",
+  "price",
+  "xdxGbp",
+  "xdxEur",
+  "xdxJpy",
+  "xrpUsd",
+  "xrpGbp",
+  "xrpEur",
+  "xrpJpy",
+  "xdx_per_xrp",
+  "xdxPerXrp",
+  "RLUSD",
+];
+
+const LIVE_MARKET_KEYS = [
+  ...LIVE_PRICE_KEYS,
+  "tvl",
+  "tvl_usd",
+  "reserve_asset",
+  "reserve_currency",
+  "lp_supply",
+  "trading_fee",
+  "volume24h",
+  "amm_xdx",
+  "ammMarketCap",
+  "xrplMarketCap",
+  "circulatingMarketCap",
+  "amm_account",
+];
+
+const LIVE_COUNT_KEYS = [
+  "holder_count",
+  "holders",
+  "trustlines",
+  "trustline_count",
+  "lp_holder_count",
+  "lp_trustline_count",
+  "count",
+];
+
+function takeLive(next, live, keys) {
+  let used = false;
+  for (const key of keys) {
+    if (!isBlankAmount(live?.[key])) {
+      next[key] = live[key];
+      used = true;
+    }
+  }
+  return used;
+}
+
+function takeLiveWhenDbBlank(next, db, live, keys) {
+  let used = false;
+  for (const key of keys) {
+    if (isBlankAmount(db?.[key]) && !isBlankAmount(live?.[key])) {
+      next[key] = live[key];
+      used = true;
+    }
+  }
+  return used;
+}
+
+export function dbHasMarket(row = {}) {
+  return (
+    !isBlankAmount(row.xdxUsd ?? row.recorded_price ?? row.price) ||
+    !isBlankAmount(row.reserve_asset ?? row.reserve_xdx) ||
+    !isBlankAmount(row.reserve_currency ?? row.reserve_quote)
+  );
+}
+
+export function dbHasCounts(row = {}) {
+  return LIVE_COUNT_KEYS.some((key) => !isBlankAmount(row?.[key]));
+}
+
+export function mergeLivePrices(db = {}, live = {}) {
+  const next = {
+    ...db,
+    quotes: { ...(asObject(db.quotes) || {}), ...(asObject(live.quotes) || {}) },
+  };
+  const liveUsed = takeLive(next, live, LIVE_PRICE_KEYS);
+  if (!isBlankAmount(live.xdxUsd)) {
+    next.xdxUsd = live.xdxUsd;
+    next.recorded_price = live.recorded_price ?? live.xdxUsd;
+    next.price = live.price ?? live.xdxUsd;
+  }
+  next.source = catalogSource(dbHasMarket(db) || Object.keys(db).length > 0, liveUsed);
+  return next;
+}
+
+export function mergeLiveOverview(db = {}, live = {}) {
+  const next = { ...db, ...mergeLivePrices(db, live) };
+  const marketUsed = takeLive(next, live, LIVE_MARKET_KEYS);
+  const countUsed = takeLiveWhenDbBlank(next, db, live, LIVE_COUNT_KEYS);
+  if (!isBlankAmount(live.xdxUsd)) {
+    next.xdxUsd = live.xdxUsd;
+    next.recorded_price = live.recorded_price ?? live.xdxUsd;
+    next.price = live.price ?? live.xdxUsd;
+    if (!isBlankAmount(live.xrplMarketCap)) next.xrplMarketCap = live.xrplMarketCap;
+    if (!isBlankAmount(live.circulatingMarketCap)) next.circulatingMarketCap = live.circulatingMarketCap;
+    if (!isBlankAmount(live.ammMarketCap)) next.ammMarketCap = live.ammMarketCap;
+  }
+  if (Array.isArray(live.pools) && live.pools.length) {
+    next.pools = mergePoolRows(db.pools, live.pools);
+  }
+  const liveUsed = marketUsed || countUsed || Boolean(live.pools?.length);
+  next.source = catalogSource(dbHasMarket(db) || dbHasCounts(db), liveUsed);
+  next.catching_up = Boolean(live.catching_up && !dbHasCounts(db));
+  return next;
+}
+
+function poolKey(row = {}) {
+  return String(row.pool_name || row.pool || row.pair || row.amm_account || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+}
+
+function mergePoolRow(dbRow = {}, liveRow = {}) {
+  const next = { ...dbRow, ...liveRow };
+  for (const key of [
+    "reserve_xdx",
+    "reserve_asset",
+    "reserve_currency",
+    "reserve_quote",
+    "lp_supply",
+    "trading_fee",
+    "xdxUsd",
+    "xrpUsd",
+    "amm_account",
+    "lp_currency",
+  ]) {
+    if (isBlankAmount(liveRow[key]) && !isBlankAmount(dbRow[key])) next[key] = dbRow[key];
+  }
+  return next;
+}
+
+export function mergePoolRows(dbPools, livePools) {
+  const byKey = new Map();
+  for (const row of Array.isArray(dbPools) ? dbPools : []) {
+    const key = poolKey(row);
+    if (key) byKey.set(key, row);
+  }
+  for (const row of Array.isArray(livePools) ? livePools : []) {
+    const key = poolKey(row);
+    if (!key) continue;
+    byKey.set(key, mergePoolRow(byKey.get(key) || {}, row));
+  }
+  return [...byKey.values()];
+}
+
+export function mergeLivePools(db = {}, live = {}) {
+  const livePools = Array.isArray(live.pools) ? live.pools : [];
+  const dbPools = Array.isArray(db.pools) ? db.pools : Array.isArray(db) ? db : [];
+  if (!livePools.length) return db;
+  const pools = mergePoolRows(dbPools, livePools);
+  return {
+    ...(asObject(db) || {}),
+    ...(asObject(live) || {}),
+    pools,
+    count: pools.length,
+    catching_up: !dbPools.length,
+    source: catalogSource(dbPools.length > 0, true),
+  };
+}
+
+export function mergeChange24h(db = {}, live = {}) {
+  const next = { ...db };
+  let liveUsed = false;
+  for (const key of ["xdx", "xrp", "lp"]) {
+    if (isBlankAmount(db[key]) && !isBlankAmount(live[key])) {
+      next[key] = live[key];
+      liveUsed = true;
+    }
+  }
+  next.source = catalogSource(!isBlankAmount(db.xdx) || !isBlankAmount(db.xrp), liveUsed);
+  return next;
+}
+
+export function mergeIssuerLocked(db = {}, live = {}) {
+  if (!isBlankAmount(db.issued) || !isBlankAmount(db.issuer_locked)) return { ...db, source: db.source || "db" };
+  if (!live) return db;
+  return { ...db, ...live, source: catalogSource(false, true) };
+}
+
+export function mergeCountPayload(db = {}, live = {}) {
+  if (!isBlankAmount(db.count) || !isBlankAmount(db.holder_count)) {
+    return { ...db, source: db.source || "db" };
+  }
+  if (isBlankAmount(live?.count) && isBlankAmount(live?.holder_count)) return db;
+  return {
+    ...db,
+    ...live,
+    count: live.count ?? live.holder_count ?? live.trustline_count ?? db.count,
+    source: catalogSource(false, true),
+    catching_up: false,
+  };
+}
+
+function hasRows(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (!asObject(value)) return false;
+  return (
+    (Array.isArray(value.rows) && value.rows.length > 0) ||
+    (Array.isArray(value.holders) && value.holders.length > 0) ||
+    (Array.isArray(value.price_history) && value.price_history.length > 0) ||
+    (Array.isArray(value.amm_pool_history) && value.amm_pool_history.length > 0)
+  );
+}
+
+export function mergeCatalogPayload(suffix, db, live) {
+  const path = String(suffix || "").split("?")[0];
+  if (live == null) return db;
+  if (db == null) return live;
+
+  if (path === "prices") return mergeLivePrices(db, live);
+  if (path === "overview" || path === "token-details" || path === "amm") {
+    return mergeLiveOverview(db, live);
+  }
+  if (path === "lp-pools" || path === "pools") return mergeLivePools(db, live);
+  if (path === "prices/change24h" || path === "change24h") return mergeChange24h(db, live);
+  if (path === "issuer-locked") return mergeIssuerLocked(db, live);
+  if (/\/count$/.test(path) || path.endsWith("/count")) return mergeCountPayload(db, live);
+  if (path === "xdx-flows" || path === "trades" || path === "charts/trades") {
+    return hasRows(db) ? db : live;
+  }
+  if (/^charts\//.test(path) || path === "chart/candles" || path === "charts/candles" || path.startsWith("sparkline/")) {
+    return hasRows(db) ? db : live;
+  }
+  if (path === "top-holders" || path === "top-holders-v2" || path === "top-lp") {
+    return hasRows(db) ? db : live;
+  }
+  if (asObject(db) && asObject(live)) return mergeLiveOverview(db, live);
+  return db;
+}
+
+export async function overlayDbResultWithLive(suffix, dbResult, loadLive) {
+  if (!dbResult || dbResult.status >= 400 || typeof loadLive !== "function") return dbResult;
+  const path = String(suffix || "").split("?")[0];
+  if (!path || path === "health" || path === "health/xrpl" || /handshake$/i.test(path)) {
+    return dbResult;
+  }
+  if (/^wallet\//.test(path) || /^balances\//.test(path)) return dbResult;
+  let dbBody;
+  try {
+    dbBody = JSON.parse(dbResult.body);
+  } catch {
+    return dbResult;
+  }
+  let live;
+  try {
+    live = await loadLive(suffix);
+  } catch {
+    return dbResult;
+  }
+  if (live == null) return dbResult;
+  const merged = mergeCatalogPayload(suffix, dbBody, live);
+  if (merged === dbBody) return dbResult;
+  return {
+    ...dbResult,
+    body: JSON.stringify(merged),
+    source: merged?.source || dbResult.source,
+  };
+}

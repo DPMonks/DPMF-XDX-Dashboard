@@ -1,14 +1,16 @@
 import { xrplRpc } from "./xrplBookOffers.js";
 import { hexCurrencyLabel } from "../src/wallet/ammCreate.js";
 import { activityFromAccountTx, ordersFromAccountOffers } from "../src/wallet/ledgerOrders.js";
-import { POOLS, XDX_ISSUER } from "../src/constants/ledger.js";
+import { POOLS, RLUSD_HEX, RLUSD_ISSUER, XDX_ISSUER } from "../src/constants/ledger.js";
 import { lpPositionFromPool } from "../src/wallet/composeWallet.js";
 import { loadLiveAmmReserves } from "./liveAmmReserves.js";
+import { loadLiveMarket } from "./liveCatalog.js";
 
 const CACHE_MS = 8_000;
 const LINE_PAGE_LIMIT = 8;
 const LP_CURRENCY_RE = /^03[A-F0-9]{38}$/i;
 const XDX_CURRENCY_RE = /^(XDX|5844580000000000000000000000000000000000)$/i;
+const RLUSD_CURRENCY_RE = /^(RLUSD|524C555344000000000000000000000000000000)$/i;
 const cache = new Map();
 
 function cached(key, loader) {
@@ -31,18 +33,45 @@ export function invalidateWalletLedger(address) {
   cache.delete(`lp:${name}`);
 }
 
-export function xdxBalanceFromLines(rows = [], issuer = XDX_ISSUER) {
+function iouBalanceFromLines(rows = [], issuer, currencyRe) {
   let total = 0;
   let found = false;
   for (const row of Array.isArray(rows) ? rows : []) {
     const currency = String(row?.currency || "").toUpperCase();
     const account = String(row?.account || row?.issuer || "").trim();
-    if (!XDX_CURRENCY_RE.test(currency)) continue;
+    if (!currencyRe.test(currency)) continue;
     if (issuer && account && account !== issuer) continue;
     const n = Number(row?.balance);
     if (!Number.isFinite(n)) continue;
     total += n;
     found = true;
+  }
+  return found ? total : null;
+}
+
+export function xdxBalanceFromLines(rows = [], issuer = XDX_ISSUER) {
+  return iouBalanceFromLines(rows, issuer, XDX_CURRENCY_RE);
+}
+
+export function rlusdBalanceFromLines(rows = [], issuer = RLUSD_ISSUER) {
+  return iouBalanceFromLines(rows, issuer, RLUSD_CURRENCY_RE);
+}
+
+export function iouFromGatewayBalances(result, issuer, currencyRe) {
+  let total = 0;
+  let found = false;
+  for (const bag of [result?.balances, result?.assets]) {
+    if (!bag || typeof bag !== "object") continue;
+    for (const [account, rows] of Object.entries(bag)) {
+      if (issuer && account && account !== issuer) continue;
+      for (const row of Array.isArray(rows) ? rows : []) {
+        if (!currencyRe.test(String(row?.currency || ""))) continue;
+        const n = Number(row?.value ?? row?.balance);
+        if (!Number.isFinite(n)) continue;
+        total += n;
+        found = true;
+      }
+    }
   }
   return found ? total : null;
 }
@@ -179,31 +208,69 @@ export async function loadWalletLines(address, options = {}) {
 export async function loadWalletBalancesFromLedger(address, options = {}) {
   const name = String(address || "").trim();
   if (!name) {
-    return { account: null, xrp: null, xdx: null, lp: 0, source: "empty", balance_drops: null };
+    return { account: null, xrp: null, xdx: null, rlusd: null, lp: 0, source: "empty", balance_drops: null };
   }
   if (options.fresh) cache.delete(`balances:${name}`);
   return cached(`balances:${name}`, async () => {
-    try {
-      const [info, raw] = await Promise.all([
-        xrplRpc("account_info", { account: name, ledger_index: "validated" }, options),
-        loadRawAccountLines(name, options),
-      ]);
-      const drops = Number(info?.account_data?.Balance);
-      const xdx = xdxBalanceFromLines(raw.lines);
-      const lpRows = lpHoldingsFromLines(raw.lines);
-      const xrp = Number.isFinite(drops) ? drops / 1_000_000 : null;
-      return {
-        account: name,
-        xrp,
-        xdx,
-        lp: lpRows.reduce((sum, row) => sum + Number(row.lp_balance || 0), 0),
-        source: "xrpl",
-        balance_drops: Number.isFinite(drops) ? drops : null,
-      };
-    } catch {
-      return { account: name, xrp: null, xdx: null, lp: 0, source: "empty", balance_drops: null };
+    const [infoResult, raw] = await Promise.all([
+      xrplRpc("account_info", { account: name, ledger_index: "validated" }, options).catch(() => null),
+      loadRawAccountLines(name, options),
+    ]);
+    let xdx = xdxBalanceFromLines(raw.lines);
+    let rlusd = rlusdBalanceFromLines(raw.lines);
+    if (xdx == null || rlusd == null) {
+      try {
+        const gateway = await xrplRpc(
+          "gateway_balances",
+          { account: name, ledger_index: "validated", hotwallet: [] },
+          options
+        );
+        if (xdx == null) xdx = iouFromGatewayBalances(gateway, XDX_ISSUER, XDX_CURRENCY_RE);
+        if (rlusd == null) rlusd = iouFromGatewayBalances(gateway, RLUSD_ISSUER, RLUSD_CURRENCY_RE);
+      } catch {
+        // keep line totals
+      }
     }
+    const lpRows = lpHoldingsFromLines(raw.lines);
+    const drops = Number(infoResult?.account_data?.Balance);
+    const xrp = Number.isFinite(drops) ? drops / 1_000_000 : null;
+    const source = infoResult || raw.source === "xrpl" ? "xrpl" : "empty";
+    return {
+      account: name,
+      xrp,
+      xdx,
+      rlusd,
+      lp: lpRows.reduce((sum, row) => sum + Number(row.lp_balance || 0), 0),
+      source,
+      balance_drops: Number.isFinite(drops) ? drops : null,
+    };
   });
+}
+
+export async function loadWalletNetworthFromLedger(address, options = {}) {
+  const name = String(address || "").trim();
+  if (!name) return { account: null, totalUsd: 0, totalGbp: 0, source: "empty" };
+  const [snap, market] = await Promise.all([
+    loadWalletBalancesFromLedger(name, options),
+    loadLiveMarket(options).catch(() => null),
+  ]);
+  const xdxUsd = Number(market?.prices?.xdxUsd || 0);
+  const xrpUsd = Number(market?.prices?.xrpUsd || 0);
+  const xrpGbp = Number(market?.prices?.xrpGbp || 0);
+  const xdx = Number(snap.xdx) || 0;
+  const xrp = Number(snap.xrp) || 0;
+  const rlusd = Number(snap.rlusd) || 0;
+  const totalUsd = xdx * xdxUsd + xrp * xrpUsd + rlusd;
+  const gbpPerUsd = xrpUsd > 0 && xrpGbp > 0 ? xrpGbp / xrpUsd : 0;
+  return {
+    account: name,
+    totalUsd,
+    totalGbp: gbpPerUsd ? totalUsd * gbpPerUsd : 0,
+    xdx,
+    xrp,
+    rlusd,
+    source: snap.source || "xrpl",
+  };
 }
 
 export async function loadWalletLpFromLedger(address, options = {}) {

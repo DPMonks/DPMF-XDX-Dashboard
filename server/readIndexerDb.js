@@ -63,9 +63,11 @@ import {
   loadWalletBalancesFromLedger,
   loadWalletLines,
   loadWalletLpFromLedger,
+  loadWalletNetworthFromLedger,
   loadWalletOffers,
 } from "./walletLedger.js";
 import { liveCatalogPayload } from "./liveCatalog.js";
+import { overlayDbResultWithLive } from "./catalogSwitch.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
 import { loadLiveAmmReserves, loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 
@@ -2218,7 +2220,17 @@ function walletLedgerResult(suffix, search = "") {
       fresh: walletFresh(search),
     }).then((body) => ok(body));
   }
+  const networth = String(suffix || "").match(/^wallet\/networth\/([^/]+)$/);
+  if (networth) {
+    return loadWalletNetworthFromLedger(decodeURIComponent(networth[1]), {
+      fresh: walletFresh(search),
+    }).then((body) => ok(body));
+  }
   return null;
+}
+
+async function withLiveCatalog(suffix, dbBody) {
+  return overlayDbResultWithLive(suffix, ok(dbBody), liveCatalogPayload);
 }
 
 export async function readIndexerDb(suffix, search = "") {
@@ -2276,12 +2288,12 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "overview" || suffix === "token-details") {
-      return ok(await buildTokenOverview(db));
+      return withLiveCatalog(suffix, await buildTokenOverview(db));
     }
 
     if (suffix === "issuer-locked") {
       const snap = await loadIssuerLocked(db);
-      return ok({
+      return withLiveCatalog(suffix, {
         issuer: XDX_ISSUER,
         issuer_locked: snap.locked,
         burned_supply: snap.locked,
@@ -2293,15 +2305,15 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "amm") {
-      return ok(await buildSnapshot(db));
+      return withLiveCatalog(suffix, await buildSnapshot(db));
     }
 
     if (suffix === "holders/count") {
       if (wantsTodaySnapshot(params)) {
-        return ok(await loadTodayOwners(db, { includeHolders: false }));
+        return withLiveCatalog(suffix, await loadTodayOwners(db, { includeHolders: false }));
       }
       const source = await pickHolderSource(db);
-      return ok({
+      return withLiveCatalog(suffix, {
         count: source.count,
         as_of: source.as_of,
         snapshot_day: source.snapshot_day || utcDay(source.as_of),
@@ -2313,7 +2325,7 @@ export async function readIndexerDb(suffix, search = "") {
 
     if (suffix === "trustlines/count") {
       const snap = await tokenTrustlineSnapshot(db);
-      return ok({
+      return withLiveCatalog(suffix, {
         count: snap.count,
         as_of: snap.as_of,
         source: "db",
@@ -2323,20 +2335,21 @@ export async function readIndexerDb(suffix, search = "") {
     if (suffix === "lp-holders/count") {
       const poolName = params.get("pool") || params.get("pair") || "XDX/XRP";
       if (wantsTodaySnapshot(params)) {
-        return ok(await loadTodayLpOwners(db, { includeHolders: false, pool: poolName }));
+        return withLiveCatalog(suffix, await loadTodayLpOwners(db, { includeHolders: false, pool: poolName }));
       }
       const owners = await loadLiveLpOwners(db, { includeHolders: false, pool: poolName });
-      return ok({ count: owners.count, pool: owners.pool });
+      return withLiveCatalog(suffix, { count: owners.count, pool: owners.pool });
     }
 
     if (suffix === "lp-trustlines/count") {
-      return ok(
+      return withLiveCatalog(
+        suffix,
         await loadLpTrustlineCount(db, params.get("pool") || params.get("pair") || "XDX/XRP")
       );
     }
 
     if (suffix === "lp-pools") {
-      return ok(await loadXdxLpPools(db));
+      return withLiveCatalog(suffix, await loadXdxLpPools(db));
     }
 
     if (suffix === "orderbooks") {
@@ -2453,14 +2466,14 @@ export async function readIndexerDb(suffix, search = "") {
 
     if (suffix === "pools") {
       const snap = await buildSnapshot(db);
-      return ok({
+      return withLiveCatalog(suffix, {
         ...snap,
         pools: snap.pools || [],
       });
     }
 
     if (suffix === "prices") {
-      return ok(await buildPrices(db));
+      return withLiveCatalog(suffix, await buildPrices(db));
     }
 
     if (suffix === "prices/change24h") {
@@ -2483,7 +2496,7 @@ export async function readIndexerDb(suffix, search = "") {
         const key = String(row.asset || "").toUpperCase();
         if (map[key] == null) map[key] = Number(row.percent_change);
       }
-      return ok({
+      return withLiveCatalog(suffix, {
         xrp: map.XRP || 0,
         xdx: map.XDX || 0,
         lp: map.LP || 0,
@@ -2555,42 +2568,11 @@ export async function readIndexerDb(suffix, search = "") {
 
     const networth = suffix.match(/^wallet\/networth\/([^/]+)$/);
     if (networth) {
-      const address = decodeURIComponent(networth[1]);
-      let trustlines = await tryQuery(
-        db,
-        `SELECT currency, balance::numeric AS balance
-         FROM token_holders_latest
-         WHERE account = $1`,
-        [address]
+      return ok(
+        await loadWalletNetworthFromLedger(decodeURIComponent(networth[1]), {
+          fresh: walletFresh(search),
+        })
       );
-      if (!trustlines.rows.length) {
-        trustlines = await tryQuery(
-          db,
-          `SELECT DISTINCT ON (account) 'XDX' AS currency, balance::numeric AS balance
-           FROM token_holders_history
-           WHERE account = $1
-           ORDER BY account, timestamp DESC`,
-          [address]
-        );
-      }
-      const prices = await tryQuery(
-        db,
-        "SELECT currency, price_usd, price_gbp FROM price_latest_all"
-      );
-      const priceMap = Object.fromEntries(
-        prices.rows.map((row) => [
-          row.currency,
-          { usd: Number(row.price_usd), gbp: Number(row.price_gbp) },
-        ])
-      );
-      let totalUsd = 0;
-      let totalGbp = 0;
-      for (const line of trustlines.rows) {
-        const price = priceMap[line.currency] || { usd: 0, gbp: 0 };
-        totalUsd += Number(line.balance) * price.usd;
-        totalGbp += Number(line.balance) * price.gbp;
-      }
-      return ok({ totalUsd, totalGbp, source: "db" });
     }
 
     const spark = suffix.match(/^sparkline\/([^/]+)$/);
@@ -2637,6 +2619,12 @@ export async function readIndexerDb(suffix, search = "") {
   } catch (error) {
     logDbError(error);
     if (isConnectError(error)) markPostgresDown();
+    try {
+      const live = await liveCatalogPayload(suffix);
+      if (live != null) return ok(live);
+    } catch {
+      // keep the public outage body
+    }
     return {
       status: isConnectError(error) ? 503 : 500,
       contentType: "application/json",

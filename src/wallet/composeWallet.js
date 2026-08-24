@@ -458,6 +458,7 @@ export function emptyWalletSnapshot(address = null) {
     filled: false,
     xrp: xrpReserveBreakdown({}),
     xdx: xdxFiatValues(null),
+    holdings: { xdx: null, xrp: null, rlusd: null },
     supply: { circulatingPct: null, supplyPct: null, circulating: null, totalSupply: null },
     fees: {
       xdx: null,
@@ -588,6 +589,11 @@ export function composeWalletSnapshot({
     filled: xdxBal != null || xrp.balance != null || lp.length > 0 || orders.length > 0 || activity.length > 0,
     xrp,
     xdx: fiat,
+    holdings: {
+      xdx: xdxBal,
+      xrp: xrp.balance,
+      rlusd: num(balances.rlusd),
+    },
     supply: {
       ...shares,
       circulating,

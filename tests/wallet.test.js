@@ -266,6 +266,8 @@ test("composeWalletSnapshot stays blank until an address is signed in", () => {
   });
   assert.equal(filled.signedIn, true);
   assert.equal(filled.filled, true);
+  assert.equal(filled.holdings.xdx, 5000);
+  assert.equal(filled.holdings.xrp, 12);
   assert.equal(filled.xdx.usd, 0.2);
   assert.equal(filled.xdx.rlusd, 0.2);
   assert.equal(filled.xdx.gbp, 0.15);

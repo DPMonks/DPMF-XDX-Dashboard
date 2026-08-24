@@ -88,11 +88,11 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
   );
 }
 
-function XdxBalancePanel({ xdx, locale, t, empty }) {
+function XdxBalancePanel({ xdx, holdings, locale, t, empty }) {
   const rows = [
-    { id: "xdx", label: t.xdx, value: empty ? "—" : formatToken(xdx.xdx, locale, 2) },
-    { id: "xrp", label: t.xrp, value: empty ? "—" : formatToken(xdx.xrp, locale, 8) },
-    { id: "rlusd", label: t.rlusd || "RLUSD", value: empty ? "—" : formatToken(xdx.rlusd, locale, 2) },
+    { id: "xdx", label: t.xdx, value: empty ? "—" : formatToken(holdings?.xdx ?? xdx.xdx, locale, 2) },
+    { id: "xrp", label: t.xrp, value: empty ? "—" : formatToken(holdings?.xrp ?? xdx.xrp, locale, 8) },
+    { id: "rlusd", label: t.rlusd || "RLUSD", value: empty ? "—" : formatToken(holdings?.rlusd ?? xdx.rlusd, locale, 2) },
     { id: "usd", label: t.usd, value: empty ? "—" : formatUsd(xdx.usd, locale) },
     { id: "gbp", label: t.gbp, value: empty ? "—" : formatGbp(xdx.gbp, locale) },
     { id: "eur", label: t.eur, value: empty ? "—" : formatEur(xdx.eur, locale) },
@@ -482,7 +482,7 @@ export default function ConnectedWallet() {
         <WalletEarnBeam fees={view.fees} locale={locale} t={t} empty={empty} />
         <div className="wallet-infographics">
           <XrpBalanceBars xrp={view.xrp} locale={locale} t={t} empty={empty} />
-          <XdxBalancePanel xdx={view.xdx} locale={locale} t={t} empty={empty} />
+          <XdxBalancePanel xdx={view.xdx} holdings={view.holdings} locale={locale} t={t} empty={empty} />
           <SupplyShareBars supply={view.supply} locale={locale} t={t} empty={empty} />
         </div>
       </div>

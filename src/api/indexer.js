@@ -671,6 +671,9 @@ export async function getWalletBalances(address) {
         "03970105D80AE3C54085F6E97EE16CEDE6CE8200",
         "03BCD44104644B711C58CD14CD13CBA65757CFBE",
       ]),
+    rlusd:
+      numberOrNull(payload?.rlusd) ??
+      amountFromBalances(payload, ["RLUSD", "524C555344000000000000000000000000000000"]),
   };
 }
 

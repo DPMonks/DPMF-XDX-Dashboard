@@ -9,6 +9,8 @@ import {
   hasIndexerDatabase,
   readIndexerDb,
 } from "./readIndexerDb.js";
+import { overlayDbResultWithLive } from "./catalogSwitch.js";
+import { liveCatalogPayload } from "./liveCatalog.js";
 import { isAllowedDashboardOrigin } from "../src/security/headers.js";
 
 export { DEFAULT_INDEXER_ORIGIN };
@@ -191,7 +193,7 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
 
   if (
     method === "GET" &&
-    (/^wallet\/(offers|activity|votes|account|balances|lines)\//.test(suffix) ||
+    (/^wallet\/(offers|activity|votes|account|balances|lines|lp|networth)\//.test(suffix) ||
       /^balances\//.test(suffix) ||
       suffix === "amm/governance" ||
       suffix === "lp-pools/live")
@@ -205,7 +207,8 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
   if (method === "GET" && hasIndexerDatabase()) {
     dbResult = await readIndexerDb(suffix, search);
     if (dbResult && dbResult.status < 400) {
-      return withSource(dbResult, "postgres");
+      const overlaid = await overlayDbResultWithLive(suffix, dbResult, liveCatalogPayload);
+      return withSource(overlaid, overlaid.source || "postgres");
     }
     if (dbResult && catalogOrHealth) {
       let parsed;
