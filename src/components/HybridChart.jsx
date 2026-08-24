@@ -160,20 +160,24 @@ export default function HybridChart() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [nextBooks, nextPools, nextPrices, nextFlows, nextSpark] = await Promise.all([
-        getOrderbooks().catch(() => null),
-        getAmm().catch(() => []),
-        getPrices().catch(() => ({})),
-        getXdxFlows().catch(() => []),
-        api.sparkline("XDX").catch(() => []),
-      ]);
-      if (cancelled) return;
-      setBooks(nextBooks);
-      setPools(Array.isArray(nextPools) ? nextPools : []);
-      setPrices(nextPrices || {});
-      setTrades(Array.isArray(nextFlows) ? nextFlows : []);
-      setSparkline(Array.isArray(nextSpark) ? nextSpark : []);
-      setNow(Date.now());
+      try {
+        const [nextBooks, nextPools, nextPrices, nextFlows, nextSpark] = await Promise.all([
+          getOrderbooks().catch(() => null),
+          getAmm().catch(() => []),
+          getPrices().catch(() => ({})),
+          getXdxFlows().catch(() => []),
+          api.sparkline("XDX").catch(() => []),
+        ]);
+        if (cancelled) return;
+        setBooks(nextBooks);
+        setPools(Array.isArray(nextPools) ? nextPools : []);
+        setPrices(nextPrices || {});
+        setTrades(Array.isArray(nextFlows) ? nextFlows : []);
+        setSparkline(Array.isArray(nextSpark) ? nextSpark : []);
+        setNow(Date.now());
+      } catch {
+        /* keep last good chart if a refresh fails */
+      }
     }
     const start = setTimeout(load, 0);
     const id = setInterval(load, 30000);

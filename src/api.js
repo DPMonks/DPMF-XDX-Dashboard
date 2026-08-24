@@ -257,6 +257,7 @@ async function getJson(path, options = {}) {
     inflight.set(cacheKey, task);
     task.finally(() => inflight.delete(cacheKey));
   }
+  task.catch(() => {});
   return task;
 }
 
