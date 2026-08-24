@@ -585,6 +585,14 @@ export function recommendedQuote(xdxAmount, reserveBase, reserveQuote) {
   return (qty / base) * quote;
 }
 
+export function saneOpposingReserve(reserveBase, reserveQuote, price) {
+  const base = Number(reserveBase);
+  const quote = Number(reserveQuote);
+  const px = Number(price);
+  const marked = base > 0 && px > 0 ? base * px : 0;
+  return preferMarkWhenPoolInsane(quote, marked) || (quote > 0 ? quote : marked);
+}
+
 export function expectedLpTokens(xdxAmount, reserveBase, lpSupply) {
   const base = Number(reserveBase);
   const supply = Number(lpSupply);
@@ -601,13 +609,16 @@ export function expectedSingleLpTokens(deposit, reserve, lpSupply) {
   return supply * (Math.sqrt(1 + qty / pool) - 1);
 }
 
-export function expectedWithdraw(lpAmount, reserveBase, reserveQuote, lpSupply) {
+export function expectedWithdraw(lpAmount, reserveBase, reserveQuote, lpSupply, options = {}) {
   const lp = Number(lpAmount);
   const supply = Number(lpSupply);
   if (!(lp > 0) || !(supply > 0)) return { base: 0, quote: 0 };
+  const quoteReserve = options.preferMark
+    ? saneOpposingReserve(reserveBase, reserveQuote, options.price)
+    : Number(reserveQuote || 0);
   return {
     base: (lp / supply) * Number(reserveBase || 0),
-    quote: (lp / supply) * Number(reserveQuote || 0),
+    quote: (lp / supply) * Number(quoteReserve || 0),
   };
 }
 
