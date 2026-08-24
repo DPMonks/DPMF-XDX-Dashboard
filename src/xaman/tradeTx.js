@@ -15,11 +15,12 @@ import {
 } from "../constants/ledger.js";
 import { detectQuoteUsd } from "../utils/poolSplit.js";
 import { pendingFromExecution, rememberPending } from "../wallet/ledgerOrders.js";
+import { rememberTradeNotice } from "../wallet/tradeNotice.js";
 import { pendingVoteFromExecution } from "../wallet/ammVote.js";
 import { preferMarkWhenPoolInsane } from "../wallet/quoteMarker.js";
 import { liveWalletAddress } from "../wallet/walletStorage.js";
 import { extractTradeMarker } from "./signMarker.js";
-import { isConsumedUuid, isPayloadUuid, rememberConsumedUuid, rememberPendingPayload } from "./payloadResume.js";
+import { isConsumedUuid, isPayloadUuid, peekPendingPayload, rememberConsumedUuid, rememberPendingPayload } from "./payloadResume.js";
 
 export const ACTION_TX_TYPES = {
   buy: ["Payment", "OfferCreate"],
@@ -717,6 +718,14 @@ export function notifyTradePending(detail = {}) {
 export function notifyTradeExecuted(detail = {}) {
   if (typeof window === "undefined") return;
   if (detail.executed === false || detail.failed || detail.rejected) return;
+  const pending = peekPendingPayload();
+  const notice = {
+    ...detail,
+    kind: "executed",
+    txjson: detail.txjson || pending?.txjson || null,
+    trade: detail.trade || pending?.trade || null,
+  };
+  rememberTradeNotice(notice);
   const key = String(detail.uuid || detail.txid || "").trim().toLowerCase();
   const marker = detail.signMarker || extractTradeMarker(detail.txjson);
   if (key && (announcedTrades.has(key) || isConsumedUuid(key))) return;
@@ -727,8 +736,8 @@ export function notifyTradeExecuted(detail = {}) {
     rememberConsumedUuid("", marker);
   }
   if (isPayloadUuid(key)) rememberPendingPayload(key, { signState: "executed", signMarker: marker });
-  rememberConfirmed(detail);
-  window.dispatchEvent(new CustomEvent("dpmf-trade-executed", { detail: { ...detail, executed: true } }));
+  rememberConfirmed(notice);
+  window.dispatchEvent(new CustomEvent("dpmf-trade-executed", { detail: { ...notice, executed: true } }));
   notifyWalletRefresh();
 }
 
@@ -745,10 +754,12 @@ export function notifyFunctionConfirmed(detail = {}) {
 
 export function notifyTradeFailed(detail = {}) {
   if (typeof window === "undefined") return;
+  rememberTradeNotice({ ...detail, kind: "failed" });
   window.dispatchEvent(new CustomEvent("dpmf-trade-failed", { detail }));
 }
 
 export function notifyTradeUnconfirmed(detail = {}) {
   if (typeof window === "undefined") return;
+  rememberTradeNotice({ ...detail, kind: "unconfirmed" });
   window.dispatchEvent(new CustomEvent("dpmf-trade-unconfirmed", { detail }));
 }
