@@ -323,21 +323,6 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
         ]}
       />
       <WalletEarnCell
-        className="wallet-earn-total"
-        label={t.totalEarnings}
-        empty={empty}
-        rows={[
-          {
-            range: t.lpFees24h,
-            value: earnText(earn.usd24h, (n) => formatUsd(n, locale), empty),
-          },
-          {
-            range: t.lpFees7d,
-            value: earnText(earn.usd7d, (n) => formatUsd(n, locale), empty),
-          },
-        ]}
-      />
-      <WalletEarnCell
         className="wallet-earn-rlusd"
         label={t.rlusdEarnings || "RLUSD earnings"}
         empty={empty}
@@ -349,6 +334,21 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
           {
             range: t.lpFees7d,
             value: earnText(earn.rlusd7d, (n) => formatToken(n, locale, 4), empty),
+          },
+        ]}
+      />
+      <WalletEarnCell
+        className="wallet-earn-total"
+        label={t.totalEarnings}
+        empty={empty}
+        rows={[
+          {
+            range: t.lpFees24h,
+            value: earnText(earn.usd24h, (n) => formatUsd(n, locale), empty),
+          },
+          {
+            range: t.lpFees7d,
+            value: earnText(earn.usd7d, (n) => formatUsd(n, locale), empty),
           },
         ]}
       />

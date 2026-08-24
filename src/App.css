@@ -2848,8 +2848,8 @@ body {
     grid-template-areas:
       "xrp"
       "xdx"
-      "total"
-      "rlusd";
+      "rlusd"
+      "total";
   }
 
   .lists-row > .dashboard-card {
