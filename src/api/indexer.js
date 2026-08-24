@@ -10,6 +10,14 @@ import {
   xrplToHolderGraphUrl,
 } from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
+import {
+  applyXrplToChange,
+  applyXrplToOverview,
+  applyXrplToPrices,
+  marketNeedsXrplTo,
+  parseXrplToToken,
+  XRPL_TO_TOKEN_URL,
+} from "../utils/xrplToToken";
 import { detectQuoteUsd, preferUsdPoolSplit } from "../utils/poolSplit";
 import { LIST_PAGE_SIZE, shouldFetchMoreRows } from "../utils/pagination";
 import {
@@ -515,13 +523,49 @@ export async function getTopLp(onPage) {
   });
 }
 
+const XRPL_TO_TOKEN_TTL_MS = 60_000;
+let xrplToTokenCache = { at: 0, token: null };
+
+export async function fetchXrplToToken() {
+  const now = Date.now();
+  if (xrplToTokenCache.token && now - xrplToTokenCache.at < XRPL_TO_TOKEN_TTL_MS) {
+    return xrplToTokenCache.token;
+  }
+  const response = await fetch(XRPL_TO_TOKEN_URL, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(4000),
+  });
+  if (!response.ok) return xrplToTokenCache.token;
+  const token = parseXrplToToken(await response.json());
+  xrplToTokenCache = { at: now, token };
+  return token;
+}
+
+async function withXrplToBackup(overview, prices, change) {
+  if (!marketNeedsXrplTo(overview) && !marketNeedsXrplTo(prices) && Number(change?.xdx)) {
+    return { overview, prices, change };
+  }
+  try {
+    const token = await fetchXrplToToken();
+    if (!token) return { overview, prices, change };
+    return {
+      overview: applyXrplToOverview(overview, token, prices),
+      prices: applyXrplToPrices(prices, token),
+      change: applyXrplToChange(change, token),
+    };
+  } catch {
+    return { overview, prices, change };
+  }
+}
+
 export async function getTokenDetails(onPartial) {
   const [overview, prices, change] = await Promise.all([
     api.overview().catch(() => ({})),
     api.prices().catch(() => ({})),
     api.change24h().catch(() => ({})),
   ]);
-  const core = composeTokenDetails({ overview, prices, change });
+  const backed = await withXrplToBackup(overview, prices, change);
+  const core = composeTokenDetails(backed);
   onPartial?.(core);
 
   const [holders, trustlines, lpHolders, lpTrustlines] = await Promise.all([
@@ -531,13 +575,13 @@ export async function getTokenDetails(onPartial) {
     api.lpTrustlinesCount({ pool: "all" }).catch(() => ({})),
   ]);
   return composeTokenDetails({
-    overview,
-    prices,
-    change,
-    holders,
-    trustlines,
-    lpHolders,
-    lpTrustlines,
+    ...backed,
+    holders: numberOrNull(holders?.count) ? holders : { count: backed.overview.holder_count },
+    trustlines: numberOrNull(trustlines?.count) ? trustlines : { count: backed.overview.trustline_count },
+    lpHolders: numberOrNull(lpHolders?.count) ? lpHolders : { count: backed.overview.lp_holder_count },
+    lpTrustlines: numberOrNull(lpTrustlines?.count)
+      ? lpTrustlines
+      : { count: backed.overview.lp_trustline_count },
   });
 }
 
@@ -707,7 +751,13 @@ export async function getWalletRank(address) {
 }
 
 export async function getPrices() {
-  return api.prices();
+  const prices = await api.prices().catch(() => ({}));
+  if (Number(prices?.xdxUsd) > 0 || Number(prices?.recorded_price) > 0) return prices;
+  try {
+    return applyXrplToPrices(prices, await fetchXrplToToken());
+  } catch {
+    return prices;
+  }
 }
 
 export async function getWalletOffers(address, extra = {}) {

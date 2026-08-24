@@ -4,10 +4,10 @@ import {
   XDX_ISSUER,
   XDX_TOTAL_SUPPLY,
   XDX_XRP_AMM,
-  XDX_XRPL_TO_MD5,
   issuerLockedFromIssued,
 } from "../src/constants/ledger.js";
-import { looksLikeXrpUsd, xrpPerXdx } from "../src/utils/recordedPrice.js";
+import { xrpPerXdx } from "../src/utils/recordedPrice.js";
+import { parseXrplToToken, XRPL_TO_TOKEN_URL, xdxUsdFromXrplTo } from "../src/utils/xrplToToken.js";
 import { attachQuoteXrpPrices, loadQuoteXrpRates } from "./quoteXrpMarket.js";
 import { loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
@@ -82,24 +82,10 @@ export async function loadXrplToToken(options = {}) {
     return tokenCache.body;
   }
   try {
-    const res = await (options.fetchImpl || fetch)(
-      `https://api.xrpl.to/v1/token/${XDX_XRPL_TO_MD5}`,
-      { signal: AbortSignal.timeout(3500) }
-    );
-    const payload = await res.json();
-    const token = payload?.token || {};
-    const exchXrp = Number(token.exch);
-    const usd = Number(token.usd);
-    const body = {
-      holders: Number(token.holders) || 0,
-      trustlines: Number(token.trustlines || token.lines) || 0,
-      lpHolders: Number(token.lpHolderCount) || 0,
-      exchXrp: Number.isFinite(exchXrp) && exchXrp > 0 && exchXrp < 1 ? exchXrp : 0,
-      vol24hXrp: Number(token.vol24hxrp || token.vol24h) || 0,
-      change24h: Number(token.pro24h),
-      usd: Number.isFinite(usd) && usd > 0 && !looksLikeXrpUsd(usd) ? usd : 0,
-      source: "xrpl.to",
-    };
+    const res = await (options.fetchImpl || fetch)(XRPL_TO_TOKEN_URL, {
+      signal: AbortSignal.timeout(3500),
+    });
+    const body = parseXrplToToken(await res.json());
     tokenCache = { at: now, body };
     return body;
   } catch {
@@ -178,9 +164,7 @@ export async function loadLiveMarket(options = {}) {
   const xrpPool = lives[0] || {};
   const xrpUsd = num(quote.usd);
   const ammUsd = xdxUsdFromXrpPool(xrpPool, xrpUsd);
-  const listedUsd = num(token.usd);
-  const exchUsd = num(token.exchXrp) && xrpUsd ? token.exchXrp * xrpUsd : 0;
-  const xdxUsd = ammUsd || listedUsd || exchUsd;
+  const xdxUsd = ammUsd || xdxUsdFromXrplTo(token, xrpUsd);
   const liveRates = await loadQuoteXrpRates(options).catch(() => ({}));
   const prices = attachQuoteXrpPrices(
     {
@@ -253,13 +237,80 @@ export async function loadLiveMarket(options = {}) {
   return marketCache;
 }
 
+export async function loadXrplToMarket(options = {}) {
+  const [quote, token] = await Promise.all([
+    loadLiveXrpQuote(options),
+    loadXrplToToken(options),
+  ]);
+  const xrpUsd = num(quote.usd);
+  const xdxUsd = xdxUsdFromXrplTo(token, xrpUsd);
+  const prices = {
+    xrpUsd,
+    xrpGbp: num(quote.gbp),
+    xrpEur: num(quote.eur),
+    xrpJpy: num(quote.jpy),
+    xdxUsd,
+    recorded_price: xdxUsd,
+    price: xdxUsd,
+    xdxGbp: xdxUsd > 0 && xrpUsd > 0 && quote.gbp ? xdxUsd * (quote.gbp / xrpUsd) : 0,
+    xdxEur: xdxUsd > 0 && xrpUsd > 0 && quote.eur ? xdxUsd * (quote.eur / xrpUsd) : 0,
+    xdxJpy: xdxUsd > 0 && xrpUsd > 0 && quote.jpy ? xdxUsd * (quote.jpy / xrpUsd) : 0,
+    xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
+    xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
+    RLUSD: 1,
+    quotes: { XRP: xrpUsd, RLUSD: 1 },
+    source: "xrpl.to",
+  };
+  const volume24h = num(token.vol24hXrp) && xrpUsd ? token.vol24hXrp * xrpUsd : num(token.vol24hXrp);
+  const overview = {
+    pool: "XDX/XRP",
+    tvl: num(token.tvl) || 0,
+    tvl_usd: num(token.tvl) || 0,
+    price: xdxUsd,
+    xdxUsd,
+    recorded_price: xdxUsd,
+    xdxGbp: prices.xdxGbp,
+    xdxEur: prices.xdxEur,
+    xdxJpy: prices.xdxJpy,
+    xrpUsd,
+    xrpGbp: prices.xrpGbp,
+    xrpEur: prices.xrpEur,
+    xrpJpy: prices.xrpJpy,
+    xdx_per_xrp: prices.xdx_per_xrp,
+    xdxPerXrp: prices.xdxPerXrp,
+    volume24h,
+    holder_count: num(token.holders) || null,
+    holders: num(token.holders) || null,
+    lp_holder_count: num(token.lpHolders) || null,
+    circulating: XDX_TOTAL_SUPPLY,
+    circulating_supply: XDX_TOTAL_SUPPLY,
+    total_supply: XDX_TOTAL_SUPPLY,
+    trustlines: num(token.trustlines) || null,
+    trustline_count: num(token.trustlines) || null,
+    ammMarketCap: num(token.tvl) || null,
+    xrplMarketCap: num(token.marketcap) || XDX_TOTAL_SUPPLY * xdxUsd,
+    circulatingMarketCap: num(token.marketcap) || XDX_TOTAL_SUPPLY * xdxUsd,
+    issuer: XDX_ISSUER,
+    amm_account: XDX_XRP_AMM,
+    source: "xrpl.to",
+    catching_up: !num(token.holders),
+  };
+  return { prices, overview, token, change: { xdx: Number(token.change24h) || 0, xrp: 0, source: "xrpl.to" } };
+}
+
 export async function liveCatalogPayload(suffix, options = {}) {
   const path = String(suffix || "").split("?")[0];
   if (path === "overview" || path === "token-details") {
-    return (await loadLiveMarket(options)).overview;
+    if (!options.fresh && marketCache.overview && Date.now() - marketCache.at < MARKET_MS) {
+      return marketCache.overview;
+    }
+    return (await loadXrplToMarket(options)).overview;
   }
   if (path === "prices") {
-    return (await loadLiveMarket(options)).prices;
+    if (!options.fresh && marketCache.prices && Date.now() - marketCache.at < MARKET_MS) {
+      return marketCache.prices;
+    }
+    return (await loadXrplToMarket(options)).prices;
   }
   if (path === "lp-pools" || path === "amm" || path === "pools") {
     const market = await loadLiveMarket(options);
@@ -271,8 +322,8 @@ export async function liveCatalogPayload(suffix, options = {}) {
     };
   }
   if (path === "prices/change24h" || path === "change24h") {
-    const market = await loadLiveMarket(options);
-    return { xdx: Number(market.change?.xdx) || 0, xrp: 0, source: "xrpl" };
+    const market = await loadXrplToMarket(options);
+    return { xdx: Number(market.change?.xdx) || 0, xrp: 0, source: "xrpl.to" };
   }
   if (path === "issuer-locked") {
     return loadIssuerLockedLive(options);

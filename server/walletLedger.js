@@ -1,7 +1,7 @@
 import { xrplRpc } from "./xrplBookOffers.js";
 import { hexCurrencyLabel } from "../src/wallet/ammCreate.js";
 import { activityFromAccountTx, ordersFromAccountOffers } from "../src/wallet/ledgerOrders.js";
-import { POOLS, RLUSD_HEX, RLUSD_ISSUER, XDX_ISSUER } from "../src/constants/ledger.js";
+import { POOLS, RLUSD_ISSUER, XDX_ISSUER } from "../src/constants/ledger.js";
 import { lpPositionFromPool } from "../src/wallet/composeWallet.js";
 import { loadLiveAmmReserves } from "./liveAmmReserves.js";
 import { loadLiveMarket } from "./liveCatalog.js";
