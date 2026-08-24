@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getConnectedWallet } from "../api/indexer";
 import { pendingVoteFromExecution } from "../wallet/ammVote";
 import { useWallet } from "../context/useWallet";
@@ -27,6 +27,13 @@ import {
 import { formatFeePercent } from "../wallet/ammVote";
 import { useMorph } from "../wallet/useMorph";
 import { mergeWalletActivity, mergeWalletOrders, pendingFromExecution } from "../wallet/ledgerOrders";
+import {
+  INCOME_PAGE_DAYS,
+  downloadTextFile,
+  incomeDayKeys,
+  lpIncomeCsv,
+  pageLpIncome,
+} from "../wallet/lpIncome";
 
 function XrpColumn({ label, tone, percent, value, locale, empty }) {
   return (
@@ -185,6 +192,80 @@ function LpInfographic({ position, locale, t, empty }) {
         </div>
       </dl>
     </div>
+  );
+}
+
+function WalletIncomePanel({ rows, locale, t, empty }) {
+  const all = Array.isArray(rows) ? rows : [];
+  const [daysShown, setDaysShown] = useState(INCOME_PAGE_DAYS);
+  const sentinelRef = useRef(null);
+  const dayCount = incomeDayKeys(all).length;
+  const visible = pageLpIncome(all, daysShown);
+  const done = empty || dayCount === 0 || daysShown >= dayCount;
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || done) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setDaysShown((current) => current + INCOME_PAGE_DAYS);
+        }
+      },
+      { root: node.parentElement, rootMargin: "24px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [done, daysShown]);
+
+  return (
+    <section className={`wallet-book wallet-income${empty ? " is-empty" : " is-filled"}`}>
+      <div className="wallet-income-head">
+        <h3>{t.lpPassiveIncome || "LP Earning/Passive income"}</h3>
+        <button
+          type="button"
+          className="copy-btn wallet-income-copy"
+          disabled={empty || !all.length}
+          onClick={() => downloadTextFile("lp-earnings.csv", lpIncomeCsv(all))}
+          aria-label={t.downloadLpIncome || "Download LP earnings"}
+        >
+          {t.copy || "Copy"}
+        </button>
+      </div>
+      <div className="wallet-income-scroll">
+        <table className="wallet-income-table">
+          <thead>
+            <tr>
+              <th>{t.incomeDate || "Date"}</th>
+              <th>{t.incomeLpTokens || "LP tokens received"}</th>
+              <th>{t.incomePair || "Pair"}</th>
+              <th>{t.incomeUsd || "USD"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {empty || !visible.length ? (
+              <tr>
+                <td colSpan={4}>{empty ? "—" : t.noLpIncome || "No LP earnings yet"}</td>
+              </tr>
+            ) : (
+              visible.map((row) => (
+                <tr key={`${row.date}-${row.pair}-${row.kind || "fee"}`}>
+                  <td>{row.date}</td>
+                  <td>{formatToken(row.lpTokens, locale, 4)}</td>
+                  <td>{row.pair}</td>
+                  <td>{formatUsd(row.usd, locale)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        {done ? (
+          <p className="wallet-income-end">{empty ? "" : t.incomeEnd || "end"}</p>
+        ) : (
+          <div ref={sentinelRef} className="wallet-income-more" aria-hidden="true" />
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -358,11 +439,6 @@ export default function ConnectedWallet() {
     () => view.lp.find((row) => normalizeWalletPair(row.pool) === selected) || null,
     [view.lp, selected]
   );
-  const mid = Number(view.book?.mid);
-  const own = snap.orders[0];
-  const fromMid =
-    own && mid > 0 ? (Math.abs(Number(own.price) - mid) / mid) * 100 : null;
-
   return (
     <div className="connected-wallet">
       <header className="wallet-hero">
@@ -444,41 +520,13 @@ export default function ConnectedWallet() {
         <LpInfographic position={position} locale={locale} t={t} empty={empty || !position} />
       </section>
 
-      <section className={`wallet-book${empty ? " is-empty" : " is-filled"}`}>
-        <h3>{t.orderbook}</h3>
-        <ul>
-          <li>
-            <i className={own ? "is-on" : ""} />
-            {t.topOfBook}
-            <b>{empty || !own ? "—" : formatQuotePerBase(own.price, locale, "XRP")}</b>
-          </li>
-          <li>
-            <i />
-            {t.fromMid}
-            <b>{empty || fromMid == null ? "—" : formatSharePercent(fromMid, locale)}</b>
-          </li>
-          <li>
-            <i />
-            {t.matchedAt}
-            <b>
-              {empty || !view.activity[0]?.price
-                ? "—"
-                : formatQuotePerBase(view.activity[0].price, locale, "XRP")}
-            </b>
-          </li>
-          <li>
-            {t.ammDepthShort}
-            <span className="wallet-micro-track is-inline">
-              <i
-                className="is-amm"
-                style={{
-                  width: empty ? 0 : `${Math.min(100, Number(view.book?.ammDepth) > 0 ? 40 : 0)}%`,
-                }}
-              />
-            </span>
-          </li>
-        </ul>
-      </section>
+      <WalletIncomePanel
+        key={`${view.address || "out"}:${(view.income || []).length}`}
+        rows={view.income}
+        locale={locale}
+        t={t}
+        empty={empty}
+      />
 
       <section className={`wallet-activity${empty ? " is-empty" : " is-filled"}`}>
         <h3>{t.recentActivity}</h3>

@@ -1,5 +1,11 @@
 import { XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
+import {
+  isXdxAmmPair,
+  lpDepositIncomeRows,
+  lpFeeIncomeRows,
+  mergeLpIncomeRows,
+} from "./lpIncome.js";
 
 export const DROPS = 1_000_000;
 export const DEFAULT_RESERVE_BASE_DROPS = 1_000_000;
@@ -295,7 +301,7 @@ export function volumeByPool(flows = [], windowMs = DAY_MS, now = Date.now()) {
     const ts = new Date(row.timestamp).getTime();
     if (!Number.isFinite(ts) || ts < cutoff) continue;
     const pair = normalizeWalletPair(row.pool || row.pool_name || row.pair);
-    if (!pair) continue;
+    if (!isXdxAmmPair(pair)) continue;
     map.set(pair, (map.get(pair) || 0) + Math.abs(Number(row.xdx) || 0));
   }
   return map;
@@ -343,6 +349,7 @@ function emptyEarnings() {
 function earningsForWindow(positions, flowVol, windowMs, { xdxUsd, xrpUsd, rlusdUsd, xdxXrp }) {
   const next = emptyEarnings();
   for (const row of Array.isArray(positions) ? positions : []) {
+    if (!isXdxAmmPair(row)) continue;
     const share = (num(row.lp_share_percent) || 0) / 100;
     if (!(share > 0)) continue;
     const feeXdx = volumeForWindow(row, flowVol, windowMs) * tradingFeeRate(row.trading_fee) * share;
@@ -377,6 +384,7 @@ export function lpFeeEarnings(
   let xdx = 0;
   let stake = 0;
   for (const row of Array.isArray(positions) ? positions : []) {
+    if (!isXdxAmmPair(row)) continue;
     const share = (num(row.lp_share_percent) || 0) / 100;
     if (!(share > 0)) continue;
     xdx += volumeForWindow(row, vol24h, DAY_MS) * tradingFeeRate(row.trading_fee) * share;
@@ -464,6 +472,7 @@ export function emptyWalletSnapshot(address = null) {
       },
     },
     lp: [],
+    income: [],
     rank: null,
     book: null,
     orders: [],
@@ -542,6 +551,23 @@ export function composeWalletSnapshot({
     walletActivity(flows, address),
     pending.activity
   ).slice(0, 3);
+  const xdxUsd = num(prices.xdxUsd ?? prices.recorded_price ?? token.xdxUsd);
+  const xrpUsd = num(prices.xrpUsd);
+  const rlusdUsd = num(prices.RLUSD ?? prices.quotes?.RLUSD) ?? 1;
+  const income = mergeLpIncomeRows(
+    lpFeeIncomeRows({
+      positions: lp,
+      flows,
+      xdxUsd,
+      xrpUsd,
+      rlusdUsd,
+    }),
+    lpDepositIncomeRows({
+      activity: mergeWalletActivity(ledgerActivity, pending.activity),
+      positions: lp,
+      xdxUsd,
+    })
+  );
   return {
     address,
     signedIn: true,
@@ -555,12 +581,13 @@ export function composeWalletSnapshot({
     },
     fees: lpFeeEarnings(lp, {
       flows,
-      xdxUsd: num(prices.xdxUsd ?? prices.recorded_price ?? token.xdxUsd),
-      xrpUsd: num(prices.xrpUsd),
-      rlusdUsd: num(prices.RLUSD ?? prices.quotes?.RLUSD) ?? 1,
+      xdxUsd,
+      xrpUsd,
+      rlusdUsd,
       xdxXrp: xdxPerXrp,
     }),
     lp,
+    income,
     rank: num(rank ?? token.rank ?? balances.rank),
     book: xrpBook
       ? {
