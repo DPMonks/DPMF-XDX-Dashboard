@@ -2,8 +2,43 @@ import { poolReservesFromAmmInfo } from "../src/utils/ammInfo.js";
 import { quoteIdFromName, quoteIssue, xdxIssue } from "../src/wallet/ammVote.js";
 import { xrplRpc } from "./xrplBookOffers.js";
 
-const CACHE_MS = 8_000;
+const CACHE_MS = 15_000;
 const cache = new Map();
+const DEFAULT_CONCURRENCY = 3;
+
+export function isTransientXrplError(err) {
+  return /429|502|503|504|timeout|TIMEOUT|ECONNRESET|aborted|fetch failed/i.test(String(err?.message || err));
+}
+
+export async function withXrplRetry(fn, { retries = 3, waitMs = 280 } = {}) {
+  let last;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      last = err;
+      if (!isTransientXrplError(err) || attempt === retries) throw err;
+      await new Promise((resolve) => setTimeout(resolve, waitMs * 2 ** attempt));
+    }
+  }
+  throw last;
+}
+
+export async function mapLimit(items, limit, fn) {
+  const list = Array.isArray(items) ? items : [];
+  const out = new Array(list.length);
+  let next = 0;
+  async function worker() {
+    while (next < list.length) {
+      const index = next;
+      next += 1;
+      out[index] = await fn(list[index], index);
+    }
+  }
+  const n = Math.max(1, Math.min(Number(limit) || 1, list.length || 1));
+  await Promise.all(Array.from({ length: list.length ? n : 0 }, () => worker()));
+  return out;
+}
 
 function normalizePair(value, quote) {
   const text = String(value || `XDX/${quote || "XRP"}`)
@@ -62,23 +97,32 @@ export async function loadLiveAmmReserves(query = {}, options = {}) {
     fetchImpl: options.fetchImpl,
     rpcUrl: options.rpcUrl,
   };
+  const retry = {
+    retries: Number.isFinite(Number(options.retries)) ? Number(options.retries) : 3,
+    waitMs: Number(options.waitMs) || 280,
+  };
   let result = null;
+  let transient = false;
   const ammAccount = String(query.ammAccount || query.amm_account || "").trim();
   if (ammAccount) {
     try {
-      result = await xrplRpc("amm_info", { amm_account: ammAccount, ledger_index: "validated" }, rpc);
-    } catch {
+      result = await withXrplRetry(
+        () => xrplRpc("amm_info", { amm_account: ammAccount, ledger_index: "validated" }, rpc),
+        retry
+      );
+    } catch (err) {
+      transient = isTransientXrplError(err);
       result = null;
     }
   }
-  if (!result?.amm) {
+  if (!result?.amm && !transient) {
     try {
-      result = await xrplRpc(
-        "amm_info",
-        { asset: xdxIssue(), asset2, ledger_index: "validated" },
-        rpc
+      result = await withXrplRetry(
+        () => xrplRpc("amm_info", { asset: xdxIssue(), asset2, ledger_index: "validated" }, rpc),
+        retry
       );
-    } catch {
+    } catch (err) {
+      transient = isTransientXrplError(err);
       result = null;
     }
   }
@@ -87,6 +131,19 @@ export async function loadLiveAmmReserves(query = {}, options = {}) {
   const body = parsed
     ? { ...parsed, pair, reserve_source: "amm_info", source: "xrpl" }
     : emptyLive(pair);
-  cache.set(key, { at: now, body });
+  if (parsed || !transient) {
+    cache.set(key, { at: now, body });
+  }
   return body;
+}
+
+export async function loadLiveAmmReservesMany(queries = [], options = {}) {
+  const concurrency = Number(options.concurrency) || DEFAULT_CONCURRENCY;
+  return mapLimit(queries, concurrency, async (query) => {
+    try {
+      return await loadLiveAmmReserves(query, options);
+    } catch {
+      return emptyLive(normalizePair(query?.pair || query?.pool, query?.quote));
+    }
+  });
 }

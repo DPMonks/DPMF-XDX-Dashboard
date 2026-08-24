@@ -162,9 +162,13 @@ export default function App() {
 
     load();
     const id = setInterval(load, 60000);
+    const ammId = setInterval(() => {
+      if (!cancelled) loadAmm();
+    }, 20000);
     return () => {
       cancelled = true;
       clearInterval(id);
+      clearInterval(ammId);
     };
   }, []);
 
