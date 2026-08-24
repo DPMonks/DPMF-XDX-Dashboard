@@ -389,7 +389,7 @@ export async function liveCatalogPayload(suffix, options = {}) {
       ...options,
       pool: params.get("pool") || params.get("pair") || "all",
     }).catch(() => null);
-    if (counts?.trustlines) {
+    if (counts && !counts.catching_up) {
       return { count: counts.trustlines, pool: counts.pool, source: "xrpl.to", catching_up: false };
     }
     const token = await loadXrplToToken(options);
