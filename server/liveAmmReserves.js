@@ -139,7 +139,12 @@ export async function loadLiveAmmReserves(query = {}, options = {}) {
 
 export async function loadLiveAmmReservesMany(queries = [], options = {}) {
   const concurrency = Number(options.concurrency) || DEFAULT_CONCURRENCY;
+  const deadlineMs = Number(options.deadlineMs) || 0;
+  const started = Date.now();
   return mapLimit(queries, concurrency, async (query) => {
+    if (deadlineMs > 0 && Date.now() - started >= deadlineMs) {
+      return emptyLive(normalizePair(query?.pair || query?.pool, query?.quote));
+    }
     try {
       return await loadLiveAmmReserves(query, options);
     } catch {

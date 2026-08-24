@@ -5,6 +5,7 @@ import {
   carryActivityMetrics,
   issuedActivitySeries,
   mergeActivityRows,
+  needsFullIssuanceHistory,
   rowsFromXrplToGraph,
   xrplToHolderGraphUrl,
 } from "../activityHistory";
@@ -307,7 +308,7 @@ export async function getOverview() {
 
 export async function getAmm() {
   const [body, prices] = await Promise.all([
-    api.lpPools(),
+    api.lpPools().catch(() => ({ pools: [], catching_up: true })),
     api.prices().catch(() => ({})),
   ]);
   const catchingUp = Boolean(
@@ -540,38 +541,43 @@ export async function getTokenDetails(onPartial) {
   });
 }
 
+const XRPL_TO_TTL_MS = 5 * 60_000;
+let xrplToIssuedCache = { at: 0, rows: [], blockedUntil: 0 };
+
 async function fetchXrplToIssued() {
-  const graphs = await Promise.all(
-    ["ALL", "24H", "5Y"].map(async (range) => {
-      try {
-        const response = await fetch(xrplToHolderGraphUrl(range), {
-          headers: { Accept: "application/json" },
-          signal: AbortSignal.timeout(15_000),
-        });
-        if (!response.ok) return [];
-        return rowsFromXrplToGraph(await response.json());
-      } catch {
-        return [];
-      }
-    })
-  );
-  return mergeActivityRows(...graphs);
+  const now = Date.now();
+  if (now < xrplToIssuedCache.blockedUntil) return xrplToIssuedCache.rows;
+  if (xrplToIssuedCache.rows.length && now - xrplToIssuedCache.at < XRPL_TO_TTL_MS) {
+    return xrplToIssuedCache.rows;
+  }
+  try {
+    const response = await fetch(xrplToHolderGraphUrl("ALL"), {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (response.status === 429) {
+      xrplToIssuedCache = { ...xrplToIssuedCache, blockedUntil: now + XRPL_TO_TTL_MS };
+      return xrplToIssuedCache.rows;
+    }
+    if (!response.ok) return xrplToIssuedCache.rows;
+    const rows = rowsFromXrplToGraph(await response.json());
+    xrplToIssuedCache = { at: now, rows, blockedUntil: 0 };
+    return rows;
+  } catch {
+    return xrplToIssuedCache.rows;
+  }
 }
 
 export async function getChartHistory() {
-  const errors = [];
-  const take = (promise) =>
-    promise.then(chartArray).catch((error) => {
-      errors.push(error);
-      return [];
-    });
-  const [apiIssued, apiActivity, apiTraders, remote] = await Promise.all([
+  const take = (promise) => promise.then(chartArray).catch(() => []);
+  const [apiIssued, apiActivity, apiTraders] = await Promise.all([
     take(api.holdersHistory({ queue: false, retries: 1 })),
     take(api.activityHistory()),
     take(api.tradersHistory()),
-    fetchXrplToIssued(),
   ]);
-  const issued = mergeActivityRows(apiIssued, apiActivity, apiTraders, remote);
+  const localIssued = mergeActivityRows(apiIssued, apiActivity, apiTraders);
+  const remote = needsFullIssuanceHistory(localIssued) ? await fetchXrplToIssued() : [];
+  const issued = mergeActivityRows(localIssued, remote);
 
   const live = await api.overview().catch(() => null);
   const lastTraders = [...issued]
@@ -590,9 +596,6 @@ export async function getChartHistory() {
         : null
     )
   );
-  if (!rows.length && errors.length) {
-    throw errors[0];
-  }
   return rows;
 }
 

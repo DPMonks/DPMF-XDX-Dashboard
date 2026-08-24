@@ -141,7 +141,7 @@ export default function App() {
 
     async function load() {
       const hsPromise = handshake();
-      hsPromise.then((hs) => applyLink(hs));
+      hsPromise.then((hs) => applyLink(hs)).catch(() => {});
 
       const [holderErr, lpErr, ammErr] = await Promise.all([
         loadHolders(),
@@ -160,15 +160,13 @@ export default function App() {
       }
     }
 
-    load();
-    const id = setInterval(load, 60000);
-    const ammId = setInterval(() => {
-      if (!cancelled) loadAmm();
-    }, 20000);
+    load().catch(() => {});
+    const id = setInterval(() => {
+      load().catch(() => {});
+    }, 60000);
     return () => {
       cancelled = true;
       clearInterval(id);
-      clearInterval(ammId);
     };
   }, []);
 
