@@ -1,3 +1,5 @@
+import { detectQuoteUsd, normalizePriceBook } from "../utils/poolSplit.js";
+
 function normalizeWalletPair(value) {
   const raw = String(value || "")
     .trim()
@@ -45,22 +47,43 @@ function pairQuote(pair, fallback) {
     .toUpperCase();
 }
 
-function quotePerXdx(row) {
-  const reserveXdx = num(row?.reserve_asset ?? row?.reserve_xdx);
-  const reserveQuote = num(row?.reserve_currency ?? row?.reserve_quote);
-  if (reserveXdx > 0 && reserveQuote > 0) return reserveQuote / reserveXdx;
+function pickUsd(...values) {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
   return 0;
 }
 
-function feeUsd(feeXdx, quoteId, px, { xdxUsd, xrpUsd, rlusdUsd }) {
-  const xdx = num(xdxUsd);
-  if (quoteId === "XRP") {
-    return (feeXdx / 2) * xdx + (feeXdx / 2) * px * num(xrpUsd);
-  }
-  if (quoteId === "RLUSD") {
-    return (feeXdx / 2) * xdx + (feeXdx / 2) * px * (num(rlusdUsd) || 1);
-  }
-  return feeXdx * xdx;
+function priceBookFromArgs(args = {}) {
+  const fromPrices = args.prices && typeof args.prices === "object" ? args.prices : {};
+  return normalizePriceBook({
+    ...fromPrices,
+    xdxUsd: pickUsd(fromPrices.xdxUsd, fromPrices.recorded_price, args.xdxUsd),
+    xrpUsd: pickUsd(fromPrices.xrpUsd, args.xrpUsd),
+    RLUSD: pickUsd(fromPrices.RLUSD, fromPrices.quotes?.RLUSD, args.rlusdUsd) || 1,
+  });
+}
+
+export function lpTokenUsd(lpTokens, pool = {}, prices = {}) {
+  const tokens = num(lpTokens);
+  const supply = num(pool.lp_supply);
+  const reserveXdx = num(pool.reserve_asset ?? pool.reserve_xdx);
+  const reserveQuote = num(pool.reserve_currency ?? pool.reserve_quote);
+  if (!(tokens > 0) || !(supply > 0)) return 0;
+  const book = normalizePriceBook(prices);
+  const quoteId = pairQuote(pool.pool || pool.pool_name || pool.pair, pool.quote);
+  const xdxUsd = num(book.xdxUsd ?? prices.xdxUsd ?? prices.recorded_price);
+  const quoteUsd = detectQuoteUsd({
+    quoteId,
+    pool: { ...pool, xdxUsd },
+    prices: book,
+    allowImplied: true,
+  });
+  const xdxValue = reserveXdx > 0 && xdxUsd > 0 ? reserveXdx * xdxUsd : 0;
+  const quoteValue = reserveQuote > 0 && quoteUsd > 0 ? reserveQuote * quoteUsd : 0;
+  if (!(xdxValue > 0) && !(quoteValue > 0)) return 0;
+  return (tokens / supply) * (xdxValue + quoteValue);
 }
 
 function lpEquivalent(feeXdx, row) {
@@ -70,19 +93,13 @@ function lpEquivalent(feeXdx, row) {
   return (feeXdx / reserveXdx) * supply;
 }
 
-function depositUsd(lpTokens, row, { xdxUsd }) {
-  const supply = num(row?.lp_supply);
-  const reserveXdx = num(row?.reserve_asset ?? row?.reserve_xdx);
-  if (!(supply > 0) || !(reserveXdx > 0) || !(lpTokens > 0)) return 0;
-  return (lpTokens / supply) * reserveXdx * 2 * num(xdxUsd);
-}
-
 export function lpFeeIncomeRows({
   positions = [],
   flows = [],
   xdxUsd = 0,
   xrpUsd = 0,
   rlusdUsd = 1,
+  prices,
 } = {}) {
   const held = (Array.isArray(positions) ? positions : []).filter(
     (row) => isXdxAmmPair(row) && num(row.lp_share_percent) > 0
@@ -100,23 +117,22 @@ export function lpFeeIncomeRows({
     buckets.set(key, current);
   }
 
-  const prices = { xdxUsd, xrpUsd, rlusdUsd };
+  const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
   const rows = [];
   for (const position of held) {
     const pair = normalizeWalletPair(position.pool || position.pool_name);
     const share = num(position.lp_share_percent) / 100;
     const rate = tradingFeeRate(position.trading_fee);
-    const quoteId = pairQuote(pair, position.quote);
-    const px = quotePerXdx(position);
     for (const bucket of buckets.values()) {
       if (bucket.pair !== pair) continue;
       const feeXdx = bucket.xdx * rate * share;
       if (!(feeXdx > 0)) continue;
+      const lpTokens = lpEquivalent(feeXdx, position);
       rows.push({
         date: bucket.date,
-        lpTokens: lpEquivalent(feeXdx, position),
+        lpTokens,
         pair,
-        usd: feeUsd(feeXdx, quoteId, px, prices),
+        usd: lpTokenUsd(lpTokens, position, book),
         kind: "fee",
       });
     }
@@ -124,13 +140,21 @@ export function lpFeeIncomeRows({
   return rows;
 }
 
-export function lpDepositIncomeRows({ activity = [], positions = [], xdxUsd = 0 } = {}) {
+export function lpDepositIncomeRows({
+  activity = [],
+  positions = [],
+  xdxUsd = 0,
+  xrpUsd = 0,
+  rlusdUsd = 1,
+  prices,
+} = {}) {
   const byPair = new Map(
     (Array.isArray(positions) ? positions : []).map((row) => [
       normalizeWalletPair(row.pool || row.pool_name),
       row,
     ])
   );
+  const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
   const rows = [];
   for (const item of Array.isArray(activity) ? activity : []) {
     if (item?.side !== "addLp") continue;
@@ -142,7 +166,7 @@ export function lpDepositIncomeRows({ activity = [], positions = [], xdxUsd = 0 
       date,
       lpTokens,
       pair,
-      usd: depositUsd(lpTokens, byPair.get(pair), { xdxUsd }),
+      usd: lpTokenUsd(lpTokens, byPair.get(pair) || { pair }, book),
       kind: "deposit",
     });
   }
