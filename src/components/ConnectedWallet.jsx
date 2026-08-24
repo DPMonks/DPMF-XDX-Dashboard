@@ -193,9 +193,9 @@ function earnText(value, format, empty) {
   return format(Number(value));
 }
 
-function WalletEarnCell({ label, rows, empty }) {
+function WalletEarnCell({ label, rows, empty, className = "" }) {
   return (
-    <div className={`wallet-earn-cell${empty ? " is-empty" : " is-filled"}`}>
+    <div className={`wallet-earn-cell${empty ? " is-empty" : " is-filled"}${className ? ` ${className}` : ""}`}>
       <p className="wallet-earn-label">{label}</p>
       {rows.map((row) => (
         <p key={row.range} className="wallet-earn-row">
@@ -212,6 +212,7 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
   return (
     <div className="wallet-earn-beam" aria-label={t.lpFeeEarnings}>
       <WalletEarnCell
+        className="wallet-earn-xrp"
         label={t.xrpEarnings}
         empty={empty}
         rows={[
@@ -226,6 +227,7 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
         ]}
       />
       <WalletEarnCell
+        className="wallet-earn-xdx"
         label={t.xdxEarnings}
         empty={empty}
         rows={[
@@ -240,6 +242,7 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
         ]}
       />
       <WalletEarnCell
+        className="wallet-earn-total"
         label={t.totalEarnings}
         empty={empty}
         rows={[
@@ -250,6 +253,29 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
           {
             range: t.lpFees7d,
             value: earnText(earn.usd7d, (n) => formatUsd(n, locale), empty),
+          },
+        ]}
+      />
+      <WalletEarnCell
+        className="wallet-earn-rlusd"
+        label={t.rlusdEarnings || "RLUSD earnings"}
+        empty={empty}
+        rows={[
+          {
+            range: t.lpFees24h,
+            value: earnText(
+              earn.rlusd24h,
+              (n) => `${formatToken(n, locale, 4)} ${t.rlusd || "RLUSD"}`,
+              empty
+            ),
+          },
+          {
+            range: t.lpFees7d,
+            value: earnText(
+              earn.rlusd7d,
+              (n) => `${formatToken(n, locale, 4)} ${t.rlusd || "RLUSD"}`,
+              empty
+            ),
           },
         ]}
       />

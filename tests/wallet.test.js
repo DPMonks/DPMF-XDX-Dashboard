@@ -336,10 +336,41 @@ test("lpFeeEarnings sums 24h pool fees across every LP position", () => {
   );
   assert.equal(priced.earnings.xdx24h, 5);
   assert.equal(priced.earnings.xrp24h, 5 * (2 / 50_000));
+  assert.equal(priced.earnings.rlusd24h, 0);
   assert.equal(priced.earnings.xdx7d, 7.5);
   assert.equal(priced.earnings.xrp7d, 7.5 * (2 / 50_000));
+  assert.equal(priced.earnings.rlusd7d, 0);
   assert.ok(priced.earnings.usd24h > 0);
   assert.ok(priced.earnings.usd7d > priced.earnings.usd24h);
+  const rlusd = lpFeeEarnings(
+    [
+      {
+        pool: "XDX/RLUSD",
+        quote: "RLUSD",
+        lp_share_percent: 10,
+        withdraw_estimate_xdx: 800,
+        trading_fee: 1000,
+        reserve_asset: 8000,
+        reserve_currency: 10,
+      },
+    ],
+    {
+      xdxUsd: 0.00004,
+      xrpUsd: 1,
+      rlusdUsd: 1,
+      now,
+      flows: [
+        { pool: "XDX/RLUSD", xdx: 10_000, timestamp: "2026-08-22T10:00:00.000Z" },
+        { pool: "XDX/RLUSD", xdx: 5_000, timestamp: "2026-08-21T10:00:00.000Z" },
+      ],
+    }
+  );
+  assert.equal(rlusd.earnings.xdx24h, 5);
+  assert.equal(rlusd.earnings.xrp24h, 0);
+  assert.equal(rlusd.earnings.rlusd24h, 5 * (10 / 8000));
+  assert.equal(rlusd.earnings.xdx7d, 7.5);
+  assert.equal(rlusd.earnings.rlusd7d, 7.5 * (10 / 8000));
+  assert.ok(Math.abs(rlusd.earnings.usd24h - (5 * 0.00004 + 5 * (10 / 8000))) < 1e-12);
 });
 
 test("composeWalletSnapshot totals LP fee earnings after sign-in", () => {
