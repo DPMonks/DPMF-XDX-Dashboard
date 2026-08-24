@@ -53,6 +53,40 @@ export function xamanAppUrl(uuid) {
   return id ? `xumm://xumm.app/sign/${encodeURIComponent(id)}` : "";
 }
 
+export function telegramWebApp(globalObject = typeof window !== "undefined" ? window : null) {
+  const tg = globalObject?.Telegram?.WebApp;
+  return tg && typeof tg === "object" ? tg : null;
+}
+
+export function isTelegramWebView(
+  userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "",
+  extras = {}
+) {
+  if (/Telegram|TelegramBot|TelegramWebview/i.test(String(userAgent || ""))) return true;
+  if (telegramWebApp(extras.window || (typeof window !== "undefined" ? window : null))) return true;
+  if (extras.telegramProxy ?? (typeof window !== "undefined" && window.TelegramWebviewProxy)) return true;
+  const referrer =
+    extras.referrer ?? (typeof document !== "undefined" ? document.referrer : "");
+  return /(?:^|\.)t\.me\b|telegram\.org/i.test(String(referrer || ""));
+}
+
+export function clickXamanAnchor(
+  href,
+  { createAnchor = typeof document !== "undefined" ? () => document.createElement("a") : null, appendNode, removeNode } = {}
+) {
+  const url = String(href || "").trim();
+  if (!url || !createAnchor) return false;
+  const node = createAnchor();
+  node.href = url;
+  node.target = "_blank";
+  node.rel = "noopener noreferrer";
+  if (appendNode) appendNode(node);
+  node.click?.();
+  if (removeNode) removeNode(node);
+  else node.remove?.();
+  return true;
+}
+
 export function launchXamanSign(
   uuid,
   {
@@ -61,6 +95,9 @@ export function launchXamanSign(
     removeNode = (node) => node?.remove?.(),
     userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "",
     assignLocation = null,
+    openExternal = null,
+    windowObject = typeof window !== "undefined" ? window : null,
+    referrer = typeof document !== "undefined" ? document.referrer : "",
   } = {}
 ) {
   const id = String(uuid || "").trim();
@@ -82,6 +119,24 @@ export function launchXamanSign(
     }
   }
   let opened = false;
+  const telegram = isTelegramWebView(userAgent, { window: windowObject, referrer });
+  if (telegram && web) {
+    const tg = telegramWebApp(windowObject);
+    try {
+      if (typeof openExternal === "function") {
+        openExternal(web);
+        opened = true;
+      } else if (typeof tg?.openLink === "function") {
+        tg.openLink(web, { try_instant_view: false });
+        opened = true;
+      } else {
+        opened = clickXamanAnchor(web);
+      }
+    } catch {
+      opened = clickXamanAnchor(web);
+    }
+    return { opened, web, app, telegram: true };
+  }
   if (isInAppBrowser(userAgent) && app) {
     const navigateApp =
       assignLocation ||
@@ -108,8 +163,10 @@ export function isPhoneDevice(
 }
 
 export function isInAppBrowser(
-  userAgent = typeof navigator !== "undefined" ? navigator.userAgent : ""
+  userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "",
+  extras = {}
 ) {
+  if (isTelegramWebView(userAgent, extras)) return true;
   return /Twitter|TwitterAndroid|\bX\/|FBAN|FBAV|FB_IAB|FBIOS|Instagram|Line\/|Snapchat|TikTok|Bytedance|Pinterest|LinkedInApp|GSA\//i.test(
     String(userAgent || "")
   );

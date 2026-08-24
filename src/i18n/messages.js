@@ -35,6 +35,7 @@ const en = {
   xappApproveHint: "Approve this sign in Xaman. This page stays here.",
   openXamanWeb: "Open Xaman in browser",
   waitingXaman: "Stay on this page. Scan the QR with Xaman, or tap Connect to open the app.",
+  waitingXamanTelegram: "Telegram can block the Xaman app. Tap Connect, or scan this QR in Xaman.",
   xamanQr: "Xaman QR",
   cancel: "Cancel",
   walletError: "Wallet sign-in failed",
