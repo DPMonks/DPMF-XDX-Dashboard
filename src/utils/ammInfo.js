@@ -31,28 +31,70 @@ function positive(value) {
 }
 
 export function overlayLiveAmmReserves(row = {}, live = null) {
-  if (!live) return row;
-  const reserveXdx =
-    positive(live.reserve_xdx ?? live.reserve_asset) ||
-    positive(row.reserve_xdx ?? row.reserve_asset);
-  const reserveQuote =
-    positive(live.reserve_currency ?? live.reserve_quote) ||
-    positive(row.reserve_currency ?? row.reserve_quote);
-  const lpSupply = positive(live.lp_supply) || positive(row.lp_supply);
-  const liveHit = Boolean(
-    positive(live.reserve_xdx ?? live.reserve_asset) ||
-      positive(live.reserve_currency ?? live.reserve_quote) ||
-      positive(live.lp_supply)
-  );
+  if (!live || live.empty || live.reserve_source === "empty") return row;
+  const liveXdx = positive(live.reserve_xdx ?? live.reserve_asset);
+  const liveQuote = positive(live.reserve_currency ?? live.reserve_quote);
+  const liveLp = positive(live.lp_supply);
+  const liveHit = Boolean(liveXdx || liveQuote || liveLp);
+  if (!liveHit) return row;
   return {
     ...row,
-    reserve_xdx: reserveXdx || row.reserve_xdx || null,
-    reserve_asset: reserveXdx || row.reserve_asset || null,
-    reserve_currency: reserveQuote || row.reserve_currency || null,
-    reserve_quote: reserveQuote || row.reserve_quote || null,
-    lp_supply: lpSupply || row.lp_supply || null,
+    reserve_xdx: liveXdx || row.reserve_xdx || null,
+    reserve_asset: liveXdx || row.reserve_asset || null,
+    // Live amm_info is the pool ratio. Never keep a leftover catalog quote.
+    reserve_currency: liveQuote || null,
+    reserve_quote: liveQuote || null,
+    lp_supply: liveLp || row.lp_supply || null,
     trading_fee: live.trading_fee ?? row.trading_fee,
-    reserve_source: liveHit ? "amm_info" : row.reserve_source,
+    amm_account: live.amm_account || row.amm_account || row.amm || null,
+    lp_currency: live.lp_currency || row.lp_currency || row.lp_currency_hex || null,
+    reserve_source: "amm_info",
+  };
+}
+
+export function matchingLiveReserves(live, pair) {
+  if (!live || live.empty || live.reserve_source === "empty") return null;
+  const livePair = String(live.pair || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const want = String(pair || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  if (livePair && want && livePair !== want) return null;
+  if (
+    !(
+      positive(live.reserve_xdx ?? live.reserve_asset) ||
+      positive(live.reserve_currency ?? live.reserve_quote) ||
+      positive(live.lp_supply)
+    )
+  ) {
+    return null;
+  }
+  return live;
+}
+
+export function previewReserves(catalog = {}, live = null) {
+  const pair = String(catalog.pair || live?.pair || "").replace(/\s+/g, "").toUpperCase();
+  const row = overlayLiveAmmReserves(catalog, matchingLiveReserves(live, pair));
+  const reserveXdx = Number(row.reserve_xdx ?? row.reserve_asset ?? 0) || 0;
+  const reserveQuote = Number(row.reserve_currency ?? row.reserve_quote ?? 0) || 0;
+  return {
+    pair,
+    base: reserveXdx,
+    quote: reserveQuote,
+    lpSupply: Number(row.lp_supply ?? 0) || 0,
+    tradingFee: Number(row.trading_fee ?? catalog.tradingFee ?? 0) || 0,
+    issuer: row.quote_issuer || catalog.issuer || null,
+    hex: row.quote_hex || catalog.hex || null,
+    xdxUsd: Number(row.xdxUsd || catalog.xdxUsd || 0) || 0,
+    quoteUsd: Number(row.quote_usd || catalog.quoteUsd || 0) || 0,
+    quoteName: row.quote || catalog.quoteName || pair.split("/")[1] || "XRP",
+    reserve_xdx: reserveXdx,
+    reserve_asset: reserveXdx,
+    reserve_currency: reserveQuote,
+    amm_account: row.amm_account || null,
+    lp_currency: row.lp_currency || null,
+    reserve_source: row.reserve_source || catalog.reserve_source || null,
   };
 }
 

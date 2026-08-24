@@ -4,8 +4,10 @@ import { XDX_ISSUER } from "../src/constants/ledger.js";
 import {
   issuedAmountValue,
   lpShareAmounts,
+  matchingLiveReserves,
   overlayLiveAmmReserves,
   poolReservesFromAmmInfo,
+  previewReserves,
 } from "../src/utils/ammInfo.js";
 
 test("issuedAmountValue reads IOU value and XRP drops", () => {
@@ -50,6 +52,42 @@ test("overlayLiveAmmReserves replaces leftover quote reserves and LP supply", ()
   assert.equal(row.reserve_source, "amm_info");
   const share = lpShareAmounts(4493.664667926788, row.reserve_xdx, row.reserve_currency, row.lp_supply);
   assert.ok(Math.abs(share.quote - 5.993807084355173) < 1e-9);
+});
+
+test("overlayLiveAmmReserves does not keep a leftover quote when live has no quote leftover", () => {
+  const row = overlayLiveAmmReserves(
+    { reserve_xdx: 1000, reserve_currency: 1947.36, lp_supply: 500 },
+    { reserve_xdx: 1000, reserve_currency: 0, lp_supply: 40, trading_fee: 500 }
+  );
+  assert.equal(row.reserve_currency, null);
+  assert.equal(row.lp_supply, 40);
+  assert.equal(row.reserve_source, "amm_info");
+});
+
+test("previewReserves uses live XDX/XIO shares and ignores another pair", () => {
+  const catalog = {
+    pair: "XDX/XIO",
+    reserve_xdx: 52286366,
+    reserve_currency: 1947.36782,
+    lp_supply: 220280408.7293996,
+    trading_fee: 0,
+  };
+  const live = {
+    pair: "XDX/XIO",
+    reserve_xdx: 52286366.55495586,
+    reserve_currency: 59.93807084355173,
+    lp_supply: 44936.64667926788,
+    trading_fee: 1000,
+    reserve_source: "amm_info",
+  };
+  const preview = previewReserves(catalog, live);
+  assert.equal(preview.reserve_source, "amm_info");
+  assert.ok(Math.abs(preview.quote - 59.93807084355173) < 1e-9);
+  const share = lpShareAmounts(4493.664667926788, preview.base, preview.quote, preview.lpSupply);
+  assert.ok(Math.abs(share.quote - 5.993807084355173) < 1e-9);
+  assert.equal(matchingLiveReserves({ ...live, pair: "XDX/XRP" }, "XDX/XIO"), null);
+  const stale = previewReserves(catalog, { ...live, pair: "XDX/XRP" });
+  assert.equal(stale.quote, 1947.36782);
 });
 
 test("poolReservesFromAmmInfo treats XRP drops as the quote reserve", () => {

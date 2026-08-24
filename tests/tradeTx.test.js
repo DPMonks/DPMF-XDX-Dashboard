@@ -260,6 +260,13 @@ test("LP TrustSet uses the pool LP hex and AMM account", () => {
   assert.equal(rlusd.amm, XDX_RLUSD_AMM);
   assert.equal(rlusd.lpCurrency, XDX_RLUSD_LP_HEX);
   assert.equal(poolForQuote(quoteAsset("XIO")).amm, null);
+  const liveXio = poolForQuote(quoteAsset("XIO"), [], {
+    pair: "XDX/XIO",
+    amm_account: "rDJXzsZGACeHGJQYfaudsYshaC5zJxqsHr",
+    lp_currency: "03E7A465A6E95CDA21E1110056AA51A71FA55CB9",
+  });
+  assert.equal(liveXio.amm, "rDJXzsZGACeHGJQYfaudsYshaC5zJxqsHr");
+  assert.equal(liveXio.lpCurrency, "03E7A465A6E95CDA21E1110056AA51A71FA55CB9");
   const badCatalog = poolForQuote(quoteAsset("RLUSD"), [
     {
       pool: "XDX/RLUSD",

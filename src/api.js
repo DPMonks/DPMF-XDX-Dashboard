@@ -492,6 +492,15 @@ export const api = {
     if (account) search.set("account", account);
     return getJson(`/amm/governance?${search}`, { retries: 1, queue: false, cache: false });
   },
+  lpPoolsLive: (query = {}) => {
+    const search = new URLSearchParams();
+    if (query.pair || query.pool) search.set("pair", query.pair || query.pool);
+    if (query.ammAccount || query.amm_account) search.set("amm", query.ammAccount || query.amm_account);
+    if (query.quote) search.set("quote", query.quote);
+    if (query.issuer || query.quote_issuer) search.set("issuer", query.issuer || query.quote_issuer);
+    if (query.hex || query.quote_hex) search.set("hex", query.hex || query.quote_hex);
+    return getJson(`/lp-pools/live?${search}`, { retries: 1, queue: false, cache: false });
+  },
   prices: () => getJson(endpoint("prices"), { queue: false }),
   change24h: () => getJson(endpoint("change24h"), { queue: false }),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),

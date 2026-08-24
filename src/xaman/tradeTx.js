@@ -314,18 +314,23 @@ export function isLpCurrency(value) {
   return /^03[A-Fa-f0-9]{38}$/.test(String(value || "").trim());
 }
 
-export function poolForQuote(quote, pools = []) {
+export function poolForQuote(quote, pools = [], live = null) {
   const pair = String(quote?.pair || `XDX/${quote?.id || quote?.currency || "XRP"}`)
     .replace(/\s+/g, "")
     .toUpperCase();
+  const liveAmm = live?.amm_account || live?.amm || null;
+  const liveLp = isLpCurrency(live?.lp_currency || live?.lp_currency_hex)
+    ? String(live.lp_currency || live.lp_currency_hex).trim().toUpperCase()
+    : null;
+  if (liveAmm && liveLp) return { amm: liveAmm, lpCurrency: liveLp, pair };
   const row = (Array.isArray(pools) ? pools : []).find((item) => {
     const name = String(item?.pool || item?.pool_name || item?.pair || "")
       .replace(/\s+/g, "")
       .toUpperCase();
     return name === pair || name.endsWith(`/${pair.split("/")[1] || ""}`);
   });
-  const amm = row?.amm_account || row?.amm || null;
-  const rawLp = row?.lp_currency || row?.lp_currency_hex || null;
+  const amm = row?.amm_account || row?.amm || liveAmm || null;
+  const rawLp = row?.lp_currency || row?.lp_currency_hex || liveLp || null;
   const lpCurrency = isLpCurrency(rawLp) ? String(rawLp).trim().toUpperCase() : null;
   if (amm && lpCurrency) return { amm, lpCurrency, pair };
   if (quote?.currency === "RLUSD" || pair === "XDX/RLUSD") {
@@ -374,10 +379,11 @@ export function ammWithdrawTx({
   quote,
   lpAmount,
   pools,
+  live,
   mode = "double",
   singleAsset = "xdx",
 } = {}) {
-  const pool = poolForQuote(quote, pools);
+  const pool = poolForQuote(quote, pools, live);
   const txjson = {
     TransactionType: "AMMWithdraw",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
