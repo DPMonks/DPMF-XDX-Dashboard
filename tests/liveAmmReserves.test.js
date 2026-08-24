@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { XDX_ISSUER, XIO_ISSUER } from "../src/constants/ledger.js";
-import { loadLiveAmmReserves } from "../server/liveAmmReserves.js";
+import {
+  isTransientXrplError,
+  loadLiveAmmReserves,
+  loadLiveAmmReservesMany,
+  mapLimit,
+  withXrplRetry,
+} from "../server/liveAmmReserves.js";
 
 function rpcFetch(handler) {
   return async (_url, options) => {
@@ -84,4 +90,88 @@ test("loadLiveAmmReserves falls back to asset pair when amm_account fails", asyn
   assert.equal(live.reserve_source, "amm_info");
   assert.equal(live.reserve_currency, 250);
   assert.equal(live.amm_account, "rUsdcAmm");
+});
+
+test("mapLimit keeps order while capping concurrency", async () => {
+  const active = [];
+  let peak = 0;
+  const out = await mapLimit([1, 2, 3, 4, 5], 2, async (value) => {
+    active.push(value);
+    peak = Math.max(peak, active.length);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    active.splice(active.indexOf(value), 1);
+    return value * 10;
+  });
+  assert.deepEqual(out, [10, 20, 30, 40, 50]);
+  assert.ok(peak <= 2);
+});
+
+test("withXrplRetry retries 429 then returns the live result", async () => {
+  assert.equal(isTransientXrplError(new Error("XRPL RPC 429")), true);
+  let calls = 0;
+  const result = await withXrplRetry(
+    async () => {
+      calls += 1;
+      if (calls < 3) throw new Error("XRPL RPC 429");
+      return { ok: true };
+    },
+    { retries: 3, waitMs: 1 }
+  );
+  assert.equal(calls, 3);
+  assert.deepEqual(result, { ok: true });
+});
+
+test("loadLiveAmmReserves retries a 429 and does not cache the failure", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return { ok: false, status: 429, json: async () => ({}) };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        result: {
+          amm: {
+            account: "rRetryAmm",
+            amount: { currency: "XDX", issuer: XDX_ISSUER, value: "1000" },
+            amount2: { currency: "XRP", value: "2000000" },
+            lp_token: { currency: "03RETRY", issuer: "rRetryAmm", value: "50" },
+          },
+        },
+      }),
+    };
+  };
+  const first = await loadLiveAmmReserves(
+    { pair: "XDX/XRP", quote: "XRP", ammAccount: "rRetryAmm", fresh: true },
+    { fetchImpl, now: 1, waitMs: 1, retries: 2 }
+  );
+  assert.equal(first.reserve_source, "amm_info");
+  assert.equal(first.reserve_xdx, 1000);
+  assert.ok(calls >= 2);
+});
+
+test("loadLiveAmmReservesMany overlays every catalog account without a 429 stampede", async () => {
+  const seen = [];
+  const fetchImpl = rpcFetch((_method, params) => {
+    seen.push(params.amm_account);
+    return {
+      amm: {
+        account: params.amm_account,
+        amount: { currency: "XDX", issuer: XDX_ISSUER, value: String(seen.length * 1000) },
+        amount2: { currency: "XRP", value: "1000000" },
+        lp_token: { currency: "03BATCH", issuer: params.amm_account, value: "10" },
+      },
+    };
+  });
+  const queries = Array.from({ length: 6 }, (_, i) => ({
+    pair: "XDX/XRP",
+    quote: "XRP",
+    ammAccount: `rPool${i}`,
+    fresh: true,
+  }));
+  const rows = await loadLiveAmmReservesMany(queries, { fetchImpl, now: Date.now(), concurrency: 2 });
+  assert.equal(rows.length, 6);
+  assert.equal(rows.every((row) => row.reserve_source === "amm_info"), true);
+  assert.equal(seen.length, 6);
 });

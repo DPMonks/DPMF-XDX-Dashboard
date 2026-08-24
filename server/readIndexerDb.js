@@ -50,7 +50,7 @@ import {
   blackholeAtFromTransactions,
   issuerBlackholeFromAccount,
 } from "../src/utils/blackhole.js";
-import { overlayLiveAmmReserves, poolReservesFromAmmInfo } from "../src/utils/ammInfo.js";
+import { overlayLiveAmmReserves } from "../src/utils/ammInfo.js";
 import {
   indexPoolsByPair,
   lookupLpPool,
@@ -60,7 +60,7 @@ import {
 } from "../src/wallet/composeWallet.js";
 import { loadWalletActivity, loadWalletLines, loadWalletOffers } from "./walletLedger.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
-import { loadLiveAmmReserves } from "./liveAmmReserves.js";
+import { loadLiveAmmReserves, loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 
 let pool = null;
 
@@ -1336,26 +1336,12 @@ async function loadLpSupplyByPool(db) {
   return map;
 }
 
-const ammInfoCache = new Map();
-const AMM_INFO_MS = 60_000;
-
 async function loadAmmReserves(ammAccount) {
   const key = String(ammAccount || "").trim();
   if (!key) return null;
-  const hit = ammInfoCache.get(key);
-  if (hit && Date.now() - hit.at < AMM_INFO_MS) return hit.body;
-  try {
-    const result = await xrplRpc("amm_info", {
-      amm_account: key,
-      ledger_index: "validated",
-    });
-    const body = poolReservesFromAmmInfo(result);
-    ammInfoCache.set(key, { at: Date.now(), body });
-    return body;
-  } catch {
-    ammInfoCache.set(key, { at: Date.now(), body: null });
-    return null;
-  }
+  const live = await loadLiveAmmReserves({ ammAccount: key });
+  if (!live || live.reserve_source === "empty") return null;
+  return live;
 }
 
 async function fillWalletLpFromLedger(positions) {
@@ -1477,58 +1463,69 @@ async function loadXdxLpPools(db) {
     xrpUsd
   );
 
-  const pools = await Promise.all(
-    stored.rows.map(async (row) => {
-      const extra =
-        reserves.byAmm.get(row.amm_account) ||
-        reserves.byName.get(String(row.pool_name || "").toUpperCase()) ||
-        reserves.byName.get(`XDX/${String(row.quote || "").toUpperCase()}`) ||
-        {};
-      const optional = optionalByAmm.get(row.amm_account) || {};
-      const reserveXdx = Number(row.reserve_xdx || extra.reserve_asset || 0);
-      const measuredQuote =
-        Number(optional.quote || 0) || Number(extra.reserve_currency || 0) || 0;
-      const quoteUsd = quoteUsdFromMap(row.quote, quotePrices);
-      const lpSupply =
-        extra.lp_supply ||
-        optional.lp_supply ||
-        holderSupply.get(normalizeWalletPairName(row.pool_name || row.quote)) ||
-        null;
-      const reserveQuote = measuredQuote || null;
-      const built = {
-        pool_name: row.pool_name,
-        pool: row.pool_name,
-        amm_account: row.amm_account,
-        quote: row.quote,
-        quote_issuer: row.quote_issuer,
-        quote_hex: row.quote_hex,
-        lp_currency: row.lp_currency_hex,
-        reserve_xdx: reserveXdx,
-        reserve_asset: reserveXdx,
-        reserve_currency: reserveQuote,
-        xdxUsd,
-        quote_usd: quoteUsd || null,
-        lp_supply: lpSupply,
-        trading_fee: Number.isFinite(Number(extra.trading_fee)) ? Number(extra.trading_fee) : 0,
-        updated: extra.timestamp || row.updated_at,
-      };
-      const overlaid = overlayLiveAmmReserves(built, await loadAmmReserves(row.amm_account));
-      const split = resolvePoolSplit({
-        reserveXdx: overlaid.reserve_xdx,
-        reserveQuote: overlaid.reserve_currency,
-        lpSupply: overlaid.lp_supply,
-        price: extra.price,
-        xdxUsd,
-        quoteUsd,
-      });
-      return {
-        ...overlaid,
-        xdx_pct: split?.xdxPct ?? null,
-        quote_pct: split?.quotePct ?? null,
-        lead: split?.lead || null,
-      };
-    })
+  const lives = await loadLiveAmmReservesMany(
+    stored.rows.map((row) => ({
+      ammAccount: row.amm_account,
+      pair: row.pool_name,
+      quote: row.quote,
+      issuer: row.quote_issuer,
+      hex: row.quote_hex,
+    })),
+    { concurrency: 3 }
   );
+
+  const pools = stored.rows.map((row, index) => {
+    const extra =
+      reserves.byAmm.get(row.amm_account) ||
+      reserves.byName.get(String(row.pool_name || "").toUpperCase()) ||
+      reserves.byName.get(`XDX/${String(row.quote || "").toUpperCase()}`) ||
+      {};
+    const optional = optionalByAmm.get(row.amm_account) || {};
+    const reserveXdx = Number(row.reserve_xdx || extra.reserve_asset || 0);
+    const measuredQuote =
+      Number(optional.quote || 0) || Number(extra.reserve_currency || 0) || 0;
+    const quoteUsd = quoteUsdFromMap(row.quote, quotePrices);
+    const lpSupply =
+      extra.lp_supply ||
+      optional.lp_supply ||
+      holderSupply.get(normalizeWalletPairName(row.pool_name || row.quote)) ||
+      null;
+    const reserveQuote = measuredQuote || null;
+    const built = {
+      pool_name: row.pool_name,
+      pool: row.pool_name,
+      amm_account: row.amm_account,
+      quote: row.quote,
+      quote_issuer: row.quote_issuer,
+      quote_hex: row.quote_hex,
+      lp_currency: row.lp_currency_hex,
+      reserve_xdx: reserveXdx,
+      reserve_asset: reserveXdx,
+      reserve_currency: reserveQuote,
+      xdxUsd,
+      quote_usd: quoteUsd || null,
+      lp_supply: lpSupply,
+      trading_fee: Number.isFinite(Number(extra.trading_fee)) ? Number(extra.trading_fee) : 0,
+      updated: extra.timestamp || row.updated_at,
+    };
+    const overlaid = overlayLiveAmmReserves(built, lives[index]);
+    const split = resolvePoolSplit({
+      reserveXdx: overlaid.reserve_xdx,
+      reserveQuote: overlaid.reserve_currency,
+      lpSupply: overlaid.lp_supply,
+      price: extra.price,
+      xdxUsd,
+      quoteUsd,
+    });
+    return {
+      ...overlaid,
+      xdx_pct: split?.xdxPct ?? null,
+      quote_pct: split?.quotePct ?? null,
+      lead: split?.lead || null,
+      updated:
+        overlaid.reserve_source === "amm_info" ? new Date().toISOString() : overlaid.updated,
+    };
+  });
 
   return {
     count: pools.length,
