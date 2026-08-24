@@ -9,7 +9,6 @@ import {
   VERSION,
 } from "./handshake/contract";
 import { createRequestScheduler } from "./utils/requestScheduler";
-import { cacheTtlMs, LIVE_CACHE_MS } from "./api/cacheTtl";
 import {
   catalogFetchBlocked,
   isPostgresOutageStatus,
@@ -47,10 +46,8 @@ const API = REQUEST_ORIGIN
 
 const inflight = new Map();
 const responseCache = new Map();
-const CACHE_MS = LIVE_CACHE_MS;
+const CACHE_MS = 15_000;
 const scheduleRequest = createRequestScheduler({ concurrency: 2 });
-
-export { cacheTtlMs };
 
 let handshakePromise = null;
 let handshakeState = {
@@ -255,7 +252,7 @@ async function getJson(path, options = {}) {
     for (let attempt = 0; attempt < retries; attempt += 1) {
       try {
         const data = await getJsonOnce(path, { method, body });
-        if (cache) cacheSet(cacheKey, data, cacheTtlMs(url));
+        if (cache) cacheSet(cacheKey, data);
         return data;
       } catch (error) {
         lastError = error;

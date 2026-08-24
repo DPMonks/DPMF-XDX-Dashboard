@@ -24,17 +24,23 @@ test("browser errors do not mention the Railway Postgres host or password", () =
   assert.equal(publicApiErrorMessage({ error: "Postgres temporarily unreachable" }, 503), "Market data is temporarily unavailable.");
 });
 
-test("live wallet and xaman paths keep fetching while catalog is in a 503 cooldown", () => {
+test("wallet metrics keep fetching while only heavy catalog routes cool down", () => {
   resetCatalogDown();
   const now = 1_000_000;
   markCatalogDown(now);
-  assert.equal(catalogFetchBlocked("/api/overview", now + 100), true);
   assert.equal(catalogFetchBlocked("/api/charts/activity", now + 100), true);
-  assert.equal(catalogFetchBlocked("/api/balances/rABC", now + 100), true);
+  assert.equal(catalogFetchBlocked("/api/top-holders", now + 100), true);
+  assert.equal(catalogFetchBlocked("/api/sparkline/XDX", now + 100), true);
   assert.equal(isLiveLedgerPath("/api/wallet/account/rABC"), true);
-  assert.equal(catalogFetchBlocked("/api/wallet/account/rABC", now + 100), false);
+  assert.equal(isLiveLedgerPath("/api/balances/rABC"), true);
+  assert.equal(catalogFetchBlocked("/api/balances/rABC", now + 100), false);
+  assert.equal(catalogFetchBlocked("/api/networth/rABC", now + 100), false);
+  assert.equal(catalogFetchBlocked("/api/prices", now + 100), false);
+  assert.equal(catalogFetchBlocked("/api/overview", now + 100), false);
+  assert.equal(catalogFetchBlocked("/api/lp-pools", now + 100), false);
+  assert.equal(catalogFetchBlocked("/api/wallet/lp/rABC", now + 100), false);
   assert.equal(catalogFetchBlocked("/api/lp-pools/live?pair=XDX/XRP", now + 100), false);
-  assert.equal(catalogFetchBlocked("/api/overview", now + 9_000), false);
+  assert.equal(catalogFetchBlocked("/api/charts/activity", now + 9_000), false);
   resetCatalogDown();
 });
 

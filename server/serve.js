@@ -73,7 +73,7 @@ const server = createServer(async (req, res) => {
         search,
         suffix,
       });
-      res.writeHead(last?.status || 502, proxyResponseHeaders(last, req, suffix));
+      res.writeHead(last?.status || 502, proxyResponseHeaders(last, req));
       res.end(last?.body || JSON.stringify({ error: "Indexer proxy failed" }));
     } catch (error) {
       res.writeHead(502, {

@@ -2,7 +2,7 @@ const CATALOG_DOWN_MS = 8_000;
 let catalogDownUntil = 0;
 
 export function isLiveLedgerPath(path) {
-  return /\/(wallet\/(offers|activity|lines|account|votes)|lp-pools\/live|amm\/governance|xaman)\b/i.test(
+  return /\/(wallet\/|balances\/|networth\/|prices|change24h|lp-pools|orderbooks?|overview|amm\/governance|xaman)\b/i.test(
     String(path || "")
   );
 }
