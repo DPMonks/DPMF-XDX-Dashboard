@@ -47,6 +47,7 @@ import {
   depositValueSplit,
   formatLinkedQty,
   linkedDepositAmounts,
+  saneOpposingReserve,
   lpHeldForPair,
   sanitizeQtyInput,
   tradeSides,
@@ -341,6 +342,30 @@ test("totals and LP hints stay simple numbers", () => {
   assert.equal(recommendedQuote(100, 1000, 50), 5);
   assert.equal(expectedLpTokens(100, 1000, 200), 20);
   assert.deepEqual(expectedWithdraw(20, 1000, 50, 200), { base: 100, quote: 5 });
+});
+
+test("remove LP quote preview follows the mark when the opposing reserve is stale", () => {
+  // Same XIO leftover as add/market: 100000 XDX paired with an XRP-sized 86.9 quote.
+  assert.ok(Math.abs(saneOpposingReserve(100000, 86.9, 0.000002) - 0.2) < 1e-9);
+  const stale = expectedWithdraw(20, 100000, 86.9, 200);
+  assert.equal(stale.base, 10000);
+  assert.ok(Math.abs(stale.quote - 8.69) < 1e-9);
+  const preview = expectedWithdraw(20, 100000, 86.9, 200, {
+    price: 0.000002,
+    preferMark: true,
+  });
+  assert.equal(preview.base, 10000);
+  assert.ok(Math.abs(preview.quote - 0.02) < 1e-9);
+  assert.ok(Math.abs(preview.quote / preview.base - 0.000002) < 1e-12);
+  const linked = linkedDepositAmounts({
+    editedSide: "xdx",
+    amount: "100000",
+    price: 0.000002,
+    reserveBase: 100000,
+    reserveQuote: 86.9,
+    preferMark: true,
+  });
+  assert.ok(Math.abs(linked.quote - 0.2) < 1e-9);
 });
 
 test("opening add LP from a pool card keeps that pair", () => {

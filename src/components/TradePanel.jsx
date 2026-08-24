@@ -30,6 +30,7 @@ import {
   quoteUnitUsd,
   depositValueSplit,
   linkedDepositAmounts,
+  saneOpposingReserve,
   lpHeldForPair,
   sanitizeQtyInput,
   tradeSides,
@@ -158,18 +159,19 @@ export default function TradePanel({
     orderType === "limit" && Number(price) > 0
       ? Number(price)
       : markerPx || implied || Number(spotPrice) || 0;
+  const quoteReserve = saneOpposingReserve(reserves.base, reserves.quote, px);
   const linked = linkedDepositAmounts({
     editedSide,
     amount,
     quoteQty,
     price: px,
     reserveBase: reserves.base,
-    reserveQuote: reserves.quote,
-    preferMark: !isLp,
+    reserveQuote: quoteReserve,
+    preferMark: true,
   });
   const total = tradeTotal(linked.xdx || amount, px);
-  const quoteHint = predictedQuoteOut(linked.xdx || amount, px, reserves.base, reserves.quote, {
-    preferMark: !isLp,
+  const quoteHint = predictedQuoteOut(linked.xdx || amount, px, reserves.base, quoteReserve, {
+    preferMark: true,
   });
   const shownAmount = linked.xdxInput;
   const shownQuoteQty = linked.quoteInput;
@@ -184,18 +186,21 @@ export default function TradePanel({
   const lpHint = isSingleLp
     ? expectedSingleLpTokens(
         singleAsset === "quote" ? addQuote : addXdx,
-        singleAsset === "quote" ? reserves.quote : reserves.base,
+        singleAsset === "quote" ? quoteReserve : reserves.base,
         reserves.lpSupply
       )
     : expectedLpTokens(addXdx || amount, reserves.base, reserves.lpSupply);
   const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
   const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices, allowImplied: false });
   const withdrawLp = lpAmount || amount;
-  const doubleWithdraw = expectedWithdraw(withdrawLp, reserves.base, reserves.quote, reserves.lpSupply);
+  const doubleWithdraw = expectedWithdraw(withdrawLp, reserves.base, reserves.quote, reserves.lpSupply, {
+    price: px,
+    preferMark: true,
+  });
   const singleOut = isSingleRemove
     ? expectedSingleWithdraw(
         withdrawLp,
-        singleAsset === "quote" ? reserves.quote : reserves.base,
+        singleAsset === "quote" ? quoteReserve : reserves.base,
         reserves.lpSupply,
         reserves.tradingFee
       )
