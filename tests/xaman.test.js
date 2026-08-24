@@ -26,6 +26,7 @@ import {
   isClassicAddress,
   isInAppBrowser,
   isPhoneDevice,
+  isTelegramWebView,
   isReusableUnsignedPayload,
   launchXamanSign,
   normalizePayload,
@@ -221,6 +222,9 @@ test("xaman sign links stay on the payload uuid and phones are detected", () => 
     true
   );
   assert.equal(isInAppBrowser("Mozilla/5.0 (Linux; Android 14) TwitterAndroid"), true);
+  assert.equal(isInAppBrowser("Mozilla/5.0 (Linux; Android 14) Telegram-Android/11.2.3"), true);
+  assert.equal(isTelegramWebView("Mozilla/5.0 (iPhone) Mobile/15E148 Telegram"), true);
+  assert.equal(isTelegramWebView("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126"), false);
   assert.equal(isInAppBrowser("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126"), false);
 });
 
@@ -597,6 +601,24 @@ test("opening Xaman for a sign stays on the in-house modal", () => {
   assert.equal(assigned.length, 0);
   assert.equal(nodes.length, 1);
   assert.match(String(nodes[0].src || ""), /xumm:\/\//);
+});
+
+test("Telegram opens Xaman through a universal link, not a swallowed xumm:// tap", () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const opened = [];
+  const assigned = [];
+  const result = launchXamanSign(uuid, {
+    createFrame: null,
+    appendNode: null,
+    assignLocation: (href) => assigned.push(href),
+    openExternal: (href) => opened.push(href),
+    userAgent: "Mozilla/5.0 (Linux; Android 14) Telegram-Android/11.2.3",
+  });
+  assert.equal(result.opened, true);
+  assert.equal(result.telegram, true);
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0], `https://xumm.app/sign/${uuid}`);
+  assert.equal(assigned.length, 0);
 });
 
 test("in-app browsers open the Xaman app, not the hosted console", () => {
