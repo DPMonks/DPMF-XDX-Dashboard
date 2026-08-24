@@ -30,7 +30,6 @@ import {
   quoteUnitUsd,
   depositValueSplit,
   linkedDepositAmounts,
-  saneOpposingReserve,
   lpHeldForPair,
   sanitizeQtyInput,
   tradeSides,
@@ -159,7 +158,7 @@ export default function TradePanel({
     orderType === "limit" && Number(price) > 0
       ? Number(price)
       : markerPx || implied || Number(spotPrice) || 0;
-  const quoteReserve = saneOpposingReserve(reserves.base, reserves.quote, px);
+  const quoteReserve = reserves.quote;
   const linked = linkedDepositAmounts({
     editedSide,
     amount,
@@ -167,11 +166,11 @@ export default function TradePanel({
     price: px,
     reserveBase: reserves.base,
     reserveQuote: quoteReserve,
-    preferMark: true,
+    preferMark: !isLp,
   });
   const total = tradeTotal(linked.xdx || amount, px);
   const quoteHint = predictedQuoteOut(linked.xdx || amount, px, reserves.base, quoteReserve, {
-    preferMark: true,
+    preferMark: !isLp,
   });
   const shownAmount = linked.xdxInput;
   const shownQuoteQty = linked.quoteInput;
@@ -193,10 +192,7 @@ export default function TradePanel({
   const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
   const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices, allowImplied: false });
   const withdrawLp = lpAmount || amount;
-  const doubleWithdraw = expectedWithdraw(withdrawLp, reserves.base, reserves.quote, reserves.lpSupply, {
-    price: px,
-    preferMark: true,
-  });
+  const doubleWithdraw = expectedWithdraw(withdrawLp, reserves.base, reserves.quote, reserves.lpSupply);
   const singleOut = isSingleRemove
     ? expectedSingleWithdraw(
         withdrawLp,
