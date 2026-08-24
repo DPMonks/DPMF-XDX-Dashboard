@@ -33,6 +33,15 @@ export function xdxUsdFromXrplTo(token = {}, xrpUsd) {
   return 0;
 }
 
+export function tvlUsdFromXrplTo(token = {}, xrpUsd) {
+  const raw = num(token.tvl);
+  const fx = num(xrpUsd);
+  if (!raw) return 0;
+  // The XDX card stores pool TVL as 2 × XRP reserve, not USD.
+  if (fx && raw < 50_000) return raw * fx;
+  return raw;
+}
+
 function fxFromXrp(xdxUsd, xrpUsd, xrpFx) {
   return xdxUsd > 0 && xrpUsd > 0 && num(xrpFx) ? xdxUsd * (Number(xrpFx) / Number(xrpUsd)) : 0;
 }
@@ -84,7 +93,9 @@ export function applyXrplToOverview(overview = {}, token = {}, prices = {}) {
     volume24h:
       num(overview.volume24h) ||
       (num(token.vol24hXrp) && xrpUsd ? token.vol24hXrp * xrpUsd : num(token.vol24hXrp)),
-    ammMarketCap: num(overview.ammMarketCap ?? overview.tvl_usd) || num(token.tvl) || null,
+    tvl: num(overview.tvl_usd ?? overview.tvl) || tvlUsdFromXrplTo(token, xrpUsd) || null,
+    tvl_usd: num(overview.tvl_usd ?? overview.tvl) || tvlUsdFromXrplTo(token, xrpUsd) || null,
+    ammMarketCap: num(overview.ammMarketCap ?? overview.tvl_usd) || tvlUsdFromXrplTo(token, xrpUsd) || null,
     xrplMarketCap: num(overview.xrplMarketCap) || num(token.marketcap) || XDX_TOTAL_SUPPLY * xdxUsd,
     circulatingMarketCap:
       num(overview.circulatingMarketCap) ||

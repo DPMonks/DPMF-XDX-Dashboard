@@ -6,6 +6,7 @@ import {
   applyXrplToPrices,
   marketNeedsXrplTo,
   parseXrplToToken,
+  tvlUsdFromXrplTo,
   xdxUsdFromXrplTo,
 } from "../src/utils/xrplToToken.js";
 
@@ -49,4 +50,11 @@ test("xrpl.to fills empty Postgres prices and holder counts", () => {
 test("xdxUsdFromXrplTo can price from exch * XRP when usd is missing", () => {
   assert.ok(Math.abs(xdxUsdFromXrplTo({ exchXrp: 0.00003 }, 2) - 0.00006) < 1e-12);
   assert.equal(xdxUsdFromXrplTo({ usd: 0.00005 }, 2), 0.00005);
+});
+
+test("xrpl.to pool TVL is 2 x XRP reserve and converts to USD", () => {
+  const xrpReserve = 2043.896261;
+  const tvlXrp = xrpReserve * 2;
+  const xrpUsd = 1.48;
+  assert.ok(Math.abs(tvlUsdFromXrplTo({ tvl: tvlXrp }, xrpUsd) - tvlXrp * xrpUsd) < 1e-6);
 });

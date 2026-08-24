@@ -7,7 +7,7 @@ import {
   issuerLockedFromIssued,
 } from "../src/constants/ledger.js";
 import { xrpPerXdx } from "../src/utils/recordedPrice.js";
-import { parseXrplToToken, XRPL_TO_TOKEN_URL, xdxUsdFromXrplTo } from "../src/utils/xrplToToken.js";
+import { parseXrplToToken, tvlUsdFromXrplTo, XRPL_TO_TOKEN_URL, xdxUsdFromXrplTo } from "../src/utils/xrplToToken.js";
 import { attachQuoteXrpPrices, loadQuoteXrpRates } from "./quoteXrpMarket.js";
 import { loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
@@ -287,10 +287,11 @@ export async function loadXrplToMarket(options = {}) {
     source: "xrpl.to",
   };
   const volume24h = num(token.vol24hXrp) && xrpUsd ? token.vol24hXrp * xrpUsd : num(token.vol24hXrp);
+  const tvlUsd = tvlUsdFromXrplTo(token, xrpUsd);
   const overview = {
     pool: "XDX/XRP",
-    tvl: num(token.tvl) || 0,
-    tvl_usd: num(token.tvl) || 0,
+    tvl: tvlUsd,
+    tvl_usd: tvlUsd,
     price: xdxUsd,
     xdxUsd,
     recorded_price: xdxUsd,
@@ -312,7 +313,7 @@ export async function loadXrplToMarket(options = {}) {
     total_supply: XDX_TOTAL_SUPPLY,
     trustlines: num(token.trustlines) || null,
     trustline_count: num(token.trustlines) || null,
-    ammMarketCap: num(token.tvl) || null,
+    ammMarketCap: tvlUsd || null,
     xrplMarketCap: num(token.marketcap) || XDX_TOTAL_SUPPLY * xdxUsd,
     circulatingMarketCap: num(token.marketcap) || XDX_TOTAL_SUPPLY * xdxUsd,
     issuer: XDX_ISSUER,
