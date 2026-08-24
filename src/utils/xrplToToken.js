@@ -1,4 +1,5 @@
 import { XDX_TOTAL_SUPPLY, XDX_XRPL_TO_MD5 } from "../constants/ledger.js";
+import { looksLikeXdxVolume, xdxFromXrpVolume } from "./lpVolume.js";
 import { looksLikeXrpUsd, xrpPerXdx } from "./recordedPrice.js";
 
 export const XRPL_TO_TOKEN_URL = `https://api.xrpl.to/v1/token/${XDX_XRPL_TO_MD5}`;
@@ -90,9 +91,20 @@ export function applyXrplToOverview(overview = {}, token = {}, prices = {}) {
     trustlines: num(overview.trustlines ?? overview.trustline_count) || num(token.trustlines) || null,
     trustline_count: num(overview.trustline_count ?? overview.trustlines) || num(token.trustlines) || null,
     lp_holder_count: num(overview.lp_holder_count) || num(token.lpHolders) || null,
+    volume24hXrp: num(overview.volume24hXrp) || num(token.vol24hXrp) || null,
+    volume24hXdx:
+      num(overview.volume24hXdx) ||
+      xdxFromXrpVolume(token.vol24hXrp, token.exchXrp || overview.xdxPerXrp || overview.xdx_per_xrp) ||
+      (looksLikeXdxVolume(overview.volume24h) ? num(overview.volume24h) : 0) ||
+      null,
+    volume24hUsd:
+      num(overview.volume24hUsd) ||
+      (num(token.vol24hXrp) && xrpUsd ? token.vol24hXrp * xrpUsd : null),
     volume24h:
-      num(overview.volume24h) ||
-      (num(token.vol24hXrp) && xrpUsd ? token.vol24hXrp * xrpUsd : num(token.vol24hXrp)),
+      num(overview.volume24hXdx) ||
+      xdxFromXrpVolume(token.vol24hXrp, token.exchXrp || overview.xdxPerXrp || overview.xdx_per_xrp) ||
+      (looksLikeXdxVolume(overview.volume24h) ? num(overview.volume24h) : 0) ||
+      null,
     tvl: num(overview.tvl_usd ?? overview.tvl) || tvlUsdFromXrplTo(token, xrpUsd) || null,
     tvl_usd: num(overview.tvl_usd ?? overview.tvl) || tvlUsdFromXrplTo(token, xrpUsd) || null,
     ammMarketCap: num(overview.ammMarketCap ?? overview.tvl_usd) || tvlUsdFromXrplTo(token, xrpUsd) || null,

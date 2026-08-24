@@ -8,6 +8,7 @@ import {
   xrplToMd5ForLpPool,
 } from "../src/constants/ledger.js";
 import { rowsFromXrplToGraph } from "../src/activityHistory.js";
+import { pairFromTradeLegs } from "../src/utils/lpVolume.js";
 import { parseXrplToToken, XRPL_TO_TOKEN_URL } from "../src/utils/xrplToToken.js";
 import { normalizeLpPool } from "../src/todayLpOwners.js";
 
@@ -127,11 +128,13 @@ export function flowsFromXrplToHistory(payload = {}) {
     const sold = isXdxLeg(paid) ? Number(paid.value) : 0;
     if (!(bought > 0) && !(sold > 0)) continue;
     const xdx = bought || sold;
+    const pair = pairFromTradeLegs(paid, got) || "XDX/XRP";
     out.push({
       timestamp: row.time
         ? new Date(row.time > 1e12 ? row.time : Number(row.time) * 1000).toISOString()
         : new Date().toISOString(),
-      pool: "XDX/XRP",
+      pool: pair,
+      pair,
       side: bought > 0 ? "buy" : "sell",
       xdx,
       price: Number(row.price) || 0,

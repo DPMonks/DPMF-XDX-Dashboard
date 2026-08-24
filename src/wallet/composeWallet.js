@@ -1,4 +1,5 @@
 import { XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
+import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
 import {
   isXdxAmmPair,
@@ -235,7 +236,16 @@ export function lpPositionFromPool(lpBalance, pool = {}, pairHint = "") {
     withdraw_estimate_quote: withdrawQuote ?? share * reserveQuote,
     fees_earned: num(pool.fees_earned),
     trading_fee: num(pool.trading_fee),
-    volume24h: num(pool.volume24h ?? pool.volume_24h),
+    volume24h: num(pool.volume24h ?? pool.volume_24h ?? pool.volume24hXdx),
+    volume24hXdx: num(pool.volume24hXdx ?? pool.volume_24h_xdx),
+    volume24hXrp: num(pool.volume24hXrp ?? pool.volume_24h_xrp),
+    volume24hUsd: num(pool.volume24hUsd ?? pool.volume_24h_usd),
+    volume7d: num(pool.volume7d ?? pool.volume7dXdx),
+    volume7dXdx: num(pool.volume7dXdx ?? pool.volume7d),
+    volumeUnit: pool.volumeUnit || null,
+    xdxUsd: num(pool.xdxUsd),
+    xrpUsd: num(pool.xrpUsd),
+    xdxPerXrp: num(pool.xdxPerXrp ?? pool.xdx_per_xrp ?? pool.exchXrp),
     composition_xdx_percent: num(pool.xdx_pct ?? pool.composition_xdx_percent),
     composition_quote_percent: num(pool.quote_pct ?? pool.composition_quote_percent),
     xdx_pct: num(pool.xdx_pct ?? pool.composition_xdx_percent),
@@ -338,10 +348,15 @@ function quotePerXdx(row, fallback) {
 function volumeForWindow(row, flowVol, windowMs) {
   const pair = normalizeWalletPair(row.pool || row.pool_name);
   const fromFlows = flowVol.get(pair) || 0;
-  const catalog24h = num(row.volume24h);
-  if (windowMs <= DAY_MS && catalog24h != null) return Math.max(catalog24h, fromFlows);
+  const catalog24h = catalogXdxVolume24h(row);
+  const catalog7d = catalogXdxVolume7d(row);
+  if (windowMs <= DAY_MS) {
+    if (catalog24h > 0) return Math.max(catalog24h, fromFlows);
+    return fromFlows;
+  }
+  if (catalog7d > 0) return Math.max(catalog7d, fromFlows);
   if (fromFlows > 0) return fromFlows;
-  if (catalog24h != null && windowMs > DAY_MS) return catalog24h * (windowMs / DAY_MS);
+  if (catalog24h > 0) return catalog24h * (windowMs / DAY_MS);
   return fromFlows;
 }
 

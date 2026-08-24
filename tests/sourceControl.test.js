@@ -71,6 +71,7 @@ test("xrpl.to rich list and OHLC map onto dashboard shapes", () => {
   });
   assert.equal(flows[0].side, "buy");
   assert.equal(flows[0].xdx, 20000);
+  assert.equal(flows[0].pool, "XDX/XRP");
 });
 
 test("free API fetches send a dashboard User-Agent so Cloudflare does not 403", async () => {

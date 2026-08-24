@@ -1,3 +1,4 @@
+import { preferRailwayXdxVolume } from "../src/utils/lpVolume.js";
 import { payloadUsable, preferUsable, recallCatalog, rememberCatalog } from "./sourceControl.js";
 
 function asObject(value) {
@@ -42,6 +43,11 @@ const LIVE_MARKET_KEYS = [
   "lp_supply",
   "trading_fee",
   "volume24h",
+  "volume24hXdx",
+  "volume24hXrp",
+  "volume24hUsd",
+  "volume7d",
+  "volume7dXdx",
   "amm_xdx",
   "ammMarketCap",
   "xrplMarketCap",
@@ -135,7 +141,7 @@ function poolKey(row = {}) {
     .toUpperCase();
 }
 
-function mergePoolRow(dbRow = {}, liveRow = {}) {
+export function mergePoolRow(dbRow = {}, liveRow = {}) {
   const next = { ...dbRow, ...liveRow };
   for (const key of [
     "reserve_xdx",
@@ -151,6 +157,7 @@ function mergePoolRow(dbRow = {}, liveRow = {}) {
   ]) {
     if (isBlankAmount(liveRow[key]) && !isBlankAmount(dbRow[key])) next[key] = dbRow[key];
   }
+  Object.assign(next, preferRailwayXdxVolume(dbRow, liveRow));
   return next;
 }
 

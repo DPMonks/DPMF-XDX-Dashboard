@@ -280,9 +280,15 @@ export async function loadWalletLpFromLedger(address, options = {}) {
   return cached(`lp:${name}`, async () => {
     const raw = await loadRawAccountLines(name, options);
     const held = lpHoldingsFromLines(raw.lines);
+    const market = held.length ? await loadLiveMarket(options).catch(() => null) : null;
     const positions = [];
     for (const holding of held) {
       const known = knownPoolForLp(holding);
+      const catalog = (market?.pools || []).find((row) => {
+        const pair = String(row.pool || row.pool_name || "").toUpperCase();
+        const amm = String(row.amm_account || "").toLowerCase();
+        return pair === String(known?.pair || "").toUpperCase() || amm === String(holding.amm_account || "").toLowerCase();
+      });
       const live = await loadLiveAmmReserves(
         {
           ammAccount: known?.amm || holding.amm_account,
@@ -305,6 +311,16 @@ export async function loadWalletLpFromLedger(address, options = {}) {
           reserve_currency: live?.reserve_currency ?? live?.reserve_quote,
           lp_supply: live?.lp_supply,
           trading_fee: live?.trading_fee,
+          volume24h: catalog?.volume24h,
+          volume24hXdx: catalog?.volume24hXdx,
+          volume24hXrp: catalog?.volume24hXrp,
+          volume24hUsd: catalog?.volume24hUsd,
+          volume7d: catalog?.volume7d,
+          volume7dXdx: catalog?.volume7dXdx,
+          volumeUnit: catalog?.volumeUnit,
+          xdxUsd: catalog?.xdxUsd ?? market?.prices?.xdxUsd,
+          xrpUsd: catalog?.xrpUsd ?? market?.prices?.xrpUsd,
+          xdxPerXrp: catalog?.xdxPerXrp ?? market?.overview?.xdxPerXrp,
         },
         known?.pair || live?.pair
       );

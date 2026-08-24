@@ -44,6 +44,9 @@ test("xrpl.to fills empty Postgres prices and holder counts", () => {
   assert.equal(overview.holder_count, 15942);
   assert.equal(overview.trustline_count, 19973);
   assert.ok(overview.xrplMarketCap > 0);
+  assert.ok(overview.volume24hXdx > 1_000_000);
+  assert.ok(overview.volume24hUsd > 100);
+  assert.ok(overview.volume24h > 1_000_000);
   assert.equal(applyXrplToChange({ xdx: 0 }, sample).xdx, -4.89);
 });
 

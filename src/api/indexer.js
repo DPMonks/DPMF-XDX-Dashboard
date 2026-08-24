@@ -197,7 +197,15 @@ function mapPool(row) {
     tvl: numberOrNull(pick(row, ["tvl_usd", "tvl", "total_value_locked", "liquidity"])),
     price: numberOrNull(pick(row, ["price", "price_usd"])),
     apr: numberOrNull(pick(row, ["apr", "apy"])),
-    volume24h: numberOrNull(pick(row, ["volume24h", "volume_24h", "volume"])),
+    volume24h: numberOrNull(pick(row, ["volume24hXdx", "volume24h", "volume_24h", "volume"])),
+    volume24hXdx: numberOrNull(pick(row, ["volume24hXdx", "volume_24h_xdx"])),
+    volume24hXrp: numberOrNull(pick(row, ["volume24hXrp", "volume_24h_xrp"])),
+    volume24hUsd: numberOrNull(pick(row, ["volume24hUsd", "volume_24h_usd"])),
+    volume7d: numberOrNull(pick(row, ["volume7dXdx", "volume7d", "volume_7d"])),
+    volume7dXdx: numberOrNull(pick(row, ["volume7dXdx", "volume7d", "volume_7d"])),
+    volumeUnit: pick(row, ["volumeUnit", "volume_unit"]) || null,
+    volumeSource: pick(row, ["volumeSource", "volume_source"]) || null,
+    xdxPerXrp: numberOrNull(pick(row, ["xdxPerXrp", "xdx_per_xrp", "exchXrp"])),
     reserve_asset: numberOrNull(
       pick(row, [
         "reserve_asset",

@@ -24,6 +24,7 @@ import {
   loadXrplToRank,
   loadXrpSparkline,
 } from "./xrplToCatalog.js";
+import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
 
 let xrpFx = { at: 0, usd: 0, gbp: 0, eur: 0, jpy: 0, change24h: 0 };
 let marketCache = { at: 0, prices: null, pools: null, overview: null };
@@ -86,7 +87,8 @@ function poolRowFromLive(spec, live, prices) {
     trading_fee: live?.trading_fee ?? null,
     xdxUsd: prices?.xdxUsd || null,
     xrpUsd: prices?.xrpUsd || null,
-    volume24h: spec.pair === "XDX/XRP" ? prices?.volume24h || null : null,
+    xdxPerXrp: prices?.xdxPerXrp || prices?.xdx_per_xrp || null,
+    volume24h: null,
     source: "xrpl",
   };
 }
@@ -201,14 +203,28 @@ export async function loadLiveMarket(options = {}) {
     liveRates,
     xrpUsd
   );
-  const pools = POOLS.map((spec, index) => poolRowFromLive(spec, lives[index], prices));
   const reserveXdx = num(xrpPool.reserve_xdx ?? xrpPool.reserve_asset);
   const reserveXrp = num(xrpPool.reserve_currency ?? xrpPool.reserve_quote);
   const tvlUsd = reserveXrp > 0 && xrpUsd > 0 ? reserveXrp * 2 * xrpUsd : 0;
   const burned = Number(issuerLocked.issuer_locked || 0);
   const circulating = Number(issuerLocked.circulating || XDX_TOTAL_SUPPLY);
-  const volume24h = num(token.vol24hXrp) && xrpUsd ? token.vol24hXrp * xrpUsd : num(token.vol24hXrp);
-  if (pools[0]) pools[0].volume24h = volume24h;
+  const volumes = await loadPoolXdxVolumes({
+    token,
+    reserveXdx,
+    reserveXrp,
+    xdxUsd,
+    xrpUsd,
+    now,
+    fresh: options.fresh,
+    fetchImpl: options.fetchImpl,
+  }).catch(() => ({}));
+  const pools = applyPoolVolumes(
+    POOLS.map((spec, index) => poolRowFromLive(spec, lives[index], prices)),
+    volumes
+  );
+  const volume24h = num(volumes["XDX/XRP"]?.volume24hXdx) || num(pools[0]?.volume24h);
+  const volume24hUsd = num(volumes["XDX/XRP"]?.volume24hUsd);
+  const volume24hXrp = num(volumes["XDX/XRP"]?.volume24hXrp) || num(token.vol24hXrp);
   const overview = {
     pool: "XDX/XRP",
     tvl: tvlUsd || reserveXrp || 0,
@@ -230,6 +246,13 @@ export async function loadLiveMarket(options = {}) {
     lp_supply: num(xrpPool.lp_supply) || null,
     trading_fee: xrpPool.trading_fee ?? null,
     volume24h,
+    volume24hXdx: volume24h,
+    volume24hUsd,
+    volume24hXrp,
+    volume7d: num(volumes["XDX/XRP"]?.volume7dXdx) || null,
+    volume7dXdx: num(volumes["XDX/XRP"]?.volume7dXdx) || null,
+    volumeUnit: "xdx",
+    volumeSource: volumes["XDX/XRP"]?.source || null,
     holder_count: num(token.holders) || null,
     holders: num(token.holders) || null,
     lp_holder_count: num(token.lpHolders) || null,
@@ -286,7 +309,16 @@ export async function loadXrplToMarket(options = {}) {
     quotes: { XRP: xrpUsd, RLUSD: 1 },
     source: "xrpl.to",
   };
-  const volume24h = num(token.vol24hXrp) && xrpUsd ? token.vol24hXrp * xrpUsd : num(token.vol24hXrp);
+  const markXrp = num(token.exchXrp) || xrpPerXdx(xdxUsd, xrpUsd);
+  const volumes = await loadPoolXdxVolumes({
+    token,
+    xdxUsd,
+    xrpUsd,
+    now: options.now,
+    fresh: options.fresh,
+    fetchImpl: options.fetchImpl,
+  }).catch(() => ({}));
+  const volume24h = num(volumes["XDX/XRP"]?.volume24hXdx) || (markXrp ? token.vol24hXrp / markXrp : 0);
   const tvlUsd = tvlUsdFromXrplTo(token, xrpUsd);
   const overview = {
     pool: "XDX/XRP",
@@ -305,6 +337,13 @@ export async function loadXrplToMarket(options = {}) {
     xdx_per_xrp: prices.xdx_per_xrp,
     xdxPerXrp: prices.xdxPerXrp,
     volume24h,
+    volume24hXdx: volume24h,
+    volume24hUsd: num(volumes["XDX/XRP"]?.volume24hUsd),
+    volume24hXrp: num(volumes["XDX/XRP"]?.volume24hXrp) || num(token.vol24hXrp),
+    volume7d: num(volumes["XDX/XRP"]?.volume7dXdx) || null,
+    volume7dXdx: num(volumes["XDX/XRP"]?.volume7dXdx) || null,
+    volumeUnit: "xdx",
+    volumeSource: volumes["XDX/XRP"]?.source || "xrpl.to",
     holder_count: num(token.holders) || null,
     holders: num(token.holders) || null,
     lp_holder_count: num(token.lpHolders) || null,
