@@ -58,7 +58,14 @@ import {
   mergeLpPoolSource,
   normalizeWalletPair,
 } from "../src/wallet/composeWallet.js";
-import { loadWalletActivity, loadWalletLines, loadWalletOffers } from "./walletLedger.js";
+import {
+  loadWalletActivity,
+  loadWalletBalancesFromLedger,
+  loadWalletLines,
+  loadWalletLpFromLedger,
+  loadWalletOffers,
+} from "./walletLedger.js";
+import { liveCatalogPayload } from "./liveCatalog.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
 import { loadLiveAmmReserves, loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 
@@ -2200,16 +2207,16 @@ function walletLedgerResult(suffix, search = "") {
     return loadWalletAccount(decodeURIComponent(account[1])).then((body) => ok(body));
   }
   const balances = String(suffix || "").match(/^(?:wallet\/)?balances\/([^/]+)$/);
-  if (balances && !getPool()) {
-    return loadWalletAccount(decodeURIComponent(balances[1])).then((live) =>
-      ok({
-        xrp: Number.isFinite(Number(live?.balance_drops)) ? Number(live.balance_drops) / 1_000_000 : null,
-        xdx: null,
-        lp: 0,
-        source: "xrpl",
-        balance_drops: live?.balance_drops ?? null,
-      })
-    );
+  if (balances) {
+    return loadWalletBalancesFromLedger(decodeURIComponent(balances[1]), {
+      fresh: walletFresh(search),
+    }).then((body) => ok(body));
+  }
+  const walletLp = String(suffix || "").match(/^wallet\/lp\/([^/]+)$/);
+  if (walletLp) {
+    return loadWalletLpFromLedger(decodeURIComponent(walletLp[1]), {
+      fresh: walletFresh(search),
+    }).then((body) => ok(body));
   }
   return null;
 }
@@ -2219,6 +2226,12 @@ export async function readIndexerDb(suffix, search = "") {
   if (ledger) return ledger;
 
   if (postgresTemporarilyDown()) {
+    try {
+      const live = await liveCatalogPayload(suffix);
+      if (live != null) return ok(live);
+    } catch {
+      // fall through to the public 503
+    }
     return {
       status: 503,
       contentType: "application/json",
