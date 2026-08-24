@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { lpFeeEarnings } from "../src/wallet/composeWallet.js";
 import {
   isXdxAmmPair,
+  lpDepositIncomeRows,
   lpFeeIncomeRows,
   lpIncomeCsv,
+  lpTokenUsd,
   mergeLpIncomeRows,
   pageLpIncome,
 } from "../src/wallet/lpIncome.js";
@@ -78,8 +80,9 @@ test("income list is newest XDX pair days first and pages by 10 days", () => {
   assert.equal(rows.length, 2);
   assert.equal(rows[0].date, "2026-08-22");
   assert.equal(rows[0].pair, "XDX/RLUSD");
-  assert.ok(rows[0].lpTokens > 0);
-  assert.ok(rows[0].usd > 0);
+  assert.ok(Math.abs(rows[0].lpTokens - 0.5) < 1e-12);
+  // 0.5 LP of 400 = 1/800 of a pool with 8000 XDX + 10 RLUSD.
+  assert.ok(Math.abs(rows[0].usd - 0.0129) < 1e-12);
   const paged = pageLpIncome(
     mergeLpIncomeRows(
       rows,
@@ -94,4 +97,28 @@ test("income list is newest XDX pair days first and pages by 10 days", () => {
   );
   assert.equal(new Set(paged.map((row) => row.date)).size, 10);
   assert.match(lpIncomeCsv(rows), /^Date,LP tokens received,Trading pair,USD\n/);
+});
+
+test("lpTokenUsd prices both pool reserves at the quote mark, not 2x XDX", () => {
+  const pool = {
+    pool: "XDX/XIO",
+    quote: "XIO",
+    reserve_asset: 52_286_366.55495586,
+    reserve_currency: 59.83194412724561,
+    lp_supply: 44_896.64667926788,
+  };
+  const prices = { xdxUsd: 0.00004, xrpUsd: 2, xioXrp: 10, XIO: 20 };
+  const tenth = pool.lp_supply / 10;
+  const usd = lpTokenUsd(tenth, pool, prices);
+  const xdxSide = pool.reserve_asset * 0.00004;
+  const quoteSide = pool.reserve_currency * 20;
+  assert.ok(Math.abs(usd - 0.1 * (xdxSide + quoteSide)) < 1e-6);
+  assert.ok(usd < 0.1 * xdxSide * 2);
+  const deposited = lpDepositIncomeRows({
+    activity: [{ side: "addLp", pair: "XDX/XIO", lp: tenth, timestamp: "2026-08-22T10:00:00.000Z" }],
+    positions: [pool],
+    prices,
+  });
+  assert.equal(deposited.length, 1);
+  assert.ok(Math.abs(deposited[0].usd - usd) < 1e-9);
 });

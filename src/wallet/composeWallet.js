@@ -558,6 +558,12 @@ export function composeWalletSnapshot({
   const xdxUsd = num(prices.xdxUsd ?? prices.recorded_price ?? token.xdxUsd);
   const xrpUsd = num(prices.xrpUsd);
   const rlusdUsd = num(prices.RLUSD ?? prices.quotes?.RLUSD) ?? 1;
+  const priceBook = {
+    ...prices,
+    xdxUsd,
+    xrpUsd,
+    RLUSD: rlusdUsd,
+  };
   const income = mergeLpIncomeRows(
     lpFeeIncomeRows({
       positions: lp,
@@ -565,11 +571,15 @@ export function composeWalletSnapshot({
       xdxUsd,
       xrpUsd,
       rlusdUsd,
+      prices: priceBook,
     }),
     lpDepositIncomeRows({
       activity: mergeWalletActivity(ledgerActivity, pending.activity),
       positions: lp,
       xdxUsd,
+      xrpUsd,
+      rlusdUsd,
+      prices: priceBook,
     })
   );
   return {
