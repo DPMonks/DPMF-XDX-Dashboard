@@ -52,12 +52,7 @@ export function isXappWebView(win = typeof window !== "undefined" ? window : nul
 
 export function isXappHost(search, win = typeof window !== "undefined" ? window : null) {
   if (readXappLaunch(search ?? win?.location?.search).token) return true;
-  if (isXappWebView(win)) return true;
-  try {
-    return storeOf("sessionStorage")?.getItem(XAPP_HOST_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return isXappWebView(win);
 }
 
 export function applyXappBootClass(win = typeof window !== "undefined" ? window : null) {

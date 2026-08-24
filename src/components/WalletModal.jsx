@@ -24,16 +24,17 @@ export default function WalletModal({
   const { t } = useI18n();
   const xapp = isXappHost();
   const telegram = isTelegramWebView();
-  const inApp = xapp || isInAppBrowser();
-  const phone = xapp || isPhoneDevice() || inApp;
+  const inApp = isInAppBrowser();
+  const phone = isPhoneDevice() || inApp;
   const appHref = xamanAppUrl(uuid) || mobileUrl;
   const webHref = xamanSignUrl(uuid);
-  const connectHref = telegram ? webHref || appHref : appHref || webHref;
+  const useUniversalLink = telegram || !phone;
+  const connectHref = useUniversalLink ? webHref || appHref : appHref || webHref;
   const connectLabel = xapp ? t.xappApprove || t.connectXaman || t.openApp : t.connectXaman || t.openApp;
   const confirming = status === "confirming";
   const showQr = Boolean(!xapp && qrUrl && status !== "loading" && !confirming);
   const lastOpen = useRef(0);
-  const showConnect = Boolean(!xapp && phone && status !== "loading" && !confirming && (connectHref || uuid));
+  const showConnect = Boolean(!xapp && status !== "loading" && !confirming && (connectHref || uuid));
   const heading =
     status === "loading"
       ? preparingLabel || t.preparing
@@ -101,7 +102,7 @@ export default function WalletModal({
             <a
               className="mobile-link-btn"
               href={connectHref}
-              target={telegram ? "_blank" : undefined}
+              target={useUniversalLink ? "_blank" : undefined}
               rel="noopener noreferrer"
               onClick={openXamanApp}
               onTouchEnd={openXamanApp}
