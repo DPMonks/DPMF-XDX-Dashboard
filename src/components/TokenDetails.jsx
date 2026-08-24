@@ -55,6 +55,7 @@ export default function TokenDetails() {
   const { t, locale } = useI18n();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const lastGood = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,16 +64,18 @@ export default function TokenDetails() {
       try {
         const next = await getTokenDetails((partial) => {
           if (!cancelled) {
+            lastGood.current = partial;
             setData(partial);
             setError(null);
           }
         });
         if (!cancelled) {
+          lastGood.current = next;
           setData(next);
           setError(null);
         }
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (!cancelled && !lastGood.current) setError(err.message);
       }
     }
 
