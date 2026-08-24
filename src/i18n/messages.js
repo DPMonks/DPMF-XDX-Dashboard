@@ -254,6 +254,7 @@ const en = {
   lpSingleHint: "Add one asset. The pool price will move toward that side.",
   lpWithdrawMode: "Withdraw",
   lpSingleRemoveHint: "Remove one asset. The pool price will move toward the other side.",
+  lpTooSmall: "This LP size is too small. Remove more so both assets come out.",
   removeLiquidity: "Remove liquidity",
   signInToTrade: "Sign in to trade",
   tradePair: "Pair",

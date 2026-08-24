@@ -54,6 +54,7 @@ import {
   xdxUnitUsd,
   tradeTotal,
   xrpDrops,
+  xrplIssuedFloor,
   xrplIssuedValue,
 } from "../src/xaman/tradeTx.js";
 
@@ -180,6 +181,8 @@ test("AMM deposit and withdraw follow XRPL two-asset / LP token flags", () => {
   assert.ok(Math.abs(expectedSingleWithdraw(20, 1000, 200) - 190) < 1e-9);
   assert.equal(expectedSingleWithdraw(0, 1000, 200), 0);
   assert.equal(expectedSingleWithdraw(200, 1000, 200), 1000);
+  assert.ok(expectedSingleWithdraw(20, 1000, 200, 1000) < 190);
+  assert.ok(expectedSingleWithdraw(20, 1000, 200, 1000) > 0);
 
   const takeXdx = ammWithdrawTx({
     account: "rLp",
@@ -193,7 +196,7 @@ test("AMM deposit and withdraw follow XRPL two-asset / LP token flags", () => {
   assert.equal(TF_ONE_ASSET_WITHDRAW_ALL, 262_144);
   assert.notEqual(TF_ONE_ASSET_LP_TOKEN, TF_ONE_ASSET_WITHDRAW_ALL);
   assert.equal(takeXdx.Flags, TF_ONE_ASSET_LP_TOKEN);
-  assert.equal(takeXdx.Amount.value, "190");
+  assert.equal(takeXdx.Amount.value, "0");
   assert.equal(takeXdx.Amount.currency, "XDX");
   assert.equal(takeXdx.Amount2, undefined);
   assert.equal(takeXdx.LPTokenIn.value, "20");
@@ -207,9 +210,10 @@ test("AMM deposit and withdraw follow XRPL two-asset / LP token flags", () => {
     amountOut: 10,
   });
   assert.equal(takeXrp.Flags, TF_ONE_ASSET_LP_TOKEN);
-  assert.equal(takeXrp.Amount, "10000000");
+  assert.equal(takeXrp.Amount, "0");
   assert.equal(takeXrp.Amount2, undefined);
   assert.equal(takeXrp.LPTokenIn.value, "20");
+  assert.ok(Number(xrplIssuedFloor("4383.261913114705")) <= 4383.261913114705);
 
   assert.deepEqual(
     tradeSides({
