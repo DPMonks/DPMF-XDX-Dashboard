@@ -7,10 +7,15 @@ const HOLDERS_URL = `https://api.xrpl.to/v1/holders/list/${XDX_XRPL_TO_MD5}`;
 const OHLC_URL = `https://api.xrpl.to/v1/ohlc/${XDX_XRPL_TO_MD5}`;
 const HISTORY_URL = `https://api.xrpl.to/v1/history`;
 
+export const FREE_API_HEADERS = {
+  accept: "application/json",
+  "user-agent": "DPMF-XDX-Dashboard/1.1",
+};
+
 function jsonFetch(url, options = {}) {
   return (options.fetchImpl || fetch)(url, {
-    headers: { accept: "application/json" },
-    signal: AbortSignal.timeout(Number(options.timeoutMs) || 4000),
+    headers: { ...FREE_API_HEADERS, ...(options.headers || {}) },
+    signal: AbortSignal.timeout(Number(options.timeoutMs) || 6000),
   }).then(async (res) => {
     if (!res.ok) throw new Error(`xrpl.to ${res.status}`);
     return res.json();

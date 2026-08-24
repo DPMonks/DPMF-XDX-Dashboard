@@ -69,6 +69,7 @@ import {
 import { liveCatalogPayload } from "./liveCatalog.js";
 import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
 import { catalogHealth } from "./sourceControl.js";
+import { FREE_API_HEADERS } from "./xrplToCatalog.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
 import { loadLiveAmmReserves, loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 
@@ -1767,8 +1768,9 @@ async function loadXrpQuote(db) {
     try {
       const res = await fetch(
         "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd,gbp,eur,jpy",
-        { signal: AbortSignal.timeout(2500) }
+        { headers: FREE_API_HEADERS, signal: AbortSignal.timeout(4000) }
       );
+      if (!res.ok) throw new Error(`coingecko ${res.status}`);
       const body = await res.json();
       usd = Number(body?.ripple?.usd || usd || 0);
       gbp = Number(body?.ripple?.gbp || gbp || 0);

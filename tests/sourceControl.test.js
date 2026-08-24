@@ -9,7 +9,13 @@ import {
   rememberCatalog,
   resetCatalogMemory,
 } from "../server/sourceControl.js";
-import { holdersFromXrplTo, flowsFromXrplToHistory, candlesFromOhlc } from "../server/xrplToCatalog.js";
+import {
+  FREE_API_HEADERS,
+  holdersFromXrplTo,
+  flowsFromXrplToHistory,
+  candlesFromOhlc,
+  loadXrplToHolders,
+} from "../server/xrplToCatalog.js";
 
 test("last-good catalog memory keeps a usable free-API payload", () => {
   resetCatalogMemory();
@@ -62,4 +68,21 @@ test("xrpl.to rich list and OHLC map onto dashboard shapes", () => {
   });
   assert.equal(flows[0].side, "buy");
   assert.equal(flows[0].xdx, 20000);
+});
+
+test("free API fetches send a dashboard User-Agent so Cloudflare does not 403", async () => {
+  assert.match(FREE_API_HEADERS["user-agent"], /DPMF-XDX-Dashboard/);
+  let headers = {};
+  const page = await loadXrplToHolders({
+    limit: 1,
+    fetchImpl: async (_url, options) => {
+      headers = options.headers || {};
+      return {
+        ok: true,
+        json: async () => ({ length: 1, richList: [{ account: "r1", balance: 2, rank: 1 }] }),
+      };
+    },
+  });
+  assert.equal(headers["user-agent"], "DPMF-XDX-Dashboard/1.1");
+  assert.equal(page.holders[0].account, "r1");
 });

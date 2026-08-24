@@ -13,6 +13,7 @@ import { loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
 import { composeAmmBook, emptyOrderbook, FEATURED_ORDERBOOK_PAIRS } from "../src/orderbook.js";
 import {
+  FREE_API_HEADERS,
   loadXrplToCandles,
   loadXrplToFlows,
   loadXrplToHolderGraph,
@@ -39,8 +40,9 @@ export async function loadLiveXrpQuote(options = {}) {
   try {
     const res = await (options.fetchImpl || fetch)(
       "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd,gbp,eur,jpy",
-      { signal: AbortSignal.timeout(2500) }
+      { headers: FREE_API_HEADERS, signal: AbortSignal.timeout(4000) }
     );
+    if (!res.ok) throw new Error(`coingecko ${res.status}`);
     const body = await res.json();
     xrpFx = {
       at: now,
@@ -90,8 +92,10 @@ export async function loadXrplToToken(options = {}) {
   }
   try {
     const res = await (options.fetchImpl || fetch)(XRPL_TO_TOKEN_URL, {
-      signal: AbortSignal.timeout(3500),
+      headers: FREE_API_HEADERS,
+      signal: AbortSignal.timeout(6000),
     });
+    if (!res.ok) throw new Error(`xrpl.to ${res.status}`);
     const body = parseXrplToToken(await res.json());
     tokenCache = { at: now, body };
     return body;
