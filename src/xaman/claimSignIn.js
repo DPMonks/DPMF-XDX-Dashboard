@@ -61,6 +61,7 @@ export async function claimExecutedTrade(
         uuid: id,
         account,
         txjson,
+        trade: pending?.trade || null,
         txType,
         signMarker: pending?.signMarker || null,
       });

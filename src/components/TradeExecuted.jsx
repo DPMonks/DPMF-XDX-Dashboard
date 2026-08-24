@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n/useI18n";
+import { formatToken } from "../utils/format";
+import { executionReceipt, formatReceiptHash } from "../wallet/executionReceipt";
+import { ackTradeNotice, peekTradeNotice, rememberTradeNotice } from "../wallet/tradeNotice";
+import { getLedgerTx } from "../xaman/xamanClient";
 
 function noticeFromEvent(kind, detail) {
   const body = detail && typeof detail === "object" ? detail : {};
@@ -32,9 +36,16 @@ function hintFor(t, notice) {
   return t.tradeExecutedHint;
 }
 
+function formatSide(rows, locale) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => Number(row.value) > 0)
+    .map((row) => `${formatToken(row.value, locale, 6)} ${row.asset}`)
+    .join(" + ");
+}
+
 export default function TradeExecuted() {
-  const { t } = useI18n();
-  const [detail, setDetail] = useState(null);
+  const { t, locale } = useI18n();
+  const [detail, setDetail] = useState(() => peekTradeNotice());
 
   useEffect(() => {
     function onDone(event) {
@@ -46,32 +57,65 @@ export default function TradeExecuted() {
     function onUnconfirmed(event) {
       setDetail(noticeFromEvent("unconfirmed", event.detail));
     }
+    function onWake() {
+      const stored = peekTradeNotice();
+      if (stored) setDetail(stored);
+    }
     window.addEventListener("dpmf-trade-executed", onDone);
     window.addEventListener("dpmf-trade-failed", onFailed);
     window.addEventListener("dpmf-trade-unconfirmed", onUnconfirmed);
+    window.addEventListener("pageshow", onWake);
+    window.addEventListener("focus", onWake);
+    document.addEventListener("visibilitychange", onWake);
     return () => {
       window.removeEventListener("dpmf-trade-executed", onDone);
       window.removeEventListener("dpmf-trade-failed", onFailed);
       window.removeEventListener("dpmf-trade-unconfirmed", onUnconfirmed);
+      window.removeEventListener("pageshow", onWake);
+      window.removeEventListener("focus", onWake);
+      document.removeEventListener("visibilitychange", onWake);
     };
   }, []);
 
   useEffect(() => {
-    if (!detail) return undefined;
-    const timer = window.setTimeout(() => setDetail(null), 7000);
-    return () => window.clearTimeout(timer);
-  }, [detail]);
+    const hash = String(detail?.txid || "").trim();
+    if (!detail || detail.kind !== "executed" || !/^[A-Fa-f0-9]{64}$/.test(hash)) return undefined;
+    if (detail.ledgerIndex || detail.lpReceived) return undefined;
+    let cancelled = false;
+    getLedgerTx(hash)
+      .then((ledger) => {
+        if (cancelled || !ledger) return;
+        setDetail((current) => {
+          if (!current || current.txid !== hash) return current;
+          const next = { ...current, ledger, ledgerIndex: ledger.ledger_index ?? current.ledgerIndex };
+          rememberTradeNotice(next);
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.txid, detail?.kind, detail?.ledgerIndex, detail?.lpReceived]);
+
+  function close() {
+    ackTradeNotice();
+    setDetail(null);
+  }
 
   if (!detail) return null;
 
-  const hash = detail.txid ? `${String(detail.txid).slice(0, 8)}…${String(detail.txid).slice(-6)}` : "";
+  const receipt = executionReceipt(detail);
+  const paid = formatSide(receipt.paid, locale);
+  const received = formatSide(receipt.received, locale);
+  const hash = receipt.txid ? formatReceiptHash(receipt.txid) : "";
   const tone = detail.kind === "failed" ? "is-failed" : detail.kind === "unconfirmed" ? "is-unconfirmed" : "is-ok";
 
   return createPortal(
     <div
       className="wallet-modal-overlay trade-executed-overlay"
       onPointerDown={(event) => {
-        if (event.target === event.currentTarget) setDetail(null);
+        if (event.target === event.currentTarget) close();
       }}
     >
       <div
@@ -83,9 +127,48 @@ export default function TradeExecuted() {
           {titleFor(t, detail)}
         </h2>
         <p className="trade-executed-copy">{hintFor(t, detail)}</p>
-        {hash ? <p className="trade-executed-hash">{hash}</p> : null}
-        <button type="button" className="connect-wallet-btn" onClick={() => setDetail(null)}>
-          {t.ok || t.cancel}
+        <dl className="trade-executed-rows">
+          {receipt.pair ? (
+            <div>
+              <dt>{t.receiptPair || t.tradePair || "Pair"}</dt>
+              <dd>{receipt.pair}</dd>
+            </div>
+          ) : null}
+          {paid ? (
+            <div>
+              <dt>{t.receiptPaid || "Paid"}</dt>
+              <dd>{paid}</dd>
+            </div>
+          ) : null}
+          {received ? (
+            <div>
+              <dt>{t.receiptReceived || "Received"}</dt>
+              <dd>{received}</dd>
+            </div>
+          ) : null}
+          {receipt.engineResult ? (
+            <div>
+              <dt>{t.receiptResult || "Result"}</dt>
+              <dd>{receipt.engineResult}</dd>
+            </div>
+          ) : null}
+          {receipt.ledgerIndex ? (
+            <div>
+              <dt>{t.receiptLedger || "Ledger"}</dt>
+              <dd>#{receipt.ledgerIndex}</dd>
+            </div>
+          ) : null}
+          {hash ? (
+            <div>
+              <dt>{t.receiptTx || "Transaction"}</dt>
+              <dd className="trade-executed-hash" title={receipt.txid}>
+                {hash}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+        <button type="button" className="connect-wallet-btn" onClick={close}>
+          {t.close || t.ok || "Close"}
         </button>
       </div>
     </div>,

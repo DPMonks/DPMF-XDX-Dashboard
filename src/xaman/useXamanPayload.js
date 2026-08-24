@@ -154,6 +154,8 @@ export function useXamanPayload() {
           ...detection,
           uuid: payloadUuid,
           txjson: request?.txjson,
+          trade: trade || request?.trade || null,
+          ledger: latestLedger,
           signMarker,
         });
       } else if (txType === "TrustSet") {
