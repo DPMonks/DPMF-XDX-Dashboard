@@ -1,3 +1,5 @@
+import { payloadUsable, preferUsable, recallCatalog, rememberCatalog } from "./sourceControl.js";
+
 function asObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
@@ -220,8 +222,10 @@ function hasRows(value) {
   return (
     (Array.isArray(value.rows) && value.rows.length > 0) ||
     (Array.isArray(value.holders) && value.holders.length > 0) ||
+    (Array.isArray(value.pools) && value.pools.length > 0) ||
     (Array.isArray(value.price_history) && value.price_history.length > 0) ||
-    (Array.isArray(value.amm_pool_history) && value.amm_pool_history.length > 0)
+    (Array.isArray(value.amm_pool_history) && value.amm_pool_history.length > 0) ||
+    (value.books && typeof value.books === "object" && Object.keys(value.books).some((key) => value.books[key]))
   );
 }
 
@@ -247,17 +251,52 @@ export function mergeCatalogPayload(suffix, db, live) {
   if (path === "top-holders" || path === "top-holders-v2" || path === "top-lp") {
     return hasRows(db) ? db : live;
   }
+  if (path === "orderbook" || path === "orderbooks") {
+    return hasRows(db) ? db : live;
+  }
+  if (path === "wallet/rank" || /^wallet\/rank\//.test(path)) {
+    if (!isBlankAmount(db?.rank)) return { ...db, source: db.source || "db" };
+    if (!isBlankAmount(live?.rank)) return { ...db, ...live, source: catalogSource(false, true) };
+    return db;
+  }
   if (asObject(db) && asObject(live)) return mergeLiveOverview(db, live);
   return db;
 }
 
+function jsonResult(body, source) {
+  return {
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+    source: source || body?.source || "xrpl.to",
+    catalogOverlaid: true,
+  };
+}
+
+export async function serveCatalogFallback(suffix, loadLive) {
+  let live;
+  try {
+    live = typeof loadLive === "function" ? await loadLive(suffix) : null;
+  } catch {
+    // last-good catalog memory is the control measure when a free API blips
+  }
+  const kept = preferUsable(suffix, live, recallCatalog(suffix));
+  if (kept == null) return null;
+  if (payloadUsable(suffix, kept)) rememberCatalog(suffix, kept);
+  return jsonResult(kept, kept?.source || "xrpl.to");
+}
+
 export async function overlayDbResultWithLive(suffix, dbResult, loadLive) {
-  if (!dbResult || dbResult.status >= 400 || typeof loadLive !== "function") return dbResult;
+  if (!dbResult || dbResult.catalogOverlaid || dbResult.status >= 400 || typeof loadLive !== "function") {
+    return dbResult;
+  }
   const path = String(suffix || "").split("?")[0];
   if (!path || path === "health" || path === "health/xrpl" || /handshake$/i.test(path)) {
     return dbResult;
   }
-  if (/^wallet\//.test(path) || /^balances\//.test(path)) return dbResult;
+  if ((/^wallet\//.test(path) || /^balances\//.test(path)) && !/^wallet\/rank\//.test(path)) {
+    return dbResult;
+  }
   let dbBody;
   try {
     dbBody = JSON.parse(dbResult.body);
@@ -268,14 +307,17 @@ export async function overlayDbResultWithLive(suffix, dbResult, loadLive) {
   try {
     live = await loadLive(suffix);
   } catch {
-    return dbResult;
+    // last-good catalog memory fills empty Railway rows below
   }
-  if (live == null) return dbResult;
-  const merged = mergeCatalogPayload(suffix, dbBody, live);
-  if (merged === dbBody) return dbResult;
+  const merged = live != null ? mergeCatalogPayload(suffix, dbBody, live) : dbBody;
+  const kept = preferUsable(path, merged, recallCatalog(path));
+  if (payloadUsable(path, kept)) rememberCatalog(path, kept);
+  if (kept == null) return { ...dbResult, catalogOverlaid: true };
+  if (kept === dbBody) return { ...dbResult, catalogOverlaid: true };
   return {
     ...dbResult,
-    body: JSON.stringify(merged),
-    source: merged?.source || dbResult.source,
+    body: JSON.stringify(kept),
+    source: kept?.source || dbResult.source,
+    catalogOverlaid: true,
   };
 }

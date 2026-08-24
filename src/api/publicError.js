@@ -3,9 +3,8 @@ let catalogDownUntil = 0;
 
 export function isLiveLedgerPath(path) {
   const text = String(path || "");
-  if (/\/top-(holders|lp)\b/i.test(text)) return false;
-  if (/\/charts\//i.test(text) && !/\/charts\/candles\b/i.test(text)) return false;
-  return /\/(wallet\/|balances\/|networth\/|prices|change24h|lp-pools|orderbooks?|overview|token-details|issuer-locked|holders|trustlines|amm|pools|trades|xdx-flows|sparkline|chart\/candles|xaman)\b/i.test(
+  if (/\/xaman\b/i.test(text)) return true;
+  return /\/(wallet\/|balances\/|networth\/|prices|change24h|lp-pools|orderbooks?|overview|token-details|issuer-locked|holders|trustlines|top-|amm|pools|trades|xdx-flows|sparkline|charts?|xaman)\b/i.test(
     text
   );
 }

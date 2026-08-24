@@ -28,8 +28,8 @@ test("wallet metrics keep fetching while only heavy catalog routes cool down", (
   resetCatalogDown();
   const now = 1_000_000;
   markCatalogDown(now);
-  assert.equal(catalogFetchBlocked("/api/charts/activity", now + 100), true);
-  assert.equal(catalogFetchBlocked("/api/top-holders", now + 100), true);
+  assert.equal(catalogFetchBlocked("/api/charts/activity", now + 100), false);
+  assert.equal(catalogFetchBlocked("/api/top-holders", now + 100), false);
   assert.equal(catalogFetchBlocked("/api/sparkline/XDX", now + 100), false);
   assert.equal(catalogFetchBlocked("/api/holders/count", now + 100), false);
   assert.equal(catalogFetchBlocked("/api/amm", now + 100), false);

@@ -12,6 +12,13 @@ import { attachQuoteXrpPrices, loadQuoteXrpRates } from "./quoteXrpMarket.js";
 import { loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
 import { composeAmmBook, emptyOrderbook, FEATURED_ORDERBOOK_PAIRS } from "../src/orderbook.js";
+import {
+  loadXrplToCandles,
+  loadXrplToFlows,
+  loadXrplToHolderGraph,
+  loadXrplToHolders,
+  loadXrplToRank,
+} from "./xrplToCatalog.js";
 
 let xrpFx = { at: 0, usd: 0, gbp: 0, eur: 0, jpy: 0 };
 let marketCache = { at: 0, prices: null, pools: null, overview: null };
@@ -298,19 +305,25 @@ export async function loadXrplToMarket(options = {}) {
   return { prices, overview, token, change: { xdx: Number(token.change24h) || 0, xrp: 0, source: "xrpl.to" } };
 }
 
+async function liveMarketOrXrplTo(options = {}) {
+  try {
+    const market = await loadLiveMarket(options);
+    if (market?.overview && (num(market.overview.xdxUsd) || num(market.overview.holder_count))) {
+      return market;
+    }
+  } catch {
+    // xrpl.to still has the token card if amm_info or CoinGecko miss
+  }
+  return loadXrplToMarket(options);
+}
+
 export async function liveCatalogPayload(suffix, options = {}) {
   const path = String(suffix || "").split("?")[0];
   if (path === "overview" || path === "token-details") {
-    if (!options.fresh && marketCache.overview && Date.now() - marketCache.at < MARKET_MS) {
-      return marketCache.overview;
-    }
-    return (await loadXrplToMarket(options)).overview;
+    return (await liveMarketOrXrplTo(options)).overview;
   }
   if (path === "prices") {
-    if (!options.fresh && marketCache.prices && Date.now() - marketCache.at < MARKET_MS) {
-      return marketCache.prices;
-    }
-    return (await loadXrplToMarket(options)).prices;
+    return (await liveMarketOrXrplTo(options)).prices;
   }
   if (path === "lp-pools" || path === "amm" || path === "pools") {
     const market = await loadLiveMarket(options);
@@ -318,7 +331,7 @@ export async function liveCatalogPayload(suffix, options = {}) {
       ...market.overview,
       pools: market.pools,
       source: "xrpl",
-      catching_up: true,
+      catching_up: !market.pools?.length,
     };
   }
   if (path === "prices/change24h" || path === "change24h") {
@@ -386,10 +399,45 @@ export async function liveCatalogPayload(suffix, options = {}) {
     };
   }
   if (path === "xdx-flows" || path === "trades" || path === "charts/trades") {
-    return [];
+    return loadXrplToFlows(options).catch(() => []);
   }
-  if (/^charts\//.test(path) || path === "chart/candles" || path === "charts/candles" || /^top-/.test(path) || path.startsWith("sparkline/")) {
-    return { rows: [], count: null, source: "xrpl", catching_up: true };
+  if (path === "top-holders" || path === "top-holders-v2") {
+    const params = new URLSearchParams(String(options.search || "").replace(/^\?/, ""));
+    return loadXrplToHolders({
+      ...options,
+      limit: params.get("limit"),
+      offset: params.get("offset"),
+    }).catch(() => ({ holders: [], rows: [], count: null, source: "xrpl.to", catching_up: true }));
+  }
+  if (path === "wallet/rank" || /^wallet\/rank\//.test(path)) {
+    const account = decodeURIComponent(path.split("/")[2] || options.account || "");
+    if (!account) return { account: null, rank: null, source: "xrpl.to" };
+    return loadXrplToRank(account, options).catch(() => ({ account, rank: null, source: "xrpl.to" }));
+  }
+  if (
+    path === "charts/holders" ||
+    path === "charts/trustlines" ||
+    path === "charts/activity" ||
+    path === "charts/traders"
+  ) {
+    const rows = await loadXrplToHolderGraph(options).catch(() => []);
+    return rows.length ? rows : { rows: [], source: "xrpl.to", catching_up: true };
+  }
+  if (path.startsWith("sparkline/")) {
+    return loadXrplToCandles(options).catch(() => []);
+  }
+  if (path === "chart/candles" || path === "charts/candles") {
+    const candles = await loadXrplToCandles(options).catch(() => []);
+    return {
+      source: "xrpl.to",
+      locked: false,
+      price_history: candles,
+      amm_pool_history: [],
+      rows: candles,
+    };
+  }
+  if (path === "charts/tvl" || path === "charts/lp-holders" || path === "charts/lp-trustlines" || path === "top-lp") {
+    return { rows: [], holders: [], count: null, source: "xrpl.to", catching_up: true };
   }
   return null;
 }

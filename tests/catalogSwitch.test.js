@@ -9,7 +9,9 @@ import {
   mergeLiveOverview,
   mergeLivePrices,
   overlayDbResultWithLive,
+  serveCatalogFallback,
 } from "../server/catalogSwitch.js";
+import { rememberCatalog, resetCatalogMemory } from "../server/sourceControl.js";
 
 test("empty DB prices take the live AMM quote", () => {
   const merged = mergeLivePrices(
@@ -72,6 +74,7 @@ test("mergeCatalogPayload routes prices, overview, and lists", () => {
 });
 
 test("overlayDbResultWithLive rewrites an empty 200 from Postgres", async () => {
+  resetCatalogMemory();
   const overlaid = await overlayDbResultWithLive(
     "prices",
     { status: 200, body: JSON.stringify({ xdxUsd: 0, xrpUsd: 1.4, source: "db" }), source: "postgres" },
@@ -80,4 +83,67 @@ test("overlayDbResultWithLive rewrites an empty 200 from Postgres", async () => 
   const body = JSON.parse(overlaid.body);
   assert.equal(body.xdxUsd, 0.00004);
   assert.equal(body.source, "hybrid");
+  assert.equal(overlaid.catalogOverlaid, true);
+});
+
+test("empty Railway rows take last-good when free APIs fail", async () => {
+  resetCatalogMemory();
+  rememberCatalog("prices", { xdxUsd: 0.00004, recorded_price: 0.00004, source: "xrpl.to" });
+  const overlaid = await overlayDbResultWithLive(
+    "prices",
+    { status: 200, body: JSON.stringify({ xdxUsd: 0, source: "db" }), source: "postgres" },
+    async () => {
+      throw new Error("xrpl.to down");
+    }
+  );
+  assert.equal(JSON.parse(overlaid.body).xdxUsd, 0.00004);
+});
+
+test("already overlaid catalog results are not fetched twice", async () => {
+  let calls = 0;
+  const first = await overlayDbResultWithLive(
+    "prices",
+    { status: 200, body: JSON.stringify({ xdxUsd: 0 }), source: "postgres", catalogOverlaid: true },
+    async () => {
+      calls += 1;
+      return { xdxUsd: 1 };
+    }
+  );
+  assert.equal(calls, 0);
+  assert.equal(JSON.parse(first.body).xdxUsd, 0);
+});
+
+test("wallet rank keeps a Railway rank and fills a blank one", () => {
+  const kept = mergeCatalogPayload(
+    "wallet/rank/rABC",
+    { account: "rABC", rank: 4, source: "db" },
+    { account: "rABC", rank: 1, source: "xrpl.to" }
+  );
+  assert.equal(kept.rank, 4);
+  const filled = mergeCatalogPayload(
+    "wallet/rank/rABC",
+    { account: "rABC", rank: null, source: "empty" },
+    { account: "rABC", rank: 1, source: "xrpl.to" }
+  );
+  assert.equal(filled.rank, 1);
+  assert.equal(filled.source, "xrpl");
+});
+
+test("populated Railway history wins over the free tape", () => {
+  const db = [{ timestamp: "2026-01-01T00:00:00.000Z", xdx: 10, side: "buy" }];
+  const live = [{ timestamp: "2026-08-24T00:00:00.000Z", xdx: 99, side: "sell", source: "xrpl.to" }];
+  const kept = mergeCatalogPayload("xdx-flows", db, live);
+  assert.equal(kept[0].xdx, 10);
+  const empty = mergeCatalogPayload("xdx-flows", [], live);
+  assert.equal(empty[0].xdx, 99);
+});
+
+test("serveCatalogFallback returns last-good when the free API throws", async () => {
+  resetCatalogMemory();
+  rememberCatalog("overview", { xdxUsd: 0.00005, holder_count: 15000, source: "xrpl.to" });
+  const result = await serveCatalogFallback("overview", async () => {
+    throw new Error("down");
+  });
+  assert.equal(JSON.parse(result.body).holder_count, 15000);
+  assert.equal(result.status, 200);
 });

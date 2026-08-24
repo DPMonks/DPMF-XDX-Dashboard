@@ -90,6 +90,12 @@ test("a down database still has a live token and price payload", async () => {
     if (target.includes("coingecko")) {
       return { ok: true, json: async () => ({ ripple: { usd: 2, gbp: 1.5, eur: 1.8, jpy: 300 } }) };
     }
+    if (target.includes("xrpl.to/v1/ohlc")) {
+      return {
+        ok: true,
+        json: async () => ({ ohlc: [[Date.now(), 0.00004, 0.00005, 0.00003, 0.000046, 12]] }),
+      };
+    }
     if (target.includes("xrpl.to")) {
       return {
         ok: true,
@@ -140,4 +146,7 @@ test("a down database still has a live token and price payload", async () => {
   assert.ok(Array.isArray(charts.rows));
   const flows = await liveCatalogPayload("xdx-flows", { fetchImpl, fresh: true, now });
   assert.deepEqual(flows, []);
+  const spark = await liveCatalogPayload("sparkline/XDX", { fetchImpl, fresh: true, now });
+  assert.equal(Array.isArray(spark), true);
+  assert.equal(spark[0].price_usd, 0.000046);
 });

@@ -67,7 +67,8 @@ import {
   loadWalletOffers,
 } from "./walletLedger.js";
 import { liveCatalogPayload } from "./liveCatalog.js";
-import { overlayDbResultWithLive } from "./catalogSwitch.js";
+import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
+import { catalogHealth } from "./sourceControl.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
 import { loadLiveAmmReserves, loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 
@@ -2229,8 +2230,12 @@ function walletLedgerResult(suffix, search = "") {
   return null;
 }
 
-async function withLiveCatalog(suffix, dbBody) {
-  return overlayDbResultWithLive(suffix, ok(dbBody), liveCatalogPayload);
+async function serveLiveOrLastGood(suffix, search = "") {
+  return serveCatalogFallback(suffix, (path) => liveCatalogPayload(path, { search }));
+}
+
+async function withLiveCatalog(suffix, dbBody, search = "") {
+  return overlayDbResultWithLive(suffix, ok(dbBody), (path) => liveCatalogPayload(path, { search }));
 }
 
 export async function readIndexerDb(suffix, search = "") {
@@ -2238,12 +2243,11 @@ export async function readIndexerDb(suffix, search = "") {
   if (ledger) return ledger;
 
   if (postgresTemporarilyDown()) {
-    try {
-      const live = await liveCatalogPayload(suffix);
-      if (live != null) return ok(live);
-    } catch {
-      // fall through to the public 503
+    if (suffix === "health" || suffix === "health/xrpl") {
+      return ok(catalogHealth({ postgresDown: true, dbOk: false }));
     }
+    const live = await serveLiveOrLastGood(suffix, search);
+    if (live) return live;
     return {
       status: 503,
       contentType: "application/json",
@@ -2271,12 +2275,7 @@ export async function readIndexerDb(suffix, search = "") {
 
     if (suffix === "health") {
       await db.query("SELECT 1");
-      return ok({
-        status: "ok",
-        source: "db",
-        timestamp: new Date().toISOString(),
-        note: "Read-only SELECT on XDX tables. Workers were not started or reset.",
-      });
+      return ok(catalogHealth({ postgresDown: false, dbOk: true }));
     }
 
     if (suffix === "health/xrpl") {
@@ -2353,20 +2352,22 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "orderbooks") {
-      return ok(await loadOrderbooks(db));
+      return withLiveCatalog(suffix, await loadOrderbooks(db), search);
     }
 
     if (suffix === "orderbook") {
       const pair =
         params.get("pair") || params.get("quote") || params.get("market") || "XDX/XRP";
-      return ok(await loadOrderbook(db, pair));
+      return withLiveCatalog(suffix, await loadOrderbook(db, pair), search);
     }
 
     if (suffix === "top-holders" || suffix === "top-holders-v2") {
-      return ok(
+      return withLiveCatalog(
+        suffix,
         await tokenHoldersPage(db, limit, offset, {
           todayOnly: wantsTodaySnapshot(params),
-        })
+        }),
+        search
       );
     }
 
@@ -2380,7 +2381,7 @@ export async function readIndexerDb(suffix, search = "") {
           includeHolders: true,
           pool: poolName,
         });
-        return ok({ ...page, rows: page.holders });
+        return withLiveCatalog(suffix, { ...page, rows: page.holders }, search);
       }
       const live = await loadLiveLpOwners(db, {
         limit: pageLimit,
@@ -2388,7 +2389,7 @@ export async function readIndexerDb(suffix, search = "") {
         includeHolders: true,
         pool: poolName,
       });
-      return ok(live.holders);
+      return withLiveCatalog(suffix, live.holders, search);
     }
 
     if (suffix === "charts/tvl") {
@@ -2399,46 +2400,48 @@ export async function readIndexerDb(suffix, search = "") {
          WHERE pool_name = 'XDX/XRP'
          ORDER BY timestamp ASC`
       );
-      if (history.rows.length) return ok(history.rows);
+      if (history.rows.length) return withLiveCatalog(suffix, history.rows, search);
       const fallback = await tryQuery(
         db,
         `SELECT timestamp, tvl FROM tvl_history ORDER BY timestamp ASC`
       );
-      return ok(fallback.rows);
+      return withLiveCatalog(suffix, fallback.rows, search);
     }
 
     if (suffix === "charts/holders") {
-      return ok(await loadLongHolderSeries(db));
+      return withLiveCatalog(suffix, await loadLongHolderSeries(db), search);
     }
 
     if (suffix === "charts/trustlines") {
-      return ok(await loadLongHolderSeries(db));
+      return withLiveCatalog(suffix, await loadLongHolderSeries(db), search);
     }
 
     if (suffix === "charts/activity") {
-      return ok(await nativeActivitySeries(db));
+      return withLiveCatalog(suffix, await nativeActivitySeries(db), search);
     }
 
     if (suffix === "charts/traders") {
-      return ok(await nativeTraderSeries(db));
+      return withLiveCatalog(suffix, await nativeTraderSeries(db), search);
     }
 
     if (suffix === "xdx-flows") {
-      return ok(await nativeXdxFlows(db));
+      return withLiveCatalog(suffix, await nativeXdxFlows(db), search);
     }
 
     if (suffix === "charts/trades" || suffix === "trades") {
       const flows = await nativeXdxFlows(db);
-      if (flows.length) return ok(flows);
+      if (flows.length) return withLiveCatalog(suffix, flows, search);
       const trades = await readAmmTrades(db);
-      if (suffix === "trades") return ok(trades);
-      return ok(
+      if (suffix === "trades") return withLiveCatalog(suffix, trades, search);
+      return withLiveCatalog(
+        suffix,
         trades.map((row) => ({
           timestamp: row.timestamp,
           trades: 1,
           volume: row.xdx,
           side: row.side,
-        }))
+        })),
+        search
       );
     }
 
@@ -2449,18 +2452,22 @@ export async function readIndexerDb(suffix, search = "") {
          FROM lp_holders_history_daily
          ORDER BY day ASC`
       );
-      if (result.rows.length) return ok(result.rows);
+      if (result.rows.length) return withLiveCatalog(suffix, result.rows, search);
       const owners = await loadTodayLpOwners(db, { includeHolders: false, pool: "all" });
-      return ok(
+      return withLiveCatalog(
+        suffix,
         owners.count
           ? [{ day: owners.as_of || new Date().toISOString(), lp_holder_count: owners.count }]
-          : []
+          : [],
+        search
       );
     }
 
     if (suffix === "charts/lp-trustlines") {
-      return ok(
-        await loadLpTrustlineChart(db, params.get("pool") || params.get("pair") || "all")
+      return withLiveCatalog(
+        suffix,
+        await loadLpTrustlineChart(db, params.get("pool") || params.get("pair") || "all"),
+        search
       );
     }
 
@@ -2563,7 +2570,7 @@ export async function readIndexerDb(suffix, search = "") {
     const walletRank = suffix.match(/^wallet\/rank\/([^/]+)$/);
     if (walletRank) {
       const address = decodeURIComponent(walletRank[1]);
-      return ok(await loadWalletRank(db, address));
+      return withLiveCatalog(suffix, await loadWalletRank(db, address), search);
     }
 
     const networth = suffix.match(/^wallet\/networth\/([^/]+)$/);
@@ -2587,7 +2594,7 @@ export async function readIndexerDb(suffix, search = "") {
          LIMIT 50`,
         [asset]
       );
-      return ok(result.rows.reverse());
+      return withLiveCatalog(suffix, result.rows.reverse(), search);
     }
 
     if (suffix === "chart/candles" || suffix === "charts/candles") {
@@ -2607,24 +2614,27 @@ export async function readIndexerDb(suffix, search = "") {
          ORDER BY timestamp ASC
          LIMIT 20000`
       );
-      return ok({
-        source: "db",
-        locked: true,
-        price_history: history.rows,
-        amm_pool_history: amm.rows,
-      });
+      return withLiveCatalog(
+        suffix,
+        {
+          source: "db",
+          locked: true,
+          price_history: history.rows,
+          amm_pool_history: amm.rows,
+        },
+        search
+      );
     }
 
     return null;
   } catch (error) {
     logDbError(error);
     if (isConnectError(error)) markPostgresDown();
-    try {
-      const live = await liveCatalogPayload(suffix);
-      if (live != null) return ok(live);
-    } catch {
-      // keep the public outage body
+    if (suffix === "health" || suffix === "health/xrpl") {
+      return ok(catalogHealth({ postgresDown: true, dbOk: false }));
     }
+    const live = await serveLiveOrLastGood(suffix, search);
+    if (live) return live;
     return {
       status: isConnectError(error) ? 503 : 500,
       contentType: "application/json",

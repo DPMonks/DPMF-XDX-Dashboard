@@ -319,13 +319,6 @@ export async function getAmm() {
     api.lpPools().catch(() => ({ pools: [], catching_up: true })),
     api.prices().catch(() => ({})),
   ]);
-  const catchingUp = Boolean(
-    body &&
-      typeof body === "object" &&
-      !Array.isArray(body) &&
-      (body.catching_up || !asArray(body.pools || body).length)
-  );
-  if (catchingUp) return [];
   const xdxUsd = numberOrNull(prices?.xdxUsd ?? prices?.recorded_price);
   const xrpUsd = numberOrNull(prices?.xrpUsd);
   return uniquePools(
