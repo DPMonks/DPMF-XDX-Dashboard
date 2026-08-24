@@ -22,9 +22,11 @@ import {
   getLedgerTx,
   getPayloadResult,
   isReusableUnsignedPayload,
+  normalizePayload,
   payloadLooksSigned,
+  payloadQrUrl,
   payloadSignedThisSession,
-  xamanSignUrl,
+  xamanAppUrl,
 } from "./xamanClient";
 import { isXappHost, isXappPayloadEvent, listenXappEvents, openXappSignRequest } from "./xappHost";
 import { nextPayloadSession, payloadSessionOpen } from "./payloadSession";
@@ -184,10 +186,10 @@ export function useXamanPayload() {
       if (resumeUuid) {
         const existing = await getPayloadResult(resumeUuid).catch(() => null);
         if (isReusableUnsignedPayload(existing)) {
-          payload = {
+          payload = normalizePayload(existing) || {
             uuid: resumeUuid,
-            qr: null,
-            mobileUrl: xamanSignUrl(resumeUuid),
+            qr: payloadQrUrl(resumeUuid),
+            mobileUrl: xamanAppUrl(resumeUuid),
             websocket: xamanWebsocketUrl(resumeUuid),
           };
         }

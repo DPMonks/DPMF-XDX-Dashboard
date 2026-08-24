@@ -24,11 +24,13 @@ import { claimExecutedTrade, claimSignedWallet } from "../src/xaman/claimSignIn.
 import {
   extractSignedAccount,
   isClassicAddress,
+  isInAppBrowser,
   isPhoneDevice,
   isReusableUnsignedPayload,
   launchXamanSign,
   normalizePayload,
   payloadLooksSigned,
+  payloadQrUrl,
   payloadSignedThisSession,
   xamanAppUrl,
   xamanSignUrl,
@@ -196,16 +198,30 @@ test("normalizePayload reads the Xaman QR refs", () => {
   });
   assert.equal(payload.uuid, "payload-1");
   assert.ok(payload.qr.includes("payload-1"));
-  assert.equal(payload.mobileUrl, "https://xumm.app/sign/payload-1");
+  assert.equal(payload.mobileUrl, "xumm://xumm.app/sign/payload-1");
+});
+
+test("normalizePayload synthesizes a QR when Xaman omits refs", () => {
+  const payload = normalizePayload({ uuid: "payload-2" });
+  assert.equal(payload.qr, "https://xumm.app/sign/payload-2_q.png");
+  assert.equal(payload.mobileUrl, "xumm://xumm.app/sign/payload-2");
 });
 
 test("xaman sign links stay on the payload uuid and phones are detected", () => {
   assert.equal(xamanSignUrl("abc-1"), "https://xumm.app/sign/abc-1");
   assert.equal(xamanAppUrl("abc-1"), "xumm://xumm.app/sign/abc-1");
+  assert.equal(payloadQrUrl("abc-1"), "https://xumm.app/sign/abc-1_q.png");
+  assert.equal(payloadQrUrl("abc-1", "https://xumm.app/sign/custom_q.png"), "https://xumm.app/sign/custom_q.png");
   assert.equal(isPhoneDevice("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), true);
   assert.equal(isPhoneDevice("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)"), true);
   assert.equal(isPhoneDevice("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)", { platform: "MacIntel", maxTouchPoints: 5 }), true);
   assert.equal(isPhoneDevice("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), false);
+  assert.equal(
+    isInAppBrowser("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 Twitter for iPhone"),
+    true
+  );
+  assert.equal(isInAppBrowser("Mozilla/5.0 (Linux; Android 14) TwitterAndroid"), true);
+  assert.equal(isInAppBrowser("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126"), false);
 });
 
 test("xaman return URLs carry the payload id placeholder", () => {
@@ -560,28 +576,42 @@ test("opening a new trade discards a leftover watchTrade payload", () => {
   }
 });
 
-test("opening Xaman for a sign keeps the dashboard tab", () => {
+test("opening Xaman for a sign stays on the in-house modal", () => {
   const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
   const opened = [];
+  const assigned = [];
   const nodes = [];
   const result = launchXamanSign(uuid, {
-    openWindow: (href, target) => {
-      opened.push({ href, target });
-      return { ok: true };
-    },
     createFrame: () => {
       const node = { src: "", style: { cssText: "" }, setAttribute() {} };
       return node;
     },
     appendNode: (node) => nodes.push(node),
     removeNode: () => {},
+    assignLocation: (href) => assigned.push(href),
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126",
   });
-  assert.equal(result.opened, true);
+  assert.equal(result.opened, false);
   assert.equal(result.web, `https://xumm.app/sign/${uuid}`);
-  assert.equal(opened[0].href, result.web);
-  assert.equal(opened[0].target, "_blank");
+  assert.equal(opened.length, 0);
+  assert.equal(assigned.length, 0);
   assert.equal(nodes.length, 1);
   assert.match(String(nodes[0].src || ""), /xumm:\/\//);
+});
+
+test("in-app browsers open the Xaman app, not the hosted console", () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const assigned = [];
+  const result = launchXamanSign(uuid, {
+    createFrame: null,
+    appendNode: null,
+    assignLocation: (href) => assigned.push(href),
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 Twitter for iPhone",
+  });
+  assert.equal(result.opened, true);
+  assert.equal(assigned.length, 1);
+  assert.equal(assigned[0], `xumm://xumm.app/sign/${uuid}`);
+  assert.doesNotMatch(String(assigned[0] || ""), /^https:\/\/xumm\.app\/sign\//);
 });
 
 test("cancelled Xaman sessions do not stay open after reset", () => {

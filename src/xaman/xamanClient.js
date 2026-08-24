@@ -8,11 +8,18 @@ function pick(object, keys) {
   return null;
 }
 
+export function payloadQrUrl(uuid, fallback = "") {
+  const fromApi = String(fallback || "").trim();
+  if (fromApi) return fromApi;
+  const id = String(uuid || "").trim();
+  return id ? `https://xumm.app/sign/${encodeURIComponent(id)}_q.png` : "";
+}
+
 export function normalizePayload(raw) {
   if (!raw || typeof raw !== "object") return null;
 
   const uuid = pick(raw, ["uuid", "payload.uuid"]);
-  const qr = pick(raw, ["refs.qr_png", "qr", "refs.qr"]);
+  const qr = payloadQrUrl(uuid, pick(raw, ["refs.qr_png", "qr", "refs.qr"]));
   const mobileUrl = pick(raw, [
     "next.always",
     "refs.deeplink_web",
@@ -30,7 +37,7 @@ export function normalizePayload(raw) {
   return {
     uuid,
     qr,
-    mobileUrl: uuid ? xamanSignUrl(uuid) : mobileUrl,
+    mobileUrl: xamanAppUrl(uuid) || mobileUrl,
     websocket,
     raw,
   };
@@ -49,10 +56,11 @@ export function xamanAppUrl(uuid) {
 export function launchXamanSign(
   uuid,
   {
-    openWindow = typeof window !== "undefined" ? window.open.bind(window) : null,
     createFrame = typeof document !== "undefined" ? () => document.createElement("iframe") : null,
     appendNode = typeof document !== "undefined" ? (node) => document.body.appendChild(node) : null,
     removeNode = (node) => node?.remove?.(),
+    userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "",
+    assignLocation = null,
   } = {}
 ) {
   const id = String(uuid || "").trim();
@@ -74,11 +82,17 @@ export function launchXamanSign(
     }
   }
   let opened = false;
-  if (openWindow && web) {
-    try {
-      opened = Boolean(openWindow(web, "_blank", "noopener,noreferrer"));
-    } catch {
-      opened = false;
+  if (isInAppBrowser(userAgent) && app) {
+    const navigateApp =
+      assignLocation ||
+      (typeof window !== "undefined" ? (href) => window.location.assign(href) : null);
+    if (navigateApp) {
+      try {
+        navigateApp(app);
+        opened = true;
+      } catch {
+        opened = false;
+      }
     }
   }
   return { opened, web, app };
@@ -91,6 +105,14 @@ export function isPhoneDevice(
   const ua = String(userAgent || "");
   if (/Android|iPhone|iPod|iPad|Mobile|Tablet/i.test(ua)) return true;
   return extras.platform === "MacIntel" && Number(extras.maxTouchPoints) > 1;
+}
+
+export function isInAppBrowser(
+  userAgent = typeof navigator !== "undefined" ? navigator.userAgent : ""
+) {
+  return /Twitter|TwitterAndroid|\bX\/|FBAN|FBAV|FB_IAB|FBIOS|Instagram|Line\/|Snapchat|TikTok|Bytedance|Pinterest|LinkedInApp|GSA\//i.test(
+    String(userAgent || "")
+  );
 }
 
 export async function createPayload(body = {}) {
