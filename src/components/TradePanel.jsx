@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getAmm, getPrices, getWalletAccount, getWalletBalances, getWalletLines, getWalletLp } from "../api/indexer";
+import { getAmm, getLiveLpReserves, getPrices, getWalletAccount, getWalletBalances, getWalletLines, getWalletLp } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -39,6 +39,7 @@ import {
 import { walletAvailableAmounts } from "../wallet/composeWallet";
 import { xdxQuoteSpot } from "../wallet/quoteMarker";
 import { formatPoolPct, normalizePriceBook, priceBookFromPools } from "../utils/poolSplit";
+import { previewReserves } from "../utils/ammInfo";
 import { formatToken, formatUsd } from "../utils/format";
 import { shortAddress } from "../utils/format";
 import { isConsumedUuid, isPayloadUuid, peekPendingPayload } from "../xaman/payloadResume";
@@ -53,24 +54,20 @@ function poolRowForQuote(pools, quote) {
   );
 }
 
-function poolReserves(pools, quote) {
-  const row = poolRowForQuote(pools, quote);
-  const pair = String(quote?.pair || poolForQuote(quote).pair || "XDX/XRP").toUpperCase();
-  return {
-    pair,
-    base: Number(row?.reserve_xdx ?? row?.reserve_asset ?? 0),
-    quote: Number(row?.reserve_currency ?? 0),
-    lpSupply: Number(row?.lp_supply ?? 0),
-    tradingFee: Number(row?.trading_fee ?? 0),
-    issuer: row?.quote_issuer || null,
-    hex: row?.quote_hex || null,
-    xdxUsd: Number(row?.xdxUsd || 0),
-    quoteUsd: Number(row?.quote_usd || 0),
-    quoteName: row?.quote || pair.split("/")[1] || "XRP",
-    reserve_xdx: Number(row?.reserve_xdx ?? row?.reserve_asset ?? 0),
-    reserve_asset: Number(row?.reserve_xdx ?? row?.reserve_asset ?? 0),
-    reserve_currency: Number(row?.reserve_currency ?? 0),
-  };
+function poolReserves(pools, quote, live = null) {
+  const row = poolRowForQuote(pools, quote) || {};
+  const pair = String(quote?.pair || poolForQuote(quote, pools, live).pair || "XDX/XRP").toUpperCase();
+  return previewReserves(
+    {
+      ...row,
+      pair,
+      tradingFee: row.trading_fee,
+      issuer: row.quote_issuer,
+      hex: row.quote_hex,
+      quoteName: row.quote || pair.split("/")[1] || "XRP",
+    },
+    live
+  );
 }
 
 export default function TradePanel({
@@ -101,6 +98,7 @@ export default function TradePanel({
   const [walletHold, setWalletHold] = useState({});
   const [walletAccount, setWalletAccount] = useState({});
   const [pools, setPools] = useState(() => (Array.isArray(initialPools) ? initialPools : []));
+  const [liveReserves, setLiveReserves] = useState(null);
   const [lineHint, setLineHint] = useState("");
   const [lpLineReady, setLpLineReady] = useState(false);
   const [quoteLineReady, setQuoteLineReady] = useState(false);
@@ -126,7 +124,7 @@ export default function TradePanel({
   const isLp = action === "addLp" || action === "removeLp";
   const account = liveWalletAddress(walletAddress);
   const signedIn = Boolean(account);
-  const lpSpec = useMemo(() => poolForQuote(quote, pools), [quote, pools]);
+  const lpSpec = useMemo(() => poolForQuote(quote, pools, liveReserves), [quote, pools, liveReserves]);
   const haveLpLine =
     lpLineReady ||
     hasLpTrustline(walletLines, lpSpec) ||
@@ -151,7 +149,7 @@ export default function TradePanel({
       haveLp: isLp && haveLpLine,
       quote,
     }) && !(isSingleLp && singleAsset === "xdx");
-  const reserves = useMemo(() => poolReserves(pools, quote), [pools, quote]);
+  const reserves = useMemo(() => poolReserves(pools, quote, liveReserves), [pools, quote, liveReserves]);
   const implied = poolPrice(reserves.base, reserves.quote);
   const markerPx = xdxQuoteSpot({ quoteId, prices, pool: reserves });
   const px =
@@ -294,6 +292,35 @@ export default function TradePanel({
     };
   }, [account, action, quoteHex, quoteId, quoteIssuer, quotePair]);
 
+  useEffect(() => {
+    if (action !== "addLp" && action !== "removeLp") return undefined;
+    let cancelled = false;
+    const pair = quotePair || `XDX/${quoteId}`;
+    function pull() {
+      getLiveLpReserves({
+        pair,
+        ammAccount: lpSpec.amm || matched?.amm_account,
+        quote: quoteId,
+        issuer: quoteIssuer,
+        hex: quoteHex,
+      })
+        .then((live) => {
+          if (cancelled) return;
+          setLiveReserves(live ? { ...live, pair } : { pair, empty: true });
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setLiveReserves((current) => (current?.pair === pair ? current : { pair, empty: true }));
+        });
+    }
+    pull();
+    const timer = window.setInterval(pull, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [action, quotePair, quoteId, quoteIssuer, quoteHex, lpSpec.amm, matched?.amm_account]);
+
   function close() {
     reset();
     onClose?.();
@@ -340,6 +367,7 @@ export default function TradePanel({
       quote,
       lpAmount: lpAmount || amount,
       pools,
+      live: liveReserves,
       mode: lpMode,
       singleAsset: isSingleRemove ? singleAsset : undefined,
     });

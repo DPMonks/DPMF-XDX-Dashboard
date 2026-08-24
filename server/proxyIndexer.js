@@ -96,6 +96,7 @@ function localDashboardStatus(suffix, extra = {}) {
     lpHoldersCountToday: "/api/lp-holders/count?snapshot=today",
     lpTrustlinesCount: "/api/lp-trustlines/count",
     lpPools: "/api/lp-pools",
+    lpPoolsLive: "/api/lp-pools/live",
     tvlHistory: "/api/charts/tvl",
     holdersHistory: "/api/charts/holders",
     lpHoldersHistory: "/api/charts/lp-holders",
@@ -192,7 +193,8 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
     method === "GET" &&
     (/^wallet\/(offers|activity|votes|account|balances|lines)\//.test(suffix) ||
       /^balances\//.test(suffix) ||
-      suffix === "amm/governance")
+      suffix === "amm/governance" ||
+      suffix === "lp-pools/live")
   ) {
     const ledger = await readIndexerDb(suffix, search);
     if (ledger && ledger.status < 400) return withSource(ledger, "xrpl");

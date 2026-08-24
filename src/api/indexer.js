@@ -729,6 +729,11 @@ export async function getPoolGovernance(pair, account) {
   return api.ammGovernance(pair, account);
 }
 
+export async function getLiveLpReserves(query = {}) {
+  const body = await api.lpPoolsLive(query);
+  return body && typeof body === "object" ? body : null;
+}
+
 export async function getWalletActivity(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return [];

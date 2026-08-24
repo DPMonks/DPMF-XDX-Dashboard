@@ -60,6 +60,7 @@ import {
 } from "../src/wallet/composeWallet.js";
 import { loadWalletActivity, loadWalletLines, loadWalletOffers } from "./walletLedger.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
+import { loadLiveAmmReserves } from "./liveAmmReserves.js";
 
 let pool = null;
 
@@ -86,6 +87,7 @@ const CATALOG = {
     lpHoldersCountToday: "/api/lp-holders/count?snapshot=today",
     lpTrustlinesCount: "/api/lp-trustlines/count",
     lpPools: "/api/lp-pools",
+    lpPoolsLive: "/api/lp-pools/live",
     topLpToday: "/api/top-lp?snapshot=today",
     lpTrustlinesHistory: "/api/charts/lp-trustlines",
     tvlHistory: "/api/charts/tvl",
@@ -1492,10 +1494,7 @@ async function loadXdxLpPools(db) {
         optional.lp_supply ||
         holderSupply.get(normalizeWalletPairName(row.pool_name || row.quote)) ||
         null;
-      const reserveQuote =
-        measuredQuote ||
-        inferQuoteReserve(reserveXdx, xdxUsd, quoteUsd) ||
-        null;
+      const reserveQuote = measuredQuote || null;
       const built = {
         pool_name: row.pool_name,
         pool: row.pool_name,
@@ -2165,6 +2164,17 @@ function walletLedgerResult(suffix, search = "") {
     return loadPoolGovernance(params.get("pair") || "XDX/XRP", params.get("account") || "").then((body) =>
       ok(body)
     );
+  }
+  if (suffix === "lp-pools/live") {
+    const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+    return loadLiveAmmReserves({
+      pair: params.get("pair") || params.get("pool") || "XDX/XRP",
+      ammAccount: params.get("amm") || params.get("amm_account"),
+      quote: params.get("quote"),
+      issuer: params.get("issuer") || params.get("quote_issuer"),
+      hex: params.get("hex") || params.get("quote_hex"),
+      fresh: params.get("fresh") === "1",
+    }).then((body) => ok(body));
   }
   const account = String(suffix || "").match(/^wallet\/account\/([^/]+)$/);
   if (account) {
