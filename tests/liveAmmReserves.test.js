@@ -175,3 +175,37 @@ test("loadLiveAmmReservesMany overlays every catalog account without a 429 stamp
   assert.equal(rows.every((row) => row.reserve_source === "amm_info"), true);
   assert.equal(seen.length, 6);
 });
+
+test("loadLiveAmmReservesMany stops overlaying after the catalog deadline", async () => {
+  const fetchImpl = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    return {
+      ok: true,
+      json: async () => ({
+        result: {
+          amm: {
+            account: "rSlow",
+            amount: { currency: "XDX", issuer: XDX_ISSUER, value: "10" },
+            amount2: { currency: "XRP", value: "1000000" },
+            lp_token: { currency: "03SLOW", issuer: "rSlow", value: "1" },
+          },
+        },
+      }),
+    };
+  };
+  const queries = Array.from({ length: 8 }, (_, i) => ({
+    pair: "XDX/XRP",
+    quote: "XRP",
+    ammAccount: `rSlow${i}`,
+    fresh: true,
+  }));
+  const rows = await loadLiveAmmReservesMany(queries, {
+    fetchImpl,
+    now: Date.now(),
+    concurrency: 1,
+    deadlineMs: 50,
+    retries: 0,
+  });
+  assert.equal(rows.length, 8);
+  assert.ok(rows.some((row) => row.reserve_source === "empty"));
+});

@@ -254,9 +254,12 @@ export function postgresPoolOptions(raw) {
       database: decodePart(url.pathname.replace(/^\//, ""), "railway"),
       ssl,
       max: 2,
+      connectionTimeoutMillis: 2500,
+      idleTimeoutMillis: 8000,
+      allowExitOnIdle: true,
     };
   } catch {
-    return { connectionString, ssl, max: 2 };
+    return { connectionString, ssl, max: 2, connectionTimeoutMillis: 2500, idleTimeoutMillis: 8000, allowExitOnIdle: true };
   }
 }
 
@@ -296,9 +299,20 @@ function logDbError(error) {
   });
 }
 
+let dbDownUntil = 0;
+
+export function postgresTemporarilyDown() {
+  return Date.now() < dbDownUntil;
+}
+
+function markPostgresDown() {
+  dbDownUntil = Date.now() + 8_000;
+}
+
 function getPool() {
   const raw = databaseUrl();
   if (!raw) return null;
+  if (postgresTemporarilyDown()) return null;
   if (!pool) {
     if (VERIFY_SSLMODES.has(String(process.env.PGSSLMODE || "").toLowerCase())) {
       process.env.PGSSLMODE = "no-verify";
@@ -1471,7 +1485,7 @@ async function loadXdxLpPools(db) {
       issuer: row.quote_issuer,
       hex: row.quote_hex,
     })),
-    { concurrency: 3 }
+    { concurrency: 3, retries: 1, waitMs: 200, deadlineMs: 4500 }
   );
 
   const pools = stored.rows.map((row, index) => {
@@ -2196,6 +2210,19 @@ export async function readIndexerDb(suffix, search = "") {
   const ledger = walletLedgerResult(suffix, search);
   if (ledger) return ledger;
 
+  if (postgresTemporarilyDown()) {
+    return {
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "Postgres temporarily unreachable",
+        source: "db",
+        hint: connectHint({ message: "timeout" }),
+      }),
+      source: "postgres",
+    };
+  }
+
   const db = getPool();
   if (!db) return null;
 
@@ -2592,6 +2619,7 @@ export async function readIndexerDb(suffix, search = "") {
     return null;
   } catch (error) {
     logDbError(error);
+    if (isConnectError(error)) markPostgresDown();
     return {
       status: 500,
       contentType: "application/json",

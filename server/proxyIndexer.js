@@ -222,6 +222,10 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
         hint: parsed.hint || databaseUrlHint(),
       });
     }
+    // Postgres is configured but down. Do not wait on the public indexer 429s.
+    if (dbResult && dbResult.status >= 400) {
+      return withSource(dbResult, "postgres");
+    }
   }
 
   // No postgres:// on this deploy: do not burn Railway Hikari on 429s.
