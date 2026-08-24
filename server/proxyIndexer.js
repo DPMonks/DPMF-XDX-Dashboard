@@ -10,6 +10,7 @@ import {
   readIndexerDb,
 } from "./readIndexerDb.js";
 import { isAllowedDashboardOrigin } from "../src/security/headers.js";
+import { indexerCacheControl } from "./indexerCacheControl.js";
 
 export { DEFAULT_INDEXER_ORIGIN };
 
@@ -260,11 +261,12 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
   return indexerErrorHint(last);
 }
 
-export function proxyResponseHeaders(last, req) {
+export function proxyResponseHeaders(last, req, suffix = "") {
   return {
     "content-type": last?.contentType || "application/json",
     ...proxyCorsHeaders(req),
     ...(last?.source ? { "x-dpmf-source": last.source } : {}),
+    "cache-control": indexerCacheControl(suffix || last?.suffix || ""),
   };
 }
 
