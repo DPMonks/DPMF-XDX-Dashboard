@@ -12,6 +12,7 @@ import AmmCard from "./components/AmmCard";
 import CreatePoolCard from "./components/CreatePoolCard";
 import VotingContainer from "./components/governance/VotingContainer";
 import OrderBook from "./components/OrderBook";
+import XdxSwapPanel from "./components/XdxSwapPanel";
 import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
@@ -346,6 +347,7 @@ export default function App() {
           <Suspense fallback={<Skeleton height={300} />}>
             <TradingChart />
           </Suspense>
+          <XdxSwapPanel />
           <div className="orderbook-wrap">
             <h3 className="card-title orderbook-title">{t.orderbook}</h3>
             <OrderBook />
@@ -434,6 +436,7 @@ export default function App() {
           key={tradeAction.openId || `${tradeAction.action}-${tradeAction.quote}`}
           action={tradeAction.action}
           initialQuote={tradeAction.quote}
+          initialAmount={tradeAction.amount}
           quoteExtra={tradeAction}
           initialPools={ammData}
           resumeUuid={tradeAction.resumeUuid}

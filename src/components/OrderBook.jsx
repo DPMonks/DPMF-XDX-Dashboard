@@ -4,6 +4,7 @@ import {
   bookHeader,
   emptyOrderbook,
   FEATURED_ORDERBOOK_PAIRS,
+  filterBookTape,
   filterOrderbookPairs,
   mergeOrderbookPayloads,
   normalizeOrderbookPair,
@@ -98,6 +99,7 @@ function BookSide({ title, rows, side, locale, t }) {
 export default function OrderBook() {
   const { t, locale } = useI18n();
   const [pair, setPair] = useState("XDX/XRP");
+  const [tape, setTape] = useState("hybrid");
   const [query, setQuery] = useState("");
   const [books, setBooks] = useState(null);
   const [error, setError] = useState(null);
@@ -142,8 +144,9 @@ export default function OrderBook() {
 
   const book = useMemo(() => {
     const name = normalizeOrderbookPair(pair);
-    return books?.books?.[name] || books?.books?.[pair] || emptyOrderbook(name);
-  }, [books, pair]);
+    const raw = books?.books?.[name] || books?.books?.[pair] || emptyOrderbook(name);
+    return filterBookTape(raw, tape);
+  }, [books, pair, tape]);
 
   const bidRows = useMemo(() => padOrderbookLevels(book.bids || []), [book]);
   const askRows = useMemo(() => padOrderbookLevels(book.asks || []), [book]);
@@ -211,6 +214,24 @@ export default function OrderBook() {
           ) : null}
         </div>
         <p className="orderbook-unit">{t.orderbookUnit} {quote}</p>
+      </div>
+      <div className="orderbook-tapes" role="tablist" aria-label={t.orderbookTape}>
+        {[
+          ["hybrid", t.orderbookTapeHybrid],
+          ["dex", t.orderbookTapeDex],
+          ["amm", t.orderbookTapeAmm],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tape === id}
+            className={tape === id ? "pair-chip active" : "pair-chip"}
+            onClick={() => setTape(id)}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <dl className="orderbook-header">

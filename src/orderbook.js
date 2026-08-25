@@ -161,6 +161,21 @@ export function bookHeader(book = {}) {
   return { best_bid, best_ask, mid, mid_usd, spread, spread_bps };
 }
 
+export function filterBookTape(book = {}, mode = "hybrid") {
+  const tape = String(mode || "hybrid").toLowerCase();
+  const keep = (row) => {
+    const source = String(row?.source || "dex").toLowerCase();
+    if (tape === "amm") return source === "amm";
+    if (tape === "dex" || tape === "book") return source === "dex" || source === "bridge";
+    return true;
+  };
+  const bids = (Array.isArray(book.bids) ? book.bids : []).filter(keep);
+  const asks = (Array.isArray(book.asks) ? book.asks : []).filter(keep);
+  const next = { ...book, bids, asks };
+  const header = bookHeader({ ...next, best_bid: null, best_ask: null, mid: null, spread: null, spread_bps: null });
+  return { ...next, ...header };
+}
+
 export function orderBookRowStamp(row = {}) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   return row.as_of || payload.as_of || row.timestamp || row.updated_at || null;

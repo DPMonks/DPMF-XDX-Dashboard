@@ -73,6 +73,7 @@ function poolReserves(pools, quote, live = null) {
 export default function TradePanel({
   action,
   initialQuote = "XRP",
+  initialAmount = "",
   quoteExtra,
   initialPools = [],
   spotPrice = 0,
@@ -88,7 +89,11 @@ export default function TradePanel({
   const [orderType, setOrderType] = useState("market");
   const [lpMode, setLpMode] = useState("double");
   const [singleAsset, setSingleAsset] = useState("xdx");
-  const [amount, setAmount] = useState(() => (action === "addLp" || action === "removeLp" ? "" : "100000"));
+  const [amount, setAmount] = useState(() => {
+    if (action === "addLp" || action === "removeLp") return "";
+    if (initialAmount && Number(initialAmount) > 0) return String(initialAmount);
+    return "100000";
+  });
   const [quoteQty, setQuoteQty] = useState("");
   const [editedSide, setEditedSide] = useState("xdx");
   const [price, setPrice] = useState(spotPrice > 0 ? String(spotPrice) : "");

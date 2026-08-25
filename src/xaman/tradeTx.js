@@ -183,6 +183,7 @@ export function normalizeTradeRequest(detail) {
     quote: quoteIdFromPair(detail.quote || detail.pair || detail.pool || "XRP"),
     quoteIssuer: detail.quoteIssuer || detail.quote_issuer || null,
     quoteHex: detail.quoteHex || detail.quote_hex || null,
+    amount: detail.amount != null && Number(detail.amount) > 0 ? Number(detail.amount) : null,
   };
 }
 
