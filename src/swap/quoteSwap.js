@@ -257,6 +257,57 @@ export function quoteSwap({
     execPrice,
     mid: venueMid,
     partialFill: hasFill && leftover > 0,
+    xdxNotional: sellingXdx ? filledIn : actual,
+  };
+}
+
+export function quoteBridgeSwap({ amountIn, fromVenue = {}, toVenue = {}, routingMode = "smart" } = {}) {
+  const hop1 = quoteSwap({
+    amountIn,
+    sellingXdx: false,
+    routingMode,
+    ...fromVenue,
+  });
+  if (!(hop1.actualOutput > 0)) {
+    return {
+      ...hop1,
+      routeUsed: "none",
+      actualOutput: 0,
+      expectedOutput: 0,
+      slippagePercent: null,
+      priceImpactPercent: null,
+      xdxNotional: 0,
+      hops: [hop1, null],
+    };
+  }
+  const hop2 = quoteSwap({
+    amountIn: hop1.actualOutput,
+    sellingXdx: true,
+    routingMode,
+    ...toVenue,
+  });
+  const hasFill = hop2.actualOutput > 0;
+  const impact =
+    hasFill && hop1.priceImpactPercent != null && hop2.priceImpactPercent != null
+      ? hop1.priceImpactPercent + hop2.priceImpactPercent
+      : hasFill
+        ? hop2.priceImpactPercent
+        : null;
+  return {
+    expectedOutput: hasFill ? hop2.expectedOutput : 0,
+    actualOutput: hop2.actualOutput,
+    leftover: hop1.leftover || hop2.leftover,
+    filledIn: hop1.filledIn,
+    routeUsed: hasFill ? "bridge" : "none",
+    slippagePercent: hasFill ? hop2.slippagePercent : null,
+    priceImpactPercent: impact,
+    isNegativeSlippage: hasFill && (hop1.isNegativeSlippage || hop2.isNegativeSlippage),
+    lossAmount: (hop1.lossAmount || 0) + (hop2.lossAmount || 0),
+    execPrice: 0,
+    mid: 0,
+    partialFill: Boolean(hop1.partialFill || hop2.partialFill),
+    xdxNotional: hop1.actualOutput,
+    hops: [hop1, hop2],
   };
 }
 

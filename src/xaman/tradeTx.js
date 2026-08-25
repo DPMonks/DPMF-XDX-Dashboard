@@ -29,6 +29,8 @@ export const ACTION_TX_TYPES = {
   removeLp: ["AMMWithdraw"],
   createPool: ["AMMCreate"],
   vote: ["AMMVote"],
+  xdxPlatformFee: ["Payment"],
+  crossSwap: ["Payment"],
 };
 
 export function executionTxType(detail = {}) {
@@ -173,6 +175,15 @@ export const WALLET_EVENTS = {
   tradePending: "dpmf-trade-pending",
 };
 
+function optionalText(value) {
+  const text = String(value || "").trim();
+  return text || null;
+}
+
+function optionalAmount(value) {
+  return value != null && Number(value) > 0 ? Number(value) : null;
+}
+
 export function normalizeTradeRequest(detail) {
   if (!detail) return null;
   if (typeof detail === "string") return { action: detail, quote: "XRP" };
@@ -180,10 +191,19 @@ export function normalizeTradeRequest(detail) {
   if (!action) return null;
   return {
     action,
-    quote: quoteIdFromPair(detail.quote || detail.pair || detail.pool || "XRP"),
+    quote: quoteIdFromPair(detail.quote || detail.pair || detail.pool || detail.toId || "XRP"),
     quoteIssuer: detail.quoteIssuer || detail.quote_issuer || null,
     quoteHex: detail.quoteHex || detail.quote_hex || null,
-    amount: detail.amount != null && Number(detail.amount) > 0 ? Number(detail.amount) : null,
+    amount: optionalAmount(detail.amount),
+    fromId: optionalText(detail.fromId),
+    toId: optionalText(detail.toId),
+    fromIssuer: optionalText(detail.fromIssuer),
+    fromHex: optionalText(detail.fromHex),
+    toIssuer: optionalText(detail.toIssuer),
+    toHex: optionalText(detail.toHex),
+    receive: optionalAmount(detail.receive),
+    feeUsd: optionalAmount(detail.feeUsd),
+    nextTrade: detail.nextTrade && typeof detail.nextTrade === "object" ? detail.nextTrade : null,
   };
 }
 
@@ -280,6 +300,21 @@ export function marketBuyXdx({ account, quote, xdx, cost } = {}) {
     TransactionType: "Payment",
     Amount: xdxAmount(xdx),
     SendMax: quoteAmount(quote, sendMax),
+    Flags: TF_PARTIAL_PAYMENT,
+  };
+  if (account) {
+    txjson.Account = account;
+    txjson.Destination = account;
+  }
+  return txjson;
+}
+
+export function crossAssetSwapTxjson({ account, fromQuote, toQuote, sendMax, deliver } = {}) {
+  const minOut = withMarketSlippage(deliver, "sell");
+  const txjson = {
+    TransactionType: "Payment",
+    Amount: quoteAmount(toQuote, minOut),
+    SendMax: quoteAmount(fromQuote, sendMax),
     Flags: TF_PARTIAL_PAYMENT,
   };
   if (account) {
@@ -691,6 +726,8 @@ export function tradeSides({
   amount,
   quoteQty,
   quoteLabel,
+  fromLabel,
+  toLabel,
   total,
   lpAmount,
   lpOut,
@@ -698,6 +735,18 @@ export function tradeSides({
   singleAsset,
 } = {}) {
   const label = quoteLabel || "XRP";
+  if (action === "xdxPlatformFee") {
+    return {
+      pay: [{ value: Number(amount) || 0, asset: "XDX" }],
+      receive: [],
+    };
+  }
+  if (action === "crossSwap") {
+    return {
+      pay: [{ value: Number(amount) || 0, asset: fromLabel || label }],
+      receive: [{ value: Number(quoteQty) || 0, asset: toLabel || label }],
+    };
+  }
   if (action === "buy") {
     return {
       pay: [{ value: Number(quoteQty || total) || 0, asset: label }],

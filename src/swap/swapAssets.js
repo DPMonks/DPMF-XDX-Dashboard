@@ -9,6 +9,12 @@ function optionKey(ticker, issuer) {
   return issuer ? `${String(ticker).toUpperCase()}:${String(issuer).toUpperCase()}` : String(ticker || "").toUpperCase();
 }
 
+function shortIssuer(address) {
+  const text = String(address || "");
+  if (text.length <= 11) return text;
+  return `${text.slice(0, 4)}…${text.slice(-4)}`;
+}
+
 function reserveAmount(pool, keys) {
   for (const key of keys) {
     if (pool?.[key] == null || pool[key] === "") continue;
@@ -57,49 +63,57 @@ export function quotesFromActiveXdxPools(pools = []) {
   });
 }
 
-function sameSwapAsset(line, asset) {
-  const ticker = String(line?.ticker || line?.id || "").toUpperCase();
-  const want = String(asset?.ticker || asset?.id || "").toUpperCase();
-  if (!ticker || ticker !== want) return false;
-  const lineIssuer = String(line?.issuer || "").toUpperCase();
-  const assetIssuer = String(asset?.issuer || "").toUpperCase();
-  if (!lineIssuer || !assetIssuer) return true;
-  return lineIssuer === assetIssuer;
+function finishOptions(collected, balances = {}) {
+  const counts = new Map();
+  for (const row of collected) counts.set(row.ticker, (counts.get(row.ticker) || 0) + 1);
+  return collected.map((row) => {
+    const collided = (counts.get(row.ticker) || 0) > 1 && row.issuer;
+    const ticker = row.ticker;
+    return {
+      id: collided ? `${ticker}:${row.issuer}` : ticker,
+      ticker,
+      label: collided ? `${ticker} · ${shortIssuer(row.issuer)}` : ticker,
+      currency: row.currency || ticker,
+      issuer: row.issuer || null,
+      hex: row.hex || null,
+      balance: ticker === "XRP" ? Number(balances.xrp) || 0 : row.balance,
+    };
+  });
 }
 
 export function swapAssetOptions({ pools = [], lines = [], balances = {}, signedIn = false } = {}) {
-  const byId = new Map();
+  return [
+    { ...XDX_ASSET, balance: Number(balances.xdx) || 0 },
+    ...swapCounterOptions({ pools, lines, balances, signedIn }),
+  ];
+}
+
+export function swapCounterOptions({ pools = [], lines = [], balances = {}, signedIn = false } = {}) {
+  const collected = [];
   function add(row) {
-    const id = String(row.id || row.ticker || "").toUpperCase();
-    if (!id || isLpCurrency(row.currency) || isLpCurrency(row.hex)) return;
-    if (byId.has(id) && !row.issuer) return;
-    byId.set(id, {
-      id,
-      ticker: row.ticker || id,
-      label: row.label || id,
-      currency: row.currency || id,
-      issuer: row.issuer || null,
+    const ticker = String(row.ticker || row.id || row.currency || "").toUpperCase();
+    if (!ticker || ticker === "XDX" || isLpCurrency(row.currency) || isLpCurrency(row.hex)) return;
+    const issuer = row.issuer || null;
+    const key = optionKey(ticker, issuer);
+    if (collected.some((item) => item.key === key)) return;
+    collected.push({
+      key,
+      ticker,
+      issuer,
+      currency: row.currency || ticker,
       hex: row.hex || null,
       balance: row.balance,
     });
   }
 
-  add({ ...XDX_ASSET, balance: Number(balances.xdx) || 0 });
-  for (const row of swapCounterOptions({ pools, lines, balances, signedIn })) add(row);
-  const xrp = byId.get("XRP");
-  if (xrp) xrp.balance = Number(balances.xrp) || xrp.balance || 0;
-  return [byId.get("XDX"), ...[...byId.values()].filter((row) => row.id !== "XDX")].filter(Boolean);
-}
-
-export function swapCounterOptions({ pools = [], lines = [], balances = {}, signedIn = false } = {}) {
-  const quotes = quotesFromActiveXdxPools(pools);
-  const held = quotesFromWalletLines(lines);
-  const rows = quotes.filter((row) => {
-    if (row.id === "XRP") return true;
-    if (!signedIn) return true;
-    return held.some((line) => sameSwapAsset(line, row));
-  });
-  if (rows.length) return rows.map((row) => (row.id === "XRP" ? { ...row, balance: Number(balances.xrp) || 0 } : row));
+  add({ ...XRP_ASSET, balance: Number(balances.xrp) || 0 });
+  if (signedIn) {
+    for (const row of quotesFromWalletLines(lines)) add(row);
+  } else {
+    for (const row of quotesFromActiveXdxPools(pools)) add(row);
+  }
+  const rows = finishOptions(collected, balances);
+  if (rows.length) return rows;
   return [{ ...XRP_ASSET, balance: Number(balances.xrp) || 0 }];
 }
 
@@ -112,13 +126,13 @@ export function swapCounterAsset(fromId, toId) {
 }
 
 export function swapSellingXdx(fromId) {
-  return String(fromId || "").toUpperCase() === "XDX";
+  return String(fromId || "").split(":")[0].toUpperCase() === "XDX";
 }
 
 export function pickOtherAsset(current, next, fallback = "XRP") {
   const a = String(current || "").toUpperCase();
   const b = String(next || "").toUpperCase();
-  if (b && b !== "XDX" && b !== a) return b;
+  if (b && b !== a) return b;
   if (a && a !== "XDX") return a;
   return fallback;
 }

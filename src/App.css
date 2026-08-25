@@ -2062,6 +2062,14 @@ body {
   color: #ffb347;
 }
 
+.xdx-swap-fee {
+  margin: 8px auto 0;
+  font-size: 12px;
+  text-align: center;
+  color: var(--dpmf-text-muted);
+  max-width: min(100%, 28rem);
+}
+
 .xdx-swap-alts {
   display: flex;
   flex-wrap: wrap;

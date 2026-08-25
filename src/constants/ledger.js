@@ -57,6 +57,10 @@ export function xrplToMd5ForLpPool(pool) {
 export const XIO_ISSUER = "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU";
 export const XSQUAD_ISSUER = "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg";
 
+// 1% XDX platform fee for swaps where neither side is XDX.
+export const XDX_FEE_TREASURY = "rDPMFBANKMexTKkC7e4n3ekD9HfhmWHva8";
+export const XDX_PLATFORM_FEE_PCT = 1;
+
 export function asciiCurrencyHex(code) {
   const text = String(code || "");
   let hex = "";

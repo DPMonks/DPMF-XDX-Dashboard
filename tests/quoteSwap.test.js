@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   ammSwapOut,
   expectedFromMid,
+  quoteBridgeSwap,
   quoteSwap,
   resolveVenueMid,
   saferSwapAlternatives,
@@ -135,8 +136,8 @@ test("swap counters are individual assets from active XDX pools, then wallet lin
     signedIn: true,
   });
   assert.deepEqual(
-    held.map((row) => row.id),
-    ["XRP", "RLUSD"]
+    held.map((row) => row.id).sort(),
+    ["RLUSD", "SOLO", "XRP"]
   );
 
   const noRlusdLine = swapCounterOptions({
@@ -145,8 +146,8 @@ test("swap counters are individual assets from active XDX pools, then wallet lin
     signedIn: true,
   });
   assert.deepEqual(
-    noRlusdLine.map((row) => row.id),
-    ["XRP"]
+    noRlusdLine.map((row) => row.id).sort(),
+    ["SOLO", "XRP"]
   );
 
   const lineWithoutPool = swapCounterOptions({
@@ -155,14 +156,27 @@ test("swap counters are individual assets from active XDX pools, then wallet lin
     signedIn: true,
   });
   assert.deepEqual(
-    lineWithoutPool.map((row) => row.id),
-    ["XRP"]
+    lineWithoutPool.map((row) => row.id).sort(),
+    ["RLUSD", "SOLO", "XRP"]
   );
 
   assert.deepEqual(
-    swapCounterOptions({ lines: [rlusdLine], signedIn: true }).map((row) => row.id),
-    ["XRP"]
+    swapCounterOptions({ lines: [rlusdLine], signedIn: true }).map((row) => row.id).sort(),
+    ["RLUSD", "XRP"]
   );
+  assert.ok(swapAssetOptions({ lines: [rlusdLine, soloLine], signedIn: true }).some((row) => row.id === "XDX"));
+});
+
+test("quoteBridgeSwap walks from-quote into XDX then out to the other quote", () => {
+  const quote = quoteBridgeSwap({
+    amountIn: 10,
+    routingMode: "amm",
+    fromVenue: { reserveBase: 10_000, reserveQuote: 200, tradingFee: 1000, mid: 0.02, bids: [], asks: [] },
+    toVenue: { reserveBase: 8_000, reserveQuote: 80, tradingFee: 1000, mid: 0.01, bids: [], asks: [] },
+  });
+  assert.equal(quote.routeUsed, "bridge");
+  assert.ok(quote.actualOutput > 0);
+  assert.ok(quote.xdxNotional > 0);
 });
 
 test("empty book-only does not report -100% slippage from an AMM mid", () => {

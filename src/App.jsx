@@ -238,6 +238,9 @@ export default function App() {
       setTradeAction((current) => {
         if (!current) return null;
         if (!executionBelongsToOpenTrade(current, detail)) return current;
+        if (current.action === "xdxPlatformFee" && current.nextTrade) {
+          return { ...normalizeTradeRequest(current.nextTrade), openId: Date.now() };
+        }
         return null;
       });
       refreshLists();
@@ -441,7 +444,13 @@ export default function App() {
           initialPools={ammData}
           resumeUuid={tradeAction.resumeUuid}
           resumeTxjson={tradeAction.resumeTxjson}
-          onClose={() => setTradeAction(null)}
+          onClose={(next) => {
+            if (next?.action) {
+              setTradeAction({ ...normalizeTradeRequest(next), openId: Date.now() });
+              return;
+            }
+            setTradeAction(null);
+          }}
         />
       ) : null}
       <TradeExecuted />

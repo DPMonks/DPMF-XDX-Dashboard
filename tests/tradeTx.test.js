@@ -428,6 +428,18 @@ test("opening add LP from a pool card keeps extra quote metadata", () => {
   assert.equal(quote.issuer, "rPlxIssuer");
 });
 
+test("fee then swap keeps the follow-on trade", () => {
+  const opened = normalizeTradeRequest({
+    action: "xdxPlatformFee",
+    amount: 12,
+    nextTrade: { action: "crossSwap", fromId: "BITX", toId: "USD", amount: 5 },
+  });
+  assert.equal(opened.action, "xdxPlatformFee");
+  assert.equal(opened.amount, 12);
+  assert.equal(opened.nextTrade.action, "crossSwap");
+  assert.equal(opened.nextTrade.fromId, "BITX");
+});
+
 test("unsigned trade clicks ask for sign-in before the trade window", () => {
   assert.equal(gateUnsignedTrade("addLp", null).action, "sign-in");
   assert.equal(gateUnsignedTrade({ action: "buy", pair: "XDX/XIO" }, null).trade.quote, "XIO");
@@ -524,6 +536,8 @@ test("only a matching ledger tx closes the open trade panel", () => {
   assert.equal(executionClosesTradeAction("buy", { txType: "AMMDeposit" }), false);
   assert.equal(executionClosesTradeAction("buy", { txjson: { TransactionType: "TrustSet" } }), false);
   assert.equal(executionClosesTradeAction("addLp", { txType: "SignIn" }), false);
+  assert.equal(executionClosesTradeAction("xdxPlatformFee", { txjson: { TransactionType: "Payment" } }), true);
+  assert.equal(executionClosesTradeAction("crossSwap", { txjson: { TransactionType: "Payment" } }), true);
 });
 
 test("a leftover executed payload cannot close a newly opened trade panel", () => {
