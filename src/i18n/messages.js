@@ -212,6 +212,12 @@ const en = {
   swapAdvanced: "Advanced options",
   swapRouting: "Routing",
   swapSmart: "Smart",
+  swapHelpSmart:
+    "Smart looks at both the XDX pool and the buy and sell orders, then uses whichever pays you more for this size. This is the usual choice.",
+  swapHelpAmm:
+    "AMM only uses the XDX pool. The pool can always fill the trade, but a big swap can move the pool price and you get less.",
+  swapHelpBook:
+    "Order book only fills from people who already posted buy or sell orders. If those orders are thin, the trade may not finish.",
   swapMax: "Max",
   swapFlip: "Flip assets",
   swapAction: "Swap",

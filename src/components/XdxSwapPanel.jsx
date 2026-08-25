@@ -35,7 +35,6 @@ export default function XdxSwapPanel() {
   const [toId, setToId] = useState("XRP");
   const [amount, setAmount] = useState("");
   const [routingMode, setRoutingMode] = useState("smart");
-  const [advanced, setAdvanced] = useState(false);
   const [lines, setLines] = useState([]);
   const [balances, setBalances] = useState({});
   const [walletAccount, setWalletAccount] = useState({});
@@ -269,9 +268,9 @@ export default function XdxSwapPanel() {
         </div>
       ) : null}
 
-      {advanced ? (
-        <fieldset className="xdx-swap-advanced">
-          <legend>{t.swapRouting}</legend>
+      <fieldset className="xdx-swap-advanced">
+        <legend>{t.swapRouting}</legend>
+        <div className="xdx-swap-routes">
           {[
             ["smart", t.swapSmart],
             ["amm", t.swapRouteAmm],
@@ -287,8 +286,11 @@ export default function XdxSwapPanel() {
               {label}
             </label>
           ))}
-        </fieldset>
-      ) : null}
+        </div>
+        <p className="xdx-swap-help">
+          {routingMode === "amm" ? t.swapHelpAmm : routingMode === "book" ? t.swapHelpBook : t.swapHelpSmart}
+        </p>
+      </fieldset>
 
       <div className="xdx-swap-actions">
         <button
@@ -298,9 +300,6 @@ export default function XdxSwapPanel() {
           onClick={() => openSwap()}
         >
           {account ? t.swapAction : t.swapConnect}
-        </button>
-        <button type="button" className="xdx-swap-secondary" onClick={() => setAdvanced((on) => !on)}>
-          {t.swapAdvanced}
         </button>
       </div>
     </section>

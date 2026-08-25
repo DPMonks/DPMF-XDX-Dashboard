@@ -2000,9 +2000,7 @@ body {
   padding: 10px;
   border: 1px solid var(--dpmf-border-soft);
   border-radius: 10px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 16px;
+  min-width: 0;
 }
 
 .xdx-swap-advanced legend {
@@ -2010,6 +2008,13 @@ body {
   font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  color: var(--dpmf-text-main);
+}
+
+.xdx-swap-routes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
 }
 
 .xdx-swap-advanced label {
@@ -2017,11 +2022,19 @@ body {
   align-items: center;
   gap: 6px;
   min-height: 44px;
+  color: var(--dpmf-text-main);
+}
+
+.xdx-swap-help {
+  margin: 8px 0 0;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .xdx-swap-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 12px;
 }
