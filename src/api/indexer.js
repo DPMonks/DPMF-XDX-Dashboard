@@ -1,5 +1,9 @@
 import { api, INDEXER_ORIGIN } from "../api";
-import { pairFromRow } from "../constants/ledger";
+import {
+  pairFromRow,
+  XDX_RLUSD_LP_XRPL_TO_MD5,
+  XDX_XRP_LP_XRPL_TO_MD5,
+} from "../constants/ledger";
 import { keepLastGoodOwners } from "../todayOwners";
 import {
   carryActivityMetrics,
@@ -10,6 +14,16 @@ import {
   xrplToHolderGraphUrl,
 } from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
+import { fillMissingXdxFiat, pricesNeedFiat } from "../utils/fiatFx";
+import {
+  applyXrplToChange,
+  applyXrplToOverview,
+  applyXrplToPrices,
+  countsNeedXrplTo,
+  marketNeedsXrplTo,
+  parseXrplToToken,
+  XRPL_TO_TOKEN_URL,
+} from "../utils/xrplToToken";
 import { detectQuoteUsd, preferUsdPoolSplit } from "../utils/poolSplit";
 import { LIST_PAGE_SIZE, shouldFetchMoreRows } from "../utils/pagination";
 import {
@@ -185,7 +199,15 @@ function mapPool(row) {
     tvl: numberOrNull(pick(row, ["tvl_usd", "tvl", "total_value_locked", "liquidity"])),
     price: numberOrNull(pick(row, ["price", "price_usd"])),
     apr: numberOrNull(pick(row, ["apr", "apy"])),
-    volume24h: numberOrNull(pick(row, ["volume24h", "volume_24h", "volume"])),
+    volume24h: numberOrNull(pick(row, ["volume24hXdx", "volume24h", "volume_24h", "volume"])),
+    volume24hXdx: numberOrNull(pick(row, ["volume24hXdx", "volume_24h_xdx"])),
+    volume24hXrp: numberOrNull(pick(row, ["volume24hXrp", "volume_24h_xrp"])),
+    volume24hUsd: numberOrNull(pick(row, ["volume24hUsd", "volume_24h_usd"])),
+    volume7d: numberOrNull(pick(row, ["volume7dXdx", "volume7d", "volume_7d"])),
+    volume7dXdx: numberOrNull(pick(row, ["volume7dXdx", "volume7d", "volume_7d"])),
+    volumeUnit: pick(row, ["volumeUnit", "volume_unit"]) || null,
+    volumeSource: pick(row, ["volumeSource", "volume_source"]) || null,
+    xdxPerXrp: numberOrNull(pick(row, ["xdxPerXrp", "xdx_per_xrp", "exchXrp"])),
     reserve_asset: numberOrNull(
       pick(row, [
         "reserve_asset",
@@ -311,13 +333,6 @@ export async function getAmm() {
     api.lpPools().catch(() => ({ pools: [], catching_up: true })),
     api.prices().catch(() => ({})),
   ]);
-  const catchingUp = Boolean(
-    body &&
-      typeof body === "object" &&
-      !Array.isArray(body) &&
-      (body.catching_up || !asArray(body.pools || body).length)
-  );
-  if (catchingUp) return [];
   const xdxUsd = numberOrNull(prices?.xdxUsd ?? prices?.recorded_price);
   const xrpUsd = numberOrNull(prices?.xrpUsd);
   return uniquePools(
@@ -499,8 +514,30 @@ export async function getTopHolders(onPage) {
   });
 }
 
+async function fetchXrplToLpOwners() {
+  const pages = await Promise.all(
+    [
+      ["XDX/XRP", XDX_XRP_LP_XRPL_TO_MD5],
+      ["XDX/RLUSD", XDX_RLUSD_LP_XRPL_TO_MD5],
+    ].map(async ([pool, md5]) => {
+      const response = await fetch(`https://api.xrpl.to/v1/holders/list/${md5}?limit=200&offset=0`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!response.ok) return [];
+      const body = await response.json();
+      return (Array.isArray(body.richList) ? body.richList : []).map((row) => ({
+        ...row,
+        pool_name: pool,
+        lp_balance: Number(row.balance) || 0,
+      }));
+    })
+  );
+  return { holders: pages.flat(), rows: pages.flat(), present: true, catching_up: false, source: "xrpl.to" };
+}
+
 export async function getTopLp(onPage) {
-  return loadPagedOwners({
+  const rows = await loadPagedOwners({
     cacheKey: "lpHolders",
     requestFirst: () => api.topLp(FIRST_LP, 0, { snapshot: "today", pool: "all" }),
     requestRest: (limit, offset) =>
@@ -513,6 +550,55 @@ export async function getTopLp(onPage) {
     firstSize: FIRST_LP,
     restPageSize: 50,
   });
+  if (rows.length) return rows;
+  try {
+    const payload = await fetchXrplToLpOwners();
+    const mapped = finishLp(asArray(payload));
+    if (mapped.length) onPage?.(mapped, pickFreshness(payload, mapped));
+    return mapped;
+  } catch {
+    return rows;
+  }
+}
+
+const XRPL_TO_TOKEN_TTL_MS = 60_000;
+let xrplToTokenCache = { at: 0, token: null };
+
+export async function fetchXrplToToken() {
+  const now = Date.now();
+  if (xrplToTokenCache.token && now - xrplToTokenCache.at < XRPL_TO_TOKEN_TTL_MS) {
+    return xrplToTokenCache.token;
+  }
+  const response = await fetch(XRPL_TO_TOKEN_URL, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(4000),
+  });
+  if (!response.ok) return xrplToTokenCache.token;
+  const token = parseXrplToToken(await response.json());
+  xrplToTokenCache = { at: now, token };
+  return token;
+}
+
+async function withXrplToBackup(overview, prices, change) {
+  if (
+    !marketNeedsXrplTo(overview) &&
+    !marketNeedsXrplTo(prices) &&
+    !countsNeedXrplTo(overview) &&
+    Number(change?.xdx)
+  ) {
+    return { overview, prices, change };
+  }
+  try {
+    const token = await fetchXrplToToken();
+    if (!token) return { overview, prices, change };
+    return {
+      overview: applyXrplToOverview(overview, token, prices),
+      prices: applyXrplToPrices(prices, token),
+      change: applyXrplToChange(change, token),
+    };
+  } catch {
+    return { overview, prices, change };
+  }
 }
 
 export async function getTokenDetails(onPartial) {
@@ -521,23 +607,35 @@ export async function getTokenDetails(onPartial) {
     api.prices().catch(() => ({})),
     api.change24h().catch(() => ({})),
   ]);
-  const core = composeTokenDetails({ overview, prices, change });
+  const backed = await withXrplToBackup(overview, fillMissingXdxFiat(prices), change);
+  const core = composeTokenDetails(backed);
   onPartial?.(core);
 
-  const [holders, trustlines, lpHolders, lpTrustlines] = await Promise.all([
+  const [holders, trustlines, lpHolders, lpTrustlines, issuerLocked] = await Promise.all([
     api.holdersCount({ snapshot: "today" }).catch(() => ({})),
     api.trustlinesCount().catch(() => ({})),
     api.lpHoldersCount({ pool: "all" }).catch(() => ({})),
     api.lpTrustlinesCount({ pool: "all" }).catch(() => ({})),
+    api.issuerLocked().catch(() => ({})),
   ]);
   return composeTokenDetails({
-    overview,
-    prices,
-    change,
-    holders,
-    trustlines,
-    lpHolders,
-    lpTrustlines,
+    ...backed,
+    overview: {
+      ...backed.overview,
+      issuer_locked:
+        numberOrNull(backed.overview.issuer_locked ?? backed.overview.burned_supply) ??
+        numberOrNull(issuerLocked?.issuer_locked ?? issuerLocked?.burned_supply),
+      circulating:
+        numberOrNull(backed.overview.circulating ?? backed.overview.circulating_supply) ??
+        numberOrNull(issuerLocked?.circulating),
+      issued: numberOrNull(backed.overview.issued ?? backed.overview.issued_xdx) ?? numberOrNull(issuerLocked?.issued),
+    },
+    holders: numberOrNull(holders?.count) ? holders : { count: backed.overview.holder_count },
+    trustlines: numberOrNull(trustlines?.count) ? trustlines : { count: backed.overview.trustline_count },
+    lpHolders: numberOrNull(lpHolders?.count) ? lpHolders : { count: backed.overview.lp_holder_count },
+    lpTrustlines: numberOrNull(lpTrustlines?.count)
+      ? lpTrustlines
+      : { count: backed.overview.lp_trustline_count },
   });
 }
 
@@ -671,6 +769,9 @@ export async function getWalletBalances(address) {
         "03970105D80AE3C54085F6E97EE16CEDE6CE8200",
         "03BCD44104644B711C58CD14CD13CBA65757CFBE",
       ]),
+    rlusd:
+      numberOrNull(payload?.rlusd) ??
+      amountFromBalances(payload, ["RLUSD", "524C555344000000000000000000000000000000"]),
   };
 }
 
@@ -704,7 +805,13 @@ export async function getWalletRank(address) {
 }
 
 export async function getPrices() {
-  return api.prices();
+  const prices = fillMissingXdxFiat(await api.prices().catch(() => ({})));
+  if (!pricesNeedFiat(prices)) return prices;
+  try {
+    return fillMissingXdxFiat(applyXrplToPrices(prices, await fetchXrplToToken()));
+  } catch {
+    return prices;
+  }
 }
 
 export async function getWalletOffers(address, extra = {}) {

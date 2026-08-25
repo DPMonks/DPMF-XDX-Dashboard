@@ -1,4 +1,6 @@
 import { XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
+import { fillMissingXdxFiat } from "../utils/fiatFx.js";
+import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
 import {
   isXdxAmmPair,
@@ -135,26 +137,28 @@ function fiatViaXrp(unitUsd, xrpUsd, xrpFx) {
 }
 
 function fiatAmount(bal, unitPrice, unitUsd, xrpUsd, xrpFx) {
-  if (num(unitPrice) != null) return bal * Number(unitPrice);
+  if (Number(unitPrice) > 0) return bal * Number(unitPrice);
   const via = fiatViaXrp(unitUsd, xrpUsd, xrpFx);
   return via != null ? bal * via : null;
 }
 
 export function xdxFiatValues(xdx, prices = {}) {
   const bal = num(xdx);
-  const usd = num(prices.xdxUsd ?? prices.recorded_price);
-  const xrp = num(prices.xdxXrp ?? prices.xdxPerXrp);
+  const filled = fillMissingXdxFiat(prices);
+  const usd = num(filled.xdxUsd ?? filled.recorded_price);
+  const xrp = num(filled.xdxXrp ?? filled.xdxPerXrp);
   if (bal == null) {
     return { xdx: null, usd: null, gbp: null, eur: null, jpy: null, xrp: null, rlusd: null };
   }
-  const usdValue = usd != null ? bal * usd : null;
-  const rlusdUsd = num(prices.rlusdUsd ?? prices.RLUSD) || 1;
+  const usdValue = usd != null && usd > 0 ? bal * usd : null;
+  const rlusdUsd = num(filled.rlusdUsd ?? filled.RLUSD) || 1;
+  const viaUsd = (rate) => (usdValue != null && Number(rate) > 0 ? usdValue * Number(rate) : null);
   return {
     xdx: bal,
     usd: usdValue,
-    gbp: fiatAmount(bal, prices.xdxGbp, usd, prices.xrpUsd, prices.xrpGbp),
-    eur: fiatAmount(bal, prices.xdxEur, usd, prices.xrpUsd, prices.xrpEur),
-    jpy: fiatAmount(bal, prices.xdxJpy, usd, prices.xrpUsd, prices.xrpJpy),
+    gbp: fiatAmount(bal, filled.xdxGbp, usd, filled.xrpUsd, filled.xrpGbp) ?? viaUsd(filled.usdGbp),
+    eur: fiatAmount(bal, filled.xdxEur, usd, filled.xrpUsd, filled.xrpEur) ?? viaUsd(filled.usdEur),
+    jpy: fiatAmount(bal, filled.xdxJpy, usd, filled.xrpUsd, filled.xrpJpy) ?? viaUsd(filled.usdJpy),
     xrp: xrp != null ? bal * xrp : null,
     rlusd: usdValue != null ? usdValue / rlusdUsd : null,
   };
@@ -235,7 +239,16 @@ export function lpPositionFromPool(lpBalance, pool = {}, pairHint = "") {
     withdraw_estimate_quote: withdrawQuote ?? share * reserveQuote,
     fees_earned: num(pool.fees_earned),
     trading_fee: num(pool.trading_fee),
-    volume24h: num(pool.volume24h ?? pool.volume_24h),
+    volume24h: num(pool.volume24h ?? pool.volume_24h ?? pool.volume24hXdx),
+    volume24hXdx: num(pool.volume24hXdx ?? pool.volume_24h_xdx),
+    volume24hXrp: num(pool.volume24hXrp ?? pool.volume_24h_xrp),
+    volume24hUsd: num(pool.volume24hUsd ?? pool.volume_24h_usd),
+    volume7d: num(pool.volume7d ?? pool.volume7dXdx),
+    volume7dXdx: num(pool.volume7dXdx ?? pool.volume7d),
+    volumeUnit: pool.volumeUnit || null,
+    xdxUsd: num(pool.xdxUsd),
+    xrpUsd: num(pool.xrpUsd),
+    xdxPerXrp: num(pool.xdxPerXrp ?? pool.xdx_per_xrp ?? pool.exchXrp),
     composition_xdx_percent: num(pool.xdx_pct ?? pool.composition_xdx_percent),
     composition_quote_percent: num(pool.quote_pct ?? pool.composition_quote_percent),
     xdx_pct: num(pool.xdx_pct ?? pool.composition_xdx_percent),
@@ -338,15 +351,94 @@ function quotePerXdx(row, fallback) {
 function volumeForWindow(row, flowVol, windowMs) {
   const pair = normalizeWalletPair(row.pool || row.pool_name);
   const fromFlows = flowVol.get(pair) || 0;
-  const catalog24h = num(row.volume24h);
-  if (windowMs <= DAY_MS && catalog24h != null) return Math.max(catalog24h, fromFlows);
+  const catalog24h = catalogXdxVolume24h(row);
+  const catalog7d = catalogXdxVolume7d(row);
+  if (windowMs <= DAY_MS) {
+    if (catalog24h > 0) return Math.max(catalog24h, fromFlows);
+    return fromFlows;
+  }
+  if (catalog7d > 0) return Math.max(catalog7d, fromFlows);
   if (fromFlows > 0) return fromFlows;
-  if (catalog24h != null && windowMs > DAY_MS) return catalog24h * (windowMs / DAY_MS);
+  if (catalog24h > 0) return catalog24h * (windowMs / DAY_MS);
   return fromFlows;
 }
 
+export const FEATURED_EARN_PAIRS = ["XDX/XRP", "XDX/RLUSD"];
+
 function emptyEarnings() {
   return { xdx: 0, xrp: 0, rlusd: 0, usd: null };
+}
+
+function emptyPoolEarn(pair) {
+  const quote = String(pair || "").split("/")[1] || "";
+  return {
+    pair,
+    quote,
+    xdx24h: 0,
+    quote24h: 0,
+    usd24h: 0,
+    xdx7d: 0,
+    quote7d: 0,
+    usd7d: 0,
+  };
+}
+
+function splitPoolFee(row, feeXdx, xdxXrp) {
+  if (!(feeXdx > 0)) return { xdx: 0, quote: 0, quoteId: poolQuoteId(row) };
+  if (quoteIsXrp(row)) {
+    const px = quotePerXdx(row, xdxXrp);
+    return { xdx: feeXdx / 2, quote: px > 0 ? (feeXdx / 2) * px : 0, quoteId: "XRP" };
+  }
+  if (quoteIsRlusd(row)) {
+    const px = quotePerXdx(row, null);
+    return { xdx: feeXdx / 2, quote: px > 0 ? (feeXdx / 2) * px : 0, quoteId: "RLUSD" };
+  }
+  return { xdx: feeXdx, quote: 0, quoteId: poolQuoteId(row) };
+}
+
+function usdForSplit(split, { xdxUsd, xrpUsd, rlusdUsd }) {
+  const xdxPart = num(xdxUsd) != null ? split.xdx * Number(xdxUsd) : 0;
+  let quotePart = 0;
+  if (split.quoteId === "XRP" && num(xrpUsd) != null) quotePart = split.quote * Number(xrpUsd);
+  else if (split.quoteId === "RLUSD") quotePart = split.quote * (num(rlusdUsd) || 1);
+  return xdxPart + quotePart;
+}
+
+export function lpPoolEarnings(
+  positions = [],
+  { flows = [], xdxUsd = null, xrpUsd = null, rlusdUsd = 1, xdxXrp = null, now = Date.now() } = {}
+) {
+  const vol24h = volumeByPool(flows, DAY_MS, now);
+  const vol7d = volumeByPool(flows, DAY_MS * 7, now);
+  const prices = { xdxUsd, xrpUsd, rlusdUsd, xdxXrp };
+  const byPair = new Map(
+    (Array.isArray(positions) ? positions : [])
+      .filter((row) => isXdxAmmPair(row))
+      .map((row) => [normalizeWalletPair(row.pool || row.pool_name), row])
+  );
+  const pools = {};
+  for (const pair of FEATURED_EARN_PAIRS) {
+    const row = byPair.get(pair);
+    if (!row || !((num(row.lp_share_percent) || 0) > 0)) {
+      pools[pair] = emptyPoolEarn(pair);
+      continue;
+    }
+    const share = Number(row.lp_share_percent) / 100;
+    const rate = tradingFeeRate(row.trading_fee);
+    const day = splitPoolFee(row, volumeForWindow(row, vol24h, DAY_MS) * rate * share, xdxXrp);
+    const week = splitPoolFee(row, volumeForWindow(row, vol7d, DAY_MS * 7) * rate * share, xdxXrp);
+    pools[pair] = {
+      pair,
+      quote: day.quoteId || pair.split("/")[1],
+      xdx24h: day.xdx,
+      quote24h: day.quote,
+      usd24h: usdForSplit(day, prices),
+      xdx7d: week.xdx,
+      quote7d: week.quote,
+      usd7d: usdForSplit(week, prices),
+    };
+  }
+  return pools;
 }
 
 function earningsForWindow(positions, flowVol, windowMs, { xdxUsd, xrpUsd, rlusdUsd, xdxXrp }) {
@@ -408,13 +500,20 @@ export function lpFeeEarnings(
     pct24h: stake > 0 ? Math.min(100, (xdx / stake) * 100) : xdx > 0 ? null : 0,
     earnings: {
       xdx24h: day.xdx,
+      xdx24hUsd: day.xdx * (Number(prices.xdxUsd) || 0),
       xrp24h: day.xrp,
+      xrp24hUsd: day.xrp * (Number(prices.xrpUsd) || 0),
       rlusd24h: day.rlusd,
+      rlusd24hUsd: day.rlusd * (Number(prices.rlusdUsd) || 1),
       usd24h: day.usd,
       xdx7d: week.xdx,
+      xdx7dUsd: week.xdx * (Number(prices.xdxUsd) || 0),
       xrp7d: week.xrp,
+      xrp7dUsd: week.xrp * (Number(prices.xrpUsd) || 0),
       rlusd7d: week.rlusd,
+      rlusd7dUsd: week.rlusd * (Number(prices.rlusdUsd) || 1),
       usd7d: week.usd,
+      pools: lpPoolEarnings(positions, { flows, xdxUsd, xrpUsd, rlusdUsd, xdxXrp, now }),
     },
   };
 }
@@ -458,6 +557,7 @@ export function emptyWalletSnapshot(address = null) {
     filled: false,
     xrp: xrpReserveBreakdown({}),
     xdx: xdxFiatValues(null),
+    holdings: { xdx: null, xrp: null, rlusd: null },
     supply: { circulatingPct: null, supplyPct: null, circulating: null, totalSupply: null },
     fees: {
       xdx: null,
@@ -465,13 +565,23 @@ export function emptyWalletSnapshot(address = null) {
       pct24h: null,
       earnings: {
         xdx24h: null,
+        xdx24hUsd: null,
         xrp24h: null,
+        xrp24hUsd: null,
         rlusd24h: null,
+        rlusd24hUsd: null,
         usd24h: null,
         xdx7d: null,
+        xdx7dUsd: null,
         xrp7d: null,
+        xrp7dUsd: null,
         rlusd7d: null,
+        rlusd7dUsd: null,
         usd7d: null,
+        pools: {
+          "XDX/XRP": emptyPoolEarn("XDX/XRP"),
+          "XDX/RLUSD": emptyPoolEarn("XDX/RLUSD"),
+        },
       },
     },
     lp: [],
@@ -518,6 +628,9 @@ export function composeWalletSnapshot({
     xrpGbp: prices.xrpGbp,
     xrpEur: prices.xrpEur,
     xrpJpy: prices.xrpJpy,
+    usdGbp: prices.usdGbp,
+    usdEur: prices.usdEur,
+    usdJpy: prices.usdJpy,
     xdxXrp: xdxPerXrp,
     rlusdUsd: prices.RLUSD ?? prices.quotes?.RLUSD ?? 1,
   });
@@ -588,6 +701,11 @@ export function composeWalletSnapshot({
     filled: xdxBal != null || xrp.balance != null || lp.length > 0 || orders.length > 0 || activity.length > 0,
     xrp,
     xdx: fiat,
+    holdings: {
+      xdx: xdxBal,
+      xrp: xrp.balance,
+      rlusd: num(balances.rlusd),
+    },
     supply: {
       ...shares,
       circulating,

@@ -1,0 +1,29 @@
+---
+description: Always ship phone and iPad layouts with every change
+alwaysApply: true
+---
+
+# Phone and iPad on every change
+
+Do not treat desktop as the only target. Every UI, layout, flow, or rendered-data change must be designed and verified for phones and iPads in the same pass — not as a follow-up.
+
+## Required viewports before calling work done
+
+- Phone: 375x667 and 390x844
+- iPad portrait: 768x1024 and 834x1194
+- iPad landscape: 1024x768 and 1180x820
+- Desktop: 1440x900 (do not regress it)
+
+Use the **layout viewport**, not the outer browser window.
+
+## Build for these devices, not around them
+
+- Touch targets at least 44px. Form controls and selects use 16px text so iOS does not zoom.
+- Do not hide primary actions (download, copy, sign-in, pair select) at phone widths.
+- Prefer stacking or 2x2 over cramped 3+ columns inside a half-width card. On iPad, the feature the user is using should be full width when two desktop columns would crush it.
+- No horizontal page scroll. Values, lime text, and labels must stay readable and unclipped.
+- Coarse-pointer / Xaman / in-app browsers count. The same math and the same actions must work after mobile sign-in.
+
+## Verify behavior, not a single screenshot
+
+Click, type, scroll, and switch related routes at each required width. If a change writes state, check the other surfaces that read it on phone and iPad too.

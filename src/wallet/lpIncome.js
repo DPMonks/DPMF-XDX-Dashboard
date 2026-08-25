@@ -86,6 +86,26 @@ export function lpTokenUsd(lpTokens, pool = {}, prices = {}) {
   return (tokens / supply) * (xdxValue + quoteValue);
 }
 
+function feeIncomeUsd(feeXdx, position, book) {
+  const reserveXdx = num(position?.reserve_asset ?? position?.reserve_xdx);
+  const reserveQuote = num(position?.reserve_currency ?? position?.reserve_quote);
+  const quoteId = pairQuote(position?.pool || position?.pool_name || position?.pair, position?.quote);
+  const xdxUsd = num(book?.xdxUsd ?? book?.recorded_price);
+  const quoteUsd = detectQuoteUsd({
+    quoteId,
+    pool: { ...position, xdxUsd },
+    prices: book,
+    allowImplied: true,
+  });
+  if (quoteId === "XRP" || quoteId === "RLUSD") {
+    const halfXdx = feeXdx / 2;
+    const px = reserveXdx > 0 ? reserveQuote / reserveXdx : 0;
+    const quoteMark = quoteUsd || (quoteId === "RLUSD" ? 1 : 0);
+    return halfXdx * xdxUsd + (px > 0 ? halfXdx * px * quoteMark : 0);
+  }
+  return feeXdx * xdxUsd;
+}
+
 function lpEquivalent(feeXdx, row) {
   const reserveXdx = num(row?.reserve_asset ?? row?.reserve_xdx);
   const supply = num(row?.lp_supply);
@@ -132,7 +152,7 @@ export function lpFeeIncomeRows({
         date: bucket.date,
         lpTokens,
         pair,
-        usd: lpTokenUsd(lpTokens, position, book),
+        usd: feeIncomeUsd(feeXdx, position, book),
         kind: "fee",
       });
     }

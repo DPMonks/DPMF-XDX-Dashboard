@@ -540,10 +540,16 @@ body {
   align-items: stretch;
 }
 
+.wallet-token-row {
+  grid-template-columns: 1fr;
+}
+
 .wallet-token-row > .dashboard-card {
   display: flex;
   flex-direction: column;
-  min-height: 640px;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
 }
 
 .lists-row > .dashboard-card {
@@ -1942,8 +1948,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: min-content;
 }
 
 .wallet-hero {
@@ -2106,6 +2112,7 @@ body {
   font-size: 13px;
   color: var(--dpmf-neon-violet);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
   transition: opacity 0.4s ease;
 }
 
@@ -2122,9 +2129,24 @@ body {
   min-width: 0;
 }
 
+.wallet-earn-board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wallet-earn-title {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #39ff14;
+}
+
 .wallet-earn-beam {
   display: grid;
-  grid-template-columns: 1.15fr 0.9fr 1.15fr;
+  grid-template-columns: 1fr 1fr 1fr;
   grid-template-areas:
     "total total total"
     "xrp xdx rlusd";
@@ -2140,12 +2162,12 @@ body {
   grid-area: xdx;
 }
 
-.wallet-earn-total {
-  grid-area: total;
-}
-
 .wallet-earn-rlusd {
   grid-area: rlusd;
+}
+
+.wallet-earn-total {
+  grid-area: total;
 }
 
 .wallet-earn-cell {
@@ -2161,10 +2183,10 @@ body {
 
 .wallet-earn-label {
   margin: 0 0 1px;
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #fff;
+  color: #39ff14;
   opacity: 0.92;
 }
 
@@ -2183,16 +2205,38 @@ body {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #fff;
+  color: #39ff14;
   opacity: 0.72;
 }
 
 .wallet-earn-value {
-  font-size: 12px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
   font-weight: 700;
   text-align: right;
   min-width: 0;
   color: #39ff14;
+}
+
+.wallet-earn-value b,
+.wallet-earn-value i {
+  font-weight: 700;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.wallet-earn-value i {
+  opacity: 0.82;
+}
+
+.wallet-mini-list dd.is-earn {
+  color: #39ff14;
+  font-weight: 700;
 }
 
 .wallet-earn-cell.is-empty .wallet-earn-value,
@@ -2346,6 +2390,7 @@ body {
 
 .wallet-mini-list dd {
   text-align: end;
+  white-space: nowrap;
 }
 
 .wallet-micro {
@@ -2493,7 +2538,7 @@ body {
 }
 
 .wallet-income-scroll {
-  max-height: 168px;
+  max-height: 240px;
   overflow: auto;
   padding-right: 2px;
 }
@@ -2527,6 +2572,11 @@ body {
 
 .wallet-income-table td {
   color: var(--dpmf-text-main);
+}
+
+.wallet-income-table td.is-earn {
+  color: #39ff14;
+  font-weight: 700;
 }
 
 .wallet-income-end,
@@ -2836,6 +2886,34 @@ body {
   .wallet-fees-pct {
     justify-content: center;
   }
+
+  .wallet-earn-beam {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "xrp xdx"
+      "rlusd total";
+  }
+
+  .wallet-earn-cell {
+    padding: 8px 10px 9px;
+  }
+
+  .wallet-earn-label,
+  .wallet-earn-range {
+    font-size: 10px;
+  }
+
+  .wallet-earn-value {
+    font-size: 13px;
+  }
+
+  .wallet-token-row {
+    grid-template-columns: 1fr;
+  }
+
+  .wallet-token-row > .dashboard-card {
+    min-height: 0;
+  }
 }
 
 @media (max-width: 1100px) {
@@ -2872,18 +2950,9 @@ body {
 
 @media (max-width: 900px) {
   .wallet-token-row,
-  .wallet-infographics,
-  .wallet-earn-beam {
+  .wallet-infographics {
     grid-template-columns: 1fr;
     grid-template-rows: none;
-  }
-
-  .wallet-earn-beam {
-    grid-template-areas:
-      "xrp"
-      "xdx"
-      "rlusd"
-      "total";
   }
 
   .lists-row > .dashboard-card {
@@ -3074,8 +3143,35 @@ body {
     padding: 6px 3px;
   }
 
-  .copy-btn {
+  .copy-btn:not(.wallet-income-copy) {
     display: none;
+  }
+
+  .wallet-income-copy {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+
+  .wallet-income-table th,
+  .wallet-income-table td {
+    white-space: normal;
+  }
+
+  .wallet-lp-head,
+  .wallet-income-head {
+    flex-wrap: wrap;
+  }
+
+  .wallet-lp-select {
+    width: 100%;
+  }
+
+  .wallet-lp-select select {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
   }
 
   .rich-table col.col-copy,
@@ -3178,7 +3274,9 @@ body {
   .trade-field select,
   .trade-panel .pair-select-control,
   .pair-select-control,
-  .brand-select-list button {
+  .brand-select-list button,
+  .wallet-lp-select select,
+  .wallet-income-copy {
     min-height: 44px;
   }
 

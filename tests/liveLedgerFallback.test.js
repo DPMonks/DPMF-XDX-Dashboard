@@ -6,11 +6,14 @@ import {
   XDX_XRP_LP_HEX,
 } from "../src/constants/ledger.js";
 import {
+  iouFromGatewayBalances,
   lpHoldingsFromLines,
   loadWalletBalancesFromLedger,
+  rlusdBalanceFromLines,
   xdxBalanceFromLines,
 } from "../server/walletLedger.js";
 import { liveCatalogPayload } from "../server/liveCatalog.js";
+import { RLUSD_HEX, RLUSD_ISSUER } from "../src/constants/ledger.js";
 
 test("XDX and LP holdings are read from account_lines", () => {
   assert.equal(
@@ -21,6 +24,18 @@ test("XDX and LP holdings are read from account_lines", () => {
     14
   );
   assert.equal(xdxBalanceFromLines([{ account: "rOther", currency: "XDX", balance: "9" }]), null);
+  assert.equal(
+    rlusdBalanceFromLines([{ account: RLUSD_ISSUER, currency: RLUSD_HEX, balance: "7.25" }]),
+    7.25
+  );
+  assert.equal(
+    iouFromGatewayBalances(
+      { balances: { [XDX_ISSUER]: [{ currency: "XDX", value: "42" }] } },
+      XDX_ISSUER,
+      /^(XDX|5844580000000000000000000000000000000000)$/i
+    ),
+    42
+  );
   const lps = lpHoldingsFromLines([
     { account: XDX_XRP_AMM, currency: XDX_XRP_LP_HEX, balance: "3.25" },
     { account: XDX_XRP_AMM, currency: XDX_XRP_LP_HEX, balance: "0" },
@@ -41,12 +56,18 @@ test("live wallet balances prefer the XRPL account and XDX line", async () => {
         }),
       };
     }
+    if (body.method === "gateway_balances") {
+      return { ok: true, json: async () => ({ result: { balances: {} } }) };
+    }
     return {
       ok: true,
       json: async () => ({
         result: {
           status: "success",
-          lines: [{ account: XDX_ISSUER, currency: "XDX", balance: "88" }],
+          lines: [
+            { account: XDX_ISSUER, currency: "XDX", balance: "88" },
+            { account: RLUSD_ISSUER, currency: RLUSD_HEX, balance: "3" },
+          ],
         },
       }),
     };
@@ -58,15 +79,105 @@ test("live wallet balances prefer the XRPL account and XDX line", async () => {
   assert.equal(snap.source, "xrpl");
   assert.equal(snap.xrp, 25);
   assert.equal(snap.xdx, 88);
+  assert.equal(snap.rlusd, 3);
   assert.equal(snap.balance_drops, 25_000_000);
 });
 
 test("a down database still has a live token and price payload", async () => {
-  const empty = await liveCatalogPayload("prices/change24h");
-  assert.equal(empty.source, "xrpl");
-  const charts = await liveCatalogPayload("charts/activity");
-  assert.equal(charts.catching_up, true);
-  assert.ok(Array.isArray(charts.rows));
-  const flows = await liveCatalogPayload("xdx-flows");
+  const now = Date.now();
+  const fetchImpl = async (url, options = {}) => {
+    const target = String(url || "");
+    if (target.includes("coingecko")) {
+      return { ok: true, json: async () => ({ ripple: { usd: 2, gbp: 1.5, eur: 1.8, jpy: 300 } }) };
+    }
+    if (target.includes("xrpl.to/v1/ohlc")) {
+      return {
+        ok: true,
+        json: async () => ({ ohlc: [[Date.now(), 0.00004, 0.00005, 0.00003, 0.000046, 12]] }),
+      };
+    }
+    if (target.includes("xrpl.to/v1/holders/list")) {
+      return {
+        ok: true,
+        json: async () => ({
+          length: 67,
+          richList: [{ account: "rLpOwner11111111111111111111111111", balance: 12.5, rank: 1 }],
+        }),
+      };
+    }
+    if (target.includes("xrpl.to/v1/holders/graph")) {
+      return {
+        ok: true,
+        json: async () => ({
+          history: [{ time: Date.now(), holders: 58, length: 67, active24H: 4 }],
+        }),
+      };
+    }
+    if (target.includes("xrpl.to")) {
+      return {
+        ok: true,
+        json: async () => ({
+          token: {
+            holders: 15941,
+            trustlines: 19973,
+            lpHolderCount: 80,
+            exch: 0.00003,
+            pro24h: -3.6,
+            vol24hxrp: 400,
+            usd: 0.00006,
+          },
+        }),
+      };
+    }
+    const body = JSON.parse(options.body || "{}");
+    if (body.method === "amm_info") {
+      return {
+        ok: true,
+        json: async () => ({
+          result: {
+            amm: {
+              account: XDX_XRP_AMM,
+              amount: { currency: "XDX", issuer: XDX_ISSUER, value: "1000000" },
+              amount2: "2000000",
+              lp_token: { currency: XDX_XRP_LP_HEX, issuer: XDX_XRP_AMM, value: "1000" },
+              trading_fee: 1000,
+            },
+          },
+        }),
+      };
+    }
+    if (body.method === "gateway_balances") {
+      return { ok: true, json: async () => ({ result: { obligations: { XDX: "9000000000" } } }) };
+    }
+    return { ok: true, json: async () => ({ result: { offers: [] } }) };
+  };
+  const empty = await liveCatalogPayload("prices/change24h", { fetchImpl, fresh: true, now });
+  assert.equal(empty.source, "xrpl.to");
+  assert.equal(empty.xdx, -3.6);
+  const prices = await liveCatalogPayload("prices", { fetchImpl, fresh: true, now });
+  assert.ok(Number(prices.xdxUsd) > 0);
+  const counts = await liveCatalogPayload("holders/count", { fetchImpl, fresh: true, now });
+  assert.equal(counts.count, 15941);
+  const charts = await liveCatalogPayload("charts/activity", { fetchImpl, fresh: true, now });
+  assert.ok(Array.isArray(charts));
+  assert.equal(charts[0].holders, 58);
+  const flows = await liveCatalogPayload("xdx-flows", { fetchImpl, fresh: true, now });
   assert.deepEqual(flows, []);
+  const spark = await liveCatalogPayload("sparkline/XDX", { fetchImpl, fresh: true, now });
+  assert.equal(Array.isArray(spark), true);
+  assert.equal(spark[0].price_usd, 0.000046);
+  const lp = await liveCatalogPayload("top-lp", { fetchImpl, fresh: true, now, search: "?pool=all" });
+  assert.equal(lp.catching_up, false);
+  assert.ok(lp.holders.length > 0);
+  assert.equal(lp.holders[0].lp_balance, 12.5);
+  const tvl = await liveCatalogPayload("charts/tvl", { fetchImpl, fresh: true, now });
+  assert.ok(Array.isArray(tvl));
+  assert.ok(Number(tvl[0].tvl) > 0);
+  const amm = await liveCatalogPayload("amm", { fetchImpl, fresh: true, now });
+  assert.ok(Number(amm.volume24h) > 1_000_000);
+  assert.equal(amm.volumeUnit, "xdx");
+  assert.ok(Number(amm.pools?.[0]?.volume24hXdx) > 1_000_000);
+  const lpChart = await liveCatalogPayload("charts/lp-holders", { fetchImpl, fresh: true, now });
+  assert.ok(Array.isArray(lpChart));
+  assert.equal(lpChart[0].lp_holder_count, 58);
 });

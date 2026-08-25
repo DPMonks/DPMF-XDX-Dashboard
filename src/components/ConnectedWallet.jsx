@@ -88,11 +88,11 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
   );
 }
 
-function XdxBalancePanel({ xdx, locale, t, empty }) {
+function XdxBalancePanel({ xdx, holdings, locale, t, empty }) {
   const rows = [
-    { id: "xdx", label: t.xdx, value: empty ? "—" : formatToken(xdx.xdx, locale, 2) },
-    { id: "xrp", label: t.xrp, value: empty ? "—" : formatToken(xdx.xrp, locale, 8) },
-    { id: "rlusd", label: t.rlusd || "RLUSD", value: empty ? "—" : formatToken(xdx.rlusd, locale, 2) },
+    { id: "xdx", label: t.xdx, value: empty ? "—" : formatToken(holdings?.xdx, locale, 2) },
+    { id: "xrp", label: t.xrp, value: empty ? "—" : formatToken(holdings?.xrp, locale, 4) },
+    { id: "rlusd", label: t.rlusd || "RLUSD", value: empty ? "—" : formatToken(holdings?.rlusd, locale, 2) },
     { id: "usd", label: t.usd, value: empty ? "—" : formatUsd(xdx.usd, locale) },
     { id: "gbp", label: t.gbp, value: empty ? "—" : formatGbp(xdx.gbp, locale) },
     { id: "eur", label: t.eur, value: empty ? "—" : formatEur(xdx.eur, locale) },
@@ -155,11 +155,21 @@ function SupplyShareBars({ supply, locale, t, empty }) {
   );
 }
 
-function LpInfographic({ position, locale, t, empty }) {
+function poolWindowText(pool, window, locale, empty) {
+  if (empty || !pool) return "—";
+  const xdx = window === "7d" ? pool.xdx7d : pool.xdx24h;
+  const usd = window === "7d" ? pool.usd7d : pool.usd24h;
+  if (!(Number(xdx) > 0) && !(Number(usd) > 0)) return "—";
+  return `${formatToken(xdx, locale, 2)}  ${formatUsd(usd, locale)}`;
+}
+
+function LpInfographic({ position, earn, locale, t, empty }) {
   const share = useMorph(empty ? 0 : position?.lp_share_percent);
   const xdxComp = useMorph(empty ? 0 : position?.composition_xdx_percent);
   const quoteComp = useMorph(empty ? 0 : position?.composition_quote_percent);
   const shareWidth = empty ? 0 : Math.min(100, Math.max(Number(share) > 0 ? 6 : 0, Number(share) * 8));
+  const earn24 = poolWindowText(earn, "24h", locale, empty);
+  const earn7 = poolWindowText(earn, "7d", locale, empty);
   return (
     <div className={`wallet-lp-info${empty ? " is-empty" : " is-filled"}`}>
       <div className="wallet-micro">
@@ -189,6 +199,14 @@ function LpInfographic({ position, locale, t, empty }) {
               ? "—"
               : `${formatToken(position?.withdraw_estimate_quote, locale, 4)} ${position?.quote || ""}`.trim()}
           </dd>
+        </div>
+        <div>
+          <dt>{t.lpFees24h}</dt>
+          <dd className="is-earn">{empty ? "—" : earn24}</dd>
+        </div>
+        <div>
+          <dt>{t.lpFees7d}</dt>
+          <dd className="is-earn">{empty ? "—" : earn7}</dd>
         </div>
       </dl>
     </div>
@@ -251,9 +269,9 @@ function WalletIncomePanel({ rows, locale, t, empty }) {
               visible.map((row) => (
                 <tr key={`${row.date}-${row.pair}-${row.kind || "fee"}`}>
                   <td>{row.date}</td>
-                  <td>{formatToken(row.lpTokens, locale, 4)}</td>
+                  <td className="is-earn">{formatToken(row.lpTokens, locale, 4)}</td>
                   <td>{row.pair}</td>
-                  <td>{formatUsd(row.usd, locale)}</td>
+                  <td className="is-earn">{formatUsd(row.usd, locale)}</td>
                 </tr>
               ))
             )}
@@ -274,6 +292,13 @@ function earnText(value, format, empty) {
   return format(Number(value));
 }
 
+function earnAmount(amount, usd, locale, digits, empty) {
+  return {
+    amount: earnText(amount, (n) => formatToken(n, locale, digits), empty),
+    usd: earnText(usd, (n) => formatUsd(n, locale), empty),
+  };
+}
+
 function WalletEarnCell({ label, rows, empty, className = "" }) {
   return (
     <div className={`wallet-earn-cell${empty ? " is-empty" : " is-filled"}${className ? ` ${className}` : ""}`}>
@@ -281,7 +306,10 @@ function WalletEarnCell({ label, rows, empty, className = "" }) {
       {rows.map((row) => (
         <p key={row.range} className="wallet-earn-row">
           <span className="wallet-earn-range">{row.range}</span>
-          <span className="wallet-earn-value">{row.value}</span>
+          <span className="wallet-earn-value">
+            <b>{row.amount}</b>
+            {row.usd ? <i>{row.usd}</i> : null}
+          </span>
         </p>
       ))}
     </div>
@@ -290,69 +318,54 @@ function WalletEarnCell({ label, rows, empty, className = "" }) {
 
 function WalletEarnBeam({ fees, locale, t, empty }) {
   const earn = fees?.earnings || {};
+  const xrp24 = earnAmount(earn.xrp24h, earn.xrp24hUsd, locale, 4, empty);
+  const xrp7 = earnAmount(earn.xrp7d, earn.xrp7dUsd, locale, 4, empty);
+  const xdx24 = earnAmount(earn.xdx24h, earn.xdx24hUsd, locale, 2, empty);
+  const xdx7 = earnAmount(earn.xdx7d, earn.xdx7dUsd, locale, 2, empty);
+  const rlusd24 = earnAmount(earn.rlusd24h, earn.rlusd24hUsd, locale, 4, empty);
+  const rlusd7 = earnAmount(earn.rlusd7d, earn.rlusd7dUsd, locale, 4, empty);
   return (
-    <div className="wallet-earn-beam" aria-label={t.lpFeeEarnings}>
-      <WalletEarnCell
-        className="wallet-earn-xrp"
-        label={t.xrpEarnings}
-        empty={empty}
-        rows={[
-          {
-            range: t.lpFees24h,
-            value: earnText(earn.xrp24h, (n) => formatToken(n, locale, 4), empty),
-          },
-          {
-            range: t.lpFees7d,
-            value: earnText(earn.xrp7d, (n) => formatToken(n, locale, 4), empty),
-          },
-        ]}
-      />
-      <WalletEarnCell
-        className="wallet-earn-xdx"
-        label={t.xdxEarnings}
-        empty={empty}
-        rows={[
-          {
-            range: t.lpFees24h,
-            value: earnText(earn.xdx24h, (n) => formatToken(n, locale, 4), empty),
-          },
-          {
-            range: t.lpFees7d,
-            value: earnText(earn.xdx7d, (n) => formatToken(n, locale, 4), empty),
-          },
-        ]}
-      />
-      <WalletEarnCell
-        className="wallet-earn-rlusd"
-        label={t.rlusdEarnings || "RLUSD earnings"}
-        empty={empty}
-        rows={[
-          {
-            range: t.lpFees24h,
-            value: earnText(earn.rlusd24h, (n) => formatToken(n, locale, 4), empty),
-          },
-          {
-            range: t.lpFees7d,
-            value: earnText(earn.rlusd7d, (n) => formatToken(n, locale, 4), empty),
-          },
-        ]}
-      />
-      <WalletEarnCell
-        className="wallet-earn-total"
-        label={t.totalEarnings}
-        empty={empty}
-        rows={[
-          {
-            range: t.lpFees24h,
-            value: earnText(earn.usd24h, (n) => formatUsd(n, locale), empty),
-          },
-          {
-            range: t.lpFees7d,
-            value: earnText(earn.usd7d, (n) => formatUsd(n, locale), empty),
-          },
-        ]}
-      />
-    </div>
+    <section className="wallet-earn-board" aria-label={t.lpFeeEarnings}>
+      <h3 className="wallet-earn-title">{t.lpFeeEarnings}</h3>
+      <div className="wallet-earn-beam">
+        <WalletEarnCell
+          className="wallet-earn-xrp"
+          label={t.xrp}
+          empty={empty}
+          rows={[
+            { range: t.lpFees24h, amount: xrp24.amount, usd: xrp24.usd },
+            { range: t.lpFees7d, amount: xrp7.amount, usd: xrp7.usd },
+          ]}
+        />
+        <WalletEarnCell
+          className="wallet-earn-xdx"
+          label={t.xdx}
+          empty={empty}
+          rows={[
+            { range: t.lpFees24h, amount: xdx24.amount, usd: xdx24.usd },
+            { range: t.lpFees7d, amount: xdx7.amount, usd: xdx7.usd },
+          ]}
+        />
+        <WalletEarnCell
+          className="wallet-earn-rlusd"
+          label={t.rlusd || "RLUSD"}
+          empty={empty}
+          rows={[
+            { range: t.lpFees24h, amount: rlusd24.amount, usd: rlusd24.usd },
+            { range: t.lpFees7d, amount: rlusd7.amount, usd: rlusd7.usd },
+          ]}
+        />
+        <WalletEarnCell
+          className="wallet-earn-total"
+          label={t.totalEarnings}
+          empty={empty}
+          rows={[
+            { range: t.lpFees24h, amount: earnText(earn.usd24h, (n) => formatUsd(n, locale), empty) },
+            { range: t.lpFees7d, amount: earnText(earn.usd7d, (n) => formatUsd(n, locale), empty) },
+          ]}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -482,7 +495,7 @@ export default function ConnectedWallet() {
         <WalletEarnBeam fees={view.fees} locale={locale} t={t} empty={empty} />
         <div className="wallet-infographics">
           <XrpBalanceBars xrp={view.xrp} locale={locale} t={t} empty={empty} />
-          <XdxBalancePanel xdx={view.xdx} locale={locale} t={t} empty={empty} />
+          <XdxBalancePanel xdx={view.xdx} holdings={view.holdings} locale={locale} t={t} empty={empty} />
           <SupplyShareBars supply={view.supply} locale={locale} t={t} empty={empty} />
         </div>
       </div>
@@ -509,7 +522,13 @@ export default function ConnectedWallet() {
             </select>
           </label>
         </div>
-        <LpInfographic position={position} locale={locale} t={t} empty={empty || !position} />
+        <LpInfographic
+          position={position}
+          earn={view.fees?.earnings?.pools?.[selected]}
+          locale={locale}
+          t={t}
+          empty={empty || !position}
+        />
       </section>
 
       <WalletIncomePanel

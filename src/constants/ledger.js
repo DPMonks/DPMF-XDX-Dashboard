@@ -15,6 +15,7 @@ export function issuerLockedFromIssued(issued, total = XDX_TOTAL_SUPPLY) {
 
 export const XDX_XRP_AMM = "rhEwhutV5EyYzTbBYDdK7dHxwdi5omqffB";
 export const XDX_XRP_LP_HEX = "03970105D80AE3C54085F6E97EE16CEDE6CE8200";
+export const XDX_XRP_LP_XRPL_TO_MD5 = "fb3abb3a776efbefe9a558705fe52606";
 
 // tfSetNoRipple — standard IOU trustline so the line cannot ripple.
 export const TF_SET_NO_RIPPLE = 131072;
@@ -39,6 +40,19 @@ export const RLUSD_ISSUER = "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De";
 export const RLUSD_HEX = "524C555344000000000000000000000000000000";
 export const XDX_RLUSD_AMM = "rLbBzF9oxntVf4XxcyakNKJTci4yqSmQUu";
 export const XDX_RLUSD_LP_HEX = "03BCD44104644B711C58CD14CD13CBA65757CFBE";
+export const XDX_RLUSD_LP_XRPL_TO_MD5 = "21c0d4ee52560f17adc52b9bdc3c6770";
+export const XRP_XRPL_TO_MD5 = "84e5efeb89c4eae8f68188982dc290d8";
+
+export function xrplToMd5ForLpPool(pool) {
+  const name = String(pool || "")
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "/");
+  if (name.includes("RLUSD") || name === XDX_RLUSD_AMM.toUpperCase()) {
+    return XDX_RLUSD_LP_XRPL_TO_MD5;
+  }
+  return XDX_XRP_LP_XRPL_TO_MD5;
+}
 
 export const XIO_ISSUER = "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU";
 export const XSQUAD_ISSUER = "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg";

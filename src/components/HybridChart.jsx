@@ -173,7 +173,15 @@ export default function HybridChart() {
         setPools(Array.isArray(nextPools) ? nextPools : []);
         setPrices(nextPrices || {});
         setTrades(Array.isArray(nextFlows) ? nextFlows : []);
-        setSparkline(Array.isArray(nextSpark) ? nextSpark : []);
+        setSparkline(
+          Array.isArray(nextSpark)
+            ? nextSpark
+            : Array.isArray(nextSpark?.rows)
+              ? nextSpark.rows
+              : Array.isArray(nextSpark?.price_history)
+                ? nextSpark.price_history
+                : []
+        );
         setNow(Date.now());
       } catch {
         /* keep last good chart if a refresh fails */

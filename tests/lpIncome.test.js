@@ -81,8 +81,8 @@ test("income list is newest XDX pair days first and pages by 10 days", () => {
   assert.equal(rows[0].date, "2026-08-22");
   assert.equal(rows[0].pair, "XDX/RLUSD");
   assert.ok(Math.abs(rows[0].lpTokens - 0.5) < 1e-12);
-  // 0.5 LP of 400 = 1/800 of a pool with 8000 XDX + 10 RLUSD.
-  assert.ok(Math.abs(rows[0].usd - 0.0129) < 1e-12);
+  // Same 50/50 split as the earn board: 5 XDX + 0.00625 RLUSD.
+  assert.ok(Math.abs(rows[0].usd - (5 * 0.00004 + 5 * (10 / 8000))) < 1e-12);
   const paged = pageLpIncome(
     mergeLpIncomeRows(
       rows,
