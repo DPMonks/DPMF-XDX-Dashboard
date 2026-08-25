@@ -21,7 +21,7 @@ import {
   preferFilledWalletSnapshot,
   normalizeWalletPair,
   preferredWalletPair,
-  sortWalletPairs,
+  walletXdxPairs,
   xrpBarPercents,
 } from "../wallet/composeWallet";
 import { formatFeePercent } from "../wallet/ammVote";
@@ -180,12 +180,14 @@ function SupplyShareBars({ supply, locale, t, empty }) {
   );
 }
 
-function poolWindowText(pool, window, locale, empty) {
-  if (empty || !pool) return "—";
+function poolWindowEarn(pool, window, locale, empty) {
+  if (empty || !pool) return { amount: "—", usd: "—" };
   const xdx = window === "7d" ? pool.xdx7d : pool.xdx24h;
   const usd = window === "7d" ? pool.usd7d : pool.usd24h;
-  if (!(Number(xdx) > 0) && !(Number(usd) > 0)) return "—";
-  return `${formatToken(xdx, locale, 2)}  ${formatUsd(usd, locale)}`;
+  return {
+    amount: Number(xdx) > 0 ? formatToken(xdx, locale, 2) : "—",
+    usd: Number(usd) > 0 ? formatUsd(usd, locale) : "—",
+  };
 }
 
 function LpInfographic({ position, earn, locale, t, empty }) {
@@ -193,8 +195,8 @@ function LpInfographic({ position, earn, locale, t, empty }) {
   const xdxComp = useMorph(empty ? 0 : position?.composition_xdx_percent);
   const quoteComp = useMorph(empty ? 0 : position?.composition_quote_percent);
   const shareWidth = empty ? 0 : Math.min(100, Math.max(Number(share) > 0 ? 6 : 0, Number(share) * 8));
-  const earn24 = poolWindowText(earn, "24h", locale, empty);
-  const earn7 = poolWindowText(earn, "7d", locale, empty);
+  const earn24 = poolWindowEarn(earn, "24h", locale, empty);
+  const earn7 = poolWindowEarn(earn, "7d", locale, empty);
   return (
     <div className={`wallet-lp-info${empty ? " is-empty" : " is-filled"}`}>
       <div className="wallet-micro">
@@ -227,13 +229,31 @@ function LpInfographic({ position, earn, locale, t, empty }) {
               : `${formatToken(position?.withdraw_estimate_quote, locale, 4)} ${position?.quote || ""}`.trim()}
           </dd>
         </div>
-        <div>
+        <div className="wallet-lp-earn">
           <dt>{t.lpFees24h}</dt>
-          <dd className="is-earn">{empty ? "—" : earn24}</dd>
+          <dd className="is-earn">
+            <span className="wallet-earn-metric">
+              <em className="wallet-earn-unit">{t.earnLpTokens || "LP tokens"}</em>
+              <b>{earn24.amount}</b>
+            </span>
+            <span className="wallet-earn-metric">
+              <em className="wallet-earn-unit">{t.usd}</em>
+              <i>{earn24.usd}</i>
+            </span>
+          </dd>
         </div>
-        <div>
+        <div className="wallet-lp-earn">
           <dt>{t.lpFees7d}</dt>
-          <dd className="is-earn">{empty ? "—" : earn7}</dd>
+          <dd className="is-earn">
+            <span className="wallet-earn-metric">
+              <em className="wallet-earn-unit">{t.earnLpTokens || "LP tokens"}</em>
+              <b>{earn7.amount}</b>
+            </span>
+            <span className="wallet-earn-metric">
+              <em className="wallet-earn-unit">{t.usd}</em>
+              <i>{earn7.usd}</i>
+            </span>
+          </dd>
         </div>
       </dl>
     </div>
@@ -429,10 +449,7 @@ export default function ConnectedWallet() {
       if (cancelled) return;
       setSnap((current) => preferFilledWalletSnapshot(current, next));
       setPair((current) =>
-        preferredWalletPair(
-          next.lp.map((row) => row.pool),
-          current
-        )
+        preferredWalletPair(walletXdxPairs(next.lp), current)
       );
     }
 
@@ -481,7 +498,7 @@ export default function ConnectedWallet() {
 
   const view = walletAddress ? snap : emptyWalletSnapshot(null);
   const empty = !view.signedIn || !view.filled;
-  const pools = sortWalletPairs(view.lp.map((row) => row.pool));
+  const pools = walletXdxPairs(view.lp);
   const selected = normalizeWalletPair(pair);
   const position = useMemo(
     () => view.lp.find((row) => normalizeWalletPair(row.pool) === selected) || null,

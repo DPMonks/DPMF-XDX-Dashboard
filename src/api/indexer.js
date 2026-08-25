@@ -855,12 +855,13 @@ export async function getConnectedWallet(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return emptyWalletSnapshot(null);
 
-  const [balances, networth, account, lpRows, rank, prices, token, pools, books, flows, offers, ledgerActivity] =
+  const [balances, networth, account, lpRows, lines, rank, prices, token, pools, books, flows, offers, ledgerActivity] =
     await Promise.all([
       getWalletBalances(name).catch(() => ({})),
       getWalletNetworth(name).catch(() => ({})),
       getWalletAccount(name).catch(() => ({})),
       getWalletLp(name).catch(() => []),
+      getWalletLines(name, extra).catch(() => []),
       getWalletRank(name).catch(() => null),
       getPrices().catch(() => ({})),
       getTokenDetails().catch(() => ({})),
@@ -880,6 +881,7 @@ export async function getConnectedWallet(address, extra = {}) {
     token,
     pools,
     lpRows,
+    lines,
     rank,
     books,
     flows,

@@ -2468,6 +2468,18 @@ body {
   white-space: nowrap;
 }
 
+.wallet-lp-earn {
+  align-items: flex-start;
+}
+
+.wallet-lp-earn dd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  white-space: normal;
+}
+
 .wallet-micro {
   display: flex;
   flex-direction: column;
@@ -2536,14 +2548,19 @@ body {
   margin: 0;
 }
 
+.wallet-lp-select {
+  min-width: min(100%, 11rem);
+}
+
 .wallet-lp-select select {
   background: #101018;
   color: var(--dpmf-text-main);
   border: 1px solid var(--dpmf-border-soft);
   border-radius: 8px;
-  padding: 6px 8px;
+  min-height: 44px;
+  padding: 8px 10px;
   font: inherit;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .wallet-lp-comp {

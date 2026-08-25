@@ -1,4 +1,4 @@
-import { XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
+import { POOLS, XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
 import { fillMissingXdxFiat } from "../utils/fiatFx.js";
 import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
@@ -98,11 +98,19 @@ export function sortWalletPairs(names = []) {
 }
 
 export function preferredWalletPair(names = [], current = "") {
-  const list = sortWalletPairs(names);
+  const list = sortWalletPairs(names).filter((name) => isXdxAmmPair(name));
   const wanted = normalizeWalletPair(current);
-  if (wanted && wanted !== "XDX/XRP" && list.includes(wanted)) return wanted;
+  if (wanted && isXdxAmmPair(wanted) && list.includes(wanted)) return wanted;
   if (list.includes("XDX/XRP")) return "XDX/XRP";
-  return list[0] || "XDX/XRP";
+  return list[0] || "";
+}
+
+export function walletXdxPairs(lp = []) {
+  return sortWalletPairs(
+    (Array.isArray(lp) ? lp : [])
+      .filter((row) => isXdxAmmPair(row) && (num(row.lp_balance ?? row.lp) || 0) > 0)
+      .map((row) => row.pool || row.pool_name || row.pair)
+  );
 }
 
 export function normalizeWalletPair(value) {
@@ -162,6 +170,86 @@ export function xdxFiatValues(xdx, prices = {}) {
     xrp: xrp != null ? bal * xrp : null,
     rlusd: usdValue != null ? usdValue / rlusdUsd : null,
   };
+}
+
+function isLpTokenCode(value) {
+  return /^03[A-Fa-f0-9]{38}$/.test(String(value || "").trim());
+}
+
+function knownXdxPoolRows() {
+  return POOLS.map((pool) => ({
+    pool: pool.pair,
+    pool_name: pool.pair,
+    quote: pool.quote,
+    amm_account: pool.amm,
+    lp_currency: pool.lpHex,
+  }));
+}
+
+function xdxCatalogPair(pool = {}) {
+  const raw = String(pool.pool_name || pool.pool || pool.pair || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "/");
+  if (raw === "XRP/XDX") return "XDX/XRP";
+  if (raw.startsWith("XDX/") && isXdxAmmPair(raw)) return raw;
+  return "";
+}
+
+export function lpRowsFromWalletLines(lines = [], pools = []) {
+  const catalog = indexPoolsByPair([...(Array.isArray(pools) ? pools : []), ...knownXdxPoolRows()]);
+  const out = [];
+  for (const line of Array.isArray(lines) ? lines : []) {
+    const currency = String(line.currency || line.lp_currency || line.lp_currency_hex || "").toUpperCase();
+    const issuer = String(line.issuer || line.account || line.amm_account || "").toLowerCase();
+    if (!(line.lp === true || isLpTokenCode(currency))) continue;
+    const balance = num(line.balance ?? line.lp_balance ?? line.lp);
+    if (!(balance > 0)) continue;
+    const pool = catalog.get(currency) || catalog.get(issuer);
+    const pair = xdxCatalogPair(pool);
+    if (!pair) continue;
+    out.push({
+      pool: pair,
+      pool_name: pair,
+      pair,
+      quote: pool.quote || pair.split("/")[1],
+      lp_balance: balance,
+      amm_account: pool.amm_account || issuer,
+      lp_currency: currency,
+    });
+  }
+  return out;
+}
+
+export function mergeXdxLpRows(...lists) {
+  const map = new Map();
+  for (const list of lists) {
+    for (const row of Array.isArray(list) ? list : []) {
+      const name = xdxCatalogPair(row) || normalizeWalletPair(row.pool_name || row.pool || row.pair);
+      if (!isXdxAmmPair(name)) continue;
+      const bal = num(row.lp_balance ?? row.lp);
+      const previous = map.get(name);
+      if (!previous || (bal != null && bal > (num(previous.lp_balance ?? previous.lp) || 0))) {
+        map.set(name, { ...row, pool: name, pool_name: name, pair: name });
+      }
+    }
+  }
+  return [...map.values()];
+}
+
+function mergeKeptLp(current = [], next = []) {
+  if (!Array.isArray(next) || !next.length) return current || [];
+  const map = new Map();
+  for (const row of Array.isArray(current) ? current : []) {
+    const name = normalizeWalletPair(row.pool || row.pool_name);
+    if (isXdxAmmPair(name)) map.set(name, row);
+  }
+  for (const row of next) {
+    const name = normalizeWalletPair(row.pool || row.pool_name);
+    if (isXdxAmmPair(name)) map.set(name, row);
+  }
+  return [...map.values()];
 }
 
 export function indexPoolsByPair(pools = []) {
@@ -417,7 +505,7 @@ export function lpPoolEarnings(
       .map((row) => [normalizeWalletPair(row.pool || row.pool_name), row])
   );
   const pools = {};
-  for (const pair of FEATURED_EARN_PAIRS) {
+  for (const pair of sortWalletPairs([...byPair.keys(), ...FEATURED_EARN_PAIRS])) {
     const row = byPair.get(pair);
     if (!row || !((num(row.lp_share_percent) || 0) > 0)) {
       pools[pair] = emptyPoolEarn(pair);
@@ -586,7 +674,7 @@ export function preferFilledWalletSnapshot(current, next) {
     xrp: next.xrp?.balance != null ? next.xrp : current.xrp,
     supply: keepSupply ? next.supply : current.supply,
     fees: nextHasEarn || !currentHasEarn ? next.fees : current.fees,
-    lp: Array.isArray(next.lp) && next.lp.length ? next.lp : current.lp,
+    lp: mergeKeptLp(current.lp, next.lp),
     income: Array.isArray(next.income) && next.income.length ? next.income : current.income,
     rank: next.rank != null ? next.rank : current.rank,
   };
@@ -644,6 +732,7 @@ export function composeWalletSnapshot({
   token = {},
   pools = [],
   lpRows = [],
+  lines = [],
   rank = null,
   books = null,
   flows = [],
@@ -685,9 +774,13 @@ export function composeWalletSnapshot({
   const totalSupply = num(token.totalSupply ?? token.total_supply) || XDX_TOTAL_SUPPLY;
   const shares = supplyShares(xdxBal, circulating, totalSupply);
 
-  const poolByName = indexPoolsByPair(pools);
+  const poolByName = indexPoolsByPair([...(Array.isArray(pools) ? pools : []), ...knownXdxPoolRows()]);
   const lpByPair = new Map();
-  for (const row of Array.isArray(lpRows) ? lpRows : []) {
+  const sourceRows = mergeXdxLpRows(
+    lpRows,
+    lpRowsFromWalletLines(lines.length ? lines : balances.raw?.lines, pools)
+  );
+  for (const row of sourceRows) {
     const name = normalizeWalletPair(row.pool_name || row.pool || row.pair);
     const position = lpPositionFromPool(
       row.lp_balance ?? row.lp,

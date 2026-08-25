@@ -10,6 +10,8 @@ import {
   normalizeWalletPair,
   preferredWalletPair,
   sortWalletPairs,
+  lpRowsFromWalletLines,
+  walletXdxPairs,
   supplyShares,
   tradingFeeRate,
   ammFeePercent,
@@ -99,6 +101,79 @@ test("preferredWalletPair always defaults to XDX/XRP when that pool is held", ()
   assert.equal(preferredWalletPair(["XDX/USDC", "XDX/XRP"], "XDX/XRP"), "XDX/XRP");
   assert.equal(preferredWalletPair(["XDX/USDC", "XDX/XRP"], "XDX/USDC"), "XDX/USDC");
   assert.equal(preferredWalletPair(["XDX/USDC"], ""), "XDX/USDC");
+});
+
+test("lpRowsFromWalletLines lists only XDX pools the wallet holds", () => {
+  const rows = lpRowsFromWalletLines(
+    [
+      { currency: "03970105D80AE3C54085F6E97EE16CEDE6CE8200", issuer: "rhEwhutV5EyYzTbBYDdK7dHxwdi5omqffB", balance: "12", lp: true },
+      { currency: "03BCD44104644B711C58CD14CD13CBA65757CFBE", issuer: "rLbBzF9oxntVf4XxcyakNKJTci4yqSmQUu", balance: "4", lp: true },
+      { currency: "03AAA11111111111111111111111111111111111", issuer: "rOtherAmmNotXdx111111111111111111", balance: "9", lp: true },
+      { currency: "XIO", issuer: "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU", balance: "8" },
+    ],
+    [
+      {
+        pool_name: "XDX/XIO",
+        amm_account: "rXioAmm111111111111111111111111111",
+        lp_currency: "03CCC22222222222222222222222222222222222",
+        quote: "XIO",
+      },
+      {
+        pool_name: "SOLO/XRP",
+        amm_account: "rOtherAmmNotXdx111111111111111111",
+        lp_currency: "03AAA11111111111111111111111111111111111",
+        quote: "XRP",
+      },
+    ]
+  );
+  assert.deepEqual(
+    rows.map((row) => row.pool).sort(),
+    ["XDX/RLUSD", "XDX/XRP"]
+  );
+
+  const withXio = lpRowsFromWalletLines(
+    [
+      {
+        currency: "03CCC22222222222222222222222222222222222",
+        issuer: "rXioAmm111111111111111111111111111",
+        balance: "3",
+        lp: true,
+      },
+    ],
+    [
+      {
+        pool_name: "XDX/XIO",
+        amm_account: "rXioAmm111111111111111111111111111",
+        lp_currency: "03CCC22222222222222222222222222222222222",
+        quote: "XIO",
+      },
+    ]
+  );
+  assert.deepEqual(
+    withXio.map((row) => row.pool),
+    ["XDX/XIO"]
+  );
+});
+
+test("composeWalletSnapshot adds XDX line positions the LP API omitted", () => {
+  const snap = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 10, xdx: 1000 },
+    lpRows: [{ pool_name: "XDX/XRP", lp_balance: 100 }],
+    lines: [
+      { currency: "03BCD44104644B711C58CD14CD13CBA65757CFBE", issuer: "rLbBzF9oxntVf4XxcyakNKJTci4yqSmQUu", balance: "20", lp: true },
+      { currency: "03CCC22222222222222222222222222222222222", issuer: "rXioAmm111111111111111111111111111", balance: "5", lp: true },
+    ],
+    pools: [
+      { pool_name: "XDX/XRP", lp_supply: 1000, reserve_asset: 50_000, reserve_currency: 2 },
+      { pool_name: "XDX/RLUSD", lp_supply: 200, reserve_asset: 8000, reserve_currency: 10, amm_account: "rLbBzF9oxntVf4XxcyakNKJTci4yqSmQUu", lp_currency: "03BCD44104644B711C58CD14CD13CBA65757CFBE" },
+      { pool_name: "XDX/XIO", lp_supply: 50, reserve_asset: 2000, reserve_currency: 1, amm_account: "rXioAmm111111111111111111111111111", lp_currency: "03CCC22222222222222222222222222222222222" },
+      { pool_name: "SOLO/XRP", lp_supply: 10, reserve_asset: 1, reserve_currency: 1, amm_account: "rOther", lp_currency: "03AAA11111111111111111111111111111111111" },
+    ],
+  });
+  assert.deepEqual(walletXdxPairs(snap.lp), ["XDX/XRP", "XDX/RLUSD", "XDX/XIO"]);
+  assert.equal(snap.lp.find((row) => row.pool === "XDX/XIO").lp_balance, 5);
+  assert.ok(!snap.lp.some((row) => String(row.pool).includes("SOLO")));
 });
 
 test("xdxFiatValues keeps USD and GBP from recorded prices", () => {
