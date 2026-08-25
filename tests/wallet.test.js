@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   composeWalletSnapshot,
   emptyWalletSnapshot,
+  preferFilledWalletSnapshot,
   walletAvailableAmounts,
   lpFeeEarnings,
   lpPositionFromPool,
@@ -242,6 +243,39 @@ test("walletAvailableAmounts reports spendable XRP and issued quote", () => {
     quote: { currency: "RLUSD", issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", id: "RLUSD" },
   });
   assert.equal(rlusd.quote, 12.5);
+});
+
+test("preferFilledWalletSnapshot keeps last balances when a refresh is hollow", () => {
+  const filled = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 57.1375, xdx: 3_004_952_684.62, rlusd: 127.3 },
+    prices: { xdxUsd: 0.0000469, xrpUsd: 1.48 },
+    token: { circulating: 10_000_000_000 },
+    rank: 1,
+  });
+  const hollow = emptyWalletSnapshot("rExample");
+  const kept = preferFilledWalletSnapshot(filled, hollow);
+  assert.equal(kept.filled, true);
+  assert.equal(kept.holdings.xdx, filled.holdings.xdx);
+  assert.equal(kept.holdings.xrp, filled.holdings.xrp);
+  assert.equal(kept.holdings.rlusd, filled.holdings.rlusd);
+  assert.equal(kept.xdx.usd, filled.xdx.usd);
+  assert.equal(kept.rank, 1);
+
+  const next = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 60, xdx: 3_100_000_000, rlusd: 130 },
+    prices: { xdxUsd: 0.00005, xrpUsd: 1.5 },
+    token: { circulating: 10_000_000_000 },
+    rank: 1,
+  });
+  const updated = preferFilledWalletSnapshot(filled, next);
+  assert.equal(updated.holdings.xrp, 60);
+  assert.equal(updated.holdings.rlusd, 130);
+
+  const other = emptyWalletSnapshot("rOther");
+  assert.equal(preferFilledWalletSnapshot(filled, other).address, "rOther");
+  assert.equal(preferFilledWalletSnapshot(filled, other).filled, false);
 });
 
 test("composeWalletSnapshot stays blank until an address is signed in", () => {

@@ -18,6 +18,7 @@ import {
 import { copyToClipboard } from "../utils/copy";
 import {
   emptyWalletSnapshot,
+  preferFilledWalletSnapshot,
   normalizeWalletPair,
   preferredWalletPair,
   sortWalletPairs,
@@ -89,10 +90,12 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
 }
 
 function XdxBalancePanel({ xdx, holdings, locale, t, empty }) {
-  const rows = [
-    { id: "xdx", label: t.xdx, value: empty ? "—" : formatToken(holdings?.xdx, locale, 2) },
+  const tokenRows = [
+    { id: "xdx", label: t.xdxTokens || "XDX tokens", value: empty ? "—" : formatToken(holdings?.xdx, locale, 2) },
     { id: "xrp", label: t.xrp, value: empty ? "—" : formatToken(holdings?.xrp, locale, 4) },
     { id: "rlusd", label: t.rlusd || "RLUSD", value: empty ? "—" : formatToken(holdings?.rlusd, locale, 2) },
+  ];
+  const fiatRows = [
     { id: "usd", label: t.usd, value: empty ? "—" : formatUsd(xdx.usd, locale) },
     { id: "gbp", label: t.gbp, value: empty ? "—" : formatGbp(xdx.gbp, locale) },
     { id: "eur", label: t.eur, value: empty ? "—" : formatEur(xdx.eur, locale) },
@@ -100,9 +103,23 @@ function XdxBalancePanel({ xdx, holdings, locale, t, empty }) {
   ];
   return (
     <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
-      <p className="wallet-panel-title is-center">{t.xdxValue}</p>
+      <p className="wallet-panel-title is-center">{t.walletBalances || "Balances"}</p>
       <dl className="wallet-mini-list">
-        {rows.map((row) => (
+        <div className="wallet-mini-kicker">
+          <dt>{t.walletTokens || "Tokens"}</dt>
+          <dd />
+        </div>
+        {tokenRows.map((row) => (
+          <div key={row.id}>
+            <dt>{row.label}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        ))}
+        <div className="wallet-mini-kicker is-fiat">
+          <dt>{t.walletFiat || "Fiat value"}</dt>
+          <dd />
+        </div>
+        {fiatRows.map((row) => (
           <div key={row.id}>
             <dt>{row.label}</dt>
             <dd>{row.value}</dd>
@@ -124,32 +141,40 @@ function SupplyShareBars({ supply, locale, t, empty }) {
     <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
       <p className="wallet-panel-title is-center">{t.supplyShare}</p>
       <div className="wallet-micro">
-        <span>{t.circulating}</span>
+        <div className="wallet-micro-head">
+          <span>{t.circulating}</span>
+          <b>{empty ? "—" : formatSharePercent(circ, locale)}</b>
+        </div>
         <span className="wallet-micro-track">
           <i style={{ width: `${circWidth}%` }} />
         </span>
-        <b>{empty ? "—" : formatSharePercent(circ, locale)}</b>
       </div>
       <div className="wallet-micro">
-        <span>{t.xdxSupplyShare}</span>
+        <div className="wallet-micro-head">
+          <span>{t.xdxSupplyShare}</span>
+          <b>{empty ? "—" : formatSupplySharePercent(supplyPct, locale)}</b>
+        </div>
         <span className="wallet-micro-track">
           <i className="is-amm" style={{ width: `${supplyWidth}%` }} />
         </span>
-        <b>{empty ? "—" : formatSupplySharePercent(supplyPct, locale)}</b>
       </div>
       <div className="wallet-micro is-pending">
-        <span>{t.borrowed}</span>
+        <div className="wallet-micro-head">
+          <span>{t.borrowed}</span>
+          <b>—</b>
+        </div>
         <span className="wallet-micro-track">
           <i />
         </span>
-        <b>—</b>
       </div>
       <div className="wallet-micro is-pending">
-        <span>{t.lending}</span>
+        <div className="wallet-micro-head">
+          <span>{t.lending}</span>
+          <b>—</b>
+        </div>
         <span className="wallet-micro-track">
           <i />
         </span>
-        <b>—</b>
       </div>
     </div>
   );
@@ -173,11 +198,13 @@ function LpInfographic({ position, earn, locale, t, empty }) {
   return (
     <div className={`wallet-lp-info${empty ? " is-empty" : " is-filled"}`}>
       <div className="wallet-micro">
-        <span>{t.lpShare}</span>
+        <div className="wallet-micro-head">
+          <span>{t.lpShare}</span>
+          <b>{empty ? "—" : formatSharePercent(share, locale)}</b>
+        </div>
         <span className="wallet-micro-track">
           <i style={{ width: `${shareWidth}%` }} />
         </span>
-        <b>{empty ? "—" : formatSharePercent(share, locale)}</b>
       </div>
       <div className="wallet-lp-comp" aria-hidden="true">
         <span className="is-xdx" style={{ width: `${empty ? 0 : Number(xdxComp) || 0}%` }} />
@@ -299,7 +326,7 @@ function earnAmount(amount, usd, locale, digits, empty) {
   };
 }
 
-function WalletEarnCell({ label, rows, empty, className = "" }) {
+function WalletEarnCell({ label, rows, empty, className = "", amountLabel, usdLabel }) {
   return (
     <div className={`wallet-earn-cell${empty ? " is-empty" : " is-filled"}${className ? ` ${className}` : ""}`}>
       <p className="wallet-earn-label">{label}</p>
@@ -307,8 +334,16 @@ function WalletEarnCell({ label, rows, empty, className = "" }) {
         <p key={row.range} className="wallet-earn-row">
           <span className="wallet-earn-range">{row.range}</span>
           <span className="wallet-earn-value">
-            <b>{row.amount}</b>
-            {row.usd ? <i>{row.usd}</i> : null}
+            <span className="wallet-earn-metric">
+              <em className="wallet-earn-unit">{amountLabel}</em>
+              <b>{row.amount}</b>
+            </span>
+            {row.usd ? (
+              <span className="wallet-earn-metric">
+                <em className="wallet-earn-unit">{usdLabel}</em>
+                <i>{row.usd}</i>
+              </span>
+            ) : null}
           </span>
         </p>
       ))}
@@ -332,6 +367,8 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
           className="wallet-earn-xrp"
           label={t.xrp}
           empty={empty}
+          amountLabel={t.earnLpTokens || "LP tokens"}
+          usdLabel={t.usd}
           rows={[
             { range: t.lpFees24h, amount: xrp24.amount, usd: xrp24.usd },
             { range: t.lpFees7d, amount: xrp7.amount, usd: xrp7.usd },
@@ -341,6 +378,8 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
           className="wallet-earn-xdx"
           label={t.xdx}
           empty={empty}
+          amountLabel={t.earnLpTokens || "LP tokens"}
+          usdLabel={t.usd}
           rows={[
             { range: t.lpFees24h, amount: xdx24.amount, usd: xdx24.usd },
             { range: t.lpFees7d, amount: xdx7.amount, usd: xdx7.usd },
@@ -350,6 +389,8 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
           className="wallet-earn-rlusd"
           label={t.rlusd || "RLUSD"}
           empty={empty}
+          amountLabel={t.earnLpTokens || "LP tokens"}
+          usdLabel={t.usd}
           rows={[
             { range: t.lpFees24h, amount: rlusd24.amount, usd: rlusd24.usd },
             { range: t.lpFees7d, amount: rlusd7.amount, usd: rlusd7.usd },
@@ -359,6 +400,8 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
           className="wallet-earn-total"
           label={t.totalEarnings}
           empty={empty}
+          amountLabel={t.usd}
+          usdLabel={t.usd}
           rows={[
             { range: t.lpFees24h, amount: earnText(earn.usd24h, (n) => formatUsd(n, locale), empty) },
             { range: t.lpFees7d, amount: earnText(earn.usd7d, (n) => formatUsd(n, locale), empty) },
@@ -384,7 +427,7 @@ export default function ConnectedWallet() {
         emptyWalletSnapshot(walletAddress)
       );
       if (cancelled) return;
-      setSnap(next);
+      setSnap((current) => preferFilledWalletSnapshot(current, next));
       setPair((current) =>
         preferredWalletPair(
           next.lp.map((row) => row.pool),

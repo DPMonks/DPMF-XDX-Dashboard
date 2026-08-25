@@ -2195,9 +2195,9 @@ body {
 .wallet-earn-row {
   margin: 0;
   display: grid;
-  grid-template-columns: 2.6em minmax(0, 1fr) minmax(3.25em, auto);
+  grid-template-columns: 2.6em minmax(0, 1fr);
   column-gap: 10px;
-  align-items: baseline;
+  align-items: start;
   font-variant-numeric: tabular-nums;
   line-height: 1.25;
 }
@@ -2212,10 +2212,33 @@ body {
 }
 
 .wallet-earn-value {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
   font-size: 12px;
   font-weight: 700;
   color: #39ff14;
+}
+
+.wallet-earn-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.wallet-earn-unit {
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dpmf-text-main);
+  opacity: 0.7;
+  text-align: start;
 }
 
 .wallet-earn-value b,
@@ -2225,17 +2248,11 @@ body {
   font-style: normal;
   white-space: nowrap;
   text-align: right;
-  justify-self: end;
   min-width: 0;
 }
 
 .wallet-earn-value i {
   opacity: 0.82;
-  padding-inline-start: 2px;
-}
-
-.wallet-earn-total .wallet-earn-value b {
-  grid-column: 2 / -1;
 }
 
 .wallet-mini-list dd.is-earn {
@@ -2245,7 +2262,8 @@ body {
 
 .wallet-earn-cell.is-empty .wallet-earn-value,
 .wallet-earn-cell.is-empty .wallet-earn-label,
-.wallet-earn-cell.is-empty .wallet-earn-range {
+.wallet-earn-cell.is-empty .wallet-earn-range,
+.wallet-earn-cell.is-empty .wallet-earn-unit {
   opacity: 0.4;
 }
 
@@ -2266,17 +2284,8 @@ body {
     row-gap: 1px;
   }
 
-  .wallet-earn-value {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 1px;
-    grid-column: 2;
-    min-width: 0;
-  }
-
-  .wallet-earn-total .wallet-earn-value b {
-    grid-column: auto;
+  .wallet-infographics {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2379,6 +2388,9 @@ body {
   text-transform: uppercase;
   color: var(--dpmf-text-muted);
   text-align: center;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .wallet-xrp-col b {
@@ -2411,6 +2423,28 @@ body {
   color: var(--dpmf-text-muted);
 }
 
+.wallet-mini-kicker {
+  margin-top: 2px;
+}
+
+.wallet-mini-kicker.is-fiat {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--dpmf-border-soft);
+}
+
+.wallet-mini-kicker dt {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dpmf-text-main);
+  opacity: 0.72;
+}
+
+.wallet-mini-kicker dd {
+  display: none;
+}
+
 .wallet-mini-list dd,
 .wallet-micro b,
 .wallet-book b {
@@ -2425,21 +2459,30 @@ body {
 }
 
 .wallet-micro {
-  display: grid;
-  grid-template-columns: minmax(92px, auto) 1fr minmax(88px, auto);
-  gap: 6px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: 11px;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
+  min-width: 0;
 }
 
-.wallet-micro span:first-child {
+.wallet-micro-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wallet-micro-head span {
   color: var(--dpmf-text-muted);
-  line-height: 1.15;
-  white-space: nowrap;
+  line-height: 1.2;
+  min-width: 0;
 }
 
-.wallet-micro b {
+.wallet-micro-head b {
+  flex: 0 0 auto;
   text-align: end;
   white-space: nowrap;
 }
