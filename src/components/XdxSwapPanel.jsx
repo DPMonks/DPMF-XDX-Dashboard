@@ -377,7 +377,7 @@ export default function XdxSwapPanel() {
   const fromSelect = (
     <BrandSelect
       value={effectiveFrom}
-      options={assets.filter((row) => row.id !== effectiveTo)}
+      options={assets}
       onChange={changeFrom}
       ariaLabel={t.swapStart || "Start swap"}
       searchable
@@ -386,7 +386,7 @@ export default function XdxSwapPanel() {
   const toSelect = (
     <BrandSelect
       value={effectiveTo}
-      options={assets.filter((row) => row.id !== effectiveFrom)}
+      options={assets}
       onChange={changeTo}
       ariaLabel={t.swapFor || "For"}
       searchable
