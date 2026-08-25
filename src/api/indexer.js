@@ -948,8 +948,10 @@ export async function getWalletAccount(address) {
   return api.walletAccount(address);
 }
 
-export async function getWalletLp(address) {
-  const body = await api.walletLp(address);
+export async function getWalletLp(address, extra = {}) {
+  const name = String(address || "").trim();
+  if (!name) return [];
+  const body = await api.walletLp(name, extra);
   return asArray(body?.positions || body);
 }
 

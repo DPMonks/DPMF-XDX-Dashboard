@@ -61,6 +61,10 @@ export const XSQUAD_ISSUER = "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg";
 export const XDX_FEE_TREASURY = "rDPMFBANKMexTKkC7e4n3ekD9HfhmWHva8";
 export const XDX_PLATFORM_FEE_PCT = 1;
 
+// Non-XDX swaps require this much LP value in any one of these pools.
+export const SWAP_LP_GOVERNANCE_USD = 10;
+export const SWAP_LP_GOVERNANCE_PAIRS = ["XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"];
+
 export function asciiCurrencyHex(code) {
   const text = String(code || "");
   let hex = "";

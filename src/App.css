@@ -1858,6 +1858,18 @@ body {
   min-width: 0;
 }
 
+.xdx-swap-layout {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  .xdx-swap-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(13rem, 16rem);
+    align-items: start;
+  }
+}
+
 .xdx-swap-head {
   display: flex;
   justify-content: space-between;
@@ -1886,6 +1898,10 @@ body {
 .xdx-swap-alts {
   width: min(100%, 28rem);
   margin-inline: auto;
+}
+
+.xdx-swap-main {
+  min-width: 0;
 }
 
 .xdx-swap-box {
@@ -2068,6 +2084,61 @@ body {
   text-align: center;
   color: var(--dpmf-text-muted);
   max-width: min(100%, 28rem);
+}
+
+.xdx-swap-gov {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--dpmf-border-soft);
+  border-radius: 12px;
+  background: var(--dpmf-bg-elevated);
+  min-width: 0;
+}
+
+.xdx-swap-gov h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.xdx-swap-gov p {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--dpmf-text-muted);
+  line-height: 1.4;
+}
+
+.xdx-swap-gov-status {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.xdx-swap-gov-status.is-yes,
+.xdx-swap-gov li.is-yes b {
+  color: #3dd68c;
+}
+
+.xdx-swap-gov-status.is-no {
+  color: #ffb347;
+}
+
+.xdx-swap-gov ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.xdx-swap-gov li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.xdx-swap-gov li span,
+.xdx-swap-gov li b {
+  min-height: 20px;
 }
 
 .xdx-swap-alts {

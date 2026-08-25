@@ -468,10 +468,15 @@ export const api = {
     getJson(endpoint("walletAccount", { address }) || `/wallet/account/${encodeURIComponent(address)}`, {
       retries: 1,
     }),
-  walletLp: (address) =>
-    getJson(endpoint("walletLp", { address }) || `/wallet/lp/${encodeURIComponent(address)}`, {
-      retries: 1,
-    }),
+  walletLp: (address, extra = {}) =>
+    getJson(
+      `${endpoint("walletLp", { address }) || `/wallet/lp/${encodeURIComponent(address)}`}${extra.fresh ? "?fresh=1" : ""}`,
+      {
+        retries: 1,
+        queue: false,
+        cache: extra.fresh === false ? true : extra.fresh ? false : true,
+      }
+    ),
   walletRank: (address) =>
     getJson(endpoint("walletRank", { address }) || `/wallet/rank/${encodeURIComponent(address)}`, {
       retries: 1,
