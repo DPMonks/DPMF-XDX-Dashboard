@@ -2856,6 +2856,14 @@ body {
   .wallet-earn-value {
     font-size: 13px;
   }
+
+  .wallet-token-row {
+    grid-template-columns: 1fr;
+  }
+
+  .wallet-token-row > .dashboard-card {
+    min-height: 0;
+  }
 }
 
 @media (max-width: 1100px) {
