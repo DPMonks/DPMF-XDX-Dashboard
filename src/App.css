@@ -545,12 +545,36 @@ body {
   align-items: start;
 }
 
-.wallet-token-row > .dashboard-card {
+.wallet-token-row > .dashboard-card,
+.token-details-stack > .dashboard-card {
   display: flex;
   flex-direction: column;
   height: auto;
   min-height: 0;
   overflow: visible;
+}
+
+.token-details-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.token-details-chart .activity-controls {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.token-details-chart .tabs,
+.token-details-chart .ranges {
+  width: 100%;
+}
+
+.token-details-chart .tab {
+  font-size: 11px;
+  padding: 7px 10px;
 }
 
 .lists-row > .dashboard-card {
@@ -2935,8 +2959,14 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .wallet-token-row > .dashboard-card {
+  .wallet-token-row > .dashboard-card,
+  .token-details-stack > .dashboard-card {
     min-height: 0;
+  }
+
+  .token-details-chart .tab,
+  .token-details-chart .range {
+    min-height: 44px;
   }
 }
 
@@ -3268,7 +3298,8 @@ body {
 }
 
 @media (min-width: 835px) and (max-width: 1180px) and (orientation: landscape) {
-  .wallet-token-row > .dashboard-card {
+  .wallet-token-row > .dashboard-card,
+  .token-details-stack > .dashboard-card {
     min-height: 0;
   }
 

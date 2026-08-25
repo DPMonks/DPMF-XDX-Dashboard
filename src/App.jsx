@@ -37,6 +37,7 @@ import {
 
 const TradingChart = lazy(() => import("./components/TradingChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
+const TokenDetailsChart = lazy(() => import("./components/TokenDetailsChart"));
 
 export default function App() {
   const { t } = useI18n();
@@ -326,10 +327,18 @@ export default function App() {
             <h2 className="card-title">{t.connectedWallet}</h2>
             <ConnectedWallet />
           </section>
-          <section className="dashboard-card neon-card">
-            <h2 className="card-title">{t.tokenDetails}</h2>
-            <TokenDetails />
-          </section>
+          <div className="token-details-stack">
+            <section className="dashboard-card neon-card">
+              <h2 className="card-title">{t.tokenDetails}</h2>
+              <TokenDetails />
+            </section>
+            <section className="dashboard-card neon-card token-details-chart-card">
+              <h2 className="card-title">{t.xdxDetailsChart}</h2>
+              <Suspense fallback={<Skeleton height={260} />}>
+                <TokenDetailsChart />
+              </Suspense>
+            </section>
+          </div>
         </div>
 
         <section className="dashboard-card neon-card">
