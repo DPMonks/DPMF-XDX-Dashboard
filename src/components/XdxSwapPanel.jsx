@@ -4,7 +4,7 @@ import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { ammSpot } from "../ammCurve";
 import { bookHeader, emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
-import { IMPACT_HIGH_PCT, IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
+import { IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
 import { swapCounterOptions } from "../swap/swapAssets";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import { walletAvailableAmounts } from "../wallet/composeWallet";
@@ -21,13 +21,6 @@ function amountAtPercent(available, pct) {
   return String(Number(/[eE]/.test(text) ? hold.toFixed(8) : text));
 }
 
-const ROUTES = {
-  hybrid: "swapRouteHybrid",
-  amm: "swapRouteAmm",
-  book: "swapRouteBook",
-  none: "swapRouteNone",
-};
-
 function reserveFrom(book, live) {
   return {
     reserveBase: Number(live?.reserve_xdx ?? live?.reserve_asset ?? book?.amm?.reserve_asset ?? 0),
@@ -36,13 +29,8 @@ function reserveFrom(book, live) {
   };
 }
 
-function LockedXdx({ label }) {
-  return (
-    <p className="xdx-swap-lock">
-      <span>{label}</span>
-      <b>XDX</b>
-    </p>
-  );
+function TokenMark({ id }) {
+  return <b className="xdx-swap-token">{id}</b>;
 }
 
 export default function XdxSwapPanel() {
@@ -144,7 +132,6 @@ export default function XdxSwapPanel() {
   const alternatives = quote ? saferSwapAlternatives(qty, quote, extras) : [];
   const impactHot =
     quote && (Math.abs(quote.priceImpactPercent) >= IMPACT_WARN_PCT || quote.isNegativeSlippage);
-  const impactHigh = quote && Math.abs(quote.priceImpactPercent) >= IMPACT_HIGH_PCT;
   const noRoute = Boolean(qty > 0 && (!quote || quote.routeUsed === "none" || !(quote.actualOutput > 0)));
 
   function changeQuote(id) {
@@ -173,10 +160,22 @@ export default function XdxSwapPanel() {
       value={effectiveQuoteId}
       options={options}
       onChange={changeQuote}
-      ariaLabel={sellingXdx ? t.swapTo : t.swapFrom}
+      ariaLabel={sellingXdx ? t.swapGet : t.swapPay}
       searchable
     />
   );
+  const haveText =
+    account && available != null
+      ? (t.swapHave || "Have {amount}").replace("{amount}", formatToken(available, locale, sellingXdx ? 2 : 4))
+      : "";
+  const gotFill = Boolean(quote?.actualOutput > 0);
+  const routeLabel = gotFill
+    ? quote.routeUsed === "amm"
+      ? t.swapRoutePool || "Pool"
+      : quote.routeUsed === "book"
+        ? t.swapBook || "Book"
+        : t.swapSmart
+    : "";
 
   return (
     <section className="xdx-swap" aria-label={t.swapTitle}>
@@ -185,39 +184,18 @@ export default function XdxSwapPanel() {
         <p className="xdx-swap-pair">{pair}</p>
       </div>
 
-      <div className="xdx-swap-dirs">
-        <button
-          type="button"
-          className={`xdx-swap-dir${!sellingXdx ? " is-on" : ""}`}
-          aria-pressed={!sellingXdx}
-          onClick={() => setSellingXdx(false)}
-        >
-          {t.swapBuyXdx}
-        </button>
-        <button
-          type="button"
-          className={`xdx-swap-switch${sellingXdx ? " is-sell" : " is-buy"}`}
-          role="switch"
-          aria-checked={sellingXdx}
-          aria-label={t.swapDirection}
-          onClick={() => setSellingXdx((on) => !on)}
-        >
-          <i />
-        </button>
-        <button
-          type="button"
-          className={`xdx-swap-dir${sellingXdx ? " is-on" : ""}`}
-          aria-pressed={sellingXdx}
-          onClick={() => setSellingXdx(true)}
-        >
-          {t.swapSellXdx}
-        </button>
-      </div>
+      <div className="xdx-swap-box">
+        <div className="xdx-swap-modes" role="group" aria-label={t.swapDirection}>
+          <button type="button" className={!sellingXdx ? "is-on is-buy" : ""} aria-pressed={!sellingXdx} onClick={() => setSellingXdx(false)}>
+            {t.swapBuyXdx}
+          </button>
+          <button type="button" className={sellingXdx ? "is-on is-sell" : ""} aria-pressed={sellingXdx} onClick={() => setSellingXdx(true)}>
+            {t.swapSellXdx}
+          </button>
+        </div>
 
-      <div className="xdx-swap-legs">
-        <div className={`xdx-swap-leg${sellingXdx ? " is-xdx" : ""}`}>
-          <span>{t.swapFrom}</span>
-          {sellingXdx ? <LockedXdx label={t.swapLockedXdx} /> : counterSelect}
+        <div className="xdx-swap-row">
+          <span>{t.swapPay || "Pay"}</span>
           <input
             type="text"
             inputMode="decimal"
@@ -227,9 +205,9 @@ export default function XdxSwapPanel() {
             aria-label={t.swapAmount}
             onChange={(event) => setAmount(sanitizeQtyInput(event.target.value))}
           />
-          <p className="xdx-swap-hold">
-            {account && available != null ? formatToken(available, locale, sellingXdx ? 2 : 4) : "—"}
-          </p>
+          {sellingXdx ? <TokenMark id="XDX" /> : counterSelect}
+        </div>
+        <div className="xdx-swap-tools">
           <div className="xdx-swap-pcts" role="group" aria-label={t.swapPercents}>
             {SWAP_PCTS.map((pct) => {
               const next = amountAtPercent(available, pct);
@@ -247,57 +225,28 @@ export default function XdxSwapPanel() {
               );
             })}
           </div>
+          {haveText ? <p className="xdx-swap-hold">{haveText}</p> : null}
         </div>
 
-        <button type="button" className="xdx-swap-flip" onClick={() => setSellingXdx((on) => !on)} aria-label={t.swapFlip}>
-          ⇄
-        </button>
-
-        <div className={`xdx-swap-leg${!sellingXdx ? " is-xdx" : ""}`}>
-          <span>{t.swapTo}</span>
-          {sellingXdx ? counterSelect : <LockedXdx label={t.swapLockedXdx} />}
-          <p className="xdx-swap-out">{quote ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "—"}</p>
-          <small>{t.swapActual}</small>
+        <div className="xdx-swap-row">
+          <span>{t.swapGet || "Get"}</span>
+          <p className="xdx-swap-out">{gotFill ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "—"}</p>
+          {sellingXdx ? counterSelect : <TokenMark id="XDX" />}
         </div>
       </div>
 
-      <dl className="xdx-swap-stats">
-        <div>
-          <dt>{t.swapExpected}</dt>
-          <dd>{quote?.actualOutput > 0 && quote.expectedOutput > 0 ? formatToken(quote.expectedOutput, locale, 4) : "—"}</dd>
-        </div>
-        <div>
-          <dt>{t.swapSlippage}</dt>
-          <dd className={quote?.isNegativeSlippage ? "is-warn" : ""}>
-            {formatPercent(quote?.slippagePercent, locale)}
-          </dd>
-        </div>
-        <div>
-          <dt>{t.swapImpact}</dt>
-          <dd className={impactHot ? "is-warn" : ""}>
-            {formatPercent(quote?.priceImpactPercent, locale)}
-          </dd>
-        </div>
-        <div>
-          <dt>{t.swapRoute}</dt>
-          <dd>{t[ROUTES[quote?.routeUsed] || "swapRouteNone"] || quote?.routeUsed || "—"}</dd>
-        </div>
-      </dl>
-
-      {noRoute ? (
+      {gotFill ? (
+        <p className={`xdx-swap-result${impactHot ? " is-warn" : ""}`}>
+          {routeLabel}
+          {quote.slippagePercent != null ? ` · ${formatPercent(quote.slippagePercent, locale)}` : ""}
+        </p>
+      ) : noRoute ? (
         <p className="xdx-swap-warn">{routingMode === "book" ? t.swapNoBook || t.swapNoRoute : t.swapNoRoute}</p>
       ) : null}
       {quote?.partialFill ? <p className="xdx-swap-warn">{t.swapPartialFill}</p> : null}
-      {!noRoute && quote?.isNegativeSlippage ? (
-        <p className="xdx-swap-warn">
-          {t.swapNegative.replace("{amount}", formatToken(quote.lossAmount, locale, 4))}
-        </p>
-      ) : null}
-      {impactHigh ? <p className="xdx-swap-warn">{t.swapImpactHigh}</p> : null}
 
       {alternatives.length ? (
         <div className="xdx-swap-alts">
-          <p>{t.swapSafer}</p>
           {alternatives.map((row) => (
             <button
               key={row.id}
@@ -313,31 +262,7 @@ export default function XdxSwapPanel() {
         </div>
       ) : null}
 
-      <fieldset className="xdx-swap-advanced">
-        <legend>{t.swapRouting}</legend>
-        <div className="xdx-swap-routes">
-          {[
-            ["smart", t.swapSmart],
-            ["amm", t.swapRouteAmm],
-            ["book", t.swapRouteBook],
-          ].map(([id, label]) => (
-            <label key={id}>
-              <input
-                type="radio"
-                name="xdx-swap-route"
-                checked={routingMode === id}
-                onChange={() => setRoutingMode(id)}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
-        <p className="xdx-swap-help">
-          {routingMode === "amm" ? t.swapHelpAmm : routingMode === "book" ? t.swapHelpBook : t.swapHelpSmart}
-        </p>
-      </fieldset>
-
-      <div className="xdx-swap-actions">
+      <div className="xdx-swap-foot">
         <button
           type="button"
           className="connect-wallet-btn"
@@ -346,6 +271,23 @@ export default function XdxSwapPanel() {
         >
           {account ? t.swapAction : t.swapConnect}
         </button>
+        <div className="xdx-swap-routes" role="radiogroup" aria-label={t.swapRouting}>
+          {[
+            ["smart", t.swapSmart],
+            ["amm", t.swapRoutePool || "Pool"],
+            ["book", t.swapBook || "Book"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={routingMode === id ? "is-on" : ""}
+              aria-pressed={routingMode === id}
+              onClick={() => setRoutingMode(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );
