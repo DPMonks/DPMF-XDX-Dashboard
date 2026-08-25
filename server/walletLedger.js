@@ -92,16 +92,29 @@ export function lpHoldingsFromLines(rows = []) {
   return out;
 }
 
-function knownPoolForLp(holding) {
+function knownPoolForLp(holding, catalogPools = []) {
   const hex = String(holding?.lp_currency || "").toUpperCase();
   const amm = String(holding?.amm_account || "");
-  return (
-    POOLS.find(
-      (pool) =>
-        String(pool.lpHex || "").toUpperCase() === hex ||
-        (amm && pool.amm === amm)
-    ) || null
+  const fromKnown = POOLS.find(
+    (pool) =>
+      String(pool.lpHex || "").toUpperCase() === hex ||
+      (amm && pool.amm === amm)
   );
+  if (fromKnown) return fromKnown;
+  const row = (Array.isArray(catalogPools) ? catalogPools : []).find((pool) => {
+    const poolHex = String(pool.lp_currency || pool.lp_currency_hex || "").toUpperCase();
+    const poolAmm = String(pool.amm_account || pool.amm || "");
+    return (hex && poolHex === hex) || (amm && poolAmm === amm);
+  });
+  if (!row) return null;
+  return {
+    pair: row.pool || row.pool_name || row.pair,
+    amm: row.amm_account || row.amm,
+    lpHex: row.lp_currency || row.lp_currency_hex,
+    quote: row.quote,
+    quoteIssuer: row.quote_issuer,
+    quoteHex: row.quote_hex,
+  };
 }
 
 export async function loadWalletOffers(address, options = {}) {
@@ -283,11 +296,14 @@ export async function loadWalletLpFromLedger(address, options = {}) {
     const market = held.length ? await loadLiveMarket(options).catch(() => null) : null;
     const positions = [];
     for (const holding of held) {
-      const known = knownPoolForLp(holding);
+      const known = knownPoolForLp(holding, market?.pools);
       const catalog = (market?.pools || []).find((row) => {
         const pair = String(row.pool || row.pool_name || "").toUpperCase();
         const amm = String(row.amm_account || "").toLowerCase();
-        return pair === String(known?.pair || "").toUpperCase() || amm === String(holding.amm_account || "").toLowerCase();
+        const hex = String(row.lp_currency || row.lp_currency_hex || "").toUpperCase();
+        if (holding.amm_account && amm === String(holding.amm_account).toLowerCase()) return true;
+        if (holding.lp_currency && hex === String(holding.lp_currency).toUpperCase()) return true;
+        return Boolean(known?.pair) && pair === String(known.pair).toUpperCase();
       });
       const live = await loadLiveAmmReserves(
         {
@@ -299,12 +315,13 @@ export async function loadWalletLpFromLedger(address, options = {}) {
         },
         options
       );
+      const pair = known?.pair || live?.pair || catalog?.pool || catalog?.pool_name || "";
       const position = lpPositionFromPool(
         holding.lp_balance,
         {
-          pool: known?.pair || live?.pair,
-          pool_name: known?.pair || live?.pair,
-          quote: known?.quote || live?.quote,
+          pool: pair,
+          pool_name: pair,
+          quote: known?.quote || live?.quote || catalog?.quote,
           amm_account: live?.amm_account || known?.amm || holding.amm_account,
           lp_currency: live?.lp_currency || holding.lp_currency,
           reserve_asset: live?.reserve_xdx ?? live?.reserve_asset,
@@ -322,7 +339,7 @@ export async function loadWalletLpFromLedger(address, options = {}) {
           xrpUsd: catalog?.xrpUsd ?? market?.prices?.xrpUsd,
           xdxPerXrp: catalog?.xdxPerXrp ?? market?.overview?.xdxPerXrp,
         },
-        known?.pair || live?.pair
+        pair
       );
       if (position) positions.push(position);
     }

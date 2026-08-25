@@ -1,4 +1,11 @@
-import { XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
+import {
+  pairFromRow,
+  XDX_RLUSD_AMM,
+  XDX_RLUSD_LP_HEX,
+  XDX_TOTAL_SUPPLY,
+  XDX_XRP_AMM,
+  XDX_XRP_LP_HEX,
+} from "../constants/ledger.js";
 import { fillMissingXdxFiat } from "../utils/fiatFx.js";
 import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
 import { looksLikeXrpPerXdx, saneXrpUsd } from "../utils/recordedPrice.js";
@@ -213,11 +220,39 @@ export function lookupLpPool(row, poolsByPair) {
   return null;
 }
 
+export function resolveLpPairName(pool = {}, pairHint = "") {
+  const hex = String(pool.lp_currency || pool.lp_currency_hex || "")
+    .replace(/^0x/i, "")
+    .toUpperCase();
+  const amm = String(pool.amm_account || pool.amm || "").trim();
+  if (hex === XDX_RLUSD_LP_HEX || amm === XDX_RLUSD_AMM) return "XDX/RLUSD";
+  if (hex === XDX_XRP_LP_HEX || amm === XDX_XRP_AMM) return "XDX/XRP";
+
+  const quote = String(pool.quote || "").trim().toUpperCase().replace(/^XDX\//, "");
+  if (quote && quote !== "XRP") return normalizeWalletPair(`XDX/${quote}`);
+
+  const named = normalizeWalletPair(pairHint || pool.pool_name || pool.pool || pool.pair);
+  if (named && named !== "XDX/XRP") return named;
+
+  const unknownLp = /^03[A-F0-9]{38}$/.test(hex) || (amm && amm !== XDX_XRP_AMM);
+  if (unknownLp) {
+    const decoded = pairFromRow({
+      amm_account: amm,
+      lp_currency: hex,
+      quote: pool.quote,
+      quote_issuer: pool.quote_issuer,
+      quote_hex: pool.quote_hex,
+    });
+    if (decoded && decoded !== "XDX/XRP") return decoded;
+    return "";
+  }
+  return named || "XDX/XRP";
+}
+
 export function lpPositionFromPool(lpBalance, pool = {}, pairHint = "") {
   const tokens = num(lpBalance);
   if (tokens == null || tokens <= 0) return null;
-  const pair =
-    normalizeWalletPair(pairHint || pool.pool_name || pool.pool || pool.pair) || "XDX/XRP";
+  const pair = resolveLpPairName(pool, pairHint) || "XDX/UNKNOWN";
   const supply = num(pool.lp_supply);
   const knownShare = num(pool.lp_share_percent);
   const share = supply > 0 ? tokens / supply : knownShare != null ? knownShare / 100 : 0;

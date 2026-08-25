@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  pairFromRow,
   RLUSD_HEX,
   RLUSD_ISSUER,
   TF_SET_NO_RIPPLE,
@@ -380,6 +381,41 @@ test("opening add LP from a pool card keeps that pair", () => {
   assert.equal(lpHeldForPair([{ pool: "XDX/XRP", lp_balance: 12.5 }], "XDX/XRP", "XRP"), 12.5);
   assert.equal(lpHeldForPair([{ pool_name: "XDX/PLX", lp: 3 }], "XDX/PLX", "PLX"), 3);
   assert.equal(lpHeldForPair([], "XDX/XRP", "XRP"), 0);
+});
+
+test("remove LP held tokens stay on the selected pair, not another LP line", () => {
+  const xsquadHex = "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const xsquadAmm = "rXsquadAmm11111111111111111111111";
+  const mixed = [
+    {
+      pool: "XDX/XRP",
+      pool_name: "XDX/XRP",
+      quote: "XSQUAD",
+      lp_balance: 8888,
+      amm_account: xsquadAmm,
+      lp_currency: xsquadHex,
+    },
+    {
+      pool: "XDX/XRP",
+      pool_name: "XDX/XRP",
+      lp_balance: 12.5,
+      amm_account: XDX_XRP_AMM,
+      lp_currency: XDX_XRP_LP_HEX,
+    },
+  ];
+  assert.equal(lpHeldForPair(mixed, "XDX/XRP", "XRP"), 12.5);
+  assert.equal(lpHeldForPair([mixed[0]], "XDX/XRP", "XRP"), 0);
+  assert.equal(lpHeldForPair([mixed[0]], "XDX/XSQUAD", "XSQUAD"), 8888);
+  assert.equal(pairFromRow({ quote: "XSQUAD", quote_issuer: "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg" }), "XDX/XSQUAD");
+  assert.equal(pairFromRow({ lp_currency: xsquadHex, amm_account: xsquadAmm }), "XDX/XSQUAD");
+  const otherAmm = "rOtherAmm1111111111111111111111111";
+  assert.equal(
+    pairFromRow({ lp_currency: xsquadHex, amm_account: otherAmm }),
+    `XDX/${otherAmm.slice(0, 4)}…${otherAmm.slice(-4)}`
+  );
+});
+
+test("opening add LP from a pool card keeps extra quote metadata", () => {
   const opened = normalizeTradeRequest({
     action: "addLp",
     pair: "XDX/PLX",

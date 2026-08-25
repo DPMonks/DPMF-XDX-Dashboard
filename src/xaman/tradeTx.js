@@ -111,13 +111,48 @@ export function quoteAsset(id) {
   return QUOTE_ASSETS.find((row) => row.id === id) || QUOTE_ASSETS[0];
 }
 
-export function lpHeldForPair(rows, pair, quoteId) {
-  const want = String(pair || (quoteId ? `XDX/${quoteId}` : "")).toUpperCase();
+export function knownLpIdentity(pair, quoteId) {
+  const want = String(pair || (quoteId ? `XDX/${quoteId}` : ""))
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  if (want === "XDX/RLUSD" || String(quoteId || "").toUpperCase() === "RLUSD") {
+    return { pair: "XDX/RLUSD", amm: XDX_RLUSD_AMM, lpCurrency: XDX_RLUSD_LP_HEX };
+  }
+  if (want === "XDX/XRP" || String(quoteId || "").toUpperCase() === "XRP") {
+    return { pair: "XDX/XRP", amm: XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX };
+  }
+  return { pair: want, amm: "", lpCurrency: "" };
+}
+
+export function lpRowMatchesPair(item, pair, quoteId, spec = {}) {
+  const want = String(pair || (quoteId ? `XDX/${quoteId}` : ""))
+    .replace(/\s+/g, "")
+    .toUpperCase();
   const quote = String(quoteId || want.split("/")[1] || "").toUpperCase();
-  const row = (Array.isArray(rows) ? rows : []).find((item) => {
-    const name = String(item?.pool_name || item?.pool || item?.pair || "").replace(/\s+/g, "").toUpperCase();
-    return name === want || name === `XDX/${quote}` || (quote && name.endsWith(`/${quote}`));
-  });
+  const known = knownLpIdentity(want, quote);
+  const wantAmm = String(spec.amm || spec.amm_account || known.amm || "").toLowerCase();
+  const wantLp = String(spec.lpCurrency || spec.lp_currency || known.lpCurrency || "").toUpperCase();
+  const name = String(item?.pool_name || item?.pool || item?.pair || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const rowQuote = String(item?.quote || "").replace(/^XDX\//, "").toUpperCase();
+  const amm = String(item?.amm_account || item?.amm || "").toLowerCase();
+  const hex = String(item?.lp_currency || item?.lp_currency_hex || "")
+    .replace(/^0x/i, "")
+    .toUpperCase();
+
+  if (wantAmm && amm && amm !== wantAmm) return false;
+  if (wantLp && isLpCurrency(hex) && hex !== wantLp) return false;
+  if (wantAmm && amm && amm === wantAmm) return true;
+  if (wantLp && isLpCurrency(hex) && hex === wantLp) return true;
+  if (quote && rowQuote && rowQuote === quote) return true;
+  return name === want || (quote && name === `XDX/${quote}`);
+}
+
+export function lpHeldForPair(rows, pair, quoteId, spec = {}) {
+  const row = (Array.isArray(rows) ? rows : []).find((item) =>
+    lpRowMatchesPair(item, pair, quoteId, spec)
+  );
   const n = Number(row?.lp_balance ?? row?.lp ?? 0);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
