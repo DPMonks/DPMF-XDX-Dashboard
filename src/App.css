@@ -1991,6 +1991,23 @@ body {
   min-width: 7.25rem;
 }
 
+.xdx-swap-row .pair-select-control {
+  min-height: 44px;
+}
+
+.xdx-swap-row .pair-select-input {
+  min-height: 44px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.xdx-swap-row .pair-select-chevron {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  margin-right: 0;
+}
+
 .xdx-swap-tools {
   display: flex;
   flex-wrap: wrap;

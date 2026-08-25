@@ -4,7 +4,7 @@ import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { ammSpot } from "../ammCurve";
 import { bookHeader, emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
-import { IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
+import { IMPACT_HIGH_PCT, IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
 import { swapCounterOptions } from "../swap/swapAssets";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import { walletAvailableAmounts } from "../wallet/composeWallet";
@@ -129,9 +129,10 @@ export default function XdxSwapPanel() {
     tradingFee: reserves.tradingFee,
   };
   const quote = qty > 0 ? quoteSwap({ ...extras, amountIn: qty, routingMode }) : null;
-  const alternatives = quote ? saferSwapAlternatives(qty, quote, extras) : [];
   const impactHot =
     quote && (Math.abs(quote.priceImpactPercent) >= IMPACT_WARN_PCT || quote.isNegativeSlippage);
+  const impactHigh = quote && Math.abs(quote.priceImpactPercent) >= IMPACT_HIGH_PCT;
+  const alternatives = impactHigh ? saferSwapAlternatives(qty, quote, extras) : [];
   const noRoute = Boolean(qty > 0 && (!quote || quote.routeUsed === "none" || !(quote.actualOutput > 0)));
 
   function changeQuote(id) {
