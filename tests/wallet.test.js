@@ -421,6 +421,29 @@ test("lpFeeEarnings sums 24h pool fees across every LP position", () => {
   assert.equal(both.earnings.pools["XDX/RLUSD"].quote24h, 10 * (10 / 8000));
   assert.ok(both.earnings.pools["XDX/XRP"].usd24h > 0);
   assert.ok(both.earnings.pools["XDX/RLUSD"].usd24h > both.earnings.pools["XDX/XRP"].usd24h);
+
+  const spiked = lpFeeEarnings(
+    [
+      {
+        pool: "XDX/XRP",
+        quote: "XRP",
+        lp_share_percent: 10,
+        trading_fee: 1000,
+        reserve_asset: 2,
+        reserve_currency: 50_000,
+      },
+    ],
+    {
+      xdxUsd: 0.00004,
+      xrpUsd: 1 / 0.00004,
+      xdxXrp: 0.00004,
+      now,
+      flows: [{ pool: "XDX/XRP", xdx: 10_000, timestamp: "2026-08-22T10:00:00.000Z" }],
+    }
+  );
+  assert.equal(spiked.earnings.xrp24h, 5 * (2 / 50_000));
+  assert.ok(spiked.earnings.xrp24hUsd < 1);
+  assert.ok(spiked.earnings.xrp24hUsd > 0);
 });
 
 test("composeWalletSnapshot totals LP fee earnings after sign-in", () => {

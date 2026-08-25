@@ -1,6 +1,7 @@
 import { XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
 import { fillMissingXdxFiat } from "../utils/fiatFx.js";
 import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
+import { looksLikeXrpPerXdx, saneXrpUsd } from "../utils/recordedPrice.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
 import {
   isXdxAmmPair,
@@ -344,8 +345,16 @@ function quoteIsRlusd(row) {
 function quotePerXdx(row, fallback) {
   const reserveXdx = num(row?.reserve_asset ?? row?.reserve_xdx);
   const reserveQuote = num(row?.reserve_currency ?? row?.reserve_quote);
-  if (reserveXdx > 0 && reserveQuote > 0) return reserveQuote / reserveXdx;
-  return num(fallback);
+  if (reserveXdx > 0 && reserveQuote > 0) {
+    const ratio = reserveQuote / reserveXdx;
+    if ((quoteIsXrp(row) || quoteIsRlusd(row)) && ratio > 1) return reserveXdx / reserveQuote;
+    return ratio;
+  }
+  const fb = num(fallback);
+  if (fb != null && (quoteIsXrp(row) || quoteIsRlusd(row)) && !looksLikeXrpPerXdx(fb) && fb > 1) {
+    return 1 / fb;
+  }
+  return fb;
 }
 
 function volumeForWindow(row, flowVol, windowMs) {
@@ -487,7 +496,7 @@ export function lpFeeEarnings(
   }
   const prices = {
     xdxUsd,
-    xrpUsd: num(xrpUsd) ?? (num(xdxUsd) > 0 && num(xdxXrp) > 0 ? Number(xdxUsd) / Number(xdxXrp) : null),
+    xrpUsd: saneXrpUsd(xrpUsd, xdxUsd, xdxXrp),
     rlusdUsd: num(rlusdUsd) ?? 1,
     xdxXrp,
   };
@@ -669,7 +678,7 @@ export function composeWalletSnapshot({
     pending.activity
   ).slice(0, 3);
   const xdxUsd = num(prices.xdxUsd ?? prices.recorded_price ?? token.xdxUsd);
-  const xrpUsd = num(prices.xrpUsd);
+  const xrpUsd = saneXrpUsd(prices.xrpUsd, xdxUsd, xdxPerXrp);
   const rlusdUsd = num(prices.RLUSD ?? prices.quotes?.RLUSD) ?? 1;
   const priceBook = {
     ...prices,
