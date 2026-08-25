@@ -12,6 +12,15 @@ import { formatPercent, formatToken } from "../utils/format";
 import { sanitizeQtyInput } from "../xaman/tradeTx";
 import BrandSelect from "./BrandSelect";
 
+const SWAP_PCTS = [25, 50, 75, 100];
+
+function amountAtPercent(available, pct) {
+  const hold = Number(available) * (Number(pct) / 100);
+  if (!(hold > 0)) return "";
+  const text = hold >= 1_000_000 ? String(Math.round(hold)) : hold.toPrecision(8);
+  return String(Number(/[eE]/.test(text) ? hold.toFixed(8) : text));
+}
+
 const ROUTES = {
   hybrid: "swapRouteHybrid",
   amm: "swapRouteAmm",
@@ -203,10 +212,26 @@ export default function XdxSwapPanel() {
             aria-label={t.swapAmount}
             onChange={(event) => setAmount(sanitizeQtyInput(event.target.value))}
           />
-          <button type="button" className="xdx-swap-max" disabled={!account || !(available > 0)} onClick={() => setAmount(String(available))}>
-            {t.swapMax}
-            {account && available != null ? ` ${formatToken(available, locale, sellingXdx ? 2 : 4)}` : ""}
-          </button>
+          <p className="xdx-swap-hold">
+            {account && available != null ? formatToken(available, locale, sellingXdx ? 2 : 4) : "—"}
+          </p>
+          <div className="xdx-swap-pcts" role="group" aria-label={t.swapPercents}>
+            {SWAP_PCTS.map((pct) => {
+              const next = amountAtPercent(available, pct);
+              const on = next !== "" && amount === next;
+              return (
+                <button
+                  key={pct}
+                  type="button"
+                  className={on ? "is-on" : ""}
+                  disabled={!account || !(available > 0)}
+                  onClick={() => setAmount(next)}
+                >
+                  {pct}%
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <button type="button" className="xdx-swap-flip" onClick={() => setSellingXdx((on) => !on)} aria-label={t.swapFlip}>

@@ -222,6 +222,7 @@ const en = {
   swapHelpBook:
     "Order book only fills from people who already posted buy or sell orders. If those orders are thin, the trade may not finish.",
   swapMax: "Max",
+  swapPercents: "Swap size",
   swapFlip: "Switch XDX side",
   swapAction: "Swap",
   swapConnect: "Connect to swap",
