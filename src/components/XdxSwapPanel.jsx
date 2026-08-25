@@ -274,9 +274,9 @@ export default function XdxSwapPanel() {
         </button>
         <div className="xdx-swap-routes" role="radiogroup" aria-label={t.swapRouting}>
           {[
-            ["smart", t.swapSmart],
-            ["amm", t.swapRoutePool || "Pool"],
-            ["book", t.swapBook || "Book"],
+            ["smart", t.swapChipSmart || "Smart (mixed fee of 0-1%)"],
+            ["amm", t.swapChipAmm || "AMM only (0-1% fee)"],
+            ["book", t.swapChipBook || "Order book only (no AMM fee 0%)"],
           ].map(([id, label]) => (
             <button
               key={id}

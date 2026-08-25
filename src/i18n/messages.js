@@ -221,6 +221,9 @@ const en = {
   swapAdvanced: "Advanced options",
   swapRouting: "Routing",
   swapSmart: "Smart",
+  swapChipSmart: "Smart (mixed fee of 0-1%)",
+  swapChipAmm: "AMM only (0-1% fee)",
+  swapChipBook: "Order book only (no AMM fee 0%)",
   swapHelpSmart:
     "Smart looks at both the XDX pool and the buy and sell orders, then uses whichever pays you more for this size. This is the usual choice.",
   swapHelpAmm:

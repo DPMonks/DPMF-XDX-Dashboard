@@ -2086,8 +2086,15 @@ body {
 
 .xdx-swap-routes {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 6px;
+}
+
+.xdx-swap-routes button {
+  padding: 0 12px;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.3;
 }
 
 .orderbook-tapes {
