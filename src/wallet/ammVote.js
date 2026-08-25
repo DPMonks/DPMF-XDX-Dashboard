@@ -239,11 +239,26 @@ export function pendingVoteFromExecution(detail = {}, address = "") {
   };
 }
 
-export function knownGovernancePairs(pools = []) {
+export function normalizeVotePair(value) {
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+}
+
+export function knownGovernancePairs(pools = [], extra = []) {
   const ids = ["XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"];
-  for (const row of Array.isArray(pools) ? pools : []) {
-    const name = String(row.pool || row.pool_name || row.pair || "").replace(/\s+/g, "").toUpperCase();
+  for (const row of [...(Array.isArray(pools) ? pools : []), ...(Array.isArray(extra) ? extra : [])]) {
+    const name = normalizeVotePair(row?.pool || row?.pool_name || row?.pair || row);
     if (name.startsWith("XDX/") && !ids.includes(name)) ids.push(name);
   }
   return ids;
+}
+
+export function poolForVotePair(pools = [], extra = [], pair = "XDX/XRP") {
+  const name = normalizeVotePair(pair);
+  return (
+    [...(Array.isArray(pools) ? pools : []), ...(Array.isArray(extra) ? extra : [])].find(
+      (row) => normalizeVotePair(row?.pool || row?.pool_name || row?.pair) === name
+    ) || null
+  );
 }

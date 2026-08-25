@@ -973,8 +973,8 @@ export async function getWalletVotes(address) {
   return asArray(body?.activity || body);
 }
 
-export async function getPoolGovernance(pair, account) {
-  return api.ammGovernance(pair, account);
+export async function getPoolGovernance(pair, account, extra = {}) {
+  return api.ammGovernance(pair, account, extra);
 }
 
 export async function getLiveLpReserves(query = {}) {

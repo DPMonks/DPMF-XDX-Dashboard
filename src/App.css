@@ -2840,7 +2840,12 @@ body {
 .governance-select,
 .governance-select .pair-select {
   width: 100%;
-  max-width: 280px;
+  max-width: 360px;
+}
+
+.governance-select .pair-select-control,
+.governance-select .pair-select-input {
+  min-height: 44px;
 }
 
 .governance-metrics {
@@ -2914,6 +2919,7 @@ body {
 
 .governance-vote input[type="range"] {
   width: 100%;
+  min-height: 44px;
   margin: 10px 0 0;
   accent-color: var(--dpmf-neon-cyan);
 }
@@ -2970,6 +2976,13 @@ body {
   .governance-select,
   .governance-select .pair-select {
     max-width: none;
+  }
+
+  .governance-select .pair-select-control,
+  .governance-select .pair-select-input,
+  .governance-vote input[type="range"],
+  .governance-actions .connect-wallet-btn {
+    min-height: 44px;
   }
 }
 

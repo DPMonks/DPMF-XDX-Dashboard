@@ -512,9 +512,15 @@ export const api = {
       queue: false,
       cache: false,
     }),
-  ammGovernance: (pair, account) => {
+  ammGovernance: (pair, account, extra = {}) => {
     const search = new URLSearchParams({ pair: pair || "XDX/XRP" });
     if (account) search.set("account", account);
+    if (extra.issuer || extra.quote_issuer) search.set("issuer", extra.issuer || extra.quote_issuer);
+    if (extra.hex || extra.quote_hex) search.set("hex", extra.hex || extra.quote_hex);
+    if (extra.ammAccount || extra.amm || extra.amm_account) {
+      search.set("amm", extra.ammAccount || extra.amm || extra.amm_account);
+    }
+    if (extra.lpBalance != null || extra.lp != null) search.set("lp", String(extra.lpBalance ?? extra.lp));
     return getJson(`/amm/governance?${search}`, { retries: 1, queue: false, cache: false });
   },
   lpPoolsLive: (query = {}) => {

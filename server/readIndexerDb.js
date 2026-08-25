@@ -2321,9 +2321,12 @@ function walletLedgerResult(suffix, search = "") {
   }
   if (suffix === "amm/governance") {
     const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
-    return loadPoolGovernance(params.get("pair") || "XDX/XRP", params.get("account") || "").then((body) =>
-      ok(body)
-    );
+    return loadPoolGovernance(params.get("pair") || "XDX/XRP", params.get("account") || "", {
+      issuer: params.get("issuer") || params.get("quote_issuer"),
+      hex: params.get("hex") || params.get("quote_hex"),
+      ammAccount: params.get("amm") || params.get("amm_account"),
+      lpBalance: params.get("lp") || params.get("lp_balance"),
+    }).then((body) => ok(body));
   }
   if (suffix === "lp-pools/live") {
     const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));

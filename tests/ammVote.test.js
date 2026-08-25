@@ -9,6 +9,9 @@ import {
   medianVotedFee,
   voteHistoryFromActivity,
   weightedVotedFee,
+  knownGovernancePairs,
+  poolForVotePair,
+  quoteIssue,
 } from "../src/wallet/ammVote.js";
 import { XDX_ISSUER } from "../src/constants/ledger.js";
 
@@ -86,4 +89,34 @@ test("voteHistoryFromActivity marks an older vote on the same pair replaced", ()
   );
   assert.equal(rows[0].status, "active");
   assert.equal(rows[1].status, "replaced");
+});
+
+test("knownGovernancePairs keeps LP and history pairs beside the catalog", () => {
+  const names = knownGovernancePairs(
+    [{ pool: "XDX/ETH", quote: "ETH" }],
+    [{ pool: "XDX/BTC" }, { pair: "XDX/PLX" }]
+  );
+  assert.ok(names.includes("XDX/ETH"));
+  assert.ok(names.includes("XDX/BTC"));
+  assert.ok(names.includes("XDX/PLX"));
+});
+
+test("poolForVotePair finds a catalog or LP row for the selected pair", () => {
+  const row = poolForVotePair(
+    [{ pool: "XDX/ETH", quote_issuer: "rEthIssuer11111111111111111111111", amm_account: "rEthAmm" }],
+    [{ pool: "XDX/BTC", lp_balance: 4 }],
+    "xdx / eth"
+  );
+  assert.equal(row.amm_account, "rEthAmm");
+  assert.equal(row.quote_issuer, "rEthIssuer11111111111111111111111");
+});
+
+test("quoteIssue keeps an issued quote instead of falling back to XRP", () => {
+  const eth = quoteIssue({
+    id: "ETH",
+    issuer: "rEthIssuer11111111111111111111111",
+  });
+  assert.equal(eth.currency, "ETH");
+  assert.equal(eth.issuer, "rEthIssuer11111111111111111111111");
+  assert.equal(quoteIssue({ id: "ETH" }).currency, "XRP");
 });
