@@ -379,7 +379,7 @@ export default function XdxSwapPanel() {
       value={effectiveFrom}
       options={assets.filter((row) => row.id !== effectiveTo)}
       onChange={changeFrom}
-      ariaLabel={t.swapPay || "Pay"}
+      ariaLabel={t.swapStart || "Start swap"}
       searchable
     />
   );
@@ -388,7 +388,7 @@ export default function XdxSwapPanel() {
       value={effectiveTo}
       options={assets.filter((row) => row.id !== effectiveFrom)}
       onChange={changeTo}
-      ariaLabel={t.swapGet || "Get"}
+      ariaLabel={t.swapFor || "For"}
       searchable
     />
   );
@@ -428,7 +428,7 @@ export default function XdxSwapPanel() {
             </div>
 
             <div className="xdx-swap-row">
-              <span>{t.swapPay || "Pay"}</span>
+              <span>{t.swapStart || "Start swap"}</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -461,12 +461,20 @@ export default function XdxSwapPanel() {
               {haveText ? <p className="xdx-swap-hold">{haveText}</p> : null}
             </div>
 
-            <div className="xdx-swap-row">
-              <span>{t.swapGet || "Get"}</span>
-              <p className="xdx-swap-out">
-                {gotFill ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "—"}
-              </p>
+            <div className="xdx-swap-row is-for">
+              <span>{t.swapFor || "For"}</span>
               {toSelect}
+            </div>
+
+            <div className="xdx-swap-row is-receive">
+              <span>{t.swapReceive || "Receive"}</span>
+              <div className="xdx-swap-receive">
+                <p className="xdx-swap-out">
+                  {gotFill ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "—"}
+                </p>
+                <small>{t.swapReceiveHint || "total tokens"}</small>
+              </div>
+              <p className="xdx-swap-token">{toTicker}</p>
             </div>
           </div>
 

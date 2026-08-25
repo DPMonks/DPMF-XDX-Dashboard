@@ -1960,9 +1960,32 @@ body {
 
 .xdx-swap-row {
   display: grid;
-  grid-template-columns: 2.6rem minmax(0, 1fr) minmax(7.25rem, auto);
+  grid-template-columns: 5.25rem minmax(0, 1fr) minmax(7.25rem, auto);
   align-items: center;
   gap: 8px;
+}
+
+.xdx-swap-row.is-for {
+  grid-template-columns: 5.25rem minmax(7.25rem, 1fr);
+}
+
+.xdx-swap-row.is-for .brand-select,
+.xdx-swap-row.is-for .pair-select {
+  width: 100%;
+  min-width: 7.25rem;
+}
+
+.xdx-swap-receive {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+}
+
+.xdx-swap-receive small {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dpmf-text-muted);
 }
 
 .xdx-swap-row + .xdx-swap-row {
