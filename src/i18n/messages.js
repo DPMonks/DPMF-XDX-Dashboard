@@ -225,11 +225,30 @@ const en = {
   swapChipAmm: "AMM only (0-1% fee)",
   swapChipBook: "Order book only (no AMM fee 0%)",
   swapHelpSmart:
-    "Smart looks at both the XDX pool and the buy and sell orders, then uses whichever pays you more for this size. This is the usual choice.",
+    "Smart scans the live XDX pool and the posted buy/sell tape together, then routes this exact size to whichever venue pays you more. Pool fee stays in the 0–1% band only when the AMM is used. This is the usual choice when you want the best fill without picking a venue.",
   swapHelpAmm:
-    "AMM only uses the XDX pool. The pool can always fill the trade, but a big swap can move the pool price and you get less.",
+    "AMM locks the fill to the XDX pool. The pool can take the full size, but a large order walks the curve and the price you get moves against you. Use this when you want a guaranteed complete fill and can accept pool impact.",
   swapHelpBook:
-    "Order book only fills from people who already posted buy or sell orders. If those orders are thin, the trade may not finish.",
+    "Order book fills only from people who already posted bids or asks. There is no AMM fee. If the tape is thin, the trade may fill only in part or not at all. Use this when you want 0% pool fee and the book is deep enough.",
+  swapRadioSmart: "Smart",
+  swapRadioBook: "Order book",
+  swapRadioAmm: "AMM",
+  swapRadioSmartMeta: "mixed fee 0–1%",
+  swapRadioBookMeta: "no AMM fee 0%",
+  swapRadioAmmMeta: "0–1% fee",
+  swapTipTitle: "Route advisor",
+  swapRecTitle: "Recommendation",
+  swapRecAccept: "Accept",
+  swapRecHalf:
+    "This size is moving the market about {impact}. Cut the order in half and re-quote so more of the fill stays near mid.",
+  swapRecAmm:
+    "The XDX pool pays more for this size than the current route. Switch to AMM only for a complete pool fill.",
+  swapRecBook:
+    "Posted orders fill this size closer to mid, with no AMM fee. Switch to Order book only.",
+  swapRecNoBook:
+    "No posted orders can fill this size. Switch to AMM so the XDX pool can complete the swap.",
+  swapRecNoAmm:
+    "The pool cannot complete this size. Switch to Smart so the book can help fill what the AMM misses.",
   swapMax: "Max",
   swapPercents: "Swap size",
   swapFlip: "Switch XDX side",

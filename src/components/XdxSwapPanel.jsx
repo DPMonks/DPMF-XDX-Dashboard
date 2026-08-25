@@ -62,6 +62,32 @@ function tickerOf(asset, fallback) {
     .toUpperCase();
 }
 
+function pickSwapRecommendation({ qty, routingMode, alternatives, noRoute }) {
+  if (!(qty > 0)) return null;
+  if (noRoute) {
+    if (routingMode === "book") return { id: "amm", reason: "nobook", amountIn: qty };
+    if (routingMode === "amm") return { id: "smart", reason: "noamm", amountIn: qty };
+    return { id: "half", reason: "half", amountIn: qty / 2 };
+  }
+  const amm = alternatives.find((row) => row.id === "amm");
+  const book = alternatives.find((row) => row.id === "book");
+  const half = alternatives.find((row) => row.id === "half");
+  if (routingMode !== "amm" && amm) return { id: "amm", reason: "better", amountIn: qty };
+  if (routingMode !== "book" && book) return { id: "book", reason: "better", amountIn: qty };
+  if (half) return { id: "half", reason: "half", amountIn: half.amountIn };
+  return null;
+}
+
+function recommendationCopy(rec, t, impactText) {
+  if (!rec) return "";
+  if (rec.reason === "half") return (t.swapRecHalf || "").replace("{impact}", impactText || "—");
+  if (rec.reason === "nobook") return t.swapRecNoBook;
+  if (rec.reason === "noamm") return t.swapRecNoAmm;
+  if (rec.id === "amm") return t.swapRecAmm;
+  if (rec.id === "book") return t.swapRecBook;
+  return "";
+}
+
 export default function XdxSwapPanel() {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
@@ -70,6 +96,7 @@ export default function XdxSwapPanel() {
   const [toId, setToId] = useState("XRP");
   const [amount, setAmount] = useState("");
   const [routingMode, setRoutingMode] = useState("smart");
+  const [acceptedRecKey, setAcceptedRecKey] = useState("");
   const [lines, setLines] = useState([]);
   const [balances, setBalances] = useState({});
   const [walletAccount, setWalletAccount] = useState({});
@@ -221,6 +248,21 @@ export default function XdxSwapPanel() {
   const alternatives = impactHigh && quoteExtras ? saferSwapAlternatives(qty, quote, quoteExtras) : [];
   const noRoute = Boolean(qty > 0 && (!quote || quote.routeUsed === "none" || !(quote.actualOutput > 0)));
   const gatedOut = Boolean(needsGate && (!account || !gate.ok));
+  const recommendation = pickSwapRecommendation({ qty, routingMode, alternatives, noRoute });
+  const recKey = recommendation ? `${routingMode}:${qty}:${recommendation.id}:${recommendation.reason}` : "";
+  const showRecommendation = Boolean(recommendation && recKey !== acceptedRecKey);
+  const routeHelp =
+    routingMode === "amm" ? t.swapHelpAmm : routingMode === "book" ? t.swapHelpBook : t.swapHelpSmart;
+  const recText = recommendationCopy(
+    recommendation,
+    t,
+    quote?.priceImpactPercent != null ? formatPercent(quote.priceImpactPercent, locale) : ""
+  );
+  const routeChoices = [
+    ["smart", t.swapRadioSmart || t.swapSmart, t.swapRadioSmartMeta || t.swapChipSmart],
+    ["book", t.swapRadioBook || t.swapRouteBook, t.swapRadioBookMeta || t.swapChipBook],
+    ["amm", t.swapRadioAmm || t.swapRouteAmm, t.swapRadioAmmMeta || t.swapChipAmm],
+  ];
 
   function changeFrom(id) {
     const next = String(id || "").toUpperCase();
@@ -439,23 +481,6 @@ export default function XdxSwapPanel() {
           {quote?.partialFill ? <p className="xdx-swap-warn">{t.swapPartialFill}</p> : null}
           {needsGate && gatedOut ? <p className="xdx-swap-warn">{t.swapLpGateNeed}</p> : null}
 
-          {alternatives.length ? (
-            <div className="xdx-swap-alts">
-              {alternatives.map((row) => (
-                <button
-                  key={row.id}
-                  type="button"
-                  onClick={() => {
-                    if (row.id === "half") setAmount(String(row.amountIn));
-                    if (row.id === "amm" || row.id === "book") setRoutingMode(row.id);
-                  }}
-                >
-                  {row.id === "half" ? t.swapSaferHalf : row.id === "amm" ? t.swapSaferAmm : t.swapSaferBook}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
           <div className="xdx-swap-foot">
             <button
               type="button"
@@ -467,25 +492,59 @@ export default function XdxSwapPanel() {
             >
               {account ? (checking ? t.swapLpChecking : t.swapAction) : t.swapConnect}
             </button>
-            <div className="xdx-swap-routes" role="radiogroup" aria-label={t.swapRouting}>
-              {[
-                ["smart", t.swapChipSmart || "Smart (mixed fee of 0-1%)"],
-                ["amm", t.swapChipAmm || "AMM only (0-1% fee)"],
-                ["book", t.swapChipBook || "Order book only (no AMM fee 0%)"],
-              ].map(([id, label]) => (
+          </div>
+        </div>
+
+        <aside className="xdx-swap-guide" aria-label={t.swapRouting}>
+          <div className="xdx-swap-radios" role="radiogroup" aria-label={t.swapRouting}>
+            {routeChoices.map(([id, label, meta]) => {
+              const on = routingMode === id;
+              return (
                 <button
                   key={id}
                   type="button"
-                  className={routingMode === id ? "is-on" : ""}
-                  aria-pressed={routingMode === id}
+                  role="radio"
+                  className={on ? "is-on" : ""}
+                  aria-checked={on}
                   onClick={() => setRoutingMode(id)}
                 >
-                  {label}
+                  <span className="xdx-swap-radio-mark" aria-hidden="true" />
+                  <span className="xdx-swap-radio-copy">
+                    <b>{label}</b>
+                    <small>{meta}</small>
+                  </span>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        </div>
+
+          <div key={routingMode} className="xdx-swap-tip">
+            <div className="xdx-swap-tip-scan" aria-hidden="true" />
+            <p className="xdx-swap-tip-kicker">{t.swapTipTitle}</p>
+            <p>{routeHelp}</p>
+          </div>
+
+          {showRecommendation ? (
+            <div key={recKey} className="xdx-swap-rec">
+              <div className="xdx-swap-tip-scan" aria-hidden="true" />
+              <p className="xdx-swap-tip-kicker">{t.swapRecTitle}</p>
+              <p>{recText}</p>
+              <button
+                type="button"
+                className="xdx-swap-rec-accept"
+                onClick={() => {
+                  if (recommendation.id === "half") setAmount(String(recommendation.amountIn));
+                  if (recommendation.id === "amm" || recommendation.id === "book" || recommendation.id === "smart") {
+                    setRoutingMode(recommendation.id);
+                  }
+                  setAcceptedRecKey(recKey);
+                }}
+              >
+                {t.swapRecAccept}
+              </button>
+            </div>
+          ) : null}
+        </aside>
 
         <aside className="xdx-swap-gov" aria-label={t.swapLpGateTitle}>
           <h4>{t.swapLpGateTitle}</h4>
