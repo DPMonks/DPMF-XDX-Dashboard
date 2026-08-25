@@ -1711,19 +1711,27 @@ body {
 }
 
 .pool-card-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
   gap: 8px;
   margin-top: auto;
   padding-top: 14px;
 }
 
 .pool-card-actions .connect-wallet-btn {
-  min-height: 36px;
-  padding: 0 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 8px;
   font-size: 12px;
+  white-space: normal;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.pool-card-actions .connect-wallet-btn > span {
+  white-space: normal;
+  text-align: center;
 }
 
 .pool-card-actions .connect-wallet-btn.is-remove-lp {
@@ -1733,6 +1741,12 @@ body {
 
 .pool-card-actions .connect-wallet-btn.is-remove-lp:hover {
   border-color: #c770ff;
+}
+
+.pool-card-actions .connect-wallet-btn.is-trustline,
+.pool-card-actions .connect-wallet-btn.is-lp-trustline {
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: none;
 }
 
 .orderbook-wrap {

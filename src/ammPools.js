@@ -53,3 +53,18 @@ export function searchPairHint(query) {
   if (!raw || searchAmmAccount(raw)) return "";
   return normalizeOrderbookPair(raw).toUpperCase();
 }
+
+export function poolQuoteTicker(pool) {
+  const name = ammPoolName(pool);
+  const fromName = name.includes("/") ? name.split("/")[1] : "";
+  return (
+    String(pool?.quote || fromName || "XRP")
+      .replace(/^XDX\//i, "")
+      .toUpperCase() || "XRP"
+  );
+}
+
+export function poolAssetTrustlineId(pool) {
+  const quote = poolQuoteTicker(pool);
+  return quote === "XRP" ? "XDX" : quote;
+}

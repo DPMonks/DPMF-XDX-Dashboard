@@ -3,12 +3,32 @@ import { pairParts } from "../utils/currency";
 import { displayPoolSplit, formatPoolPct } from "../utils/poolSplit";
 import { formatNumber, formatToken, formatUsd, formatUsdPrice, formatWhen, shortAddress } from "../utils/format";
 import { formatAmmFee } from "../wallet/composeWallet";
-import { filterAmmPools, mergeAmmPoolLists, searchAmmAccount, searchPairHint } from "../ammPools";
+import {
+  filterAmmPools,
+  mergeAmmPoolLists,
+  poolAssetTrustlineId,
+  poolQuoteTicker,
+  searchAmmAccount,
+  searchPairHint,
+} from "../ammPools";
 import { discoverLiveAmmPool } from "../api/indexer";
-import { QUOTE_ASSETS } from "../xaman/tradeTx";
+import { xdxTrustSetTxjson } from "../constants/ledger";
+import { useWallet } from "../context/useWallet";
+import {
+  QUOTE_ASSETS,
+  isLpCurrency,
+  lpTrustSetTxjson,
+  notifyWalletRefresh,
+  poolForQuote,
+  quoteTrustSetTxjson,
+  resolveQuote,
+} from "../xaman/tradeTx";
+import { useXamanPayload } from "../xaman/useXamanPayload";
+import { liveWalletAddress } from "../wallet/walletStorage";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 import WalletButton from "./WalletButton";
+import WalletModal from "./WalletModal";
 
 function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
   const split = displayPoolSplit(xdxPct, quotePct);
@@ -53,15 +73,67 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
   );
 }
 
+function poolQuote(pool) {
+  const ticker = String(pool?.quote || "")
+    .replace(/^XDX\//i, "")
+    .toUpperCase() || poolAssetTrustlineId(pool);
+  return resolveQuote(ticker === "XDX" ? "XRP" : ticker, {
+    quote_issuer: pool.quote_issuer,
+    quote_hex: pool.quote_hex,
+  });
+}
+
+function assetTrustTxjson(pool, account) {
+  if (poolAssetTrustlineId(pool) === "XDX") return xdxTrustSetTxjson(account);
+  return quoteTrustSetTxjson(account, poolQuote(pool));
+}
+
+function lpTrustTxjson(pool, account) {
+  const lpHex = pool?.lp_currency || pool?.lp_currency_hex;
+  if (pool?.amm_account && isLpCurrency(lpHex)) {
+    return lpTrustSetTxjson(account, { amm: pool.amm_account, lpCurrency: lpHex });
+  }
+  const quoteId = poolQuoteTicker(pool);
+  const spec = poolForQuote(poolQuote(pool), [pool], pool);
+  if (quoteId !== "XRP" && spec.pair === "XDX/XRP") return null;
+  return lpTrustSetTxjson(account, spec);
+}
+
 export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemoveLiquidity }) {
   const { t, locale } = useI18n();
+  const { walletAddress, connectWallet } = useWallet();
+  const { qr, mobileUrl, uuid, status, error: signError, start, reset } = useXamanPayload();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState([]);
   const [looking, setLooking] = useState(false);
+  const [signKind, setSignKind] = useState("quote");
+  const [signAsset, setSignAsset] = useState("XDX");
+  const [lineError, setLineError] = useState("");
   const lookupGen = useRef(0);
   const lookupTimer = useRef(0);
   const catalog = mergeAmmPoolLists(pools, found);
   const visible = filterAmmPools(catalog, query);
+  const signing = status === "loading" || status === "waiting";
+  const account = liveWalletAddress(walletAddress);
+
+  function signTrustline(pool, kind) {
+    const txjson = kind === "lp" ? lpTrustTxjson(pool, account) : assetTrustTxjson(pool, account);
+    if (!txjson) {
+      setLineError(kind === "lp" ? t.lpTrustlineError : t.trustlineError);
+      return;
+    }
+    setLineError("");
+    setSignKind(kind);
+    setSignAsset(kind === "lp" ? "LP" : poolAssetTrustlineId(pool));
+    start({
+      body: { txjson },
+      onSigned: (signedAccount) => {
+        if (signedAccount) connectWallet(signedAccount);
+        notifyWalletRefresh();
+      },
+      errorMessage: kind === "lp" ? t.lpTrustlineError : t.trustlineError,
+    });
+  }
 
   async function lookup(nextQuery) {
     const ammAccount = searchAmmAccount(nextQuery);
@@ -221,30 +293,67 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
                 </div>
               ) : null}
             </dl>
-            {onAddLiquidity || onRemoveLiquidity ? (
-              <div className="pool-card-actions">
-                {onAddLiquidity ? (
-                  <WalletButton
-                    label={t.addLiquidity}
-                    title={`${t.addLiquidity} ${pool.pool}`}
-                    onClick={() => onAddLiquidity(pool)}
-                  />
-                ) : null}
-                {onRemoveLiquidity ? (
-                  <WalletButton
-                    className="is-remove-lp"
-                    label={t.removeLiquidity}
-                    title={`${t.removeLiquidity} ${pool.pool}`}
-                    onClick={() => onRemoveLiquidity(pool)}
-                  />
-                ) : null}
-              </div>
-            ) : null}
+            <div className="pool-card-actions">
+              {onAddLiquidity ? (
+                <WalletButton
+                  label={t.addLiquidity}
+                  title={`${t.addLiquidity} ${pool.pool}`}
+                  onClick={() => onAddLiquidity(pool)}
+                />
+              ) : null}
+              {onRemoveLiquidity ? (
+                <WalletButton
+                  className="is-remove-lp"
+                  label={t.removeLiquidity}
+                  title={`${t.removeLiquidity} ${pool.pool}`}
+                  onClick={() => onRemoveLiquidity(pool)}
+                />
+              ) : null}
+              <WalletButton
+                className="is-trustline"
+                label={(t.quoteTrustline || "{asset} Trustline").replace("{asset}", poolAssetTrustlineId(pool))}
+                title={(t.quoteTrustline || "{asset} Trustline").replace("{asset}", poolAssetTrustlineId(pool))}
+                disabled={signing}
+                onClick={() => signTrustline(pool, "quote")}
+              />
+              <WalletButton
+                className="is-lp-trustline"
+                label={t.lpTrustline}
+                title={`${t.lpTrustline} ${pool.pool}`}
+                disabled={signing}
+                onClick={() => signTrustline(pool, "lp")}
+              />
+            </div>
           </article>
         );
           })}
         </div>
       )}
+      {lineError || signError ? <p className="wallet-error">{lineError || signError}</p> : null}
+      <WalletModal
+        visible={signing}
+        qrUrl={qr}
+        mobileUrl={mobileUrl}
+        uuid={uuid}
+        status={status}
+        preparingLabel={
+          signKind === "lp"
+            ? t.preparingLpTrustline
+            : (t.preparingAssetTrustline || t.preparingTrustline || "Preparing {asset} trustline…").replace(
+                "{asset}",
+                signAsset
+              )
+        }
+        scanLabel={
+          signKind === "lp"
+            ? t.scanLpTrustline
+            : (t.scanAssetTrustline || t.scanTrustline || "Scan to add the {asset} trustline").replace(
+                "{asset}",
+                signAsset
+              )
+        }
+        onClose={reset}
+      />
     </div>
   );
 }

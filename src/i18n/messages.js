@@ -24,6 +24,8 @@ const en = {
   confirmingTrustline: "Waiting for the ledger to confirm the trustline…",
   lpTrustlineError: "LP Trustline sign failed",
   quoteTrustline: "{asset} Trustline",
+  preparingAssetTrustline: "Preparing {asset} trustline…",
+  scanAssetTrustline: "Scan to add the {asset} trustline",
   connected: "Connected",
   disconnect: "Disconnect",
   online: "Online",
