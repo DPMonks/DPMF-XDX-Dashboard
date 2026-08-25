@@ -1,6 +1,8 @@
-import { XDX_TOTAL_SUPPLY, XDX_XRPL_TO_MD5 } from "../constants/ledger.js";
+import { XDX_ISSUED_AT, XDX_ISSUER, XDX_TOTAL_SUPPLY, XDX_XRPL_TO_MD5 } from "../constants/ledger.js";
+import { XDX_BLACKHOLED_AT } from "./blackhole.js";
+import { fillMissingXdxFiat, pricesNeedFiat } from "./fiatFx.js";
 import { looksLikeXdxVolume, xdxFromXrpVolume } from "./lpVolume.js";
-import { looksLikeXrpUsd, xrpPerXdx } from "./recordedPrice.js";
+import { looksLikeXrpUsd, recordedXdxUsdFromPrices, xrpPerXdx } from "./recordedPrice.js";
 
 export const XRPL_TO_TOKEN_URL = `https://api.xrpl.to/v1/token/${XDX_XRPL_TO_MD5}`;
 
@@ -48,8 +50,9 @@ function fxFromXrp(xdxUsd, xrpUsd, xrpFx) {
 }
 
 export function marketNeedsXrplTo(row = {}) {
+  const price = recordedXdxUsdFromPrices(row, row.xrpUsd);
   return !(
-    num(row.xdxUsd ?? row.recorded_price ?? row.price) ||
+    price ||
     num(row.holder_count ?? row.holders ?? row.count) ||
     num(row.trustlines ?? row.trustline_count)
   );
@@ -57,26 +60,28 @@ export function marketNeedsXrplTo(row = {}) {
 
 export function applyXrplToPrices(prices = {}, token = {}) {
   const xrpUsd = num(prices.xrpUsd ?? prices.XRP);
-  const xdxUsd = xdxUsdFromXrplTo(token, xrpUsd);
-  if (!xdxUsd) return prices;
-  if (num(prices.xdxUsd ?? prices.recorded_price)) {
-    return {
-      ...prices,
-      source: prices.source || "hybrid",
-    };
-  }
-  return {
+  const fromToken = xdxUsdFromXrplTo(token, xrpUsd);
+  const existing = recordedXdxUsdFromPrices(prices, xrpUsd);
+  const xdxUsd = existing || fromToken;
+  if (!xdxUsd && !pricesNeedFiat(prices)) return prices;
+  const usedToken = !existing && fromToken > 0;
+  const next = {
     ...prices,
-    xdxUsd,
-    recorded_price: xdxUsd,
-    price: xdxUsd,
-    xdxGbp: fxFromXrp(xdxUsd, xrpUsd, prices.xrpGbp),
-    xdxEur: fxFromXrp(xdxUsd, xrpUsd, prices.xrpEur),
-    xdxJpy: fxFromXrp(xdxUsd, xrpUsd, prices.xrpJpy),
-    xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
-    xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
-    source: prices.source && prices.source !== "xrpl.to" ? "hybrid" : "xrpl.to",
+    xdxUsd: xdxUsd || 0,
+    recorded_price: xdxUsd || prices.recorded_price || 0,
+    price: xdxUsd || prices.price || 0,
+    xdxGbp: num(prices.xdxGbp) || fxFromXrp(xdxUsd, xrpUsd, prices.xrpGbp),
+    xdxEur: num(prices.xdxEur) || fxFromXrp(xdxUsd, xrpUsd, prices.xrpEur),
+    xdxJpy: num(prices.xdxJpy) || fxFromXrp(xdxUsd, xrpUsd, prices.xrpJpy),
+    xdx_per_xrp: num(prices.xdx_per_xrp) || xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
+    xdxPerXrp: num(prices.xdxPerXrp) || xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
+    source: usedToken
+      ? prices.source && prices.source !== "xrpl.to"
+        ? "hybrid"
+        : "xrpl.to"
+      : prices.source || "hybrid",
   };
+  return fillMissingXdxFiat(next);
 }
 
 export function applyXrplToOverview(overview = {}, token = {}, prices = {}) {
@@ -113,6 +118,12 @@ export function applyXrplToOverview(overview = {}, token = {}, prices = {}) {
       num(overview.circulatingMarketCap) ||
       num(token.marketcap) ||
       Number(overview.circulating || overview.circulating_supply || XDX_TOTAL_SUPPLY) * xdxUsd,
+    issuer: overview.issuer || XDX_ISSUER,
+    tokenType: overview.tokenType || "XDX",
+    created: overview.created || XDX_ISSUED_AT,
+    blackholed: overview.blackholed ?? true,
+    blackholed_fixed: overview.blackholed_fixed ?? true,
+    blackholed_at: overview.blackholed_at || XDX_BLACKHOLED_AT,
     source: overview.source && overview.source !== "xrpl.to" && xdxUsd ? "hybrid" : priced.source,
   };
   return next;

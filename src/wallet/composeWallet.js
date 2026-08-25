@@ -1,4 +1,5 @@
 import { XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
+import { fillMissingXdxFiat } from "../utils/fiatFx.js";
 import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
 import {
@@ -136,26 +137,28 @@ function fiatViaXrp(unitUsd, xrpUsd, xrpFx) {
 }
 
 function fiatAmount(bal, unitPrice, unitUsd, xrpUsd, xrpFx) {
-  if (num(unitPrice) != null) return bal * Number(unitPrice);
+  if (Number(unitPrice) > 0) return bal * Number(unitPrice);
   const via = fiatViaXrp(unitUsd, xrpUsd, xrpFx);
   return via != null ? bal * via : null;
 }
 
 export function xdxFiatValues(xdx, prices = {}) {
   const bal = num(xdx);
-  const usd = num(prices.xdxUsd ?? prices.recorded_price);
-  const xrp = num(prices.xdxXrp ?? prices.xdxPerXrp);
+  const filled = fillMissingXdxFiat(prices);
+  const usd = num(filled.xdxUsd ?? filled.recorded_price);
+  const xrp = num(filled.xdxXrp ?? filled.xdxPerXrp);
   if (bal == null) {
     return { xdx: null, usd: null, gbp: null, eur: null, jpy: null, xrp: null, rlusd: null };
   }
-  const usdValue = usd != null ? bal * usd : null;
-  const rlusdUsd = num(prices.rlusdUsd ?? prices.RLUSD) || 1;
+  const usdValue = usd != null && usd > 0 ? bal * usd : null;
+  const rlusdUsd = num(filled.rlusdUsd ?? filled.RLUSD) || 1;
+  const viaUsd = (rate) => (usdValue != null && Number(rate) > 0 ? usdValue * Number(rate) : null);
   return {
     xdx: bal,
     usd: usdValue,
-    gbp: fiatAmount(bal, prices.xdxGbp, usd, prices.xrpUsd, prices.xrpGbp),
-    eur: fiatAmount(bal, prices.xdxEur, usd, prices.xrpUsd, prices.xrpEur),
-    jpy: fiatAmount(bal, prices.xdxJpy, usd, prices.xrpUsd, prices.xrpJpy),
+    gbp: fiatAmount(bal, filled.xdxGbp, usd, filled.xrpUsd, filled.xrpGbp) ?? viaUsd(filled.usdGbp),
+    eur: fiatAmount(bal, filled.xdxEur, usd, filled.xrpUsd, filled.xrpEur) ?? viaUsd(filled.usdEur),
+    jpy: fiatAmount(bal, filled.xdxJpy, usd, filled.xrpUsd, filled.xrpJpy) ?? viaUsd(filled.usdJpy),
     xrp: xrp != null ? bal * xrp : null,
     rlusd: usdValue != null ? usdValue / rlusdUsd : null,
   };
@@ -534,6 +537,9 @@ export function composeWalletSnapshot({
     xrpGbp: prices.xrpGbp,
     xrpEur: prices.xrpEur,
     xrpJpy: prices.xrpJpy,
+    usdGbp: prices.usdGbp,
+    usdEur: prices.usdEur,
+    usdJpy: prices.usdJpy,
     xdxXrp: xdxPerXrp,
     rlusdUsd: prices.RLUSD ?? prices.quotes?.RLUSD ?? 1,
   });

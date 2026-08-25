@@ -2106,6 +2106,7 @@ body {
   font-size: 13px;
   color: var(--dpmf-neon-violet);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
   transition: opacity 0.4s ease;
 }
 
@@ -2346,6 +2347,7 @@ body {
 
 .wallet-mini-list dd {
   text-align: end;
+  overflow-wrap: anywhere;
 }
 
 .wallet-micro {

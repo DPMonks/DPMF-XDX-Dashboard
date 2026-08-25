@@ -14,6 +14,7 @@ import {
   xrplToHolderGraphUrl,
 } from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
+import { fillMissingXdxFiat, pricesNeedFiat } from "../utils/fiatFx";
 import {
   applyXrplToChange,
   applyXrplToOverview,
@@ -600,18 +601,29 @@ export async function getTokenDetails(onPartial) {
     api.prices().catch(() => ({})),
     api.change24h().catch(() => ({})),
   ]);
-  const backed = await withXrplToBackup(overview, prices, change);
+  const backed = await withXrplToBackup(overview, fillMissingXdxFiat(prices), change);
   const core = composeTokenDetails(backed);
   onPartial?.(core);
 
-  const [holders, trustlines, lpHolders, lpTrustlines] = await Promise.all([
+  const [holders, trustlines, lpHolders, lpTrustlines, issuerLocked] = await Promise.all([
     api.holdersCount({ snapshot: "today" }).catch(() => ({})),
     api.trustlinesCount().catch(() => ({})),
     api.lpHoldersCount({ pool: "all" }).catch(() => ({})),
     api.lpTrustlinesCount({ pool: "all" }).catch(() => ({})),
+    api.issuerLocked().catch(() => ({})),
   ]);
   return composeTokenDetails({
     ...backed,
+    overview: {
+      ...backed.overview,
+      issuer_locked:
+        numberOrNull(backed.overview.issuer_locked ?? backed.overview.burned_supply) ??
+        numberOrNull(issuerLocked?.issuer_locked ?? issuerLocked?.burned_supply),
+      circulating:
+        numberOrNull(backed.overview.circulating ?? backed.overview.circulating_supply) ??
+        numberOrNull(issuerLocked?.circulating),
+      issued: numberOrNull(backed.overview.issued ?? backed.overview.issued_xdx) ?? numberOrNull(issuerLocked?.issued),
+    },
     holders: numberOrNull(holders?.count) ? holders : { count: backed.overview.holder_count },
     trustlines: numberOrNull(trustlines?.count) ? trustlines : { count: backed.overview.trustline_count },
     lpHolders: numberOrNull(lpHolders?.count) ? lpHolders : { count: backed.overview.lp_holder_count },
@@ -787,10 +799,10 @@ export async function getWalletRank(address) {
 }
 
 export async function getPrices() {
-  const prices = await api.prices().catch(() => ({}));
-  if (Number(prices?.xdxUsd) > 0 || Number(prices?.recorded_price) > 0) return prices;
+  const prices = fillMissingXdxFiat(await api.prices().catch(() => ({})));
+  if (!pricesNeedFiat(prices)) return prices;
   try {
-    return applyXrplToPrices(prices, await fetchXrplToToken());
+    return fillMissingXdxFiat(applyXrplToPrices(prices, await fetchXrplToToken()));
   } catch {
     return prices;
   }

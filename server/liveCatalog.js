@@ -1,14 +1,18 @@
 import {
   POOLS,
   XDX_HEX,
+  XDX_ISSUED_AT,
   XDX_ISSUER,
   XDX_TOTAL_SUPPLY,
   XDX_XRP_AMM,
   issuerLockedFromIssued,
 } from "../src/constants/ledger.js";
+import { issuerBlackholeFromAccount, XDX_BLACKHOLED_AT } from "../src/utils/blackhole.js";
+import { pickXdxUsd, xdxUsdFromRlusdPool, xdxUsdFromXrpPool } from "../src/utils/fiatFx.js";
 import { xrpPerXdx } from "../src/utils/recordedPrice.js";
 import { parseXrplToToken, tvlUsdFromXrplTo, XRPL_TO_TOKEN_URL, xdxUsdFromXrplTo } from "../src/utils/xrplToToken.js";
 import { attachQuoteXrpPrices, loadQuoteXrpRates } from "./quoteXrpMarket.js";
+import { attachXdxFiat, loadFiatQuote } from "./fiatQuotes.js";
 import { loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
 import { composeAmmBook, emptyOrderbook, FEATURED_ORDERBOOK_PAIRS } from "../src/orderbook.js";
@@ -26,13 +30,14 @@ import {
 } from "./xrplToCatalog.js";
 import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
 
-let xrpFx = { at: 0, usd: 0, gbp: 0, eur: 0, jpy: 0, change24h: 0 };
 let marketCache = { at: 0, prices: null, pools: null, overview: null };
 let tokenCache = { at: 0, body: null };
 let issuerLockedCache = { at: 0, body: null };
+let issuerBlackholeCache = { at: 0, body: null };
 const MARKET_MS = 15_000;
 const TOKEN_MS = 60_000;
 const ISSUER_MS = 60_000;
+const BLACKHOLE_MS = 6 * 60 * 60 * 1000;
 
 function num(value) {
   const n = Number(value);
@@ -40,34 +45,7 @@ function num(value) {
 }
 
 export async function loadLiveXrpQuote(options = {}) {
-  const now = Number(options.now) || Date.now();
-  if (!options.fresh && now - xrpFx.at < 300_000 && xrpFx.usd) return xrpFx;
-  try {
-    const res = await (options.fetchImpl || fetch)(
-      "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd,gbp,eur,jpy&include_24hr_change=true",
-      { headers: FREE_API_HEADERS, signal: AbortSignal.timeout(4000) }
-    );
-    if (!res.ok) throw new Error(`coingecko ${res.status}`);
-    const body = await res.json();
-    xrpFx = {
-      at: now,
-      usd: Number(body?.ripple?.usd || xrpFx.usd || 0),
-      gbp: Number(body?.ripple?.gbp || xrpFx.gbp || 0),
-      eur: Number(body?.ripple?.eur || xrpFx.eur || 0),
-      jpy: Number(body?.ripple?.jpy || xrpFx.jpy || 0),
-      change24h: Number(body?.ripple?.usd_24h_change ?? xrpFx.change24h ?? 0),
-    };
-  } catch {
-    xrpFx = { ...xrpFx, at: now };
-  }
-  return xrpFx;
-}
-
-function xdxUsdFromXrpPool(live, xrpUsd) {
-  const xdx = num(live?.reserve_xdx ?? live?.reserve_asset);
-  const xrp = num(live?.reserve_currency ?? live?.reserve_quote);
-  if (!(xdx > 0) || !(xrp > 0) || !(xrpUsd > 0)) return 0;
-  return (xrp / xdx) * xrpUsd;
+  return loadFiatQuote(options);
 }
 
 function poolRowFromLive(spec, live, prices) {
@@ -160,15 +138,49 @@ export async function loadIssuerLockedLive(options = {}) {
   }
 }
 
+export async function loadIssuerBlackholeLive(options = {}) {
+  const now = Number(options.now) || Date.now();
+  if (!options.fresh && issuerBlackholeCache.body && now - issuerBlackholeCache.at < BLACKHOLE_MS) {
+    return issuerBlackholeCache.body;
+  }
+  try {
+    const info = await xrplRpc(
+      "account_info",
+      { account: XDX_ISSUER, ledger_index: "validated" },
+      options
+    );
+    const detected = issuerBlackholeFromAccount(info);
+    const body = {
+      blackholed: detected.blackholed,
+      blackholed_fixed: detected.fixed,
+      blackholed_at: detected.blackholed ? issuerBlackholeCache.body?.blackholed_at || XDX_BLACKHOLED_AT : null,
+      source: "xrpl",
+    };
+    issuerBlackholeCache = { at: now, body };
+    return body;
+  } catch {
+    return (
+      issuerBlackholeCache.body || {
+        blackholed: true,
+        blackholed_fixed: true,
+        blackholed_at: XDX_BLACKHOLED_AT,
+        source: "ledger",
+      }
+    );
+  }
+}
+
 export async function loadLiveMarket(options = {}) {
   const now = Number(options.now) || Date.now();
   if (!options.fresh && marketCache.overview && now - marketCache.at < MARKET_MS) {
     return marketCache;
   }
-  const [quote, token, issuerLocked] = await Promise.all([
+  const [quote, token, issuerLocked, blackhole, lpCounts] = await Promise.all([
     loadLiveXrpQuote(options),
     loadXrplToToken(options),
     loadIssuerLockedLive(options),
+    loadIssuerBlackholeLive(options),
+    loadXrplToLpCounts({ ...options, pool: "all" }).catch(() => null),
   ]);
   const lives = await loadLiveAmmReservesMany(
     POOLS.map((pool) => ({
@@ -181,27 +193,34 @@ export async function loadLiveMarket(options = {}) {
     options
   );
   const xrpPool = lives[0] || {};
+  const rlusdPool = lives.find((row) => String(row?.pair || "").includes("RLUSD")) || lives[1] || {};
   const xrpUsd = num(quote.usd);
-  const ammUsd = xdxUsdFromXrpPool(xrpPool, xrpUsd);
-  const xdxUsd = ammUsd || xdxUsdFromXrplTo(token, xrpUsd);
+  const xdxUsd = pickXdxUsd({
+    ammXrp: xdxUsdFromXrpPool(xrpPool, xrpUsd),
+    ammRlusd: xdxUsdFromRlusdPool(rlusdPool, 1),
+    xrplTo: xdxUsdFromXrplTo(token, xrpUsd),
+  });
   const liveRates = await loadQuoteXrpRates(options).catch(() => ({}));
-  const prices = attachQuoteXrpPrices(
-    {
-      xrpUsd,
-      xrpGbp: num(quote.gbp),
-      xrpEur: num(quote.eur),
-      xrpJpy: num(quote.jpy),
-      xdxUsd,
-      recorded_price: xdxUsd,
-      xdxGbp: xdxUsd > 0 && xrpUsd > 0 && quote.gbp ? xdxUsd * (quote.gbp / xrpUsd) : 0,
-      xdxEur: xdxUsd > 0 && xrpUsd > 0 && quote.eur ? xdxUsd * (quote.eur / xrpUsd) : 0,
-      xdxJpy: xdxUsd > 0 && xrpUsd > 0 && quote.jpy ? xdxUsd * (quote.jpy / xrpUsd) : 0,
-      RLUSD: 1,
-      quotes: { XRP: xrpUsd, RLUSD: 1 },
-      source: "xrpl",
-    },
-    liveRates,
-    xrpUsd
+  const prices = attachXdxFiat(
+    attachQuoteXrpPrices(
+      {
+        xrpUsd,
+        xrpGbp: num(quote.gbp),
+        xrpEur: num(quote.eur),
+        xrpJpy: num(quote.jpy),
+        usdGbp: num(quote.usdGbp),
+        usdEur: num(quote.usdEur),
+        usdJpy: num(quote.usdJpy),
+        xdxUsd,
+        recorded_price: xdxUsd,
+        RLUSD: 1,
+        quotes: { XRP: xrpUsd, RLUSD: 1 },
+        source: "xrpl",
+      },
+      liveRates,
+      xrpUsd
+    ),
+    quote
   );
   const reserveXdx = num(xrpPool.reserve_xdx ?? xrpPool.reserve_asset);
   const reserveXrp = num(xrpPool.reserve_currency ?? xrpPool.reserve_quote);
@@ -255,7 +274,7 @@ export async function loadLiveMarket(options = {}) {
     volumeSource: volumes["XDX/XRP"]?.source || null,
     holder_count: num(token.holders) || null,
     holders: num(token.holders) || null,
-    lp_holder_count: num(token.lpHolders) || null,
+    lp_holder_count: num(token.lpHolders) || num(lpCounts?.holders) || null,
     circulating,
     circulating_supply: circulating,
     total_supply: XDX_TOTAL_SUPPLY,
@@ -266,10 +285,19 @@ export async function loadLiveMarket(options = {}) {
     amm_xdx: reserveXdx,
     trustlines: num(token.trustlines) || null,
     trustline_count: num(token.trustlines) || null,
+    lp_trustline_count: num(lpCounts?.trustlines) || null,
     ammMarketCap: tvlUsd,
     xrplMarketCap: XDX_TOTAL_SUPPLY * xdxUsd,
     circulatingMarketCap: circulating * xdxUsd,
     issuer: XDX_ISSUER,
+    tokenType: "XDX",
+    created: XDX_ISSUED_AT,
+    blackholed: blackhole.blackholed,
+    blackholed_fixed: blackhole.blackholed_fixed,
+    blackholed_at: blackhole.blackholed_at,
+    usdGbp: prices.usdGbp,
+    usdEur: prices.usdEur,
+    usdJpy: prices.usdJpy,
     amm_account: xrpPool.amm_account || XDX_XRP_AMM,
     source: "xrpl",
     catching_up: !num(token.holders),
@@ -292,23 +320,26 @@ export async function loadXrplToMarket(options = {}) {
   ]);
   const xrpUsd = num(quote.usd);
   const xdxUsd = xdxUsdFromXrplTo(token, xrpUsd);
-  const prices = {
-    xrpUsd,
-    xrpGbp: num(quote.gbp),
-    xrpEur: num(quote.eur),
-    xrpJpy: num(quote.jpy),
-    xdxUsd,
-    recorded_price: xdxUsd,
-    price: xdxUsd,
-    xdxGbp: xdxUsd > 0 && xrpUsd > 0 && quote.gbp ? xdxUsd * (quote.gbp / xrpUsd) : 0,
-    xdxEur: xdxUsd > 0 && xrpUsd > 0 && quote.eur ? xdxUsd * (quote.eur / xrpUsd) : 0,
-    xdxJpy: xdxUsd > 0 && xrpUsd > 0 && quote.jpy ? xdxUsd * (quote.jpy / xrpUsd) : 0,
-    xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
-    xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
-    RLUSD: 1,
-    quotes: { XRP: xrpUsd, RLUSD: 1 },
-    source: "xrpl.to",
-  };
+  const prices = attachXdxFiat(
+    {
+      xrpUsd,
+      xrpGbp: num(quote.gbp),
+      xrpEur: num(quote.eur),
+      xrpJpy: num(quote.jpy),
+      usdGbp: num(quote.usdGbp),
+      usdEur: num(quote.usdEur),
+      usdJpy: num(quote.usdJpy),
+      xdxUsd,
+      recorded_price: xdxUsd,
+      price: xdxUsd,
+      xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
+      xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
+      RLUSD: 1,
+      quotes: { XRP: xrpUsd, RLUSD: 1 },
+      source: "xrpl.to",
+    },
+    quote
+  );
   const markXrp = num(token.exchXrp) || xrpPerXdx(xdxUsd, xrpUsd);
   const volumes = await loadPoolXdxVolumes({
     token,
@@ -350,12 +381,20 @@ export async function loadXrplToMarket(options = {}) {
     circulating: XDX_TOTAL_SUPPLY,
     circulating_supply: XDX_TOTAL_SUPPLY,
     total_supply: XDX_TOTAL_SUPPLY,
+    issuer: XDX_ISSUER,
+    tokenType: "XDX",
+    created: XDX_ISSUED_AT,
+    blackholed: true,
+    blackholed_fixed: true,
+    blackholed_at: XDX_BLACKHOLED_AT,
+    usdGbp: prices.usdGbp,
+    usdEur: prices.usdEur,
+    usdJpy: prices.usdJpy,
     trustlines: num(token.trustlines) || null,
     trustline_count: num(token.trustlines) || null,
     ammMarketCap: tvlUsd || null,
     xrplMarketCap: num(token.marketcap) || XDX_TOTAL_SUPPLY * xdxUsd,
     circulatingMarketCap: num(token.marketcap) || XDX_TOTAL_SUPPLY * xdxUsd,
-    issuer: XDX_ISSUER,
     amm_account: XDX_XRP_AMM,
     source: "xrpl.to",
     catching_up: !num(token.holders),

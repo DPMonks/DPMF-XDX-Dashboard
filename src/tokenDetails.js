@@ -1,4 +1,6 @@
-import { XDX_TOTAL_SUPPLY } from "./constants/ledger.js";
+import { XDX_ISSUED_AT, XDX_ISSUER, XDX_TOTAL_SUPPLY } from "./constants/ledger.js";
+import { XDX_BLACKHOLED_AT } from "./utils/blackhole.js";
+import { fillMissingXdxFiat } from "./utils/fiatFx.js";
 import { recordedXdxUsdFromPrices, xrpPerXdx } from "./utils/recordedPrice.js";
 
 function numberOrNull(value) {
@@ -36,8 +38,9 @@ export function composeTokenDetails({
     overview.circulating || overview.circulating_supply || overview.xdx_supply
   );
   const circulating = rawCirc && rawCirc > 0 ? rawCirc : Math.max(totalSupply - issuerLocked, 0);
+  const filledPrices = fillMissingXdxFiat({ ...overview, ...prices });
   const price =
-    recordedXdxUsdFromPrices(prices, prices.xrpUsd || overview.xrpUsd) ||
+    recordedXdxUsdFromPrices(filledPrices, filledPrices.xrpUsd || overview.xrpUsd) ||
     recordedXdxUsdFromPrices(
       {
         recorded_price: overview.recorded_price,
@@ -72,12 +75,12 @@ export function composeTokenDetails({
     lp_holder_count: countOf(lpHolders, overview.lp_holder_count),
     lp_trustline_count: countOf(lpTrustlines, overview.lp_trustline_count),
     lp_supply: numberOrNull(overview.lp_supply),
-    issuer: overview.issuer,
+    issuer: overview.issuer || XDX_ISSUER,
     issuerFee: overview.issuer_fee,
-    blackholed: overview.blackholed,
-    blackholed_fixed: overview.blackholed_fixed,
-    blackholed_at: overview.blackholed_at,
-    created: overview.created,
+    blackholed: overview.blackholed ?? true,
+    blackholed_fixed: overview.blackholed_fixed ?? true,
+    blackholed_at: overview.blackholed_at || XDX_BLACKHOLED_AT,
+    created: overview.created || XDX_ISSUED_AT,
     change24h: change.xdx ?? change.XDX,
     source: overview.source,
   };

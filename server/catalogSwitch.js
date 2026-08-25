@@ -29,6 +29,9 @@ const LIVE_PRICE_KEYS = [
   "xrpGbp",
   "xrpEur",
   "xrpJpy",
+  "usdGbp",
+  "usdEur",
+  "usdJpy",
   "xdx_per_xrp",
   "xdxPerXrp",
   "RLUSD",
@@ -52,7 +55,21 @@ const LIVE_MARKET_KEYS = [
   "ammMarketCap",
   "xrplMarketCap",
   "circulatingMarketCap",
+  "circulating",
+  "circulating_supply",
+  "total_supply",
+  "burned_supply",
+  "issuer_locked",
   "amm_account",
+];
+
+const LIVE_META_KEYS = [
+  "issuer",
+  "tokenType",
+  "created",
+  "blackholed",
+  "blackholed_fixed",
+  "blackholed_at",
 ];
 
 const LIVE_COUNT_KEYS = [
@@ -80,6 +97,24 @@ function takeLiveWhenDbBlank(next, db, live, keys) {
   let used = false;
   for (const key of keys) {
     if (isBlankAmount(db?.[key]) && !isBlankAmount(live?.[key])) {
+      next[key] = live[key];
+      used = true;
+    }
+  }
+  return used;
+}
+
+function isBlankValue(value) {
+  if (value == null || value === "") return true;
+  if (typeof value === "boolean") return false;
+  if (typeof value === "string") return !String(value).trim();
+  return isBlankAmount(value);
+}
+
+function takeLiveWhenDbBlankValue(next, db, live, keys) {
+  let used = false;
+  for (const key of keys) {
+    if (isBlankValue(db?.[key]) && !isBlankValue(live?.[key])) {
       next[key] = live[key];
       used = true;
     }
@@ -118,6 +153,7 @@ export function mergeLiveOverview(db = {}, live = {}) {
   const next = { ...db, ...mergeLivePrices(db, live) };
   const marketUsed = takeLive(next, live, LIVE_MARKET_KEYS);
   const countUsed = takeLiveWhenDbBlank(next, db, live, LIVE_COUNT_KEYS);
+  const metaUsed = takeLiveWhenDbBlankValue(next, db, live, LIVE_META_KEYS);
   if (!isBlankAmount(live.xdxUsd)) {
     next.xdxUsd = live.xdxUsd;
     next.recorded_price = live.recorded_price ?? live.xdxUsd;
@@ -129,7 +165,7 @@ export function mergeLiveOverview(db = {}, live = {}) {
   if (Array.isArray(live.pools) && live.pools.length) {
     next.pools = mergePoolRows(db.pools, live.pools);
   }
-  const liveUsed = marketUsed || countUsed || Boolean(live.pools?.length);
+  const liveUsed = marketUsed || countUsed || metaUsed || Boolean(live.pools?.length);
   next.source = catalogSource(dbHasMarket(db) || dbHasCounts(db), liveUsed);
   next.catching_up = Boolean(live.catching_up && !dbHasCounts(db));
   return next;
