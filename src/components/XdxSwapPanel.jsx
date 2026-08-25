@@ -178,24 +178,32 @@ export default function XdxSwapPanel() {
         <p className="xdx-swap-pair">{pair}</p>
       </div>
 
-      <div className="xdx-swap-dirs" role="tablist" aria-label={t.swapTitle}>
+      <div className="xdx-swap-dirs">
         <button
           type="button"
-          role="tab"
-          aria-selected={sellingXdx}
-          className={sellingXdx ? "pair-chip active" : "pair-chip"}
-          onClick={() => setSellingXdx(true)}
-        >
-          {t.swapSellXdx}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={!sellingXdx}
-          className={!sellingXdx ? "pair-chip active" : "pair-chip"}
+          className={`xdx-swap-dir${!sellingXdx ? " is-on" : ""}`}
+          aria-pressed={!sellingXdx}
           onClick={() => setSellingXdx(false)}
         >
           {t.swapBuyXdx}
+        </button>
+        <button
+          type="button"
+          className={`xdx-swap-switch${sellingXdx ? " is-sell" : " is-buy"}`}
+          role="switch"
+          aria-checked={sellingXdx}
+          aria-label={t.swapDirection}
+          onClick={() => setSellingXdx((on) => !on)}
+        >
+          <i />
+        </button>
+        <button
+          type="button"
+          className={`xdx-swap-dir${sellingXdx ? " is-on" : ""}`}
+          aria-pressed={sellingXdx}
+          onClick={() => setSellingXdx(true)}
+        >
+          {t.swapSellXdx}
         </button>
       </div>
 
