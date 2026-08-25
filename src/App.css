@@ -2791,7 +2791,7 @@ body {
 
 .wallet-income-scroll {
   flex: 1 1 auto;
-  min-height: 160px;
+  min-height: 220px;
   max-height: none;
   overflow: auto;
   padding-right: 2px;
@@ -3197,7 +3197,7 @@ body {
 
   .wallet-income-scroll {
     min-height: 0;
-    max-height: 240px;
+    max-height: 320px;
   }
 
   .token-details-chart .tabs {

@@ -50,7 +50,7 @@ function tradingFeeRate(tradingFee) {
   return raw > 20 ? raw / 100_000 : raw / 100;
 }
 
-export const INCOME_PAGE_DAYS = 10;
+export const INCOME_PAGE_DAYS = 14;
 
 export function isXdxAmmPair(value) {
   const pair = normalizeWalletPair(
@@ -282,6 +282,47 @@ function overlayVolumeDays(buckets, volumeDays = []) {
   return buckets;
 }
 
+function volumeOnDay(known, date) {
+  if (!known.length) return 0;
+  let prev = null;
+  let next = null;
+  for (const row of known) {
+    if (row.date === date) return row.xdx;
+    if (row.date < date) prev = row;
+    if (row.date > date && !next) next = row;
+  }
+  if (prev && next) {
+    const start = Date.parse(`${prev.date}T00:00:00.000Z`);
+    const end = Date.parse(`${next.date}T00:00:00.000Z`);
+    const at = Date.parse(`${date}T00:00:00.000Z`);
+    if (!(end > start) || !Number.isFinite(at)) return prev.xdx;
+    const weight = (at - start) / (end - start);
+    return prev.xdx * (1 - weight) + next.xdx * weight;
+  }
+  return (next || prev)?.xdx || 0;
+}
+
+export function fillContinuousVolumeDays(buckets, pair, fromDay, toDay) {
+  const want = normalizeWalletPair(pair);
+  const start = utcDayKey(fromDay);
+  const end = utcDayKey(toDay);
+  if (!want || !start || !end || start > end) return buckets;
+  const known = [...buckets.values()]
+    .filter((row) => row.pair === want && row.xdx > 0)
+    .sort((left, right) => (left.date < right.date ? -1 : 1));
+  if (!known.length) return buckets;
+  const first = start < known[0].date ? known[0].date : start;
+  for (let ts = Date.parse(`${first}T00:00:00.000Z`); ts <= Date.parse(`${end}T00:00:00.000Z`); ts += DAY_MS) {
+    const date = utcDayKey(ts);
+    if (!date) continue;
+    const key = `${date}|${want}`;
+    if (buckets.get(key)?.xdx > 0) continue;
+    const xdx = volumeOnDay(known, date);
+    if (xdx > 0) buckets.set(key, { date, pair: want, xdx });
+  }
+  return buckets;
+}
+
 export function lpFeeIncomeRows({
   positions = [],
   flows = [],
@@ -311,6 +352,17 @@ export function lpFeeIncomeRows({
   }
   overlayVolumeDays(buckets, volumeDays);
   fillCatalogVolumeDays(buckets, held, now);
+  const today = utcDayKey(now);
+  for (const position of held) {
+    const pair = normalizeWalletPair(position.pool || position.pool_name);
+    const heldFrom = earliestHeldDay(pair, activity, position.lp_balance);
+    const known = [...buckets.values()]
+      .filter((row) => row.pair === pair)
+      .map((row) => row.date)
+      .sort();
+    const fromDay = [oldest, heldFrom, known[0]].filter(Boolean).sort().pop() || known[0];
+    if (fromDay && today) fillContinuousVolumeDays(buckets, pair, fromDay, today);
+  }
 
   const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
   const rows = [];
@@ -462,28 +514,27 @@ export function incomeRowsForPair({
       (row) => incomePairName(row?.pool || row?.pool_name || row?.pair) === want
     )?.lp_balance
   );
-  let fees = dailyLpIncomeTotals(
+  const rebuilt = lpFeeIncomeRows({
+    positions: (Array.isArray(positions) ? positions : []).filter(
+      (row) => incomePairName(row?.pool || row?.pool_name || row?.pair) === want
+    ),
+    flows: [],
+    volumeDays: filterIncomeByPair(historyDays, want),
+    activity: historyActivity || [],
+    xdxUsd,
+    xrpUsd,
+    rlusdUsd,
+    prices,
+    now,
+  });
+  return dailyLpIncomeTotals(
     mergeRecordedLpIncome(
       snapshot.filter((row) => !row.kind || row.kind === "fee"),
       filterIncomeByPair(historyDays, want),
-      filterIncomeByPair(recordedRows, want)
+      filterIncomeByPair(recordedRows, want),
+      rebuilt
     )
   ).filter((row) => !heldFrom || row.date >= heldFrom);
-  if (!fees.length) {
-    fees = lpFeeIncomeRows({
-      positions: (Array.isArray(positions) ? positions : []).filter(
-        (row) => incomePairName(row?.pool || row?.pool_name || row?.pair) === want
-      ),
-      flows: [],
-      activity: historyActivity || [],
-      xdxUsd,
-      xrpUsd,
-      rlusdUsd,
-      prices,
-      now,
-    });
-  }
-  return fees;
 }
 
 export function incomeDayKeys(rows = []) {

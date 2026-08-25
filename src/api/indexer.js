@@ -1016,8 +1016,9 @@ const LP_INCOME_CLIENT_PAGES = 40;
 export async function loadWalletLpIncomeHistory(address, extra = {}) {
   const name = String(address || "").trim();
   const pair = extra.pair || "XDX/XRP";
-  if (!name) return { account: null, pair, activity: [], complete: true };
+  if (!name) return { account: null, pair, activity: [], days: [], complete: true };
   const merged = [];
+  const days = [];
   let marker = extra.marker || null;
   let complete = false;
   for (let page = 0; page < LP_INCOME_CLIENT_PAGES; page += 1) {
@@ -1027,12 +1028,13 @@ export async function loadWalletLpIncomeHistory(address, extra = {}) {
       fresh: extra.fresh && page === 0,
     });
     merged.push(...next.activity);
+    days.push(...(next.days || []));
     marker = next.marker;
     complete = Boolean(next.complete) || !marker;
-    extra.onPage?.({ activity: merged, complete, pages: page + 1 });
+    extra.onPage?.({ activity: merged, days, complete, pages: page + 1 });
     if (complete) break;
   }
-  return { account: name, pair, activity: merged, complete, marker: complete ? null : marker };
+  return { account: name, pair, activity: merged, days, complete, marker: complete ? null : marker };
 }
 
 export async function getConnectedWallet(address, extra = {}) {

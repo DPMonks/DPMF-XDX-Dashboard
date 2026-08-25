@@ -5,6 +5,7 @@ import {
   DEFAULT_INCOME_PAIR,
   HISTORICAL_INCOME_DAYS,
   dailyLpIncomeTotals,
+  fillContinuousVolumeDays,
   filterIncomeByPair,
   incomePairChoices,
   incomeRowsForPair,
@@ -70,6 +71,7 @@ test("lp fee earnings ignore non-XDX AMM positions", () => {
 
 test("income list is newest XDX pair days first and pages by 10 days", () => {
   const rows = lpFeeIncomeRows({
+    now: Date.parse("2026-08-22T18:00:00.000Z"),
     positions: [
       {
         pool: "XDX/RLUSD",
@@ -193,6 +195,20 @@ test("income rows keep one selected pair and replace snapshot deposits with wall
   assert.equal(history.some((row) => row.lpTokens === 1), false);
 });
 
+test("continuous volume days fill every 24h UTC date newest-ready", () => {
+  const buckets = new Map([
+    ["2026-08-01|XDX/XRP", { date: "2026-08-01", pair: "XDX/XRP", xdx: 100 }],
+    ["2026-08-04|XDX/XRP", { date: "2026-08-04", pair: "XDX/XRP", xdx: 400 }],
+  ]);
+  fillContinuousVolumeDays(buckets, "XDX/XRP", "2026-08-01", "2026-08-04");
+  assert.deepEqual(
+    [...buckets.keys()].sort(),
+    ["2026-08-01|XDX/XRP", "2026-08-02|XDX/XRP", "2026-08-03|XDX/XRP", "2026-08-04|XDX/XRP"]
+  );
+  assert.ok(Math.abs(buckets.get("2026-08-02|XDX/XRP").xdx - 200) < 1e-9);
+  assert.ok(Math.abs(buckets.get("2026-08-03|XDX/XRP").xdx - 300) < 1e-9);
+});
+
 test("daily totals record each UTC day and keep stored history", () => {
   const rows = dailyLpIncomeTotals([
     { date: "2026-08-23", pair: "XDX/XRP", lpTokens: 0.2, usd: 0.001, kind: "fee" },
@@ -273,10 +289,13 @@ test("fee history records each historical day from the volume series, not only t
     xdxUsd: 0.00004,
     xrpUsd: 2,
   });
-  assert.deepEqual(
-    rows.map((row) => row.date),
-    ["2026-08-25", "2026-08-24", "2026-08-10", "2026-08-01"]
-  );
+  const days = rows.map((row) => row.date);
+  assert.equal(days[0], "2026-08-25");
+  assert.equal(days[days.length - 1], "2026-08-01");
+  assert.equal(days.length, 25);
+  for (let i = 1; i < days.length; i += 1) {
+    assert.ok(days[i - 1] > days[i]);
+  }
   const today = rows.find((row) => row.date === "2026-08-25");
   const fromTape = 500 * 0.01 * 0.1;
   const fromOhlc = 4_000_000 * 0.01 * 0.1;
