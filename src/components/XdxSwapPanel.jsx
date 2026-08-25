@@ -60,7 +60,19 @@ export default function XdxSwapPanel() {
   const [book, setBook] = useState(null);
   const [live, setLive] = useState(null);
 
-  const pair = normalizeOrderbookPair(`XDX/${quoteId || "XRP"}`);
+  const options = useMemo(
+    () =>
+      swapCounterOptions({
+        pools,
+        lines,
+        balances: { xdx: balances.xdx, xrp: balances.xrp },
+        signedIn: Boolean(account),
+      }),
+    [account, balances, lines, pools]
+  );
+  const quoteAsset = options.find((row) => row.id === quoteId) || options.find((row) => row.id === "XRP") || options[0];
+  const effectiveQuoteId = quoteAsset?.id || "XRP";
+  const pair = normalizeOrderbookPair(`XDX/${effectiveQuoteId}`);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,18 +120,13 @@ export default function XdxSwapPanel() {
     };
   }, [pair]);
 
-  const options = useMemo(
-    () => swapCounterOptions({ pools, lines, balances: { xdx: balances.xdx, xrp: balances.xrp } }),
-    [pools, lines, balances]
-  );
-  const quoteAsset = options.find((row) => row.id === quoteId) || options.find((row) => row.id === "XRP") || options[0];
   const hold = walletAvailableAmounts({
     balances,
     account: walletAccount,
     lines,
-    quote: quoteId === "XRP" ? { currency: "XRP" } : quoteAsset,
+    quote: effectiveQuoteId === "XRP" ? { currency: "XRP" } : quoteAsset,
   });
-  const available = sellingXdx ? hold.xdx : quoteId === "XRP" ? hold.xrp : hold.quote;
+  const available = sellingXdx ? hold.xdx : effectiveQuoteId === "XRP" ? hold.xrp : hold.quote;
   const header = bookHeader(book || emptyOrderbook(pair));
   const reserves = reserveFrom(book, live);
   const qty = Number(amount) || 0;
@@ -151,7 +158,7 @@ export default function XdxSwapPanel() {
       new CustomEvent("dpmf-open-trade", {
         detail: {
           action: sellingXdx ? "sell" : "buy",
-          quote: quoteId,
+          quote: effectiveQuoteId,
           quoteIssuer: quoteAsset?.issuer,
           quoteHex: quoteAsset?.hex,
           amount: sellingXdx ? nextAmount : quote?.actualOutput,
@@ -163,7 +170,7 @@ export default function XdxSwapPanel() {
 
   const counterSelect = (
     <BrandSelect
-      value={quoteAsset?.id || quoteId}
+      value={effectiveQuoteId}
       options={options}
       onChange={changeQuote}
       ariaLabel={sellingXdx ? t.swapTo : t.swapFrom}

@@ -8,7 +8,15 @@ import {
   walkBook,
   walkHybrid,
 } from "../src/swap/quoteSwap.js";
-import { pickOtherAsset, swapAssetOptions, swapCounterAsset, swapCounterOptions, swapSellingXdx } from "../src/swap/swapAssets.js";
+import { RLUSD_ISSUER } from "../src/constants/ledger.js";
+import {
+  isActiveXdxPool,
+  pickOtherAsset,
+  swapAssetOptions,
+  swapCounterAsset,
+  swapCounterOptions,
+  swapSellingXdx,
+} from "../src/swap/swapAssets.js";
 import { filterBookTape } from "../src/orderbook.js";
 
 test("ammSwapOut follows the constant-product fee walk", () => {
@@ -89,14 +97,71 @@ test("expectedFromMid and swap helpers keep one side on XDX", () => {
   assert.equal(swapCounterAsset("XDX", "XDX"), "XRP");
   assert.equal(pickOtherAsset("XDX", "XDX", "XRP"), "XRP");
   assert.equal(pickOtherAsset("RLUSD", "XRP"), "XRP");
-  const counters = swapCounterOptions({
-    lines: [{ currency: "RLUSD", issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", ticker: "RLUSD", balance: "12" }],
-    balances: { xdx: 100, xrp: 5 },
-  });
-  assert.equal(counters.some((row) => row.id === "XDX"), false);
-  assert.ok(counters.some((row) => row.id === "XRP"));
-  assert.ok(counters.some((row) => row.id === "RLUSD"));
   assert.ok(swapAssetOptions({ balances: { xdx: 1 } }).some((row) => row.id === "XDX"));
+});
+
+test("swap counters are individual assets from active XDX pools, then wallet lines", () => {
+  const activeXrp = { pool: "XDX/XRP", reserve_asset: 1_000_000, reserve_currency: 2_000 };
+  const activeRlusd = {
+    pool: "XDX/RLUSD",
+    reserve_asset: 500_000,
+    reserve_currency: 1_200,
+    quote_issuer: RLUSD_ISSUER,
+  };
+  const deadXio = { pool: "XDX/XIO", reserve_asset: 0, reserve_currency: 0 };
+  const listedUnknown = { pool: "XDX/XIO", amm_account: "rExampleAmm" };
+  const rlusdLine = { currency: "RLUSD", issuer: RLUSD_ISSUER, ticker: "RLUSD", balance: "12" };
+  const soloLine = { currency: "SOLO", issuer: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", ticker: "SOLO", balance: "9" };
+
+  assert.equal(isActiveXdxPool(activeRlusd), true);
+  assert.equal(isActiveXdxPool(deadXio), false);
+  assert.equal(isActiveXdxPool({ pool: "XDX/XDX", reserve_asset: 10, reserve_currency: 10 }), false);
+
+  const browse = swapCounterOptions({ pools: [activeXrp, activeRlusd, deadXio, listedUnknown] });
+  assert.deepEqual(
+    browse.map((row) => row.id),
+    ["XRP", "RLUSD", "XIO"]
+  );
+  assert.equal(
+    browse.some((row) => String(row.id).includes("/") || row.id === "XDX" || row.id === "SOLO"),
+    false
+  );
+
+  const held = swapCounterOptions({
+    pools: [activeXrp, activeRlusd, deadXio],
+    lines: [rlusdLine, soloLine],
+    balances: { xdx: 100, xrp: 5 },
+    signedIn: true,
+  });
+  assert.deepEqual(
+    held.map((row) => row.id),
+    ["XRP", "RLUSD"]
+  );
+
+  const noRlusdLine = swapCounterOptions({
+    pools: [activeXrp, activeRlusd],
+    lines: [soloLine],
+    signedIn: true,
+  });
+  assert.deepEqual(
+    noRlusdLine.map((row) => row.id),
+    ["XRP"]
+  );
+
+  const lineWithoutPool = swapCounterOptions({
+    pools: [activeXrp],
+    lines: [rlusdLine, soloLine],
+    signedIn: true,
+  });
+  assert.deepEqual(
+    lineWithoutPool.map((row) => row.id),
+    ["XRP"]
+  );
+
+  assert.deepEqual(
+    swapCounterOptions({ lines: [rlusdLine], signedIn: true }).map((row) => row.id),
+    ["XRP"]
+  );
 });
 
 test("filterBookTape splits hybrid, DEX, and AMM rows", () => {
