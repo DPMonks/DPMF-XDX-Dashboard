@@ -1904,22 +1904,22 @@ body {
   min-height: 40px;
   padding: 8px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(199, 112, 255, 0.55);
-  background: #16161f;
+  border: 1.5px solid var(--dpmf-neon-violet);
+  background: #1c1428;
   color: var(--dpmf-text-main);
   font: inherit;
   font-size: 16px;
-  box-shadow: 0 0 0 1px rgba(199, 112, 255, 0.12), 0 0 16px rgba(199, 112, 255, 0.2);
+  box-shadow: 0 0 0 1px rgba(199, 112, 255, 0.22), 0 0 18px rgba(199, 112, 255, 0.32);
 }
 
 .orderbook-search::placeholder {
-  color: #c8c8dc;
+  color: #ddd6ea;
 }
 
 .orderbook-search:focus {
   outline: none;
-  border-color: var(--dpmf-neon-violet);
-  box-shadow: 0 0 0 2px rgba(199, 112, 255, 0.35), 0 0 20px rgba(199, 112, 255, 0.28);
+  border-color: #e0b3ff;
+  box-shadow: 0 0 0 2px rgba(199, 112, 255, 0.45), 0 0 22px rgba(199, 112, 255, 0.4);
 }
 
 .orderbook-search-list {
