@@ -2123,12 +2123,25 @@ body {
   min-width: 0;
 }
 
+.wallet-earn-board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wallet-earn-title {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #39ff14;
+}
+
 .wallet-earn-beam {
   display: grid;
-  grid-template-columns: 1.15fr 0.9fr 1.15fr;
-  grid-template-areas:
-    "total total total"
-    "xrp xdx rlusd";
+  grid-template-columns: 1fr 1fr 0.9fr;
+  grid-template-areas: "xrp rlusd total";
   gap: 8px;
   align-items: stretch;
 }
@@ -2137,16 +2150,12 @@ body {
   grid-area: xrp;
 }
 
-.wallet-earn-xdx {
-  grid-area: xdx;
+.wallet-earn-rlusd {
+  grid-area: rlusd;
 }
 
 .wallet-earn-total {
   grid-area: total;
-}
-
-.wallet-earn-rlusd {
-  grid-area: rlusd;
 }
 
 .wallet-earn-cell {
@@ -2162,10 +2171,10 @@ body {
 
 .wallet-earn-label {
   margin: 0 0 1px;
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #fff;
+  color: #39ff14;
   opacity: 0.92;
 }
 
@@ -2184,16 +2193,30 @@ body {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #fff;
+  color: #39ff14;
   opacity: 0.72;
 }
 
 .wallet-earn-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
   font-size: 12px;
   font-weight: 700;
   text-align: right;
   min-width: 0;
   color: #39ff14;
+}
+
+.wallet-earn-value b {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.wallet-mini-list dd.is-earn {
+  color: #39ff14;
+  font-weight: 700;
 }
 
 .wallet-earn-cell.is-empty .wallet-earn-value,
@@ -2842,8 +2865,8 @@ body {
   .wallet-earn-beam {
     grid-template-columns: 1fr 1fr;
     grid-template-areas:
-      "xrp xdx"
-      "rlusd total";
+      "xrp rlusd"
+      "total total";
   }
 
   .wallet-earn-cell {

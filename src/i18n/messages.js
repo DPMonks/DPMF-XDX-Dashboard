@@ -58,6 +58,8 @@ const en = {
   xrpEarnings: "XRP earnings",
   xdxEarnings: "XDX earnings",
   rlusdEarnings: "RLUSD earnings",
+  xdxXrpEarnings: "XDX/XRP",
+  xdxRlusdEarnings: "XDX/RLUSD",
   totalEarnings: "Total earnings",
   supplyShare: "Supply share",
   xdxSupplyShare: "XDX supply share",

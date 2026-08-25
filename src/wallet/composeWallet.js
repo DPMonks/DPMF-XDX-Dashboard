@@ -363,8 +363,82 @@ function volumeForWindow(row, flowVol, windowMs) {
   return fromFlows;
 }
 
+export const FEATURED_EARN_PAIRS = ["XDX/XRP", "XDX/RLUSD"];
+
 function emptyEarnings() {
   return { xdx: 0, xrp: 0, rlusd: 0, usd: null };
+}
+
+function emptyPoolEarn(pair) {
+  const quote = String(pair || "").split("/")[1] || "";
+  return {
+    pair,
+    quote,
+    xdx24h: 0,
+    quote24h: 0,
+    usd24h: 0,
+    xdx7d: 0,
+    quote7d: 0,
+    usd7d: 0,
+  };
+}
+
+function splitPoolFee(row, feeXdx, xdxXrp) {
+  if (!(feeXdx > 0)) return { xdx: 0, quote: 0, quoteId: poolQuoteId(row) };
+  if (quoteIsXrp(row)) {
+    const px = quotePerXdx(row, xdxXrp);
+    return { xdx: feeXdx / 2, quote: px > 0 ? (feeXdx / 2) * px : 0, quoteId: "XRP" };
+  }
+  if (quoteIsRlusd(row)) {
+    const px = quotePerXdx(row, null);
+    return { xdx: feeXdx / 2, quote: px > 0 ? (feeXdx / 2) * px : 0, quoteId: "RLUSD" };
+  }
+  return { xdx: feeXdx, quote: 0, quoteId: poolQuoteId(row) };
+}
+
+function usdForSplit(split, { xdxUsd, xrpUsd, rlusdUsd }) {
+  const xdxPart = num(xdxUsd) != null ? split.xdx * Number(xdxUsd) : 0;
+  let quotePart = 0;
+  if (split.quoteId === "XRP" && num(xrpUsd) != null) quotePart = split.quote * Number(xrpUsd);
+  else if (split.quoteId === "RLUSD") quotePart = split.quote * (num(rlusdUsd) || 1);
+  return xdxPart + quotePart;
+}
+
+export function lpPoolEarnings(
+  positions = [],
+  { flows = [], xdxUsd = null, xrpUsd = null, rlusdUsd = 1, xdxXrp = null, now = Date.now() } = {}
+) {
+  const vol24h = volumeByPool(flows, DAY_MS, now);
+  const vol7d = volumeByPool(flows, DAY_MS * 7, now);
+  const prices = { xdxUsd, xrpUsd, rlusdUsd, xdxXrp };
+  const byPair = new Map(
+    (Array.isArray(positions) ? positions : [])
+      .filter((row) => isXdxAmmPair(row))
+      .map((row) => [normalizeWalletPair(row.pool || row.pool_name), row])
+  );
+  const pools = {};
+  for (const pair of FEATURED_EARN_PAIRS) {
+    const row = byPair.get(pair);
+    if (!row || !((num(row.lp_share_percent) || 0) > 0)) {
+      pools[pair] = emptyPoolEarn(pair);
+      continue;
+    }
+    const share = Number(row.lp_share_percent) / 100;
+    const rate = tradingFeeRate(row.trading_fee);
+    const day = splitPoolFee(row, volumeForWindow(row, vol24h, DAY_MS) * rate * share, xdxXrp);
+    const week = splitPoolFee(row, volumeForWindow(row, vol7d, DAY_MS * 7) * rate * share, xdxXrp);
+    pools[pair] = {
+      pair,
+      quote: day.quoteId || pair.split("/")[1],
+      xdx24h: day.xdx,
+      quote24h: day.quote,
+      usd24h: usdForSplit(day, prices),
+      xdx7d: week.xdx,
+      quote7d: week.quote,
+      usd7d: usdForSplit(week, prices),
+    };
+  }
+  return pools;
 }
 
 function earningsForWindow(positions, flowVol, windowMs, { xdxUsd, xrpUsd, rlusdUsd, xdxXrp }) {
@@ -433,6 +507,7 @@ export function lpFeeEarnings(
       xrp7d: week.xrp,
       rlusd7d: week.rlusd,
       usd7d: week.usd,
+      pools: lpPoolEarnings(positions, { flows, xdxUsd, xrpUsd, rlusdUsd, xdxXrp, now }),
     },
   };
 }
@@ -491,6 +566,10 @@ export function emptyWalletSnapshot(address = null) {
         xrp7d: null,
         rlusd7d: null,
         usd7d: null,
+        pools: {
+          "XDX/XRP": emptyPoolEarn("XDX/XRP"),
+          "XDX/RLUSD": emptyPoolEarn("XDX/RLUSD"),
+        },
       },
     },
     lp: [],
