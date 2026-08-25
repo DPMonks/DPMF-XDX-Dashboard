@@ -2589,6 +2589,7 @@ body {
 
 .wallet-lp-head {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
@@ -2597,16 +2598,25 @@ body {
 
 .wallet-lp-head h3 {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: min(100%, 10rem);
+}
+
+.wallet-lp-select {
+  flex: 1 1 10rem;
+  min-width: min(100%, 10rem);
 }
 
 .wallet-lp-select select {
+  width: 100%;
   background: #101018;
   color: var(--dpmf-text-main);
   border: 1px solid var(--dpmf-border-soft);
   border-radius: 8px;
   padding: 6px 8px;
   font: inherit;
-  font-size: 12px;
+  font-size: 16px;
+  min-height: 44px;
 }
 
 .wallet-lp-comp {
@@ -2669,6 +2679,7 @@ body {
 
 .wallet-income-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -2677,6 +2688,8 @@ body {
 
 .wallet-income-head h3 {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: min(100%, 10rem);
 }
 
 .wallet-income-tools {
@@ -2684,15 +2697,20 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  min-width: 0;
+  flex: 1 1 12rem;
+  min-width: min(100%, 12rem);
 }
 
 .wallet-income-select {
-  min-width: 0;
+  flex: 1 1 10rem;
+  min-width: 10rem;
 }
 
 .wallet-income-select select {
-  max-width: 140px;
+  width: 100%;
+  max-width: none;
+  min-height: 44px;
+  font-size: 16px;
 }
 
 .wallet-income-copy {
@@ -3123,6 +3141,19 @@ body {
   .connected-wallet,
   .wallet-income {
     flex: 0 0 auto;
+  }
+
+  .wallet-income-tools,
+  .wallet-lp-select {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .wallet-income-select,
+  .wallet-lp-select {
+    width: 100%;
+    min-width: 0;
   }
 
   .wallet-income-scroll {
