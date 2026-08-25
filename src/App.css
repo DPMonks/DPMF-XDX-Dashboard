@@ -1601,7 +1601,7 @@ body {
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1621,15 +1621,19 @@ body {
 }
 
 .pool-split-amt {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
   opacity: 0.88;
+  min-width: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pool-split-asset {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1801,14 +1805,20 @@ body {
   width: 100%;
   min-height: 44px;
   padding: 6px 8px;
-  font-size: 12px;
-  white-space: normal;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.15;
   text-align: center;
 }
 
 .pool-card-actions .connect-wallet-btn > span {
-  white-space: normal;
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: center;
 }
 
@@ -3538,7 +3548,7 @@ body {
 
   .pool-split-labels {
     grid-template-columns: 1fr 1fr;
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .pool-split-ratio {
