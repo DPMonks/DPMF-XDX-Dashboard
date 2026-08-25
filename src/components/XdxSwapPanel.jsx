@@ -78,6 +78,24 @@ function pickSwapRecommendation({ qty, routingMode, alternatives, noRoute }) {
   return null;
 }
 
+function LpAccessLock({ open }) {
+  return (
+    <svg className="xdx-swap-gov-lock" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+      {open ? (
+        <path
+          fill="currentColor"
+          d="M5.1 7.15V5.35a2.9 2.9 0 0 1 5.35-1.55l-1.05.85A1.55 1.55 0 0 0 6.55 5.35v1.8H12c.75 0 1.35.6 1.35 1.35v5.15c0 .75-.6 1.35-1.35 1.35H4c-.75 0-1.35-.6-1.35-1.35V8.5c0-.75.6-1.35 1.35-1.35h1.1z"
+        />
+      ) : (
+        <path
+          fill="currentColor"
+          d="M5.1 7.15V5.35a2.9 2.9 0 0 1 5.8 0v1.8H12c.75 0 1.35.6 1.35 1.35v5.15c0 .75-.6 1.35-1.35 1.35H4c-.75 0-1.35-.6-1.35-1.35V8.5c0-.75.6-1.35 1.35-1.35h1.1zm1.45-1.8v1.8h2.9V5.35a1.45 1.45 0 1 0-2.9 0z"
+        />
+      )}
+    </svg>
+  );
+}
+
 function recommendationCopy(rec, t, impactText) {
   if (!rec) return "";
   if (rec.reason === "half") return (t.swapRecHalf || "").replace("{impact}", impactText || "—");
@@ -560,6 +578,7 @@ export default function XdxSwapPanel() {
           <h4>{t.swapLpGateTitle}</h4>
           <p>{t.swapLpGateHint}</p>
           <p className={`xdx-swap-gov-status${gate.ok ? " is-yes" : " is-no"}`}>
+            <LpAccessLock open={gate.ok} />
             {gate.ok ? t.swapLpGateOpen : t.swapLpGateClosed}
           </p>
           <ul>

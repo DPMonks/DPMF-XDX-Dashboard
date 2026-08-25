@@ -2190,8 +2190,16 @@ body {
 }
 
 .xdx-swap-gov-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 700;
+}
+
+.xdx-swap-gov-lock {
+  flex: 0 0 auto;
+  display: block;
 }
 
 .xdx-swap-gov-status.is-yes,
@@ -2199,8 +2207,16 @@ body {
   color: #3dd68c;
 }
 
+.xdx-swap-gov-status.is-yes .xdx-swap-gov-lock {
+  color: #3dd68c;
+}
+
 .xdx-swap-gov-status.is-no {
   color: #ffb347;
+}
+
+.xdx-swap-gov-status.is-no .xdx-swap-gov-lock {
+  color: #ff3b3b;
 }
 
 .xdx-swap-gov ul {
