@@ -5,6 +5,7 @@ import {
   currentPage,
   pageCount,
   pageSlice,
+  resetScrollTop,
   shouldFetchMoreRows,
 } from "../src/utils/pagination.js";
 
@@ -35,6 +36,13 @@ test("pageSlice is the same for owner and LP lists", () => {
 
   assert.equal(clamped.currentPage, 2);
   assert.equal(currentPage(0, 103), 1);
+});
+
+test("resetScrollTop returns a list scroller to the first row", () => {
+  const node = { scrollTop: 480 };
+  assert.equal(resetScrollTop(node), true);
+  assert.equal(node.scrollTop, 0);
+  assert.equal(resetScrollTop(null), false);
 });
 
 test("shouldFetchMoreRows keeps loading a full first page", () => {
