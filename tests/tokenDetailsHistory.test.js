@@ -182,6 +182,31 @@ test("composeTokenDetailHistory uses candle prices and LP supply scans", () => {
   assert.ok(first.xrplMarketCap > 400_000);
 });
 
+test("composeTokenDetailHistory prefers candle prices over a conflicting sparkline", () => {
+  const rows = composeTokenDetailHistory({
+    candles: [{ timestamp: "2026-08-25T11:30:00.000Z", asset: "XDX", price_usd: 0.000046 }],
+    sparkline: [{ timestamp: "2026-08-25T11:30:00.000Z", price_usd: 0.00009 }],
+    live: { timestamp: "2026-08-25T12:00:00.000Z", price: 0.0000465 },
+  });
+  const mid = rows.find((row) => row.timestamp === "2026-08-25T11:30:00.000Z");
+  assert.equal(mid.price, 0.000046);
+});
+
+test("windowedTokenSeries does not clone a synthetic now point onto the tail", () => {
+  const now = Date.parse("2026-08-25T12:00:00.000Z");
+  const windowed = windowedTokenSeries(
+    [
+      { timestamp: "2026-08-25T11:00:00.000Z", ts: now - 3600000, price: 0.000047 },
+      { timestamp: "2026-08-25T11:58:00.000Z", ts: now - 120000, price: 0.0000465 },
+    ],
+    "24H",
+    now,
+    "price"
+  );
+  assert.equal(windowed[windowed.length - 1].ts, now - 120000);
+  assert.equal(windowed[windowed.length - 1].plot, 0.0000465);
+});
+
 test("tokenDetailDecimals match Token Details precision", () => {
   assert.equal(tokenDetailDecimals("price"), 8);
   assert.equal(tokenDetailDecimals("xdxPerXrp"), 8);

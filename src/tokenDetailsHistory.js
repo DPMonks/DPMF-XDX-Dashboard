@@ -1,4 +1,4 @@
-import { downsampleSeries } from "./activityHistory.js";
+import { collapseUnchangedPlot, downsampleSeries } from "./activityHistory.js";
 
 export const TOKEN_DETAIL_METRICS = [
   "price",
@@ -260,14 +260,14 @@ export function composeTokenDetailHistory({
   amm = [],
   live = null,
 } = {}) {
+  const priceRows = xdxPriceHistoryRows(candles);
   return carryTokenDetailMetrics(
     mergeTokenDetailRows(
       namedHistoryRows(holders, "holders"),
       namedHistoryRows(trustlines, "trustlines"),
       namedHistoryRows(lpHolders, "lpHolders"),
       aggregateLpChartRows(lpTrustlines),
-      sparkMetricRows(xdxPriceHistoryRows(candles), live),
-      sparkMetricRows(sparkline, live),
+      sparkMetricRows(priceRows.length ? priceRows : sparkline, live),
       ammHistoryRows(amm, live),
       ammHistoryRows(tvl, live),
       [liveTokenDetailTip(live)]
@@ -293,7 +293,7 @@ export function windowedTokenSeries(rows, range, now, metric) {
   });
   const usable = filled.filter((row) => Number.isFinite(row.plot));
   if (!usable.length) return [];
-  if (range === "Max") return downsampleSeries(usable);
+  if (range === "Max") return collapseUnchangedPlot(downsampleSeries(usable));
 
   const windowMs = TOKEN_DETAIL_RANGE_MS[range];
   if (!windowMs) return downsampleSeries(usable);
@@ -304,11 +304,7 @@ export function windowedTokenSeries(rows, range, now, metric) {
   if (lastBefore) {
     out.unshift({ ...lastBefore, timestamp: new Date(start).toISOString(), ts: start });
   }
-  const last = out[out.length - 1];
-  if (last && last.ts < now) {
-    out.push({ ...last, timestamp: new Date(now).toISOString(), ts: now });
-  }
-  return downsampleSeries(out.filter((row) => Number.isFinite(row.plot)));
+  return collapseUnchangedPlot(downsampleSeries(out.filter((row) => Number.isFinite(row.plot))));
 }
 
 export function tokenDetailYDomain(values) {

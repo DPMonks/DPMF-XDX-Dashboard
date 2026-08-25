@@ -1111,6 +1111,12 @@ body {
   animation: activity-glow 2.8s ease-in-out infinite;
 }
 
+.token-details-chart .activity-plot .recharts-line-curve,
+.token-details-chart .activity-plot .activity-line {
+  filter: drop-shadow(0 0 4px #00ff6a);
+  animation: none;
+}
+
 @keyframes activity-glow {
   0%,
   100% {

@@ -13,6 +13,7 @@ import {
   lpTokenUsd,
   mergeLpIncomeRows,
   pageLpIncome,
+  poolForIncomePair,
 } from "../src/wallet/lpIncome.js";
 
 test("only XDX AMM pairs count as earn pools", () => {
@@ -162,4 +163,43 @@ test("income rows keep one selected pair and replace snapshot deposits with wall
   assert.equal(history.some((row) => row.lpTokens === 1), false);
   assert.equal(history.filter((row) => row.kind !== "fee").length, 2);
   assert.ok(history.every((row) => row.pair === "XDX/XRP"));
+});
+
+test("each pair marks LP tokens from that pool's reserves, including a missing quote side", () => {
+  const xrpPool = {
+    pool: "XDX/XRP",
+    quote: "XRP",
+    reserve_asset: 64_520_961.62244989,
+    reserve_currency: 2094.628968,
+    lp_supply: 233_179_846.2759734,
+  };
+  const rlusdPool = {
+    pool: "XDX/RLUSD",
+    quote: "RLUSD",
+    reserve_asset: 2_607_820.43763469,
+    reserve_currency: 123.1704222066608,
+    lp_supply: 17_907.41480903618,
+  };
+  const prices = { xdxUsd: 0.0000473979, xrpUsd: 1.46, RLUSD: 1 };
+  const xrpUsd = lpTokenUsd(6100.5985, xrpPool, prices);
+  const xrpHalf = (6100.5985 / xrpPool.lp_supply) * (xrpPool.reserve_asset * prices.xdxUsd);
+  assert.ok(Math.abs(xrpUsd - xrpHalf * 2) < 0.01);
+  assert.ok(xrpUsd > 0.15);
+
+  const rlusdUsd = lpTokenUsd(13_524.1529, rlusdPool, prices);
+  const rlusdTvl = rlusdPool.reserve_asset * prices.xdxUsd + rlusdPool.reserve_currency;
+  assert.ok(Math.abs(rlusdUsd - (13_524.1529 / rlusdPool.lp_supply) * rlusdTvl) < 0.05);
+
+  const xrpMissingQuote = lpTokenUsd(6100.5985, { ...xrpPool, reserve_currency: 0 }, prices);
+  assert.ok(Math.abs(xrpMissingQuote - xrpUsd) < 0.02);
+
+  const fromCatalog = lpDepositIncomeRows({
+    activity: [{ side: "addLp", pair: "XDX/RLUSD", lp: 13_524.1529, timestamp: "2026-08-24T10:00:00.000Z" }],
+    positions: [{ pool: "XDX/RLUSD", lp_supply: 13_524.1529, reserve_asset: 100, reserve_currency: 1 }],
+    pools: [rlusdPool],
+    prices,
+  });
+  assert.equal(fromCatalog.length, 1);
+  assert.ok(Math.abs(fromCatalog[0].usd - rlusdUsd) < 0.05);
+  assert.equal(poolForIncomePair("XDX/RLUSD", [], [rlusdPool]).lp_supply, rlusdPool.lp_supply);
 });

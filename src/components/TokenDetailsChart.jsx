@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getTokenDetailsHistory } from "../api/indexer";
 import { XDX_ISSUED_AT } from "../constants/ledger";
@@ -13,7 +13,6 @@ import {
   windowedTokenSeries,
 } from "../tokenDetailsHistory";
 import { formatNumber, formatWhen } from "../utils/format";
-import { DRIFT_MS, driftPlot, easeInOutCubic, lerpPair } from "../utils/lineDrift";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
@@ -74,49 +73,6 @@ export default function TokenDetailsChart() {
     () => tokenDetailYDomain(chartRows.map((row) => Number(row.plot))),
     [chartRows]
   );
-  const [displayRows, setDisplayRows] = useState(chartRows);
-  const [displayX, setDisplayX] = useState(xRange);
-  const [displayY, setDisplayY] = useState(targetY);
-  const displayRef = useRef({ rows: chartRows, x: xRange, y: targetY, metric, range });
-
-  useEffect(() => {
-    const nextX = xRange;
-    const nextY = targetY;
-    const prev = displayRef.current;
-    const shouldDrift =
-      prev.rows.length > 0 &&
-      chartRows.length > 0 &&
-      (prev.metric !== metric || prev.range !== range);
-
-    if (!shouldDrift) {
-      setDisplayRows(chartRows);
-      setDisplayX(nextX);
-      setDisplayY(nextY);
-      displayRef.current = { rows: chartRows, x: nextX, y: nextY, metric, range };
-      return undefined;
-    }
-
-    const fromRows = prev.rows;
-    const fromX = prev.x || nextX;
-    const fromY = prev.y || nextY;
-    const started = performance.now();
-    let frame = 0;
-    const step = (stamp) => {
-      const progress = Math.min(1, (stamp - started) / DRIFT_MS);
-      const eased = easeInOutCubic(progress);
-      const rows = progress >= 1 ? chartRows : driftPlot(fromRows, chartRows, progress);
-      const x = progress >= 1 ? nextX : lerpPair(fromX, nextX, eased);
-      const y = progress >= 1 ? nextY : lerpPair(fromY, nextY, eased);
-      setDisplayRows(rows);
-      setDisplayX(x);
-      setDisplayY(y);
-      displayRef.current = { rows, x, y, metric, range };
-      if (progress < 1) frame = requestAnimationFrame(step);
-    };
-    frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
-  }, [chartRows, xRange, targetY, metric, range]);
-
   const digits = tokenDetailDecimals(metric);
   const label = tokenDetailLabel(t, metric);
 
@@ -157,16 +113,16 @@ export default function TokenDetailsChart() {
       ) : error && data.length === 0 ? (
         <p className="error-message">{error}</p>
       ) : (
-        <div className="activity-plot is-live">
-          {!chartRows.length && !displayRows.length ? (
+        <div className="activity-plot">
+          {!chartRows.length ? (
             <p className="empty-message">{t.noRangeData}</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={displayRows.length ? displayRows : chartRows}>
+              <LineChart data={chartRows}>
                 <XAxis
                   type="number"
                   dataKey="ts"
-                  domain={displayX}
+                  domain={xRange}
                   tick={{ fill: "#7f8ba8", fontSize: 11 }}
                   tickFormatter={(value) => {
                     const date = new Date(value);
@@ -191,13 +147,14 @@ export default function TokenDetailsChart() {
                 <YAxis
                   tick={{ fill: "#7f8ba8", fontSize: 11 }}
                   width={72}
-                  domain={displayY}
+                  domain={targetY}
                   allowDecimals={digits > 0}
                   tickFormatter={(value) =>
                     formatNumber(value, locale, { maximumFractionDigits: digits })
                   }
                 />
                 <Tooltip
+                  cursor={false}
                   contentStyle={{
                     background: "#0b0f1a",
                     border: "1px solid #1f2535",
@@ -211,14 +168,14 @@ export default function TokenDetailsChart() {
                   ]}
                 />
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey="plot"
                   stroke="#00ff6a"
                   strokeWidth={2.4}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   dot={false}
-                  activeDot={{ r: 5, fill: "#00ff6a", stroke: "#c770ff", strokeWidth: 2 }}
+                  activeDot={false}
                   connectNulls
                   isAnimationActive={false}
                   className="activity-line"
