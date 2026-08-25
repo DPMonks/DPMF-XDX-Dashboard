@@ -2320,7 +2320,8 @@ body {
   color: var(--dpmf-text-main);
 }
 
-.wallet-earn-row {
+.wallet-earn-row,
+.wallet-earn-cols {
   margin: 0;
   display: grid;
   grid-template-columns: 2.6em minmax(0, 1fr) minmax(3.25em, auto);
@@ -2328,6 +2329,33 @@ body {
   align-items: baseline;
   font-variant-numeric: tabular-nums;
   line-height: 1.25;
+}
+
+.wallet-earn-cols {
+  margin-bottom: 1px;
+}
+
+.wallet-earn-cols-titles {
+  display: contents;
+}
+
+.wallet-earn-col-lp,
+.wallet-earn-col-usd {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: right;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.wallet-earn-col-lp {
+  color: var(--dpmf-neon-violet);
+}
+
+.wallet-earn-col-usd {
+  color: #39ff14;
 }
 
 .wallet-earn-range {
@@ -2343,12 +2371,10 @@ body {
   display: contents;
   font-size: 12px;
   font-weight: 700;
-  color: #39ff14;
 }
 
 .wallet-earn-value b,
 .wallet-earn-value i {
-  color: #39ff14;
   font-weight: 700;
   font-style: normal;
   white-space: nowrap;
@@ -2357,13 +2383,25 @@ body {
   min-width: 0;
 }
 
+.wallet-earn-value b {
+  color: var(--dpmf-neon-violet);
+}
+
 .wallet-earn-value i {
-  opacity: 0.82;
+  color: #39ff14;
+  opacity: 0.92;
   padding-inline-start: 2px;
 }
 
+.wallet-earn-cell.is-usd-only .wallet-earn-cols,
+.wallet-earn-cell.is-usd-only .wallet-earn-row {
+  grid-template-columns: 2.6em minmax(0, 1fr);
+}
+
+.wallet-earn-cell.is-usd-only .wallet-earn-col-usd,
 .wallet-earn-total .wallet-earn-value b {
   grid-column: 2 / -1;
+  color: #39ff14;
 }
 
 .wallet-mini-list dd.is-earn {
@@ -2373,7 +2411,8 @@ body {
 
 .wallet-earn-cell.is-empty .wallet-earn-value,
 .wallet-earn-cell.is-empty .wallet-earn-label,
-.wallet-earn-cell.is-empty .wallet-earn-range {
+.wallet-earn-cell.is-empty .wallet-earn-range,
+.wallet-earn-cell.is-empty .wallet-earn-cols {
   opacity: 0.4;
 }
 
@@ -2389,9 +2428,17 @@ body {
       "rlusd total";
   }
 
-  .wallet-earn-row {
+  .wallet-earn-row,
+  .wallet-earn-cols {
     grid-template-columns: 2.6em minmax(0, 1fr);
     row-gap: 1px;
+  }
+
+  .wallet-earn-cols-titles {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    grid-column: 2;
   }
 
   .wallet-earn-value {
@@ -2403,7 +2450,8 @@ body {
     min-width: 0;
   }
 
-  .wallet-earn-total .wallet-earn-value b {
+  .wallet-earn-total .wallet-earn-value b,
+  .wallet-earn-cell.is-usd-only .wallet-earn-col-usd {
     grid-column: auto;
   }
 }
@@ -2864,6 +2912,11 @@ body {
   color: var(--dpmf-text-main);
 }
 
+.wallet-income-table td.is-lp {
+  color: var(--dpmf-neon-violet);
+  font-weight: 700;
+}
+
 .wallet-income-table td.is-earn {
   color: #39ff14;
   font-weight: 700;
@@ -3195,7 +3248,9 @@ body {
   }
 
   .wallet-earn-label,
-  .wallet-earn-range {
+  .wallet-earn-range,
+  .wallet-earn-col-lp,
+  .wallet-earn-col-usd {
     font-size: 10px;
   }
 

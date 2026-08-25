@@ -79,7 +79,7 @@ const en = {
   lpPassiveIncome: "LP Earning/Passive income",
   downloadLpIncome: "Download LP earnings",
   incomeDate: "Date",
-  incomeLpTokens: "LP tokens received",
+  incomeLpTokens: "LP",
   incomePair: "Pair",
   incomePairSelect: "LP earnings pair",
   incomeUsd: "USD",

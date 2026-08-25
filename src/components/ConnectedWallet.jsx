@@ -385,7 +385,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
           <thead>
             <tr>
               <th>{t.incomeDate || "Date"}</th>
-              <th>{t.incomeLpTokens || "LP tokens received"}</th>
+              <th>{t.incomeLpTokens || "LP"}</th>
               <th>{t.incomePair || "Pair"}</th>
               <th>{t.incomeUsd || "USD"}</th>
             </tr>
@@ -399,7 +399,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
               visible.map((row) => (
                 <tr key={`${row.txid || row.date}-${row.pair}-${row.kind || "fee"}-${row.lpTokens}`}>
                   <td>{row.date}</td>
-                  <td className="is-earn">{formatToken(row.lpTokens, locale, 4)}</td>
+                  <td className="is-lp">{formatToken(row.lpTokens, locale, 4)}</td>
                   <td>{row.pair}</td>
                   <td className="is-earn">{formatUsd(row.usd, locale)}</td>
                 </tr>
@@ -429,10 +429,19 @@ function earnAmount(amount, usd, locale, digits, empty) {
   };
 }
 
-function WalletEarnCell({ label, rows, empty, className = "" }) {
+function WalletEarnCell({ label, rows, empty, className = "", usdOnly = false, t }) {
   return (
-    <div className={`wallet-earn-cell${empty ? " is-empty" : " is-filled"}${className ? ` ${className}` : ""}`}>
+    <div
+      className={`wallet-earn-cell${empty ? " is-empty" : " is-filled"}${usdOnly ? " is-usd-only" : ""}${className ? ` ${className}` : ""}`}
+    >
       <p className="wallet-earn-label">{label}</p>
+      <p className="wallet-earn-cols">
+        <span className="wallet-earn-cols-spacer" aria-hidden="true" />
+        <span className="wallet-earn-cols-titles">
+          {usdOnly ? null : <span className="wallet-earn-col-lp">{t?.incomeLpTokens || "LP"}</span>}
+          <span className="wallet-earn-col-usd">{t?.incomeUsd || "USD"}</span>
+        </span>
+      </p>
       {rows.map((row) => (
         <p key={row.range} className="wallet-earn-row">
           <span className="wallet-earn-range">{row.range}</span>
@@ -462,6 +471,7 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
           className="wallet-earn-xrp"
           label={t.xrp}
           empty={empty}
+          t={t}
           rows={[
             { range: t.lpFees24h, amount: xrp24.amount, usd: xrp24.usd },
             { range: t.lpFees7d, amount: xrp7.amount, usd: xrp7.usd },
@@ -471,6 +481,7 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
           className="wallet-earn-xdx"
           label={t.xdx}
           empty={empty}
+          t={t}
           rows={[
             { range: t.lpFees24h, amount: xdx24.amount, usd: xdx24.usd },
             { range: t.lpFees7d, amount: xdx7.amount, usd: xdx7.usd },
@@ -480,6 +491,7 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
           className="wallet-earn-rlusd"
           label={t.rlusd || "RLUSD"}
           empty={empty}
+          t={t}
           rows={[
             { range: t.lpFees24h, amount: rlusd24.amount, usd: rlusd24.usd },
             { range: t.lpFees7d, amount: rlusd7.amount, usd: rlusd7.usd },
@@ -489,6 +501,8 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
           className="wallet-earn-total"
           label={t.totalEarnings}
           empty={empty}
+          usdOnly
+          t={t}
           rows={[
             { range: t.lpFees24h, amount: earnText(earn.usd24h, (n) => formatUsd(n, locale), empty) },
             { range: t.lpFees7d, amount: earnText(earn.usd7d, (n) => formatUsd(n, locale), empty) },
