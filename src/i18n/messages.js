@@ -202,6 +202,8 @@ const en = {
   swapFor: "For",
   swapReceive: "Receive",
   swapReceiveHint: "total tokens",
+  swapFromBook: "Order book",
+  swapFromAmm: "AMM",
   swapHave: "Have {amount}",
   swapLockedXdx: "XDX",
   swapAmount: "Amount",

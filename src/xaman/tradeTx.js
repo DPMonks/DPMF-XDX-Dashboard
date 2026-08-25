@@ -382,8 +382,25 @@ export function ammDepositTx({ account, quote, xdx, quoteQty, mode = "double", s
   return txjson;
 }
 
+export function ledgerCurrencyCode(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^0x/i, "")
+    .toUpperCase();
+}
+
 export function isLpCurrency(value) {
-  return /^03[A-Fa-f0-9]{38}$/.test(String(value || "").trim());
+  return /^03[A-F0-9]{38}$/.test(ledgerCurrencyCode(value));
+}
+
+export function sameLedgerCurrency(left, right) {
+  const a = ledgerCurrencyCode(left);
+  const b = ledgerCurrencyCode(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (/^[A-F0-9]{40}$/.test(a) && b.length <= 20 && asciiCurrencyHex(b) === a) return true;
+  if (/^[A-F0-9]{40}$/.test(b) && a.length <= 20 && asciiCurrencyHex(a) === b) return true;
+  return false;
 }
 
 export function poolForQuote(quote, pools = [], live = null) {
@@ -403,14 +420,15 @@ export function poolForQuote(quote, pools = [], live = null) {
   });
   const amm = row?.amm_account || row?.amm || liveAmm || null;
   const rawLp = row?.lp_currency || row?.lp_currency_hex || liveLp || null;
-  const lpCurrency = isLpCurrency(rawLp) ? String(rawLp).trim().toUpperCase() : null;
+  const lpCurrency = isLpCurrency(rawLp) ? ledgerCurrencyCode(rawLp) : null;
   if (amm && lpCurrency) return { amm, lpCurrency, pair };
   if (quote?.currency === "RLUSD" || pair === "XDX/RLUSD") {
-    return { amm: XDX_RLUSD_AMM, lpCurrency: XDX_RLUSD_LP_HEX, pair: "XDX/RLUSD" };
+    return { amm: amm || XDX_RLUSD_AMM, lpCurrency: XDX_RLUSD_LP_HEX, pair: "XDX/RLUSD" };
   }
-  if (quote?.currency === "XRP" || pair === "XDX/XRP" || !quote?.issuer) {
-    return { amm: XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX, pair: pair || "XDX/XRP" };
+  if (quote?.currency === "XRP" || pair === "XDX/XRP") {
+    return { amm: amm || XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX, pair: "XDX/XRP" };
   }
+  if (amm) return { amm, lpCurrency, pair };
   return { amm: null, lpCurrency: null, pair };
 }
 
@@ -434,15 +452,16 @@ export function lpTrustSetTxjson(account, spec = {}) {
 }
 
 export function hasLpTrustline(lines, spec = {}) {
-  const currency = String(spec.lpCurrency || spec.currency || "").toUpperCase();
-  const issuer = String(spec.amm || spec.issuer || "").toUpperCase();
+  const currency = ledgerCurrencyCode(spec.lpCurrency || spec.currency || spec.lp_currency);
+  const issuer = String(spec.amm || spec.issuer || spec.amm_account || "").toUpperCase();
   if (!currency && !issuer) return false;
   return (Array.isArray(lines) ? lines : []).some((row) => {
-    const who = String(row?.issuer || row?.account || "").toUpperCase();
+    const who = String(row?.issuer || row?.account || row?.counterparty || "").toUpperCase();
     if (issuer && who && who !== issuer) return false;
-    const code = String(row?.currency || row?.hex || "").toUpperCase();
-    if (currency && code === currency) return true;
-    return Boolean(row?.lp) && Boolean(issuer) && who === issuer;
+    const code = ledgerCurrencyCode(row?.currency || row?.hex || row?.lp_currency);
+    if (currency && sameLedgerCurrency(code, currency)) return true;
+    const isLp = Boolean(row?.lp) || isLpCurrency(code);
+    return Boolean(issuer) && who === issuer && isLp;
   });
 }
 
@@ -502,13 +521,14 @@ export function hasQuoteTrustline(lines, quote = {}) {
   const issuer = String(quote.issuer || "").toUpperCase();
   const codes = new Set(
     [quote.currency, quote.hex, quote.id, quote.label, quoteLedgerCurrency(quote)]
-      .map((value) => String(value || "").toUpperCase())
+      .map((value) => ledgerCurrencyCode(value))
       .filter(Boolean)
   );
   return (Array.isArray(lines) ? lines : []).some((row) => {
-    if (String(row?.issuer || row?.account || "").toUpperCase() !== issuer) return false;
-    const code = String(row?.currency || row?.hex || row?.ticker || "").toUpperCase();
-    return codes.has(code);
+    if (String(row?.issuer || row?.account || row?.counterparty || "").toUpperCase() !== issuer) return false;
+    const code = ledgerCurrencyCode(row?.currency || row?.hex || row?.ticker);
+    if (codes.has(code)) return true;
+    return [...codes].some((want) => sameLedgerCurrency(code, want));
   });
 }
 

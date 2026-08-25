@@ -54,6 +54,9 @@ test("walkHybrid prefers a better book level then finishes on the AMM", () => {
   assert.ok(fill.usedAmm);
   assert.ok(fill.usedDex);
   assert.ok(fill.out > 50 * 0.03);
+  assert.ok(fill.bookOut > 0);
+  assert.ok(fill.ammOut > 0);
+  assert.ok(Math.abs(fill.bookOut + fill.ammOut - fill.out) < 1e-9);
 });
 
 test("quoteSwap marks negative slippage when actual is below mid", () => {
@@ -73,6 +76,8 @@ test("quoteSwap marks negative slippage when actual is below mid", () => {
   assert.ok(quote.lossAmount > 0);
   assert.ok(quote.slippagePercent < 0);
   assert.equal(quote.routeUsed, "amm");
+  assert.equal(quote.bookOutput, 0);
+  assert.ok(quote.ammOutput > 0);
 });
 
 test("saferSwapAlternatives offers a smaller size when impact is high", () => {

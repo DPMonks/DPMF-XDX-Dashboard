@@ -95,7 +95,7 @@ export function walkBook({ levels, amountIn, inIsBase } = {}) {
       used.push({ ...row, take, out: got });
     }
   }
-  return { out, leftover: left > 0 ? left : 0, used };
+  return { out, leftover: left > 0 ? left : 0, used, bookOut: out, ammOut: 0 };
 }
 
 function applyAmmIn(state, amountIn, tradingFee, inIsBase) {
@@ -135,6 +135,8 @@ export function walkHybrid({
   const state = { base: num(reserveBase), quote: num(reserveQuote) };
   let left = num(amountIn);
   let out = 0;
+  let bookOut = 0;
+  let ammOutTotal = 0;
   let usedAmm = false;
   let usedDex = false;
 
@@ -145,30 +147,32 @@ export function walkHybrid({
       : left;
     if (!(slice > 0)) break;
 
-    const ammOut = applyAmmIn(
+    const sliceAmm = applyAmmIn(
       { base: state.base, quote: state.quote },
       slice,
       tradingFee,
       inIsBase
     );
-    const bookOut = level ? (inIsBase ? slice * level.price : slice / level.price) : 0;
-    const takeBook = level && bookOut >= ammOut && bookOut > 0;
+    const sliceBook = level ? (inIsBase ? slice * level.price : slice / level.price) : 0;
+    const takeBook = level && sliceBook >= sliceAmm && sliceBook > 0;
 
     if (takeBook) {
-      out += bookOut;
+      out += sliceBook;
+      bookOut += sliceBook;
       left -= slice;
       usedDex = true;
       if (inIsBase) {
         level.base_size -= slice;
-        level.quote_size -= bookOut;
+        level.quote_size -= sliceBook;
       } else {
         level.quote_size -= slice;
-        level.base_size -= bookOut;
+        level.base_size -= sliceBook;
       }
       if (level.base_size <= 1e-12 || level.quote_size <= 1e-12) queue.shift();
-    } else if (ammOut > 0) {
+    } else if (sliceAmm > 0) {
       const got = applyAmmIn(state, slice, tradingFee, inIsBase);
       out += got;
+      ammOutTotal += got;
       left -= slice;
       usedAmm = true;
     } else {
@@ -177,7 +181,7 @@ export function walkHybrid({
   }
 
   const route = usedAmm && usedDex ? "hybrid" : usedAmm ? "amm" : usedDex ? "book" : "none";
-  return { out, leftover: left > 0 ? left : 0, route, usedAmm, usedDex };
+  return { out, leftover: left > 0 ? left : 0, route, usedAmm, usedDex, bookOut, ammOut: ammOutTotal };
 }
 
 export function expectedFromMid(amountIn, mid, sellingXdx) {
@@ -209,10 +213,18 @@ export function quoteSwap({
     const out = sellingXdx
       ? ammSwapOut({ reserveIn: reserveBase, reserveOut: reserveQuote, amountIn: input, tradingFee })
       : ammSwapOut({ reserveIn: reserveQuote, reserveOut: reserveBase, amountIn: input, tradingFee });
-    walk = { out, leftover: out > 0 ? 0 : input, route: out > 0 ? "amm" : "none", usedAmm: out > 0, usedDex: false };
+    walk = {
+      out,
+      leftover: out > 0 ? 0 : input,
+      route: out > 0 ? "amm" : "none",
+      usedAmm: out > 0,
+      usedDex: false,
+      bookOut: 0,
+      ammOut: out,
+    };
   } else if (mode === "book") {
     const book = walkBook({ levels: copyLevels(levels, { dexOnly: true }), amountIn: input, inIsBase });
-    walk = { ...book, route: book.out > 0 ? "book" : "none", usedAmm: false, usedDex: book.out > 0 };
+    walk = { ...book, route: book.out > 0 ? "book" : "none", usedAmm: false, usedDex: book.out > 0, bookOut: book.out, ammOut: 0 };
   } else {
     walk = walkHybrid({
       levels,
@@ -250,6 +262,8 @@ export function quoteSwap({
     leftover,
     filledIn,
     routeUsed: walk.route,
+    bookOutput: num(walk.bookOut),
+    ammOutput: num(walk.ammOut),
     slippagePercent,
     priceImpactPercent,
     isNegativeSlippage,
@@ -272,6 +286,8 @@ export function quoteBridgeSwap({ amountIn, fromVenue = {}, toVenue = {}, routin
     return {
       ...hop1,
       routeUsed: "none",
+      bookOutput: 0,
+      ammOutput: 0,
       actualOutput: 0,
       expectedOutput: 0,
       slippagePercent: null,
@@ -299,6 +315,8 @@ export function quoteBridgeSwap({ amountIn, fromVenue = {}, toVenue = {}, routin
     leftover: hop1.leftover || hop2.leftover,
     filledIn: hop1.filledIn,
     routeUsed: hasFill ? "bridge" : "none",
+    bookOutput: hasFill ? num(hop2.bookOutput) : 0,
+    ammOutput: hasFill ? num(hop2.ammOutput) : 0,
     slippagePercent: hasFill ? hop2.slippagePercent : null,
     priceImpactPercent: impact,
     isNegativeSlippage: hasFill && (hop1.isNegativeSlippage || hop2.isNegativeSlippage),

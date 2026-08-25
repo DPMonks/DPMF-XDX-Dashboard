@@ -2028,6 +2028,37 @@ body {
   color: var(--dpmf-text-muted);
 }
 
+.xdx-swap-venues {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.xdx-swap-venues div {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--dpmf-border-soft);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.xdx-swap-venues dt {
+  margin: 0 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dpmf-text-muted);
+}
+
+.xdx-swap-venues dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--dpmf-text-main);
+}
+
 .xdx-swap-row.is-for {
   grid-template-columns: 5.25rem minmax(7.25rem, 1fr);
 }

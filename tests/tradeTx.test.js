@@ -300,11 +300,50 @@ test("hasLpTrustline matches the pool LP line, not a quote IOU", () => {
     hasLpTrustline([{ lp: true, issuer: XDX_XRP_AMM, ticker: "LP" }], spec),
     true
   );
+  const futureAmm = "rFutureAmmAccount111111111111111111";
+  const futureLp = "03EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
+  assert.equal(
+    hasLpTrustline(
+      [{ currency: futureLp.toLowerCase(), issuer: futureAmm, ticker: "LP" }],
+      { amm: futureAmm, lpCurrency: `0x${futureLp}` }
+    ),
+    true
+  );
+  assert.equal(
+    hasLpTrustline(
+      [{ currency: futureLp, issuer: futureAmm, lp: true }],
+      { amm: futureAmm }
+    ),
+    true
+  );
+  assert.equal(
+    hasLpTrustline(
+      [{ currency: "USDC", issuer: futureAmm, ticker: "USDC" }],
+      { amm: futureAmm, lpCurrency: futureLp }
+    ),
+    false
+  );
   const rlusd = quoteAsset("RLUSD");
   assert.equal(
     hasQuoteTrustline(
       [{ currency: RLUSD_HEX, issuer: RLUSD_ISSUER, ticker: "RLUSD" }],
       rlusd
+    ),
+    true
+  );
+  const usdcIssuer = "rUSDCIssuer11111111111111111111111";
+  const usdcHex = "5553444300000000000000000000000000000000";
+  assert.equal(
+    hasQuoteTrustline(
+      [{ currency: usdcHex, issuer: usdcIssuer, ticker: "USDC" }],
+      { issuer: usdcIssuer, currency: "USDC", hex: usdcHex, id: "USDC" }
+    ),
+    true
+  );
+  assert.equal(
+    hasQuoteTrustline(
+      [{ currency: "USDC", issuer: usdcIssuer, ticker: "USDC" }],
+      { issuer: usdcIssuer, currency: "USDC", hex: usdcHex, id: "USDC" }
     ),
     true
   );

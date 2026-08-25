@@ -98,7 +98,10 @@ function LpAccessLock({ open }) {
 
 function recommendationCopy(rec, t, impactText) {
   if (!rec) return "";
-  if (rec.reason === "half") return (t.swapRecHalf || "").replace("{impact}", impactText || "—");
+  if (rec.reason === "half") {
+    const impact = impactText && !String(impactText).includes("—") ? impactText : "this much";
+    return (t.swapRecHalf || "").replace("{impact}", impact);
+  }
   if (rec.reason === "nobook") return t.swapRecNoBook;
   if (rec.reason === "noamm") return t.swapRecNoAmm;
   if (rec.id === "amm") return t.swapRecAmm;
@@ -489,12 +492,30 @@ export default function XdxSwapPanel() {
             <div className="xdx-swap-receive-block">
               <span>{t.swapReceive || "Receive"}</span>
               <p className="xdx-swap-out">
-                {gotFill ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "—"}
+                {gotFill ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "-"}
               </p>
               <small>
                 {t.swapReceiveHint || "total tokens"}
                 {toTicker ? ` · ${toTicker}` : ""}
               </small>
+              {gotFill ? (
+                <dl className="xdx-swap-venues">
+                  <div>
+                    <dt>{t.swapFromBook || "Order book"}</dt>
+                    <dd>
+                      {formatToken(quote.bookOutput || 0, locale, sellingXdx ? 4 : 2)}
+                      {toTicker ? ` ${toTicker}` : ""}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t.swapFromAmm || "AMM"}</dt>
+                    <dd>
+                      {formatToken(quote.ammOutput || 0, locale, sellingXdx ? 4 : 2)}
+                      {toTicker ? ` ${toTicker}` : ""}
+                    </dd>
+                  </div>
+                </dl>
+              ) : null}
             </div>
           </div>
 
