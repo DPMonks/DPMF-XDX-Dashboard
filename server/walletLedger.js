@@ -335,7 +335,7 @@ export async function loadWalletLpFromLedger(address, options = {}) {
           hex: known?.quoteHex,
         },
         options
-      );
+      ).catch(() => null);
       const pair = known?.pair || live?.pair || catalog?.pool || catalog?.pool_name || "";
       const position = lpPositionFromPool(
         holding.lp_balance,
@@ -345,10 +345,10 @@ export async function loadWalletLpFromLedger(address, options = {}) {
           quote: known?.quote || live?.quote || catalog?.quote,
           amm_account: live?.amm_account || known?.amm || holding.amm_account,
           lp_currency: live?.lp_currency || holding.lp_currency,
-          reserve_asset: live?.reserve_xdx ?? live?.reserve_asset,
-          reserve_currency: live?.reserve_currency ?? live?.reserve_quote,
-          lp_supply: live?.lp_supply,
-          trading_fee: live?.trading_fee,
+          reserve_asset: live?.reserve_xdx ?? live?.reserve_asset ?? catalog?.reserve_asset ?? catalog?.reserve_xdx,
+          reserve_currency: live?.reserve_currency ?? live?.reserve_quote ?? catalog?.reserve_currency ?? catalog?.reserve_quote,
+          lp_supply: live?.lp_supply ?? catalog?.lp_supply,
+          trading_fee: live?.trading_fee ?? catalog?.trading_fee ?? 1000,
           volume24h: catalog?.volume24h,
           volume24hXdx: catalog?.volume24hXdx,
           volume24hXrp: catalog?.volume24hXrp,

@@ -295,3 +295,33 @@ test("wallet LP from ledger keeps XDX/XSQUAD tokens off the XDX/XRP pair", async
   assert.equal(lpHeldForPair(body.positions, "XDX/XRP", "XRP"), 4);
   assert.equal(lpHeldForPair(body.positions, "XDX/XSQUAD", "XSQUAD"), 88.5);
 });
+
+test("wallet LP from ledger keeps the XDX/XRP line when live AMM lookup fails", async () => {
+  const fetchImpl = async (_url, options) => {
+    if (options?.body) {
+      const body = JSON.parse(options.body);
+      if (body.method === "account_lines") {
+        return {
+          ok: true,
+          json: async () => ({
+            result: {
+              status: "success",
+              lines: [{ account: XDX_XRP_AMM, currency: XDX_XRP_LP_HEX, balance: "9.5" }],
+            },
+          }),
+        };
+      }
+      if (body.method === "amm_info") {
+        return { ok: false, status: 500, json: async () => ({ error: "timeout" }) };
+      }
+      return { ok: true, json: async () => ({ result: { status: "success" } }) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  const body = await loadWalletLpFromLedger("rWallet111111111111111111111111111", {
+    fetchImpl,
+    fresh: true,
+  });
+  assert.equal(body.positions[0]?.pool, "XDX/XRP");
+  assert.equal(body.positions[0]?.lp_balance, 9.5);
+});

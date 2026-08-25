@@ -10,12 +10,9 @@ import { fillMissingXdxFiat } from "../utils/fiatFx.js";
 import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
 import { looksLikeXrpPerXdx, saneXrpUsd } from "../utils/recordedPrice.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
-import {
-  isXdxAmmPair,
-  lpDepositIncomeRows,
-  lpFeeIncomeRows,
-  mergeLpIncomeRows,
-} from "./lpIncome.js";
+import { isXdxAmmPair, lpFeeIncomeRows } from "./lpIncome.js";
+
+const LP_CURRENCY_RE = /^03[A-F0-9]{38}$/i;
 
 export const DROPS = 1_000_000;
 export const DEFAULT_RESERVE_BASE_DROPS = 1_000_000;
@@ -247,6 +244,62 @@ export function resolveLpPairName(pool = {}, pairHint = "") {
     return "";
   }
   return named || "XDX/XRP";
+}
+
+export function lpHoldingsFromLines(rows = []) {
+  const out = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const currency = String(row?.currency || row?.lp_currency || "").toUpperCase();
+    if (!LP_CURRENCY_RE.test(currency)) continue;
+    const tokens = num(row?.balance ?? row?.lp_balance);
+    if (!(tokens > 0)) continue;
+    out.push({
+      lp_currency: currency,
+      amm_account: String(row?.account || row?.issuer || row?.amm_account || "").trim(),
+      lp_balance: tokens,
+    });
+  }
+  return out;
+}
+
+export function positionsFromLines(lines = [], pools = []) {
+  const holdings = lpHoldingsFromLines(lines);
+  if (!holdings.length) return [];
+  const byAccount = new Map();
+  const byHex = new Map();
+  for (const pool of Array.isArray(pools) ? pools : []) {
+    const amm = String(pool?.amm_account || pool?.amm || "").toLowerCase();
+    const hex = String(pool?.lp_currency || pool?.lp_currency_hex || "").toUpperCase();
+    if (amm) byAccount.set(amm, pool);
+    if (hex) byHex.set(hex, pool);
+  }
+  const out = [];
+  for (const holding of holdings) {
+    const catalog =
+      byAccount.get(String(holding.amm_account || "").toLowerCase()) ||
+      byHex.get(holding.lp_currency) ||
+      null;
+    const pair =
+      resolveLpPairName(
+        {
+          ...(catalog || {}),
+          amm_account: holding.amm_account,
+          lp_currency: holding.lp_currency,
+        },
+        catalog?.pool || catalog?.pool_name || catalog?.pair
+      ) || "";
+    if (!pair) continue;
+    const position = lpPositionFromPool(
+      holding.lp_balance,
+      mergeLpPoolSource(
+        { ...holding, pool: pair, pool_name: pair, pair },
+        catalog
+      ),
+      pair
+    );
+    if (position) out.push(position);
+  }
+  return out;
 }
 
 export function lpPositionFromPool(lpBalance, pool = {}, pairHint = "") {
@@ -715,6 +768,7 @@ export function composeWalletSnapshot({
   flows = [],
   offers = [],
   ledgerActivity = [],
+  lines = [],
 } = {}) {
   if (!address) return emptyWalletSnapshot(null);
 
@@ -766,6 +820,19 @@ export function composeWalletSnapshot({
       lpByPair.set(position.pool, position);
     }
   }
+  const lineRows = Array.isArray(lines) && lines.length
+    ? lines
+    : Array.isArray(balances.lines) && balances.lines.length
+      ? balances.lines
+      : Array.isArray(balances.raw?.lines)
+        ? balances.raw.lines
+        : [];
+  for (const position of positionsFromLines(lineRows, pools)) {
+    const previous = lpByPair.get(position.pool);
+    if (!previous || position.lp_balance > previous.lp_balance) {
+      lpByPair.set(position.pool, position);
+    }
+  }
   const lp = [...lpByPair.values()];
 
   const xrpBook = books?.books?.["XDX/XRP"] || null;
@@ -785,25 +852,16 @@ export function composeWalletSnapshot({
     xrpUsd,
     RLUSD: rlusdUsd,
   };
-  const income = mergeLpIncomeRows(
-    lpFeeIncomeRows({
-      positions: lp,
-      flows,
-      xdxUsd,
-      xrpUsd,
-      rlusdUsd,
-      prices: priceBook,
-    }),
-    lpDepositIncomeRows({
-      activity: mergeWalletActivity(ledgerActivity, pending.activity),
-      positions: lp,
-      pools,
-      xdxUsd,
-      xrpUsd,
-      rlusdUsd,
-      prices: priceBook,
-    })
-  );
+  const ledgerRows = mergeWalletActivity(ledgerActivity, pending.activity);
+  const income = lpFeeIncomeRows({
+    positions: lp,
+    flows,
+    activity: ledgerRows,
+    xdxUsd,
+    xrpUsd,
+    rlusdUsd,
+    prices: priceBook,
+  });
   return {
     address,
     signedIn: true,

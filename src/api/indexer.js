@@ -1000,6 +1000,7 @@ export async function getWalletLpIncome(address, extra = {}) {
     account: body?.account || name,
     pair: body?.pair || extra.pair || "XDX/XRP",
     activity: asArray(body?.activity),
+    days: asArray(body?.days),
     complete: Boolean(body?.complete) || !body?.marker,
     marker: body?.marker || null,
     source: body?.source || null,
@@ -1034,7 +1035,7 @@ export async function getConnectedWallet(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return emptyWalletSnapshot(null);
 
-  const [balances, networth, account, lpRows, rank, prices, token, pools, books, flows, offers, ledgerActivity] =
+  const [balances, networth, account, lpRows, rank, prices, token, pools, books, flows, offers, ledgerActivity, lines] =
     await Promise.all([
       getWalletBalances(name).catch(() => ({})),
       getWalletNetworth(name).catch(() => ({})),
@@ -1048,6 +1049,7 @@ export async function getConnectedWallet(address, extra = {}) {
       getXdxFlows().catch(() => []),
       getWalletOffers(name, extra).catch(() => []),
       getWalletActivity(name, extra).catch(() => []),
+      getWalletLines(name, extra).catch(() => []),
     ]);
 
   return composeWalletSnapshot({
@@ -1064,5 +1066,6 @@ export async function getConnectedWallet(address, extra = {}) {
     flows,
     offers,
     ledgerActivity,
+    lines: lines.length ? lines : balances.lines || balances.raw?.lines || [],
   });
 }

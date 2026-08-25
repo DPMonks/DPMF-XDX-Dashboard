@@ -35,7 +35,10 @@ import {
   incomePairChoices,
   incomeRowsForPair,
   lpIncomeCsv,
+  mergeRecordedLpIncome,
   pageLpIncome,
+  readRecordedLpIncome,
+  writeRecordedLpIncome,
 } from "../wallet/lpIncome";
 
 function XrpColumn({ label, tone, percent, value, locale, empty }) {
@@ -220,6 +223,8 @@ function LpInfographic({ position, earn, locale, t, empty }) {
 function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook, locale, t, empty }) {
   const [incomePair, setIncomePair] = useState(DEFAULT_INCOME_PAIR);
   const [historyActivity, setHistoryActivity] = useState(null);
+  const [historyDays, setHistoryDays] = useState([]);
+  const [recordedRows] = useState(() => readRecordedLpIncome(address));
   const [loading, setLoading] = useState(() => Boolean(address) && !empty);
   const [historyComplete, setHistoryComplete] = useState(false);
   const [daysShown, setDaysShown] = useState(INCOME_PAGE_DAYS);
@@ -234,6 +239,8 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
     pair: incomePair,
     snapshotRows,
     historyActivity,
+    historyDays,
+    recordedRows,
     positions,
     pools,
     prices: priceBook,
@@ -252,6 +259,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
     const cached = cacheRef.current.get(key);
     if (cached) {
       setHistoryActivity(cached.activity);
+      setHistoryDays(Array.isArray(cached.days) ? cached.days : []);
       setHistoryComplete(cached.complete);
       setLoading(false);
       return undefined;
@@ -264,6 +272,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
         if (cancelled) return;
         cacheRef.current.set(key, result);
         setHistoryActivity(result.activity);
+        setHistoryDays(Array.isArray(result.days) ? result.days : []);
         setHistoryComplete(result.complete);
         setLoading(false);
       })
@@ -315,14 +324,21 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
     const cached = address ? cacheRef.current.get(`${address}:${next}`) : null;
     if (cached) {
       setHistoryActivity(cached.activity);
+      setHistoryDays(Array.isArray(cached.days) ? cached.days : []);
       setHistoryComplete(cached.complete);
       setLoading(false);
       return;
     }
     setHistoryActivity(null);
+    setHistoryDays([]);
     setHistoryComplete(false);
     setLoading(true);
   }
+
+  useEffect(() => {
+    if (!address || empty || !all.length) return;
+    writeRecordedLpIncome(address, mergeRecordedLpIncome(readRecordedLpIncome(address), all));
+  }, [address, empty, all]);
 
   return (
     <section className={`wallet-book wallet-income${empty ? " is-empty" : " is-filled"}`}>
