@@ -1,17 +1,24 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pairParts } from "../utils/currency";
 import { displayPoolSplit, formatPoolPct } from "../utils/poolSplit";
 import { formatNumber, formatToken, formatUsd, formatUsdPrice, formatWhen, shortAddress } from "../utils/format";
 import { formatAmmFee } from "../wallet/composeWallet";
 import {
+  ammPoolName,
+  applyLivePoolReserves,
+  compactPoolAmount,
   filterAmmPools,
+  isLpPoolTrade,
   mergeAmmPoolLists,
   poolAssetTrustlineId,
+  poolKey,
   poolQuoteTicker,
+  poolSplitMeta,
   searchAmmAccount,
   searchPairHint,
+  tradePoolHint,
 } from "../ammPools";
-import { discoverLiveAmmPool } from "../api/indexer";
+import { discoverLiveAmmPool, getLiveLpReserves } from "../api/indexer";
 import { xdxTrustSetTxjson } from "../constants/ledger";
 import { useWallet } from "../context/useWallet";
 import {
@@ -30,12 +37,28 @@ import Skeleton from "./Skeleton";
 import WalletButton from "./WalletButton";
 import WalletModal from "./WalletModal";
 
-function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
+function SplitBar({ asset, quote, xdxPct, quotePct, lead, reserveXdx, reserveQuote, lpSupply, t }) {
   const split = displayPoolSplit(xdxPct, quotePct);
+  const meta = poolSplitMeta({
+    reserve_asset: reserveXdx,
+    reserve_currency: reserveQuote,
+    lp_supply: lpSupply,
+  });
   const ready = split.measured;
   const xdxLead = lead === "xdx" || split.xdxPct >= split.quotePct;
   const xdxShare = Math.max(split.xdxPct, 0);
   const quoteShare = Math.max(split.quotePct, 0);
+  const lpLine =
+    meta.xdxPerLp != null && meta.quotePerLp != null && meta.lpSupply != null
+      ? (t.poolLpLine || "1 LP · {xdx} {asset} + {quote} {quoteAsset} · {lp} LP")
+          .replace("{xdx}", compactPoolAmount(meta.xdxPerLp))
+          .replace("{asset}", asset)
+          .replace("{quote}", compactPoolAmount(meta.quotePerLp))
+          .replace("{quoteAsset}", quote)
+          .replace("{lp}", compactPoolAmount(meta.lpSupply))
+      : meta.lpSupply != null
+        ? `LP ${compactPoolAmount(meta.lpSupply)}`
+        : "";
 
   return (
     <div className={`pool-split ${ready ? (xdxLead ? "is-xdx-lead" : "is-quote-lead") : "is-pending"}`}>
@@ -44,11 +67,19 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
           <i className="pool-split-swatch is-xdx" aria-hidden="true" />
           <span className="pool-split-pct">{formatPoolPct(split.xdxPct)}%</span>
           <span className="pool-split-asset">{asset}</span>
+          {meta.reserveXdx != null ? (
+            <span className="pool-split-amt">{compactPoolAmount(meta.reserveXdx)}</span>
+          ) : null}
         </span>
         <span className="pool-split-ratio">
-          {`${formatPoolPct(split.xdxPct)} / ${formatPoolPct(split.quotePct)}`}
+          {meta.lpSupply != null
+            ? `LP ${compactPoolAmount(meta.lpSupply)}`
+            : `${formatPoolPct(split.xdxPct)} / ${formatPoolPct(split.quotePct)}`}
         </span>
         <span className={`pool-split-quote ${!xdxLead ? "is-lead" : ""}`}>
+          {meta.reserveQuote != null ? (
+            <span className="pool-split-amt">{compactPoolAmount(meta.reserveQuote)}</span>
+          ) : null}
           <span className="pool-split-pct">{formatPoolPct(split.quotePct)}%</span>
           <span className="pool-split-asset">{quote}</span>
           <i className="pool-split-swatch is-quote" aria-hidden="true" />
@@ -57,7 +88,7 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
       <div
         className={`pool-split-bar ${ready ? (xdxLead ? "is-xdx-lead" : "is-quote-lead") : "is-pending"}`}
         role="img"
-        aria-label={`${formatPoolPct(split.xdxPct)} percent ${asset}, ${formatPoolPct(split.quotePct)} percent ${quote}`}
+        aria-label={`${formatPoolPct(split.xdxPct)} percent ${asset} ${compactPoolAmount(meta.reserveXdx)}, ${formatPoolPct(split.quotePct)} percent ${quote} ${compactPoolAmount(meta.reserveQuote)}, LP ${compactPoolAmount(meta.lpSupply)}`}
       >
         <span
           className="pool-split-bar-xdx"
@@ -67,8 +98,9 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
           className="pool-split-bar-quote"
           style={{ flexGrow: quoteShare, flexShrink: 0, flexBasis: 0 }}
         />
-        <i className="pool-split-mid" aria-hidden="true" />
+        <i className="pool-split-mid" style={{ left: `${xdxShare}%` }} aria-hidden="true" />
       </div>
+      {lpLine ? <p className="pool-split-lp">{lpLine}</p> : null}
     </div>
   );
 }
@@ -109,10 +141,38 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
   const [signKind, setSignKind] = useState("quote");
   const [signAsset, setSignAsset] = useState("XDX");
   const [lineError, setLineError] = useState("");
+  const [liveByKey, setLiveByKey] = useState({});
   const lookupGen = useRef(0);
   const lookupTimer = useRef(0);
+  const liveTimer = useRef(0);
   const catalog = mergeAmmPoolLists(pools, found);
-  const visible = filterAmmPools(catalog, query);
+  const filtered = filterAmmPools(catalog, query);
+  const visible = filtered.map((row) => applyLivePoolReserves(row, liveByKey[poolKey(row)]));
+
+  function pullLive(pool, extra = {}) {
+    if (!pool) return;
+    getLiveLpReserves({
+      pair: pool.pool || pool.pool_name,
+      quote: poolQuoteTicker(pool),
+      issuer: pool.quote_issuer,
+      hex: pool.quote_hex,
+      ammAccount: pool.amm_account,
+      fresh: extra.fresh,
+    })
+      .then((live) => {
+        if (!live || live.empty || live.reserve_source === "empty") return;
+        setLiveByKey((current) => ({ ...current, [poolKey(pool)]: live }));
+      })
+      .catch(() => {});
+  }
+
+  function refreshLive(targets, extra = {}) {
+    const rows = (Array.isArray(targets) ? targets : []).filter(Boolean).slice(0, 8);
+    window.clearTimeout(liveTimer.current);
+    liveTimer.current = window.setTimeout(() => {
+      rows.forEach((pool) => pullLive(pool, extra));
+    }, extra.fresh ? 220 : 40);
+  }
   const signing = status === "loading" || status === "waiting";
   const account = liveWalletAddress(walletAddress);
 
@@ -165,6 +225,22 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     }
     lookupTimer.current = window.setTimeout(() => lookup(value), 320);
   }
+
+  useEffect(() => {
+    function onTrade(event) {
+      const detail = event?.detail || {};
+      if (!isLpPoolTrade(detail)) return;
+      const pair = tradePoolHint(detail);
+      const rows = filterAmmPools(mergeAmmPoolLists(pools, found), query);
+      const targets = pair ? rows.filter((row) => ammPoolName(row) === pair) : rows.slice(0, 6);
+      refreshLive(targets.length ? targets : rows.slice(0, 6), { fresh: true });
+    }
+    window.addEventListener("dpmf-trade-executed", onTrade);
+    return () => {
+      window.removeEventListener("dpmf-trade-executed", onTrade);
+      window.clearTimeout(liveTimer.current);
+    };
+  }, [found, pools, query]);
 
   if (loading && !pools.length && !found.length) {
     return (
@@ -225,6 +301,10 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
               xdxPct={pool.xdx_pct}
               quotePct={pool.quote_pct}
               lead={pool.lead}
+              reserveXdx={pool.reserve_asset ?? pool.reserve_xdx}
+              reserveQuote={pool.reserve_currency}
+              lpSupply={pool.lp_supply}
+              t={t}
             />
             <dl className="pool-stats">
               {pool.amm_account ? (

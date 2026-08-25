@@ -530,6 +530,7 @@ export const api = {
     if (query.quote) search.set("quote", query.quote);
     if (query.issuer || query.quote_issuer) search.set("issuer", query.issuer || query.quote_issuer);
     if (query.hex || query.quote_hex) search.set("hex", query.hex || query.quote_hex);
+    if (query.fresh) search.set("fresh", "1");
     return getJson(`/lp-pools/live?${search}`, { retries: 1, queue: false, cache: false });
   },
   prices: () => getJson(endpoint("prices"), { queue: false }),
