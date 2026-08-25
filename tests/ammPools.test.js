@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterAmmPools, mergeAmmPoolLists, searchAmmAccount, searchPairHint } from "../src/ammPools.js";
+import { filterAmmPools, mergeAmmPoolLists, poolAssetTrustlineId, poolQuoteTicker, searchAmmAccount, searchPairHint } from "../src/ammPools.js";
+import { XDX_ISSUER, XDX_XRP_AMM, XDX_XRP_LP_HEX, XIO_ISSUER, xdxTrustSetTxjson } from "../src/constants/ledger.js";
+import { lpTrustSetTxjson, poolForQuote, quoteTrustSetTxjson, resolveQuote } from "../src/xaman/tradeTx.js";
 import { knownLivePoolSpecs } from "../server/liveCatalog.js";
 
 test("AMM pool search matches XDX / quote, pair, or AMM account", () => {
@@ -41,6 +43,21 @@ test("mergeAmmPoolLists keeps a newly found live pool beside the catalog", () =>
     merged.map((row) => row.pool),
     ["XDX/XRP", "XDX/USDC"]
   );
+});
+
+test("XRP pools use an XDX trustline; other pools use the quote asset", () => {
+  assert.equal(poolAssetTrustlineId({ pool: "XDX/XRP", quote: "XRP" }), "XDX");
+  assert.equal(poolAssetTrustlineId({ pool: "XDX/XIO", quote: "XIO" }), "XIO");
+  assert.equal(poolAssetTrustlineId({ pool: "XDX/RLUSD" }), "RLUSD");
+  assert.equal(poolQuoteTicker({ pool: "XDX/USDC" }), "USDC");
+  const xdxLine = xdxTrustSetTxjson("rA");
+  assert.equal(xdxLine.LimitAmount.issuer, XDX_ISSUER);
+  const xio = resolveQuote("XIO", { quote_issuer: XIO_ISSUER });
+  assert.equal(quoteTrustSetTxjson("rA", xio).LimitAmount.issuer, XIO_ISSUER);
+  const xrpPool = { pool: "XDX/XRP", quote: "XRP", amm_account: XDX_XRP_AMM, lp_currency: XDX_XRP_LP_HEX };
+  const lp = lpTrustSetTxjson("rA", poolForQuote(resolveQuote("XRP"), [xrpPool], xrpPool));
+  assert.equal(lp.LimitAmount.issuer, XDX_XRP_AMM);
+  assert.equal(lp.LimitAmount.currency, XDX_XRP_LP_HEX);
 });
 
 test("known live pool specs include featured XDX quotes, not only XRP and RLUSD", () => {
