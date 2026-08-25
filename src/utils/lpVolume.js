@@ -303,7 +303,8 @@ export function overlayPoolFlowVolumes(pools = [], flows = [], now = Date.now())
 
 export function attachPoolVolumes(pool = {}, volumes = {}) {
   const incoming = Number(volumes.volume24hXdx);
-  const volume24hXdx = Number.isFinite(incoming) && incoming >= 0 ? incoming : numPos(pool.volume24h);
+  const existing = numPos(pool.volume24hXdx) || numPos(pool.volume24h);
+  const volume24hXdx = incoming > 0 ? incoming : existing || (Number.isFinite(incoming) && incoming >= 0 ? incoming : 0);
   const volume7dXdx = numPos(volumes.volume7dXdx);
   const volume24hXrp = numPos(volumes.volume24hXrp);
   const volume24hUsd = numPos(volumes.volume24hUsd);

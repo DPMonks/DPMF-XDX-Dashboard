@@ -1522,49 +1522,77 @@ body {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+  align-items: stretch;
 }
 
 .pool-card {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 32px 92px minmax(0, 1fr) 104px;
+  grid-template-areas:
+    "head"
+    "split"
+    "stats"
+    "actions";
+  height: 420px;
+  min-height: 420px;
+  max-height: 420px;
+  overflow: hidden;
   background: linear-gradient(180deg, rgba(18, 16, 28, 0.96) 0%, #0b0c10 100%);
   border: 1px solid var(--dpmf-border-soft);
   border-radius: 16px;
-  padding: 20px 20px 18px;
-  min-height: 228px;
+  padding: 16px 16px 14px;
   box-shadow:
     0 0 18px rgba(0, 234, 255, 0.16),
     0 0 22px rgba(199, 112, 255, 0.2);
 }
 
 .pool-card-head {
+  grid-area: head;
   display: flex;
   justify-content: space-between;
   gap: 8px;
   align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  margin: 0;
 }
 
 .pool-card .pair-badge {
   margin: 0;
   padding: 5px 12px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
+  flex: 0 1 auto;
+  max-width: 56%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pool-updated {
   color: var(--dpmf-text-muted);
-  font-size: 11px;
+  font-size: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pool-split {
-  margin: 0 0 12px;
-  padding: 8px 10px 8px;
+  grid-area: split;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
   border-radius: 12px;
   background: rgba(8, 8, 14, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.04);
+  overflow: hidden;
 }
 
 .pool-split-labels {
@@ -1581,10 +1609,10 @@ body {
 .pool-split-quote {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 4px;
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .pool-split-pct {
@@ -1644,7 +1672,7 @@ body {
 }
 
 .pool-split-labels .is-lead {
-  font-size: 14px;
+  font-size: 13px;
   text-shadow: 0 0 12px currentColor;
 }
 
@@ -1691,14 +1719,16 @@ body {
 }
 
 .pool-split-lp {
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   color: var(--dpmf-text-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.01em;
   text-align: center;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pool-split.is-pending .pool-split-bar-xdx,
@@ -1711,25 +1741,40 @@ body {
 }
 
 .pool-stats {
+  grid-area: stats;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px 14px;
-  margin: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  align-content: start;
+  gap: 4px 12px;
+  min-width: 0;
+  min-height: 0;
+  margin: 8px 0 0;
+  overflow: hidden;
+}
+
+.pool-stats > div {
+  min-width: 0;
 }
 
 .pool-stats dt {
   color: var(--dpmf-text-muted);
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pool-stats dd {
-  margin: 4px 0 0;
-  font-size: 14px;
+  margin: 2px 0 0;
+  font-size: 12px;
   font-weight: 600;
   color: #d8caff;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pool-stats dd .is-volume {
@@ -1743,12 +1788,13 @@ body {
 }
 
 .pool-card-actions {
+  grid-area: actions;
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-items: stretch;
   gap: 8px;
-  margin-top: auto;
-  padding-top: 14px;
+  margin: 0;
+  padding-top: 8px;
 }
 
 .pool-card-actions .connect-wallet-btn {
@@ -3441,8 +3487,7 @@ body {
   }
 
   .pool-card {
-    padding: 18px 16px 16px;
-    min-height: 0;
+    padding: 14px 14px 12px;
   }
 
   .token-details-grid {
@@ -3483,7 +3528,7 @@ body {
   }
 
   .pool-card {
-    padding: 16px 14px 14px;
+    padding: 14px 12px 12px;
   }
 
   .pool-card .pair-badge {
@@ -3637,10 +3682,6 @@ body {
 @media (max-height: 500px) and (orientation: landscape) {
   .activity-plot {
     height: 170px;
-  }
-
-  .pool-card {
-    min-height: 0;
   }
 
   .wallet-modal-overlay {

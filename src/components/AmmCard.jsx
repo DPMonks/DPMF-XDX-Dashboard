@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { pairParts } from "../utils/currency";
 import { displayPoolSplit, formatPoolPct } from "../utils/poolSplit";
-import { formatNumber, formatToken, formatUsd, formatUsdPrice, formatWhen, shortAddress } from "../utils/format";
+import { formatToken, formatWhen, shortAddress } from "../utils/format";
 import { formatAmmFee } from "../wallet/composeWallet";
 import {
   ammPoolName,
@@ -17,6 +17,7 @@ import {
   poolKey,
   poolQuoteTicker,
   poolSplitMeta,
+  rememberPoolVolume,
   searchAmmAccount,
   searchPairHint,
   tradePoolHint,
@@ -104,7 +105,7 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead, reserveXdx, reserveQuo
         />
         <i className="pool-split-mid" style={{ left: `${xdxShare}%` }} aria-hidden="true" />
       </div>
-      {lpLine ? <p className="pool-split-lp">{lpLine}</p> : null}
+      <p className="pool-split-lp">{lpLine || "\u00a0"}</p>
     </div>
   );
 }
@@ -153,13 +154,9 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
   const catalog = mergeAmmPoolLists(pools, found);
   const filtered = filterAmmPools(catalog, query);
   const visible = filtered.map((row) => {
-    const live = applyLivePoolReserves(row, liveByKey[poolKey(row)]);
-    const catalogVol = Number(live.volume24h ?? live.volume24hXdx);
-    const recorded = Number(volumeByKey[poolKey(row)]);
-    const volume24h = Math.max(
-      Number.isFinite(catalogVol) && catalogVol > 0 ? catalogVol : 0,
-      Number.isFinite(recorded) ? recorded : 0
-    );
+    const key = poolKey(row);
+    const live = applyLivePoolReserves(row, liveByKey[key]);
+    const volume24h = rememberPoolVolume(key, live.volume24h ?? live.volume24hXdx, volumeByKey[key]);
     return { ...live, volume24h, volume24hXdx: volume24h, volumeUnit: "xdx" };
   });
 
@@ -318,7 +315,7 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     return (
       <div className="pool-grid">
         {Array.from({ length: 6 }, (_, i) => (
-          <Skeleton key={i} height={260} />
+          <Skeleton key={i} height={420} />
         ))}
       </div>
     );
@@ -361,11 +358,9 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
           >
             <header className="pool-card-head">
               <span className="pair-badge">{pool.pool}</span>
-              {pool.updated && (
-                <span className="pool-updated">
-                  {t.updated} {formatWhen(pool.updated, locale)}
-                </span>
-              )}
+              <span className="pool-updated">
+                {pool.updated ? `${t.updated} ${formatWhen(pool.updated, locale)}` : "\u00a0"}
+              </span>
             </header>
             <SplitBar
               asset={asset}
@@ -379,69 +374,42 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
               t={t}
             />
             <dl className="pool-stats">
-              {pool.amm_account ? (
-                <div>
-                  <dt>{t.ammAccount}</dt>
-                  <dd title={pool.amm_account}>{shortAddress(pool.amm_account)}</dd>
-                </div>
-              ) : null}
-              {pool.tvl != null ? (
-                <div>
-                  <dt>{t.tvl}</dt>
-                  <dd>{formatUsd(pool.tvl, locale)}</dd>
-                </div>
-              ) : null}
-              {pool.price != null ? (
-                <div>
-                  <dt>{t.price}</dt>
-                  <dd>{formatUsdPrice(pool.price, locale)}</dd>
-                </div>
-              ) : null}
+              <div>
+                <dt>{t.ammAccount}</dt>
+                <dd title={pool.amm_account || ""}>{pool.amm_account ? shortAddress(pool.amm_account) : "—"}</dd>
+              </div>
               <div>
                 <dt>
                   {t.reserve} {asset}
                 </dt>
-                <dd>{formatToken(pool.reserve_asset, locale)}</dd>
+                <dd title={formatToken(pool.reserve_asset, locale)}>{compactPoolAmount(pool.reserve_asset)}</dd>
               </div>
-              {pool.reserve_currency != null ? (
-                <div>
-                  <dt>
-                    {t.reserve} {quoteName}
-                  </dt>
-                  <dd>{formatToken(pool.reserve_currency, locale)}</dd>
-                </div>
-              ) : (
-                <div>
-                  <dt>{t.pair}</dt>
-                  <dd>{quoteName}</dd>
-                </div>
-              )}
-              {pool.lp_currency ? (
-                <div>
-                  <dt>{t.lp}</dt>
-                  <dd title={pool.lp_currency}>{shortAddress(pool.lp_currency)}</dd>
-                </div>
-              ) : null}
-              {pool.lp_supply != null ? (
-                <div>
-                  <dt>{t.lpSupply}</dt>
-                  <dd>{formatToken(pool.lp_supply, locale)}</dd>
-                </div>
-              ) : null}
+              <div>
+                <dt>
+                  {t.reserve} {quoteName}
+                </dt>
+                <dd title={formatToken(pool.reserve_currency, locale)}>
+                  {pool.reserve_currency != null ? compactPoolAmount(pool.reserve_currency) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt>{t.lp}</dt>
+                <dd title={pool.lp_currency || ""}>{pool.lp_currency ? shortAddress(pool.lp_currency) : "—"}</dd>
+              </div>
+              <div>
+                <dt>{t.lpSupply}</dt>
+                <dd title={formatToken(pool.lp_supply, locale)}>
+                  {pool.lp_supply != null ? compactPoolAmount(pool.lp_supply) : "—"}
+                </dd>
+              </div>
               <div>
                 <dt>{t.fee}</dt>
                 <dd>{formatAmmFee(pool.trading_fee, locale)}</dd>
               </div>
-              {pool.apr != null ? (
-                <div>
-                  <dt>{t.apr}</dt>
-                  <dd>{`${formatNumber(pool.apr, locale)}%`}</dd>
-                </div>
-              ) : null}
-              <div>
+              <div className="is-volume-stat">
                 <dt>{t.volume24h}</dt>
-                <dd>
-                  <span className="is-volume">{formatToken(pool.volume24h ?? 0, locale)}</span>{" "}
+                <dd title={formatToken(pool.volume24h ?? 0, locale)}>
+                  <span className="is-volume">{compactPoolAmount(pool.volume24h ?? 0)}</span>{" "}
                   <span className="pool-volume-unit">{t.xdx}</span>
                 </dd>
               </div>

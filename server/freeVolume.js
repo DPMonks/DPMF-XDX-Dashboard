@@ -261,7 +261,13 @@ function collectVolumePairs(requested = [], dex = {}, gecko = {}, flows = []) {
 export function applyPoolVolumes(pools = [], byPair = {}) {
   return (Array.isArray(pools) ? pools : []).map((pool) => {
     const key = xdxPairKey(pool.pool || pool.pool_name || pool.pair);
-    const vol = byPair[key] || { volume24hXdx: 0, source: "recorded" };
+    const vol = byPair[key];
+    if (!vol) {
+      return attachPoolVolumes(pool, {
+        volume24hXdx: Number(pool.volume24hXdx ?? pool.volume24h) || 0,
+        source: pool.volumeSource || "recorded",
+      });
+    }
     return attachPoolVolumes(pool, vol);
   });
 }

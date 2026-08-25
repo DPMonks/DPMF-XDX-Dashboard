@@ -365,4 +365,8 @@ test("every pool records 24h XDX volume, including new pairs with no tape", () =
   assert.equal(applied[0].volume24h, 0);
   assert.equal(applied[0].volumeUnit, "xdx");
   assert.equal(applied[1].volume24h, 2000);
+  const kept = applyPoolVolumes([{ pool: "XDX/XRP", volume24h: 8_000_000 }], {});
+  assert.equal(kept[0].volume24h, 8_000_000);
+  const flicker = attachPoolVolumes({ pool: "XDX/XRP", volume24h: 8_000_000 }, { volume24hXdx: 0, source: "empty" });
+  assert.equal(flicker.volume24h, 8_000_000);
 });

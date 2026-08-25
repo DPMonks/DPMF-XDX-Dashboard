@@ -5,6 +5,9 @@ import {
   applyTradePoolReserves,
   applyTradePoolVolume,
   looksLikeLpAsQuote,
+  rememberPoolVolume,
+  resetHeldPoolVolumes,
+  rollingPoolVolume,
   compactPoolAmount,
   filterAmmPools,
   isLpPoolTrade,
@@ -185,6 +188,19 @@ test("add or remove LP updates the card from the signed amounts immediately", ()
   );
   assert.equal(leaked.reserve_currency, 4);
   assert.equal(leaked.lp_supply, 56047.4283);
+});
+
+test("rolling 24h volume keeps the last positive total when a refresh drops to 0", () => {
+  resetHeldPoolVolumes();
+  assert.equal(rollingPoolVolume(10_645_018, 0), 10_645_018);
+  assert.equal(rollingPoolVolume(0, 10_645_018), 10_645_018);
+  assert.equal(rollingPoolVolume(null, 2_000), 2_000);
+  assert.equal(rollingPoolVolume(12_000, 10_000), 12_000);
+  assert.equal(rollingPoolVolume(0, 0), 0);
+  assert.equal(rememberPoolVolume("XDX/XRP", 10_645_018, 0), 10_645_018);
+  assert.equal(rememberPoolVolume("XDX/XRP", 0, 0), 10_645_018);
+  assert.equal(rememberPoolVolume("XDX/XRP", 11_000_000, 0), 11_000_000);
+  resetHeldPoolVolumes();
 });
 
 test("a signed buy or sell adds XDX to that pool's 24h volume immediately", () => {

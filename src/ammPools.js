@@ -260,13 +260,34 @@ export function tradeXdxVolume(detail = {}) {
   );
 }
 
+export function rollingPoolVolume(catalog, held) {
+  const catalogVol = Number(catalog);
+  const heldVol = Number(held);
+  const live = Number.isFinite(catalogVol) && catalogVol > 0 ? catalogVol : 0;
+  const kept = Number.isFinite(heldVol) && heldVol > 0 ? heldVol : 0;
+  return Math.max(live, kept);
+}
+
+const heldVolumeByKey = new Map();
+
+export function rememberPoolVolume(key, catalog, held) {
+  const id = String(key || "");
+  const next = rollingPoolVolume(catalog, rollingPoolVolume(held, heldVolumeByKey.get(id)));
+  if (id && next > 0) heldVolumeByKey.set(id, next);
+  return next;
+}
+
+export function resetHeldPoolVolumes() {
+  heldVolumeByKey.clear();
+}
+
 export function applyTradePoolVolume(pool, detail = {}) {
   if (!pool) return pool;
   const add = tradeXdxVolume(detail);
   if (!(add > 0)) return pool;
   const pair = tradePoolHint(detail);
   if (pair && ammPoolName(pool) !== pair) return pool;
-  const next = (Number(pool.volume24h) || 0) + add;
+  const next = rollingPoolVolume(pool.volume24h, 0) + add;
   return {
     ...pool,
     volume24h: next,
