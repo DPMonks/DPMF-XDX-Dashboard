@@ -21,9 +21,18 @@ function cached(key, loader) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.body;
   return loader().then((body) => {
-    cache.set(key, { at: Date.now(), body });
+    if (body && body.source !== "empty") cache.set(key, { at: Date.now(), body });
     return body;
   });
+}
+
+export function preferPositiveAmount(live, catalog) {
+  if (Number(live) > 0) return Number(live);
+  if (Number(catalog) > 0) return Number(catalog);
+  if (live == null && catalog == null) return null;
+  if (Number.isFinite(Number(live))) return Number(live);
+  if (Number.isFinite(Number(catalog))) return Number(catalog);
+  return null;
 }
 
 export function invalidateWalletLedger(address) {
@@ -238,14 +247,18 @@ export async function loadWalletBalancesFromLedger(address, options = {}) {
     ]);
     let xdx = xdxBalanceFromLines(raw.lines);
     let rlusd = rlusdBalanceFromLines(raw.lines);
-    if (xdx == null || rlusd == null) {
+    if (xdx == null) xdx = xdxBalanceFromLines(raw.lines, "");
+    if (!(xdx > 0) || rlusd == null) {
       try {
         const gateway = await xrplRpc(
           "gateway_balances",
           { account: name, ledger_index: "validated", hotwallet: [] },
           options
         );
-        if (xdx == null) xdx = iouFromGatewayBalances(gateway, XDX_ISSUER, XDX_CURRENCY_RE);
+        if (!(xdx > 0)) {
+          const fromGateway = iouFromGatewayBalances(gateway, XDX_ISSUER, XDX_CURRENCY_RE);
+          xdx = preferPositiveAmount(xdx, fromGateway);
+        }
         if (rlusd == null) rlusd = iouFromGatewayBalances(gateway, RLUSD_ISSUER, RLUSD_CURRENCY_RE);
       } catch {
         // keep line totals

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   composeWalletSnapshot,
   emptyWalletSnapshot,
+  preferFilledWalletSnapshot,
   walletAvailableAmounts,
   lpFeeEarnings,
   lpPositionFromPool,
@@ -275,6 +276,51 @@ test("walletAvailableAmounts reports spendable XRP and issued quote", () => {
     quote: { currency: "RLUSD", issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", id: "RLUSD" },
   });
   assert.equal(rlusd.quote, 12.5);
+});
+
+test("preferFilledWalletSnapshot keeps last XDX when a refresh returns zero", () => {
+  const filled = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 57.1375, xdx: 3_004_952_684.62, rlusd: 127.3 },
+    prices: { xdxUsd: 0.0000469, xrpUsd: 1.48 },
+    token: { circulating: 10_000_000_000 },
+    rank: 1,
+  });
+  const hollow = emptyWalletSnapshot("rExample");
+  const kept = preferFilledWalletSnapshot(filled, hollow);
+  assert.equal(kept.filled, true);
+  assert.equal(kept.holdings.xdx, filled.holdings.xdx);
+  assert.equal(kept.xdx.usd, filled.xdx.usd);
+  assert.equal(kept.supply.supplyPct, filled.supply.supplyPct);
+
+  const zeroed = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 0, xdx: 0, rlusd: 0 },
+    account: { balance_drops: 0 },
+    prices: { xdxUsd: 0.0000469, xrpUsd: 1.48 },
+    token: { circulating: 10_000_000_000 },
+  });
+  const held = preferFilledWalletSnapshot(filled, zeroed);
+  assert.equal(held.holdings.xdx, filled.holdings.xdx);
+  assert.equal(held.xdx.usd, filled.xdx.usd);
+  assert.equal(held.holdings.xrp, filled.holdings.xrp);
+  assert.equal(held.supply.circulatingPct, filled.supply.circulatingPct);
+  assert.equal(held.rank, 1);
+
+  const next = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 60, xdx: 3_100_000_000, rlusd: 130 },
+    prices: { xdxUsd: 0.00005, xrpUsd: 1.5 },
+    token: { circulating: 10_000_000_000 },
+    rank: 1,
+  });
+  const updated = preferFilledWalletSnapshot(filled, next);
+  assert.equal(updated.holdings.xdx, 3_100_000_000);
+  assert.equal(updated.holdings.xrp, 60);
+
+  const other = emptyWalletSnapshot("rOther");
+  assert.equal(preferFilledWalletSnapshot(filled, other).address, "rOther");
+  assert.equal(preferFilledWalletSnapshot(filled, other).filled, false);
 });
 
 test("composeWalletSnapshot stays blank until an address is signed in", () => {

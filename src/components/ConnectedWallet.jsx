@@ -19,6 +19,7 @@ import { copyToClipboard } from "../utils/copy";
 import {
   emptyWalletSnapshot,
   normalizeWalletPair,
+  preferFilledWalletSnapshot,
   preferredWalletPair,
   sortWalletPairs,
   xrpBarPercents,
@@ -496,18 +497,19 @@ export default function ConnectedWallet() {
         emptyWalletSnapshot(walletAddress)
       );
       if (cancelled) return;
-      setSnap(next);
-      setPair((current) =>
-        preferredWalletPair(
-          next.lp.map((row) => row.pool),
-          current
-        )
-      );
+      setSnap((current) => preferFilledWalletSnapshot(current, next));
+      setPair((current) => {
+        const pairs = next.lp.map((row) => row.pool);
+        if (!pairs.length) return current;
+        return preferredWalletPair(pairs, current);
+      });
     }
 
     load();
-    const id = setInterval(load, 30000);
     const retries = [];
+    retries.push(window.setTimeout(() => load(false), 800));
+    retries.push(window.setTimeout(() => load(true), 2800));
+    const id = setInterval(load, 30000);
     function refreshConfirmed() {
       load(true);
       retries.push(window.setTimeout(() => load(true), 2500));
