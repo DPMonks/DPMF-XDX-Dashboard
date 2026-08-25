@@ -37,6 +37,7 @@ import {
   FEATURED_ORDERBOOK_PAIRS,
 } from "../orderbook";
 import { composeWalletSnapshot, emptyWalletSnapshot } from "../wallet/composeWallet";
+import { normalizeWalletLines } from "../wallet/ammCreate";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -963,7 +964,7 @@ export async function getWalletLines(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return [];
   const body = await api.walletLines(name, extra);
-  return asArray(body?.lines || body);
+  return normalizeWalletLines(body);
 }
 
 export async function getWalletVotes(address) {

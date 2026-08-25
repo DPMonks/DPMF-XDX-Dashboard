@@ -38,11 +38,34 @@ export function existingPoolForQuote(pools, quoteId) {
   );
 }
 
+function isWalletLine(row) {
+  if (!row || typeof row !== "object") return false;
+  const currency = row.currency || row.ticker || row.hex || row.code;
+  const issuer = row.issuer || row.account || row.counterparty;
+  return Boolean(currency) && Boolean(issuer);
+}
+
+export function normalizeWalletLines(body) {
+  if (Array.isArray(body?.lines)) return body.lines.filter(isWalletLine);
+  if (Array.isArray(body?.trustlines)) return body.trustlines.filter(isWalletLine);
+  if (Array.isArray(body?.balances)) return body.balances.filter(isWalletLine);
+  if (Array.isArray(body?.assets)) return body.assets.filter(isWalletLine);
+  if (Array.isArray(body?.tokens)) return body.tokens.filter(isWalletLine);
+  if (Array.isArray(body)) return body.filter(isWalletLine);
+  return [];
+}
+
+export function preferWalletLines(primary, fallback) {
+  const first = normalizeWalletLines(primary);
+  const second = normalizeWalletLines(fallback);
+  return first.length >= second.length ? first : second;
+}
+
 export function walletLineRows(raw) {
   if (!raw || typeof raw !== "object") return [];
-  const rows = [];
-  for (const key of ["balances", "lines", "trustlines", "assets", "tokens"]) {
-    if (Array.isArray(raw[key])) rows.push(...raw[key]);
+  const rows = [...normalizeWalletLines(raw)];
+  if (!rows.length && raw.raw && raw.raw !== raw) {
+    rows.push(...walletLineRows(raw.raw));
   }
   if (!rows.length && raw.balances && typeof raw.balances === "object" && !Array.isArray(raw.balances)) {
     for (const [key, value] of Object.entries(raw.balances)) {
