@@ -2,6 +2,7 @@ import { api, INDEXER_ORIGIN } from "../api";
 import {
   pairFromRow,
   XDX_RLUSD_LP_XRPL_TO_MD5,
+  XDX_XRPL_TO_MD5,
   XDX_XRP_LP_XRPL_TO_MD5,
 } from "../constants/ledger";
 import { keepLastGoodOwners } from "../todayOwners";
@@ -14,7 +15,7 @@ import {
   xrplToHolderGraphUrl,
 } from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
-import { composeTokenDetailHistory } from "../tokenDetailsHistory";
+import { composeTokenDetailHistory, rowsFromOhlc, xdxPriceHistoryRows } from "../tokenDetailsHistory";
 import { fillMissingXdxFiat, pricesNeedFiat } from "../utils/fiatFx";
 import {
   applyXrplToChange,
@@ -642,7 +643,7 @@ export async function getTokenDetails(onPartial) {
 
 export async function getTokenDetailsHistory() {
   const take = (promise) => promise.then(chartArray).catch(() => []);
-  const [holders, trustlinesOrEmpty, tvl, lpHolders, lpTrustlines, sparkline, overview, prices] =
+  const [holders, trustlinesOrEmpty, tvl, lpHolders, lpTrustlines, sparkline, candlesBody, overview, prices] =
     await Promise.all([
       take(api.holdersHistory({ queue: false, retries: 1 })),
       take(api.trustlinesHistory()),
@@ -650,11 +651,21 @@ export async function getTokenDetailsHistory() {
       take(api.lpHoldersHistory()),
       take(api.lpTrustlinesHistory({ pool: "all" })),
       take(api.sparkline("XDX")),
+      api.candles().catch(() => ({})),
       api.overview().catch(() => ({})),
       api.prices().catch(() => ({})),
     ]);
   const activity =
     !holders.length || !trustlinesOrEmpty.length ? await take(api.activityHistory()) : [];
+  const localIssued = mergeActivityRows(holders, trustlinesOrEmpty, activity);
+  const issued = mergeActivityRows(
+    localIssued,
+    needsFullIssuanceHistory(localIssued) ? await fetchXrplToIssued() : []
+  );
+  const candlePrices = xdxPriceHistoryRows(candlesBody);
+  const priceRows = historyLooksShort(candlePrices, sparkline)
+    ? [...(await fetchXrplToOhlc()), ...candlePrices]
+    : candlePrices;
   const live = composeTokenDetails({
     overview,
     prices: fillMissingXdxFiat(prices),
@@ -664,12 +675,14 @@ export async function getTokenDetailsHistory() {
     lpTrustlines: { count: overview.lp_trustline_count },
   });
   return composeTokenDetailHistory({
-    holders: holders.length ? holders : activity,
-    trustlines: trustlinesOrEmpty.length ? trustlinesOrEmpty : activity,
+    holders: issued,
+    trustlines: issued,
     tvl,
     lpHolders,
     lpTrustlines,
     sparkline,
+    candles: priceRows,
+    amm: Array.isArray(candlesBody?.amm_pool_history) ? candlesBody.amm_pool_history : [],
     live: {
       ...live,
       timestamp: new Date().toISOString(),
@@ -708,6 +721,44 @@ async function fetchXrplToIssued() {
     return rows;
   } catch {
     return xrplToIssuedCache.rows;
+  }
+}
+
+const XRPL_TO_OHLC_URL = `https://api.xrpl.to/v1/ohlc/${XDX_XRPL_TO_MD5}?range=ALL&interval=1d&vs_currency=USD`;
+let xrplToOhlcCache = { at: 0, rows: [], blockedUntil: 0 };
+
+function historyLooksShort(...lists) {
+  const rows = lists.flatMap((list) => (Array.isArray(list) ? list : []));
+  if (rows.length < 50) return true;
+  let first = Infinity;
+  for (const row of rows) {
+    const ms = Date.parse(row?.timestamp || row?.day || row?.ts || "");
+    if (Number.isFinite(ms) && ms < first) first = ms;
+  }
+  return !Number.isFinite(first) || Date.now() - first < 60 * 86400000;
+}
+
+async function fetchXrplToOhlc() {
+  const now = Date.now();
+  if (now < xrplToOhlcCache.blockedUntil) return xrplToOhlcCache.rows;
+  if (xrplToOhlcCache.rows.length && now - xrplToOhlcCache.at < XRPL_TO_TTL_MS) {
+    return xrplToOhlcCache.rows;
+  }
+  try {
+    const response = await fetch(XRPL_TO_OHLC_URL, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (response.status === 429) {
+      xrplToOhlcCache = { ...xrplToOhlcCache, blockedUntil: now + XRPL_TO_TTL_MS };
+      return xrplToOhlcCache.rows;
+    }
+    if (!response.ok) return xrplToOhlcCache.rows;
+    const rows = rowsFromOhlc(await response.json());
+    xrplToOhlcCache = { at: now, rows, blockedUntil: 0 };
+    return rows;
+  } catch {
+    return xrplToOhlcCache.rows;
   }
 }
 

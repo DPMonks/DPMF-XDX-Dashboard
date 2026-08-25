@@ -7,10 +7,12 @@ import {
   liveTokenDetailTip,
   mergeTokenDetailRows,
   namedHistoryRows,
+  rowsFromOhlc,
   tokenDetailDecimals,
   tokenDetailLabel,
   tokenDetailMetricNumber,
   windowedTokenSeries,
+  xdxPriceHistoryRows,
 } from "../src/tokenDetailsHistory.js";
 
 test("token detail tabs cover the live numeric token-detail boxes", () => {
@@ -121,6 +123,63 @@ test("windowedTokenSeries seeds the selected timeframe and keeps the live tip", 
   assert.ok(windowed.length >= 2);
   assert.equal(windowed[0].ts, now - 86400000);
   assert.equal(windowed[windowed.length - 1].plot, 15939);
+});
+
+test("windowedTokenSeries does not invent a year of flat history from one live tip", () => {
+  const now = Date.parse("2026-08-25T12:00:00.000Z");
+  const windowed = windowedTokenSeries(
+    [{ timestamp: "2026-08-25T12:00:00.000Z", ts: now, lpSupply: 233525459 }],
+    "1Y",
+    now,
+    "lpSupply"
+  );
+  assert.ok(windowed.length >= 1);
+  assert.ok(windowed[0].ts > now - 30 * 86400000);
+  assert.equal(windowed[windowed.length - 1].plot, 233525459);
+});
+
+test("xdxPriceHistoryRows keeps XDX candles and drops XRP", () => {
+  const rows = xdxPriceHistoryRows({
+    price_history: [
+      { timestamp: "2026-08-21T20:54:47.746Z", asset: "XRP", price_usd: 1.37 },
+      { timestamp: "2026-08-21T20:54:47.746Z", asset: "XDX", price_usd: 0.00004071 },
+    ],
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].price_usd, 0.00004071);
+});
+
+test("rowsFromOhlc reads xrpl.to daily closes", () => {
+  const rows = rowsFromOhlc({
+    ohlc: [[1722470400, 0.00003, 0.00004, 0.00002, 0.000035]],
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].price_usd, 0.000035);
+});
+
+test("composeTokenDetailHistory uses candle prices and LP supply scans", () => {
+  const rows = composeTokenDetailHistory({
+    candles: [
+      { timestamp: "2026-08-21T20:54:47.746Z", asset: "XDX", price_usd: 0.00004071 },
+      { timestamp: "2026-08-25T12:00:00.000Z", asset: "XDX", price_usd: 0.00004659 },
+    ],
+    lpTrustlines: [
+      { timestamp: "2026-08-21T23:06:33.453Z", lp_supply: 220000000, trustline_count: 67 },
+      { timestamp: "2026-08-25T12:00:00.000Z", lp_supply: 233525459, trustline_count: 70 },
+    ],
+    live: {
+      timestamp: "2026-08-25T12:09:00.000Z",
+      price: 0.00004658,
+      circulating: 10_000_000_000,
+      totalSupply: 10_000_000_000,
+      lpSupply: 233525459,
+    },
+  });
+  const first = rows.find((row) => row.price === 0.00004071);
+  const supply = rows.find((row) => row.lpSupply === 220000000);
+  assert.ok(first);
+  assert.ok(supply);
+  assert.ok(first.xrplMarketCap > 400_000);
 });
 
 test("tokenDetailDecimals match Token Details precision", () => {

@@ -1219,22 +1219,36 @@ async function loadOrderbooks(db) {
 async function loadLpTrustlineChart(db, pool = "all") {
   const pair = normalizeLpPool(pool);
   const where = lpPoolClause(pair);
-  const byScan = await tryQuery(
-    db,
-    `SELECT timestamp,
+  const byScan = pair
+    ? await tryQuery(
+        db,
+        `SELECT timestamp,
             COUNT(*)::int AS trustline_count,
             COUNT(*) FILTER (WHERE ABS(lp_balance::numeric) > 0)::int AS lp_holder_count,
+            COALESCE(SUM(ABS(lp_balance::numeric)), 0) AS lp_supply,
             COALESCE(pool_name, 'XDX/XRP') AS pool_name
      FROM lp_holders_history
      WHERE ${where.sql}
      GROUP BY timestamp, COALESCE(pool_name, 'XDX/XRP')
      ORDER BY timestamp ASC`,
-    where.params
-  );
+        where.params
+      )
+    : await tryQuery(
+        db,
+        `SELECT timestamp,
+            COUNT(*)::int AS trustline_count,
+            COUNT(*) FILTER (WHERE ABS(lp_balance::numeric) > 0)::int AS lp_holder_count,
+            COALESCE(SUM(ABS(lp_balance::numeric)) FILTER (WHERE COALESCE(pool_name, 'XDX/XRP') = 'XDX/XRP'), 0) AS lp_supply,
+            'ALL' AS pool_name
+     FROM lp_holders_history
+     GROUP BY timestamp
+     ORDER BY timestamp ASC`
+      );
   return (byScan.rows || []).map((row) => ({
     timestamp: asIso(row.timestamp) || row.timestamp,
     trustline_count: Number(row.trustline_count || 0),
     lp_holder_count: Number(row.lp_holder_count || 0),
+    lp_supply: Number(row.lp_supply || 0) || null,
     pool_name: row.pool_name || pair || "XDX/XRP",
   }));
 }
@@ -2709,14 +2723,27 @@ export async function readIndexerDb(suffix, search = "") {
          LIMIT 20000`
           )
         : { rows: [] };
-      const amm = await tryQuery(
+      const ammWithSupply = await tryQueryIf(
         db,
-        `SELECT timestamp, pool_name, reserve_asset, reserve_currency, price
+        "amm_pool_history",
+        ["timestamp", "pool_name", "reserve_asset", "reserve_currency", "price", "lp_supply"],
+        `SELECT timestamp, pool_name, reserve_asset, reserve_currency, price, lp_supply
          FROM amm_pool_history
          WHERE pool_name IN ('XDX/XRP', 'XDX/RLUSD')
          ORDER BY timestamp ASC
          LIMIT 20000`
       );
+      const amm =
+        ammWithSupply.rows?.length || ammWithSupply.ok
+          ? ammWithSupply
+          : await tryQuery(
+              db,
+              `SELECT timestamp, pool_name, reserve_asset, reserve_currency, price
+         FROM amm_pool_history
+         WHERE pool_name IN ('XDX/XRP', 'XDX/RLUSD')
+         ORDER BY timestamp ASC
+         LIMIT 20000`
+            );
       return withLiveCatalog(
         suffix,
         {

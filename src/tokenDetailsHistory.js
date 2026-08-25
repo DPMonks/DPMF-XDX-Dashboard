@@ -151,6 +151,8 @@ function sparkMetricRows(sparkline, live) {
   const xrpUsd = rawNumber(live?.xrpUsd ?? live?.xrp_usd);
   return (Array.isArray(sparkline) ? sparkline : [])
     .map((row) => {
+      const asset = String(row.asset || row.token || "XDX").toUpperCase();
+      if (asset && asset !== "XDX") return null;
       const price = rawNumber(row.price_usd ?? row.price ?? row.c ?? row.xdxUsd);
       if (price == null) return null;
       const fields = { price };
@@ -162,6 +164,91 @@ function sparkMetricRows(sparkline, live) {
     .filter(Boolean);
 }
 
+export function rowsFromOhlc(payload, asset = "XDX") {
+  const rows = Array.isArray(payload?.ohlc)
+    ? payload.ohlc
+    : Array.isArray(payload)
+      ? payload
+      : [];
+  return rows
+    .map((row) => {
+      if (Array.isArray(row)) {
+        const time = Number(row[0]);
+        const close = Number(row[4] ?? row[1]);
+        if (!Number.isFinite(time) || !(close > 0)) return null;
+        return {
+          timestamp: new Date(time > 1e12 ? time : time * 1000).toISOString(),
+          price_usd: close,
+          asset,
+        };
+      }
+      const price = rawNumber(row?.price_usd ?? row?.price ?? row?.c);
+      if (price == null) return null;
+      return { ...row, price_usd: price, asset: row.asset || asset };
+    })
+    .filter(Boolean);
+}
+
+export function xdxPriceHistoryRows(payload) {
+  const rows = Array.isArray(payload)
+    ? payload
+    : [
+        ...(Array.isArray(payload?.price_history) ? payload.price_history : []),
+        ...(Array.isArray(payload?.rows) ? payload.rows : []),
+        ...(Array.isArray(payload?.ohlc) ? rowsFromOhlc(payload) : []),
+      ];
+  return rows.filter((row) => {
+    const asset = String(row?.asset || row?.token || "XDX").toUpperCase();
+    return !asset || asset === "XDX";
+  });
+}
+
+function ammHistoryRows(rows, live) {
+  const price = tokenDetailMetricNumber(live, "price");
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const pair = String(row.pool_name || row.pool || row.pair || "XDX/XRP")
+        .replace(/\s+/g, "")
+        .toUpperCase();
+      if (pair && pair !== "XDX/XRP") return null;
+      const usd = rawNumber(row.tvl_usd ?? row.ammMarketCap);
+      const tvl = rawNumber(row.tvl);
+      const reserve = rawNumber(row.reserve_asset ?? row.reserve_xdx);
+      let ammMarketCap = usd;
+      if (ammMarketCap == null && tvl != null) {
+        ammMarketCap = tvl > 1_000_000 && price > 0 ? tvl * price : tvl;
+      }
+      if (ammMarketCap == null && reserve != null && price > 0) ammMarketCap = reserve * price;
+      const lpSupply = rawNumber(row.lp_supply ?? row.lpSupply);
+      if (ammMarketCap == null && lpSupply == null) return null;
+      return mapHistoryRow(row, {
+        ...(ammMarketCap != null ? { ammMarketCap } : {}),
+        ...(lpSupply != null ? { lpSupply } : {}),
+      });
+    })
+    .filter(Boolean);
+}
+
+export function aggregateLpChartRows(rows = []) {
+  const byTs = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const mapped = mapHistoryRow(row, {
+      lpHolders: rawNumber(row.lp_holder_count ?? row.lpHolders ?? row.holders),
+      lpTrustlines: rawNumber(row.trustline_count ?? row.lp_trustline_count ?? row.lpTrustlines),
+      lpSupply: rawNumber(row.lp_supply ?? row.lpSupply),
+    });
+    if (!mapped) continue;
+    const current = byTs.get(mapped.ts) || { timestamp: mapped.timestamp, ts: mapped.ts };
+    if (mapped.lpHolders != null) current.lpHolders = (current.lpHolders || 0) + mapped.lpHolders;
+    if (mapped.lpTrustlines != null) {
+      current.lpTrustlines = (current.lpTrustlines || 0) + mapped.lpTrustlines;
+    }
+    if (mapped.lpSupply != null && current.lpSupply == null) current.lpSupply = mapped.lpSupply;
+    byTs.set(mapped.ts, current);
+  }
+  return [...byTs.values()].sort((a, b) => a.ts - b.ts);
+}
+
 export function composeTokenDetailHistory({
   holders = [],
   trustlines = [],
@@ -169,16 +256,20 @@ export function composeTokenDetailHistory({
   lpHolders = [],
   lpTrustlines = [],
   sparkline = [],
+  candles = [],
+  amm = [],
   live = null,
 } = {}) {
   return carryTokenDetailMetrics(
     mergeTokenDetailRows(
       namedHistoryRows(holders, "holders"),
       namedHistoryRows(trustlines, "trustlines"),
-      namedHistoryRows(tvl, "ammMarketCap"),
       namedHistoryRows(lpHolders, "lpHolders"),
-      namedHistoryRows(lpTrustlines, "lpTrustlines"),
+      aggregateLpChartRows(lpTrustlines),
+      sparkMetricRows(xdxPriceHistoryRows(candles), live),
       sparkMetricRows(sparkline, live),
+      ammHistoryRows(amm, live),
+      ammHistoryRows(tvl, live),
       [liveTokenDetailTip(live)]
     )
   );
@@ -209,11 +300,9 @@ export function windowedTokenSeries(rows, range, now, metric) {
   const start = now - windowMs;
   const inside = usable.filter((row) => row.ts >= start && row.ts <= now);
   const lastBefore = [...usable].reverse().find((row) => row.ts < start);
-  const seed = lastBefore || (inside[0] ? null : usable[usable.length - 1]);
   const out = [...inside];
-  if (seed) out.unshift({ ...seed, timestamp: new Date(start).toISOString(), ts: start });
-  else if (out[0] && out[0].ts > start) {
-    out.unshift({ ...out[0], timestamp: new Date(start).toISOString(), ts: start });
+  if (lastBefore) {
+    out.unshift({ ...lastBefore, timestamp: new Date(start).toISOString(), ts: start });
   }
   const last = out[out.length - 1];
   if (last && last.ts < now) {
