@@ -409,7 +409,10 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
               {pool.volume24h != null ? (
                 <div>
                   <dt>{t.volume24h}</dt>
-                  <dd className="is-volume">{formatToken(pool.volume24h, locale)}</dd>
+                  <dd>
+                    <span className="is-volume">{formatToken(pool.volume24h, locale)}</span>{" "}
+                    <span className="pool-volume-unit">{t.xdx}</span>
+                  </dd>
                 </div>
               ) : null}
             </dl>

@@ -1732,9 +1732,14 @@ body {
   overflow-wrap: anywhere;
 }
 
-.pool-stats dd.is-volume {
+.pool-stats dd .is-volume {
   color: #39ff14;
   font-weight: 700;
+}
+
+.pool-stats dd .pool-volume-unit {
+  color: #fff;
+  font-weight: 600;
 }
 
 .pool-card-actions {
