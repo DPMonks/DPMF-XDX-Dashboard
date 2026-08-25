@@ -58,6 +58,13 @@ export function marketNeedsXrplTo(row = {}) {
   );
 }
 
+export function countsNeedXrplTo(row = {}) {
+  return !(
+    num(row.holder_count ?? row.holders ?? row.count) &&
+    num(row.trustlines ?? row.trustline_count)
+  );
+}
+
 export function applyXrplToPrices(prices = {}, token = {}) {
   const xrpUsd = num(prices.xrpUsd ?? prices.XRP);
   const fromToken = xdxUsdFromXrplTo(token, xrpUsd);

@@ -19,6 +19,7 @@ import {
   applyXrplToChange,
   applyXrplToOverview,
   applyXrplToPrices,
+  countsNeedXrplTo,
   marketNeedsXrplTo,
   parseXrplToToken,
   XRPL_TO_TOKEN_URL,
@@ -579,7 +580,12 @@ export async function fetchXrplToToken() {
 }
 
 async function withXrplToBackup(overview, prices, change) {
-  if (!marketNeedsXrplTo(overview) && !marketNeedsXrplTo(prices) && Number(change?.xdx)) {
+  if (
+    !marketNeedsXrplTo(overview) &&
+    !marketNeedsXrplTo(prices) &&
+    !countsNeedXrplTo(overview) &&
+    Number(change?.xdx)
+  ) {
     return { overview, prices, change };
   }
   try {

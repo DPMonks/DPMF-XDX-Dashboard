@@ -213,6 +213,8 @@ export async function loadLiveMarket(options = {}) {
         usdJpy: num(quote.usdJpy),
         xdxUsd,
         recorded_price: xdxUsd,
+        xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
+        xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
         RLUSD: 1,
         quotes: { XRP: xrpUsd, RLUSD: 1 },
         source: "xrpl",
@@ -303,7 +305,7 @@ export async function loadLiveMarket(options = {}) {
     catching_up: !num(token.holders),
   };
   marketCache = {
-    at: now,
+    at: num(token.holders) ? now : 0,
     prices,
     pools,
     overview,

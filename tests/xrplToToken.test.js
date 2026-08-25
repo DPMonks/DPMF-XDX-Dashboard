@@ -4,6 +4,7 @@ import {
   applyXrplToChange,
   applyXrplToOverview,
   applyXrplToPrices,
+  countsNeedXrplTo,
   marketNeedsXrplTo,
   parseXrplToToken,
   tvlUsdFromXrplTo,
@@ -33,6 +34,8 @@ test("parseXrplToToken reads the live XDX token card", () => {
 
 test("xrpl.to fills empty Postgres prices and holder counts", () => {
   assert.equal(marketNeedsXrplTo({ xdxUsd: 0, holder_count: 0, xrpUsd: 1.5 }), true);
+  assert.equal(countsNeedXrplTo({ xdxUsd: 0.00005, holder_count: 0, trustlines: 0 }), true);
+  assert.equal(countsNeedXrplTo({ holder_count: 15940, trustlines: 19973 }), false);
   const prices = applyXrplToPrices({ xdxUsd: 0, xrpUsd: 1.5, xrpGbp: 1.1, source: "db" }, sample);
   assert.ok(prices.xdxUsd > 0.00004);
   assert.equal(prices.source, "hybrid");
@@ -48,6 +51,17 @@ test("xrpl.to fills empty Postgres prices and holder counts", () => {
   assert.ok(overview.volume24hUsd > 100);
   assert.ok(overview.volume24h > 1_000_000);
   assert.equal(applyXrplToChange({ xdx: 0 }, sample).xdx, -4.89);
+});
+
+test("xrpl.to still fills holder boxes when the live AMM already has a price", () => {
+  const overview = applyXrplToOverview(
+    { xdxUsd: 0.00005, holder_count: 0, trustlines: 0, xrpUsd: 1.5, source: "xrpl" },
+    sample,
+    { xdxUsd: 0.00005, xrpUsd: 1.5 }
+  );
+  assert.equal(overview.holder_count, 15942);
+  assert.equal(overview.trustline_count, 19973);
+  assert.equal(overview.lp_holder_count, 80);
 });
 
 test("xdxUsdFromXrplTo can price from exch * XRP when usd is missing", () => {
