@@ -2215,7 +2215,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   font-size: 12px;
   font-weight: 700;
@@ -2269,6 +2269,16 @@ body {
 
 .wallet-earn-cell.is-filled {
   animation: walletFill 0.42s ease;
+}
+
+@container wallet (max-width: 720px) {
+  .wallet-earn-beam {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "total total"
+      "xrp xdx"
+      "rlusd rlusd";
+  }
 }
 
 @container wallet (max-width: 560px) {
@@ -2383,14 +2393,14 @@ body {
 }
 
 .wallet-xrp-col small {
-  font-size: 9px;
-  letter-spacing: 0.04em;
+  font-size: 8px;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--dpmf-text-muted);
   text-align: center;
   line-height: 1.2;
   max-width: 100%;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .wallet-xrp-col b {
@@ -2469,9 +2479,9 @@ body {
 
 .wallet-micro-head {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -2482,8 +2492,7 @@ body {
 }
 
 .wallet-micro-head b {
-  flex: 0 0 auto;
-  text-align: end;
+  text-align: start;
   white-space: nowrap;
 }
 

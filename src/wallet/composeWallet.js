@@ -554,6 +554,11 @@ function keepAmount(next, current) {
   return next != null && Number.isFinite(Number(next)) ? Number(next) : current ?? next;
 }
 
+function feeEarningsFilled(fees) {
+  const earn = fees?.earnings || {};
+  return [earn.usd24h, earn.usd7d, earn.xdx24h, earn.xrp24h, earn.rlusd24h].some((value) => Number(value) > 0);
+}
+
 export function preferFilledWalletSnapshot(current, next) {
   if (!next) return current || emptyWalletSnapshot(null);
   if (!current?.filled || !current.address || current.address !== next.address) return next;
@@ -565,13 +570,8 @@ export function preferFilledWalletSnapshot(current, next) {
     if (value != null) xdx[key] = value;
   }
 
-  const nextFees = next.fees || {};
-  const keepFees =
-    nextFees.xdx != null ||
-    nextFees.usd != null ||
-    nextFees.earnings?.usd24h != null ||
-    nextFees.earnings?.xdx24h != null ||
-    nextFees.earnings?.xrp24h != null;
+  const nextHasEarn = feeEarningsFilled(next.fees);
+  const currentHasEarn = feeEarningsFilled(current.fees);
   const keepSupply = next.supply?.supplyPct != null || next.supply?.circulatingPct != null;
 
   return {
@@ -585,7 +585,7 @@ export function preferFilledWalletSnapshot(current, next) {
     xdx,
     xrp: next.xrp?.balance != null ? next.xrp : current.xrp,
     supply: keepSupply ? next.supply : current.supply,
-    fees: keepFees ? next.fees : current.fees,
+    fees: nextHasEarn || !currentHasEarn ? next.fees : current.fees,
     lp: Array.isArray(next.lp) && next.lp.length ? next.lp : current.lp,
     income: Array.isArray(next.income) && next.income.length ? next.income : current.income,
     rank: next.rank != null ? next.rank : current.rank,

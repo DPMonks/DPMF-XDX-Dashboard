@@ -278,6 +278,44 @@ test("preferFilledWalletSnapshot keeps last balances when a refresh is hollow", 
   assert.equal(preferFilledWalletSnapshot(filled, other).filled, false);
 });
 
+test("preferFilledWalletSnapshot keeps last LP earnings when a refresh returns zeros", () => {
+  const filled = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 57.1375, xdx: 3_004_952_684.62, rlusd: 127.3 },
+    prices: { xdxUsd: 0.0000469, xrpUsd: 1.48 },
+    token: { circulating: 10_000_000_000 },
+    flows: [{ pool: "XDX/XRP", xdx: 100, quote: 0.003, timestamp: Date.now() }],
+    lpRows: [
+      {
+        pool: "XDX/XRP",
+        lp_balance: 10,
+        lp_share_percent: 4,
+      },
+    ],
+  });
+  filled.fees = {
+    ...filled.fees,
+    earnings: {
+      ...filled.fees.earnings,
+      xrp24h: 0.0034,
+      xrp24hUsd: 0.005,
+      usd24h: 0.01,
+      usd7d: 0.07,
+    },
+  };
+  const next = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 57.1375, xdx: 3_004_952_684.62, rlusd: 127.3 },
+    prices: { xdxUsd: 0.0000469, xrpUsd: 1.48 },
+    token: { circulating: 10_000_000_000 },
+  });
+  const kept = preferFilledWalletSnapshot(filled, next);
+  assert.equal(kept.holdings.xdx, filled.holdings.xdx);
+  assert.equal(kept.fees.earnings.usd24h, 0.01);
+  assert.equal(kept.fees.earnings.xrp24h, 0.0034);
+  assert.equal(kept.lp.length, 1);
+});
+
 test("composeWalletSnapshot stays blank until an address is signed in", () => {
   const empty = emptyWalletSnapshot(null);
   assert.equal(empty.signedIn, false);
