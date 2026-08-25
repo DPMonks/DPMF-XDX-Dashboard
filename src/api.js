@@ -517,6 +517,7 @@ export const api = {
   prices: () => getJson(endpoint("prices"), { queue: false }),
   change24h: () => getJson(endpoint("change24h"), { queue: false }),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),
+  candles: () => getJson(endpoint("candles") || "/charts/candles"),
   issuerLocked: () => getJson(endpoint("issuerLocked")),
   orderbook: (pair = "XDX/XRP") => {
     const path = endpoint("orderbook") || "/orderbook";
