@@ -235,6 +235,7 @@ const en = {
   removedLpActivity: "Removed {amount} LP from {pair}",
   tvl: "TVL",
   lpSupply: "LP supply",
+  poolLpLine: "1 LP · {xdx} {asset} + {quote} {quoteAsset} · {lp} LP",
   xdxHolders: "XDX holders",
   lpHoldersCount: "LP holders",
   lpTrustlinesCount: "LP trustlines",
