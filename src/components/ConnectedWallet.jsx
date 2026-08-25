@@ -162,12 +162,17 @@ function SupplyShareBars({ supply, locale, t, empty }) {
   );
 }
 
-function poolWindowText(pool, window, locale, empty) {
+function PoolWindowValue({ pool, window, locale, empty }) {
   if (empty || !pool) return "—";
   const xdx = window === "7d" ? pool.xdx7d : pool.xdx24h;
   const usd = window === "7d" ? pool.usd7d : pool.usd24h;
   if (!(Number(xdx) > 0) && !(Number(usd) > 0)) return "—";
-  return `${formatToken(xdx, locale, 2)}  ${formatUsd(usd, locale)}`;
+  return (
+    <span className="wallet-lp-earn">
+      <b>{formatToken(xdx, locale, 2)}</b>
+      <i>{formatUsd(usd, locale)}</i>
+    </span>
+  );
 }
 
 function LpInfographic({ position, earn, locale, t, empty }) {
@@ -175,8 +180,6 @@ function LpInfographic({ position, earn, locale, t, empty }) {
   const xdxComp = useMorph(empty ? 0 : position?.composition_xdx_percent);
   const quoteComp = useMorph(empty ? 0 : position?.composition_quote_percent);
   const shareWidth = empty ? 0 : Math.min(100, Math.max(Number(share) > 0 ? 6 : 0, Number(share) * 8));
-  const earn24 = poolWindowText(earn, "24h", locale, empty);
-  const earn7 = poolWindowText(earn, "7d", locale, empty);
   return (
     <div className={`wallet-lp-info${empty ? " is-empty" : " is-filled"}`}>
       <div className="wallet-micro">
@@ -209,11 +212,15 @@ function LpInfographic({ position, earn, locale, t, empty }) {
         </div>
         <div>
           <dt>{t.lpFees24h}</dt>
-          <dd className="is-earn">{empty ? "—" : earn24}</dd>
+          <dd>
+            <PoolWindowValue pool={earn} window="24h" locale={locale} empty={empty} />
+          </dd>
         </div>
         <div>
           <dt>{t.lpFees7d}</dt>
-          <dd className="is-earn">{empty ? "—" : earn7}</dd>
+          <dd>
+            <PoolWindowValue pool={earn} window="7d" locale={locale} empty={empty} />
+          </dd>
         </div>
       </dl>
     </div>
@@ -435,22 +442,26 @@ function WalletEarnCell({ label, rows, empty, className = "", usdOnly = false, t
       className={`wallet-earn-cell${empty ? " is-empty" : " is-filled"}${usdOnly ? " is-usd-only" : ""}${className ? ` ${className}` : ""}`}
     >
       <p className="wallet-earn-label">{label}</p>
-      <p className="wallet-earn-cols">
-        <span className="wallet-earn-cols-spacer" aria-hidden="true" />
-        <span className="wallet-earn-cols-titles">
+      <div className="wallet-earn-grid">
+        <p className="wallet-earn-row is-head">
+          <span className="wallet-earn-range" aria-hidden="true" />
           {usdOnly ? null : <span className="wallet-earn-col-lp">{t?.incomeLpTokens || "LP"}</span>}
           <span className="wallet-earn-col-usd">{t?.incomeUsd || "USD"}</span>
-        </span>
-      </p>
-      {rows.map((row) => (
-        <p key={row.range} className="wallet-earn-row">
-          <span className="wallet-earn-range">{row.range}</span>
-          <span className="wallet-earn-value">
-            <b>{row.amount}</b>
-            {row.usd ? <i>{row.usd}</i> : null}
-          </span>
         </p>
-      ))}
+        {rows.map((row) => (
+          <p key={row.range} className="wallet-earn-row">
+            <span className="wallet-earn-range">{row.range}</span>
+            {usdOnly ? (
+              <b className="wallet-earn-usd">{row.amount}</b>
+            ) : (
+              <>
+                <b className="wallet-earn-lp">{row.amount}</b>
+                <i className="wallet-earn-usd">{row.usd}</i>
+              </>
+            )}
+          </p>
+        ))}
+      </div>
     </div>
   );
 }
