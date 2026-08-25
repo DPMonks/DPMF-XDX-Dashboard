@@ -1965,27 +1965,71 @@ body {
   gap: 8px;
 }
 
-.xdx-swap-row.is-for {
-  grid-template-columns: 5.25rem minmax(7.25rem, 1fr);
-}
-
-.xdx-swap-row.is-for .brand-select,
-.xdx-swap-row.is-for .pair-select {
-  width: 100%;
-  min-width: 7.25rem;
-}
-
-.xdx-swap-receive {
+.xdx-swap-pair-picks {
   display: grid;
-  align-content: center;
+  gap: 10px;
+}
+
+@media (min-width: 520px) {
+  .xdx-swap-pair-picks {
+    grid-template-columns: 1fr 1fr;
+    align-items: end;
+  }
+}
+
+.xdx-swap-leg {
+  display: grid;
+  gap: 6px;
   min-width: 0;
 }
 
-.xdx-swap-receive small {
+.xdx-swap-leg > span,
+.xdx-swap-receive-block > span {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dpmf-text-muted);
+}
+
+.xdx-swap-leg .brand-select,
+.xdx-swap-leg .pair-select,
+.xdx-swap-row.is-for .brand-select,
+.xdx-swap-row.is-for .pair-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.xdx-swap-input.is-amount {
+  margin-top: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--dpmf-border-soft);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.xdx-swap-receive-block {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.xdx-swap-receive,
+.xdx-swap-receive-block {
+  min-width: 0;
+}
+
+.xdx-swap-receive small,
+.xdx-swap-receive-block small {
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--dpmf-text-muted);
+}
+
+.xdx-swap-row.is-for {
+  grid-template-columns: 5.25rem minmax(7.25rem, 1fr);
 }
 
 .xdx-swap-row + .xdx-swap-row {
@@ -2043,17 +2087,20 @@ body {
   min-width: 7.25rem;
 }
 
-.xdx-swap-row .pair-select-control {
+.xdx-swap-row .pair-select-control,
+.xdx-swap-leg .pair-select-control {
   min-height: 44px;
 }
 
-.xdx-swap-row .pair-select-input {
+.xdx-swap-row .pair-select-input,
+.xdx-swap-leg .pair-select-input {
   min-height: 44px;
   padding-top: 0;
   padding-bottom: 0;
 }
 
-.xdx-swap-row .pair-select-chevron {
+.xdx-swap-row .pair-select-chevron,
+.xdx-swap-leg .pair-select-chevron {
   width: 44px;
   min-width: 44px;
   height: 44px;

@@ -427,19 +427,26 @@ export default function XdxSwapPanel() {
               </button>
             </div>
 
-            <div className="xdx-swap-row">
-              <span>{t.swapStart || "Start swap"}</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                className="xdx-swap-input"
-                value={amount}
-                placeholder="0"
-                aria-label={t.swapAmount}
-                onChange={(event) => setAmount(sanitizeQtyInput(event.target.value))}
-              />
-              {fromSelect}
+            <div className="xdx-swap-pair-picks">
+              <div className="xdx-swap-leg">
+                <span>{t.swapStart || "Start swap"}</span>
+                {fromSelect}
+              </div>
+              <div className="xdx-swap-leg">
+                <span>{t.swapFor || "For"}</span>
+                {toSelect}
+              </div>
             </div>
+
+            <input
+              type="text"
+              inputMode="decimal"
+              className="xdx-swap-input is-amount"
+              value={amount}
+              placeholder="0"
+              aria-label={t.swapAmount}
+              onChange={(event) => setAmount(sanitizeQtyInput(event.target.value))}
+            />
             <div className="xdx-swap-tools">
               <div className="xdx-swap-pcts" role="group" aria-label={t.swapPercents}>
                 {SWAP_PCTS.map((pct) => {
@@ -461,20 +468,15 @@ export default function XdxSwapPanel() {
               {haveText ? <p className="xdx-swap-hold">{haveText}</p> : null}
             </div>
 
-            <div className="xdx-swap-row is-for">
-              <span>{t.swapFor || "For"}</span>
-              {toSelect}
-            </div>
-
-            <div className="xdx-swap-row is-receive">
+            <div className="xdx-swap-receive-block">
               <span>{t.swapReceive || "Receive"}</span>
-              <div className="xdx-swap-receive">
-                <p className="xdx-swap-out">
-                  {gotFill ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "—"}
-                </p>
-                <small>{t.swapReceiveHint || "total tokens"}</small>
-              </div>
-              <p className="xdx-swap-token">{toTicker}</p>
+              <p className="xdx-swap-out">
+                {gotFill ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "—"}
+              </p>
+              <small>
+                {t.swapReceiveHint || "total tokens"}
+                {toTicker ? ` · ${toTicker}` : ""}
+              </small>
             </div>
           </div>
 
