@@ -226,7 +226,7 @@ function mapPool(row) {
         "reserveCurrency",
         "amount2",
         "quote_reserve",
-        "xrp_reserve",
+        ...((pick(row, ["quote"]) || quoteFromName || "XRP") === "XRP" ? ["xrp_reserve"] : []),
       ])
     ),
     lp_supply: numberOrNull(pick(row, ["lp_supply", "lpSupply", "lp_token.value", "lpToken"])),

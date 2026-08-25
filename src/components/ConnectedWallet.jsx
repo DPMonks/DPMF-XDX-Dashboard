@@ -216,7 +216,7 @@ function LpInfographic({ position, earn, locale, t, empty }) {
   );
 }
 
-function WalletIncomePanel({ address, snapshotRows, positions, priceBook, locale, t, empty }) {
+function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook, locale, t, empty }) {
   const [incomePair, setIncomePair] = useState(DEFAULT_INCOME_PAIR);
   const [historyActivity, setHistoryActivity] = useState(null);
   const [loading, setLoading] = useState(() => Boolean(address) && !empty);
@@ -234,6 +234,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, priceBook, locale
     snapshotRows,
     historyActivity,
     positions,
+    pools,
     prices: priceBook,
     xdxUsd: priceBook?.xdxUsd,
     xrpUsd: priceBook?.xrpUsd,
@@ -647,6 +648,7 @@ export default function ConnectedWallet() {
         address={walletAddress}
         snapshotRows={view.income}
         positions={view.lp}
+        pools={view.pools}
         priceBook={view.priceBook}
         locale={locale}
         t={t}

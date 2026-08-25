@@ -630,6 +630,7 @@ export function emptyWalletSnapshot(address = null) {
     },
     lp: [],
     income: [],
+    pools: [],
     priceBook: {},
     rank: null,
     book: null,
@@ -734,6 +735,7 @@ export function composeWalletSnapshot({
     lpDepositIncomeRows({
       activity: mergeWalletActivity(ledgerActivity, pending.activity),
       positions: lp,
+      pools,
       xdxUsd,
       xrpUsd,
       rlusdUsd,
@@ -765,6 +767,7 @@ export function composeWalletSnapshot({
     }),
     lp,
     income,
+    pools,
     priceBook,
     rank: num(rank ?? token.rank ?? balances.rank),
     book: xrpBook

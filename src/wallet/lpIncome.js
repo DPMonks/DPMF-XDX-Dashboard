@@ -92,6 +92,51 @@ function priceBookFromArgs(args = {}) {
   });
 }
 
+function preferPositive(...values) {
+  for (const value of values) {
+    if (value > 0) return value;
+  }
+  return 0;
+}
+
+function preferLargest(...values) {
+  return values.reduce((best, value) => (value > best ? value : best), 0);
+}
+
+export function poolForIncomePair(pair, positions = [], pools = []) {
+  const want = incomePairName(pair);
+  const position =
+    (Array.isArray(positions) ? positions : []).find(
+      (row) => incomePairName(row?.pool || row?.pool_name || row?.pair) === want
+    ) || {};
+  const catalog =
+    (Array.isArray(pools) ? pools : []).find(
+      (row) => incomePairName(row?.pool || row?.pool_name || row?.pair) === want
+    ) || {};
+  const reserveXdx = preferPositive(
+    num(catalog.reserve_asset ?? catalog.reserve_xdx),
+    num(position.reserve_asset ?? position.reserve_xdx)
+  );
+  const reserveQuote = preferPositive(
+    num(catalog.reserve_currency ?? catalog.reserve_quote),
+    num(position.reserve_currency ?? position.reserve_quote)
+  );
+  const supply = preferLargest(num(catalog.lp_supply), num(position.lp_supply));
+  return {
+    ...catalog,
+    ...position,
+    pair: want,
+    pool: want,
+    pool_name: want,
+    quote: position.quote || catalog.quote || want.split("/")[1],
+    lp_supply: supply,
+    reserve_asset: reserveXdx,
+    reserve_xdx: reserveXdx,
+    reserve_currency: reserveQuote,
+    reserve_quote: reserveQuote,
+  };
+}
+
 export function lpTokenUsd(lpTokens, pool = {}, prices = {}) {
   const tokens = num(lpTokens);
   const supply = num(pool.lp_supply);
@@ -101,14 +146,19 @@ export function lpTokenUsd(lpTokens, pool = {}, prices = {}) {
   const book = normalizePriceBook(prices);
   const quoteId = pairQuote(pool.pool || pool.pool_name || pool.pair, pool.quote);
   const xdxUsd = num(book.xdxUsd ?? prices.xdxUsd ?? prices.recorded_price);
-  const quoteUsd = detectQuoteUsd({
-    quoteId,
-    pool: { ...pool, xdxUsd },
-    prices: book,
-    allowImplied: true,
-  });
-  const xdxValue = reserveXdx > 0 && xdxUsd > 0 ? reserveXdx * xdxUsd : 0;
-  const quoteValue = reserveQuote > 0 && quoteUsd > 0 ? reserveQuote * quoteUsd : 0;
+  const quoteUsd =
+    quoteId === "RLUSD"
+      ? 1
+      : detectQuoteUsd({
+          quoteId,
+          pool: { ...pool, xdxUsd },
+          prices: book,
+          allowImplied: true,
+        });
+  let xdxValue = reserveXdx > 0 && xdxUsd > 0 ? reserveXdx * xdxUsd : 0;
+  let quoteValue = reserveQuote > 0 && quoteUsd > 0 ? reserveQuote * quoteUsd : 0;
+  if (xdxValue > 0 && !(quoteValue > 0)) quoteValue = xdxValue;
+  if (quoteValue > 0 && !(xdxValue > 0)) xdxValue = quoteValue;
   if (!(xdxValue > 0) && !(quoteValue > 0)) return 0;
   return (tokens / supply) * (xdxValue + quoteValue);
 }
@@ -190,17 +240,12 @@ export function lpFeeIncomeRows({
 export function lpDepositIncomeRows({
   activity = [],
   positions = [],
+  pools = [],
   xdxUsd = 0,
   xrpUsd = 0,
   rlusdUsd = 1,
   prices,
 } = {}) {
-  const byPair = new Map(
-    (Array.isArray(positions) ? positions : []).map((row) => [
-      normalizeWalletPair(row.pool || row.pool_name),
-      row,
-    ])
-  );
   const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
   const rows = [];
   for (const item of Array.isArray(activity) ? activity : []) {
@@ -213,7 +258,7 @@ export function lpDepositIncomeRows({
       date,
       lpTokens,
       pair,
-      usd: lpTokenUsd(lpTokens, byPair.get(pair) || { pair }, book),
+      usd: lpTokenUsd(lpTokens, poolForIncomePair(pair, positions, pools), book),
       kind: item.side === "createPool" ? "create" : "deposit",
       txid: item.txid || null,
     });
@@ -236,6 +281,7 @@ export function incomeRowsForPair({
   snapshotRows = [],
   historyActivity = null,
   positions = [],
+  pools = [],
   prices,
   xdxUsd = 0,
   xrpUsd = 0,
@@ -250,6 +296,7 @@ export function incomeRowsForPair({
       : lpDepositIncomeRows({
           activity: historyActivity,
           positions,
+          pools,
           xdxUsd,
           xrpUsd,
           rlusdUsd,
