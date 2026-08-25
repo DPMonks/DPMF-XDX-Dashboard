@@ -52,6 +52,7 @@ import {
   rememberConsumedUuid,
   rememberPendingPayload,
   shouldAutoClaimPendingTrade,
+  shouldResumePendingSignIn,
   takeXamanReturnUuid,
   xamanWebsocketUrl,
 } from "../src/xaman/payloadResume.js";
@@ -576,6 +577,29 @@ test("opening a new trade discards a leftover watchTrade payload", () => {
   } finally {
     clearPendingPayload();
     clearConsumedUuids();
+    if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
+    else globalThis.sessionStorage = previous.sessionStorage;
+    if (previous.localStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous.localStorage;
+  }
+});
+
+test("a stored payload does not resume sign-in unless Xaman returned the uuid", () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const previous = {
+    sessionStorage: globalThis.sessionStorage,
+    localStorage: globalThis.localStorage,
+  };
+  globalThis.sessionStorage = memoryStore();
+  globalThis.localStorage = memoryStore();
+  try {
+    rememberPendingPayload(uuid);
+    assert.equal(shouldResumePendingSignIn(""), false);
+    assert.equal(shouldResumePendingSignIn(`?xaman=${uuid}`), true);
+    rememberPendingPayload(uuid, { watchTrade: true, txjson: { TransactionType: "Payment" } });
+    assert.equal(shouldResumePendingSignIn(`?xaman=${uuid}`), false);
+  } finally {
+    clearPendingPayload();
     if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
     else globalThis.sessionStorage = previous.sessionStorage;
     if (previous.localStorage === undefined) delete globalThis.localStorage;
