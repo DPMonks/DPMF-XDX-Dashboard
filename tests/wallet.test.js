@@ -253,7 +253,7 @@ test("composeWalletSnapshot stays blank until an address is signed in", () => {
 
   const filled = composeWalletSnapshot({
     address: "rExample",
-    balances: { xrp: 12, xdx: 5000 },
+    balances: { xrp: 12, xdx: 5000, rlusd: 127.3 },
     prices: {
       xdxUsd: 0.00004,
       xdxGbp: 0.00003,
@@ -268,6 +268,7 @@ test("composeWalletSnapshot stays blank until an address is signed in", () => {
   assert.equal(filled.filled, true);
   assert.equal(filled.holdings.xdx, 5000);
   assert.equal(filled.holdings.xrp, 12);
+  assert.equal(filled.holdings.rlusd, 127.3);
   assert.equal(filled.xdx.usd, 0.2);
   assert.equal(filled.xdx.rlusd, 0.2);
   assert.equal(filled.xdx.gbp, 0.15);
@@ -342,9 +343,14 @@ test("lpFeeEarnings sums 24h pool fees across every LP position", () => {
   assert.equal(priced.earnings.xdx24h, 5);
   assert.equal(priced.earnings.xrp24h, 5 * (2 / 50_000));
   assert.equal(priced.earnings.rlusd24h, 0);
+  assert.equal(priced.earnings.xdx24hUsd, 5 * 0.00004);
+  assert.equal(priced.earnings.xrp24hUsd, priced.earnings.xrp24h * 1);
+  assert.equal(priced.earnings.rlusd24hUsd, 0);
   assert.equal(priced.earnings.xdx7d, 7.5);
   assert.equal(priced.earnings.xrp7d, 7.5 * (2 / 50_000));
   assert.equal(priced.earnings.rlusd7d, 0);
+  assert.equal(priced.earnings.xdx7dUsd, 7.5 * 0.00004);
+  assert.equal(priced.earnings.xrp7dUsd, priced.earnings.xrp7d * 1);
   assert.ok(priced.earnings.usd24h > 0);
   assert.ok(priced.earnings.usd7d > priced.earnings.usd24h);
   const rlusd = lpFeeEarnings(
@@ -373,8 +379,11 @@ test("lpFeeEarnings sums 24h pool fees across every LP position", () => {
   assert.equal(rlusd.earnings.xdx24h, 5);
   assert.equal(rlusd.earnings.xrp24h, 0);
   assert.equal(rlusd.earnings.rlusd24h, 5 * (10 / 8000));
+  assert.equal(rlusd.earnings.xdx24hUsd, 5 * 0.00004);
+  assert.equal(rlusd.earnings.rlusd24hUsd, rlusd.earnings.rlusd24h * 1);
   assert.equal(rlusd.earnings.xdx7d, 7.5);
   assert.equal(rlusd.earnings.rlusd7d, 7.5 * (10 / 8000));
+  assert.equal(rlusd.earnings.rlusd7dUsd, rlusd.earnings.rlusd7d * 1);
   assert.ok(Math.abs(rlusd.earnings.usd24h - (5 * 0.00004 + 5 * (10 / 8000))) < 1e-12);
   const both = lpFeeEarnings(
     [
