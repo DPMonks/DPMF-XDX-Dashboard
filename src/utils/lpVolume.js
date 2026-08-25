@@ -259,21 +259,65 @@ export function sumFlowXdx(rows = [], { now = Date.now(), windowMs = DAY_MS, pai
   return sum;
 }
 
+export function xdxPairKey(value) {
+  const raw = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "/");
+  if (!raw) return "";
+  if (raw.startsWith("XDX/")) return raw;
+  if (/^[A-Z0-9]{2,12}$/.test(raw)) return `XDX/${raw}`;
+  return raw;
+}
+
+export function volumesFromFlows(flows = [], { now = Date.now(), windowMs = DAY_MS } = {}) {
+  const cutoff = now - Number(windowMs || DAY_MS);
+  const byPair = {};
+  for (const row of Array.isArray(flows) ? flows : []) {
+    const ts = new Date(row.timestamp || row.time).getTime();
+    if (!Number.isFinite(ts) || ts < cutoff) continue;
+    const pair = xdxPairKey(row.pool || row.pool_name || row.pair);
+    if (!/^XDX\/[A-Z0-9]{2,12}$/.test(pair)) continue;
+    byPair[pair] = (byPair[pair] || 0) + Math.abs(Number(row.xdx) || 0);
+  }
+  return byPair;
+}
+
+export function overlayPoolFlowVolumes(pools = [], flows = [], now = Date.now()) {
+  const byPair = volumesFromFlows(flows, { now });
+  return (Array.isArray(pools) ? pools : []).map((pool) => {
+    const pair = xdxPairKey(pool.pool || pool.pool_name || pool.pair);
+    const fromFlow = byPair[pair] || 0;
+    const current = Number(pool.volume24h ?? pool.volume24hXdx);
+    const next = Number.isFinite(current) && current > 0 ? Math.max(current, fromFlow) : fromFlow;
+    return {
+      ...pool,
+      volume24h: next,
+      volume24hXdx: next,
+      volumeUnit: "xdx",
+      volumeSource: fromFlow > 0 && !(current > fromFlow) ? "xdx-flows" : pool.volumeSource || "recorded",
+    };
+  });
+}
+
 export function attachPoolVolumes(pool = {}, volumes = {}) {
-  const volume24hXdx = numPos(volumes.volume24hXdx);
+  const incoming = Number(volumes.volume24hXdx);
+  const volume24hXdx = Number.isFinite(incoming) && incoming >= 0 ? incoming : numPos(pool.volume24h);
   const volume7dXdx = numPos(volumes.volume7dXdx);
   const volume24hXrp = numPos(volumes.volume24hXrp);
   const volume24hUsd = numPos(volumes.volume24hUsd);
+  const recorded = Number.isFinite(volume24hXdx) ? volume24hXdx : 0;
   return {
     ...pool,
-    volume24h: volume24hXdx || numPos(pool.volume24h) || null,
-    volume24hXdx: volume24hXdx || null,
+    volume24h: recorded,
+    volume24hXdx: recorded,
     volume24hXrp: volume24hXrp || null,
     volume24hUsd: volume24hUsd || null,
     volume7d: volume7dXdx || null,
     volume7dXdx: volume7dXdx || null,
     volumeUnit: "xdx",
-    volumeSource: volumes.source || pool.volumeSource || null,
+    volumeSource: volumes.source || pool.volumeSource || "recorded",
   };
 }
 

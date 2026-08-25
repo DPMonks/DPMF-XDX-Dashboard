@@ -28,6 +28,7 @@ import {
 } from "../utils/xrplToToken";
 import { detectQuoteUsd, preferUsdPoolSplit } from "../utils/poolSplit";
 import { sanePoolQuoteReserve } from "../ammPools";
+import { overlayPoolFlowVolumes } from "../utils/lpVolume";
 import { LIST_PAGE_SIZE, shouldFetchMoreRows } from "../utils/pagination";
 import {
   composeAmmBook,
@@ -334,17 +335,21 @@ export async function getOverview() {
 }
 
 export async function getAmm() {
-  const [body, prices] = await Promise.all([
+  const [body, prices, flows] = await Promise.all([
     api.lpPools().catch(() => ({ pools: [], catching_up: true })),
     api.prices().catch(() => ({})),
+    getXdxFlows().catch(() => []),
   ]);
   const xdxUsd = numberOrNull(prices?.xdxUsd ?? prices?.recorded_price);
   const xrpUsd = numberOrNull(prices?.xrpUsd);
-  return uniquePools(
-    asArray(body)
-      .map(mapPool)
-      .filter(Boolean)
-      .map((row) => withPoolSplit(row, row.xdxUsd || xdxUsd, xrpUsd, prices))
+  return overlayPoolFlowVolumes(
+    uniquePools(
+      asArray(body)
+        .map(mapPool)
+        .filter(Boolean)
+        .map((row) => withPoolSplit(row, row.xdxUsd || xdxUsd, xrpUsd, prices))
+    ),
+    flows
   );
 }
 
@@ -353,13 +358,16 @@ export async function discoverLiveAmmPool(pair, extra = {}) {
   const ammAccount = String(extra.ammAccount || extra.amm_account || "").trim();
   const validPair = /^XDX\/[A-Z0-9]{2,12}$/.test(name);
   if (!validPair && !/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(ammAccount)) return null;
-  const live = await getLiveLpReserves({
-    pair: validPair ? name : extra.pair || extra.pool,
-    quote: extra.quote || (validPair ? name.split("/")[1] : undefined),
-    issuer: extra.issuer || extra.quote_issuer,
-    hex: extra.hex || extra.quote_hex,
-    ammAccount,
-  }).catch(() => null);
+  const [live, flows] = await Promise.all([
+    getLiveLpReserves({
+      pair: validPair ? name : extra.pair || extra.pool,
+      quote: extra.quote || (validPair ? name.split("/")[1] : undefined),
+      issuer: extra.issuer || extra.quote_issuer,
+      hex: extra.hex || extra.quote_hex,
+      ammAccount,
+    }).catch(() => null),
+    getXdxFlows().catch(() => []),
+  ]);
   if (!live || live.empty || live.reserve_source === "empty") return null;
   if (
     !(
@@ -373,7 +381,7 @@ export async function discoverLiveAmmPool(pair, extra = {}) {
   const resolved = String(live.pair || name || "")
     .replace(/\s+/g, "")
     .toUpperCase();
-  return mapPool({
+  const mapped = mapPool({
     ...live,
     pool: resolved || live.pair,
     pool_name: resolved || live.pair,
@@ -382,6 +390,7 @@ export async function discoverLiveAmmPool(pair, extra = {}) {
     quote_hex: extra.hex || live.quote_hex,
     amm_account: live.amm_account || ammAccount,
   });
+  return overlayPoolFlowVolumes([mapped], flows)[0] || mapped;
 }
 
 let lastOrderbooks = null;

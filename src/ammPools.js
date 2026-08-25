@@ -245,3 +245,33 @@ export function tradePoolHint(detail = {}) {
   if (raw && !raw.includes("/")) return `XDX/${raw}`;
   return "";
 }
+
+export function tradeXdxVolume(detail = {}) {
+  const trade = detail.trade || {};
+  const action = String(trade.action || detail.action || "").toLowerCase();
+  if (action !== "buy" && action !== "sell") return 0;
+  const tx = detail.txjson || {};
+  return (
+    Number(trade.amount) ||
+    Number(trade.xdx) ||
+    (isXdxAmount(tx.TakerGets) ? issuedAmountValue(tx.TakerGets) : 0) ||
+    (isXdxAmount(tx.TakerPays) ? issuedAmountValue(tx.TakerPays) : 0) ||
+    0
+  );
+}
+
+export function applyTradePoolVolume(pool, detail = {}) {
+  if (!pool) return pool;
+  const add = tradeXdxVolume(detail);
+  if (!(add > 0)) return pool;
+  const pair = tradePoolHint(detail);
+  if (pair && ammPoolName(pool) !== pair) return pool;
+  const next = (Number(pool.volume24h) || 0) + add;
+  return {
+    ...pool,
+    volume24h: next,
+    volume24hXdx: next,
+    volumeUnit: "xdx",
+    volumeSource: "trade",
+  };
+}

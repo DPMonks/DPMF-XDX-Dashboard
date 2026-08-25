@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   applyLivePoolReserves,
   applyTradePoolReserves,
+  applyTradePoolVolume,
   looksLikeLpAsQuote,
   compactPoolAmount,
   filterAmmPools,
@@ -184,6 +185,17 @@ test("add or remove LP updates the card from the signed amounts immediately", ()
   );
   assert.equal(leaked.reserve_currency, 4);
   assert.equal(leaked.lp_supply, 56047.4283);
+});
+
+test("a signed buy or sell adds XDX to that pool's 24h volume immediately", () => {
+  const pool = { pool: "XDX/XIO", volume24h: 100 };
+  const bought = applyTradePoolVolume(pool, { trade: { action: "buy", pair: "XDX/XIO", amount: 50 } });
+  assert.equal(bought.volume24h, 150);
+  assert.equal(bought.volumeUnit, "xdx");
+  const other = applyTradePoolVolume(pool, { trade: { action: "buy", pair: "XDX/XRP", amount: 50 } });
+  assert.equal(other.volume24h, 100);
+  const fresh = applyTradePoolVolume({ pool: "XDX/NEWS" }, { trade: { action: "sell", pair: "XDX/NEWS", amount: 25 } });
+  assert.equal(fresh.volume24h, 25);
 });
 
 test("known live pool specs include featured XDX quotes, not only XRP and RLUSD", () => {

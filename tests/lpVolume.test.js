@@ -16,6 +16,7 @@ import {
   xdxVolumeFromGeckoPool,
   xdxVolumeFromTokenCard,
   dailyXdxFlowsFromOhlc,
+  overlayPoolFlowVolumes,
   xrpVolumeFromOhlc,
 } from "../src/utils/lpVolume.js";
 import { composeWalletSnapshot, lpFeeEarnings, tradingFeeRate } from "../src/wallet/composeWallet.js";
@@ -337,4 +338,31 @@ test("free volume cascade prefers complete pair APIs and scales 7d from OHLC", a
   assert.ok(dexscreenerPairForQuote({ pairs: [{ chainId: "xrpl", baseToken: { symbol: "XDX" }, quoteToken: { symbol: "RLUSD" } }] }, "RLUSD"));
   assert.ok(geckoPoolForQuote({ data: [{ attributes: { name: "XDX / RLUSD" } }] }, "RLUSD"));
   assert.ok(attachPoolVolumes({}, xrp).volume24hXdx > 0);
+});
+
+test("every pool records 24h XDX volume, including new pairs with no tape", () => {
+  const now = Date.parse("2026-08-25T18:00:00.000Z");
+  const overlaid = overlayPoolFlowVolumes(
+    [
+      { pool: "XDX/XIO", volume24h: null },
+      { pool: "XDX/NEWS" },
+      { pool: "XDX/XRP", volume24h: 8_000_000 },
+    ],
+    [
+      { pool: "XDX/XIO", xdx: 1200, timestamp: "2026-08-25T10:00:00.000Z" },
+      { pool: "XDX/XIO", xdx: 800, timestamp: "2026-08-25T12:00:00.000Z" },
+    ],
+    now
+  );
+  assert.equal(overlaid[0].volume24h, 2000);
+  assert.equal(overlaid[1].volume24h, 0);
+  assert.equal(overlaid[1].volumeUnit, "xdx");
+  assert.equal(overlaid[2].volume24h, 8_000_000);
+  const applied = applyPoolVolumes(
+    [{ pool: "XDX/XSQUAD" }, { pool: "XDX/XIO" }],
+    { "XDX/XIO": { volume24hXdx: 2000, source: "xrpl.to-history" } }
+  );
+  assert.equal(applied[0].volume24h, 0);
+  assert.equal(applied[0].volumeUnit, "xdx");
+  assert.equal(applied[1].volume24h, 2000);
 });

@@ -290,6 +290,7 @@ export async function loadLiveMarket(options = {}) {
     now,
     fresh: options.fresh,
     fetchImpl: options.fetchImpl,
+    pairs: liveSpecs.map((spec) => spec.pair),
   }).catch(() => ({}));
   const pools = applyPoolVolumes(
     liveSpecs

@@ -7,6 +7,7 @@ import {
   ammPoolName,
   applyLivePoolReserves,
   applyTradePoolReserves,
+  applyTradePoolVolume,
   compactPoolAmount,
   looksLikeLpAsQuote,
   filterAmmPools,
@@ -19,6 +20,7 @@ import {
   searchAmmAccount,
   searchPairHint,
   tradePoolHint,
+  tradeXdxVolume,
 } from "../ammPools";
 import { discoverLiveAmmPool, getLiveLpReserves } from "../api/indexer";
 import { xdxTrustSetTxjson } from "../constants/ledger";
@@ -144,12 +146,22 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
   const [signAsset, setSignAsset] = useState("XDX");
   const [lineError, setLineError] = useState("");
   const [liveByKey, setLiveByKey] = useState({});
+  const [volumeByKey, setVolumeByKey] = useState({});
   const lookupGen = useRef(0);
   const lookupTimer = useRef(0);
   const liveTimer = useRef(0);
   const catalog = mergeAmmPoolLists(pools, found);
   const filtered = filterAmmPools(catalog, query);
-  const visible = filtered.map((row) => applyLivePoolReserves(row, liveByKey[poolKey(row)]));
+  const visible = filtered.map((row) => {
+    const live = applyLivePoolReserves(row, liveByKey[poolKey(row)]);
+    const catalogVol = Number(live.volume24h ?? live.volume24hXdx);
+    const recorded = Number(volumeByKey[poolKey(row)]);
+    const volume24h = Math.max(
+      Number.isFinite(catalogVol) && catalogVol > 0 ? catalogVol : 0,
+      Number.isFinite(recorded) ? recorded : 0
+    );
+    return { ...live, volume24h, volume24hXdx: volume24h, volumeUnit: "xdx" };
+  });
 
   function pullLive(pool, extra = {}) {
     if (!pool) return;
@@ -208,6 +220,26 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
       return next;
     });
     refreshLive(nextTargets, { fresh: true });
+  }
+
+  function recordTradeVolume(detail) {
+    const add = tradeXdxVolume(detail);
+    if (!(add > 0)) return;
+    const pair = tradePoolHint(detail);
+    const rows = filterAmmPools(mergeAmmPoolLists(pools, found), query);
+    const targets = pair ? rows.filter((row) => ammPoolName(row) === pair) : rows.slice(0, 6);
+    setVolumeByKey((current) => {
+      const next = { ...current };
+      for (const row of targets) {
+        const key = poolKey(row);
+        const shown = applyTradePoolVolume(
+          { ...row, volume24h: current[key] ?? row.volume24h ?? 0 },
+          detail
+        );
+        next[key] = Number(shown.volume24h) || 0;
+      }
+      return next;
+    });
   }
   const signing = status === "loading" || status === "waiting";
   const account = liveWalletAddress(walletAddress);
@@ -271,8 +303,8 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
   useEffect(() => {
     function onTrade(event) {
       const detail = event?.detail || {};
-      if (!isLpPoolTrade(detail)) return;
-      applyTradeThenLive(detail);
+      if (isLpPoolTrade(detail)) applyTradeThenLive(detail);
+      recordTradeVolume(detail);
     }
     window.addEventListener("dpmf-trade-executed", onTrade);
     return () => {
@@ -406,15 +438,13 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
                   <dd>{`${formatNumber(pool.apr, locale)}%`}</dd>
                 </div>
               ) : null}
-              {pool.volume24h != null ? (
-                <div>
-                  <dt>{t.volume24h}</dt>
-                  <dd>
-                    <span className="is-volume">{formatToken(pool.volume24h, locale)}</span>{" "}
-                    <span className="pool-volume-unit">{t.xdx}</span>
-                  </dd>
-                </div>
-              ) : null}
+              <div>
+                <dt>{t.volume24h}</dt>
+                <dd>
+                  <span className="is-volume">{formatToken(pool.volume24h ?? 0, locale)}</span>{" "}
+                  <span className="pool-volume-unit">{t.xdx}</span>
+                </dd>
+              </div>
             </dl>
             <div className="pool-card-actions">
               {onAddLiquidity ? (
