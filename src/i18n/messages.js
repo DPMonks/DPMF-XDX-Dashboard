@@ -179,6 +179,8 @@ const en = {
   midUsdHint: "Mid USD (not recorded price)",
   orderbookUnit: "Quote per 1 XDX ·",
   searchPair: "Search XDX / asset",
+  noMatchingPools: "No live XDX pools match that search.",
+  lookingForPool: "Looking up that XDX pool on the ledger…",
   ammDepth: "XRPL book_offers — top 20 each side, closest to price. Purple bar is AMM opposing depth at that price.",
   ammImplied: "Filled from this pair’s AMM and from the XDX/XRP DEX via the XRP price. Native book_offers still overlay when the pair has its own tape. Purple bar is AMM opposing depth.",
   emptyOrderbook: "Waiting for XRPL book_offers or AMM reserves on this pair.",

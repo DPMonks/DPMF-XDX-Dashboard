@@ -803,6 +803,23 @@ body {
   font-size: 1.15rem;
 }
 
+.amm-pools-search {
+  display: block;
+  width: min(360px, 100%);
+  max-width: 100%;
+  margin: 0 0 14px;
+}
+
+.amm-pools-search .orderbook-search {
+  max-width: 100%;
+}
+
+.amm-pools-looking {
+  margin: 0 0 10px;
+  color: var(--dpmf-text-muted);
+  font-size: 12px;
+}
+
 .scroll-area,
 .rich-table-wrap {
   max-height: 460px;
@@ -3490,7 +3507,9 @@ body {
   .brand-select-list button,
   .wallet-lp-select select,
   .wallet-income-select select,
-  .wallet-income-copy {
+  .wallet-income-copy,
+  .orderbook-search,
+  .amm-pools-search .orderbook-search {
     min-height: 44px;
   }
 
