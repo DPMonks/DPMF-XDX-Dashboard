@@ -334,6 +334,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
             <select
               value={incomePair}
               disabled={empty}
+              aria-label={t.incomePairSelect || t.incomePair || "Pair"}
               onChange={(event) => onPairChange(event.target.value)}
             >
               {pairs.map((name) => (
