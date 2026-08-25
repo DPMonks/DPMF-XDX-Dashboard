@@ -555,7 +555,9 @@ body {
 }
 
 .wallet-token-row > .dashboard-card {
+  height: 0;
   min-height: 100%;
+  overflow: hidden;
 }
 
 .token-details-stack {
@@ -2067,8 +2069,13 @@ body {
   gap: 12px;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
   container-type: inline-size;
   container-name: wallet;
+}
+
+.connected-wallet > *:not(.wallet-income) {
+  flex-shrink: 0;
 }
 
 .wallet-hero {
@@ -2787,14 +2794,38 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .wallet-income-scroll {
   flex: 1 1 auto;
-  min-height: 220px;
+  min-height: 8rem;
   max-height: none;
   overflow: auto;
-  padding-right: 2px;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+  scrollbar-color: var(--dpmf-scroll-thumb) var(--dpmf-scroll-track);
+  scrollbar-width: thin;
+}
+
+.wallet-income-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.wallet-income-scroll::-webkit-scrollbar-thumb {
+  background: var(--dpmf-scroll-thumb);
+  border-radius: 99px;
+}
+
+.wallet-income-scroll::-webkit-scrollbar-track {
+  background: var(--dpmf-scroll-track);
+}
+
+.wallet-income-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--dpmf-bg-elevated);
 }
 
 .wallet-income-table {
@@ -3174,12 +3205,19 @@ body {
 
   .wallet-token-row > .dashboard-card,
   .token-details-stack > .dashboard-card {
+    height: auto;
     min-height: 0;
+    overflow: visible;
   }
 
   .connected-wallet,
   .wallet-income {
     flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .wallet-income {
+    overflow: hidden;
   }
 
   .wallet-income-tools,
@@ -3295,7 +3333,9 @@ body {
   }
 
   .wallet-token-row > .dashboard-card {
+    height: auto;
     min-height: 0;
+    overflow: visible;
   }
 
   .header-bar {
@@ -3563,7 +3603,9 @@ body {
 @media (min-width: 835px) and (max-width: 1180px) and (orientation: landscape) {
   .wallet-token-row > .dashboard-card,
   .token-details-stack > .dashboard-card {
+    height: auto;
     min-height: 0;
+    overflow: visible;
   }
 
   .lists-row > .dashboard-card {
