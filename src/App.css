@@ -1882,7 +1882,8 @@ body {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  margin-top: 10px;
+  width: min(100%, 34rem);
+  margin: 10px auto 0;
 }
 
 .xdx-swap-dir {
@@ -1955,7 +1956,8 @@ body {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 10px;
   align-items: stretch;
-  margin-top: 10px;
+  width: min(100%, 34rem);
+  margin: 10px auto 0;
 }
 
 .xdx-swap-leg {
