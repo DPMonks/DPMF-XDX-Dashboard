@@ -302,6 +302,32 @@ function volumeOnDay(known, date) {
   return (next || prev)?.xdx || 0;
 }
 
+export function priceBookOnDay(date, dailyPrices = {}, fallback = {}) {
+  const book = priceBookFromArgs({
+    prices: fallback,
+    xdxUsd: fallback.xdxUsd,
+    xrpUsd: fallback.xrpUsd,
+    rlusdUsd: fallback.RLUSD ?? fallback.rlusdUsd,
+  });
+  const map = dailyPrices && typeof dailyPrices === "object" ? dailyPrices : {};
+  const day = utcDayKey(date) || String(date || "");
+  if (!day) return book;
+  let picked = map[day];
+  if (!picked) {
+    const earlier = Object.keys(map)
+      .filter((key) => key && key <= day)
+      .sort();
+    picked = map[earlier[earlier.length - 1]];
+  }
+  if (!picked) return book;
+  return priceBookFromArgs({
+    prices: { ...book, ...picked },
+    xdxUsd: picked.xdxUsd,
+    xrpUsd: picked.xrpUsd,
+    rlusdUsd: picked.rlusdUsd ?? picked.RLUSD ?? book.RLUSD,
+  });
+}
+
 export function fillContinuousVolumeDays(buckets, pair, fromDay, toDay) {
   const want = normalizeWalletPair(pair);
   const start = utcDayKey(fromDay);
@@ -311,8 +337,7 @@ export function fillContinuousVolumeDays(buckets, pair, fromDay, toDay) {
     .filter((row) => row.pair === want && row.xdx > 0)
     .sort((left, right) => (left.date < right.date ? -1 : 1));
   if (!known.length) return buckets;
-  const first = start < known[0].date ? known[0].date : start;
-  for (let ts = Date.parse(`${first}T00:00:00.000Z`); ts <= Date.parse(`${end}T00:00:00.000Z`); ts += DAY_MS) {
+  for (let ts = Date.parse(`${start}T00:00:00.000Z`); ts <= Date.parse(`${end}T00:00:00.000Z`); ts += DAY_MS) {
     const date = utcDayKey(ts);
     if (!date) continue;
     const key = `${date}|${want}`;
@@ -332,6 +357,7 @@ export function lpFeeIncomeRows({
   xrpUsd = 0,
   rlusdUsd = 1,
   prices,
+  dailyPrices,
   now = Date.now(),
 } = {}) {
   const held = (Array.isArray(positions) ? positions : []).filter(
@@ -360,11 +386,16 @@ export function lpFeeIncomeRows({
       .filter((row) => row.pair === pair)
       .map((row) => row.date)
       .sort();
-    const fromDay = [oldest, heldFrom, known[0]].filter(Boolean).sort().pop() || known[0];
+    const fromDay = heldFrom
+      ? [oldest, heldFrom].filter(Boolean).sort().pop()
+      : known[0];
     if (fromDay && today) fillContinuousVolumeDays(buckets, pair, fromDay, today);
   }
 
   const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
+  const dayBooks =
+    (dailyPrices && typeof dailyPrices === "object" && dailyPrices) ||
+    (prices?.dailyPrices && typeof prices.dailyPrices === "object" ? prices.dailyPrices : {});
   const rows = [];
   for (const position of held) {
     const pair = normalizeWalletPair(position.pool || position.pool_name);
@@ -382,7 +413,7 @@ export function lpFeeIncomeRows({
         date: bucket.date,
         lpTokens,
         pair,
-        usd: feeIncomeUsd(feeXdx, position, book),
+        usd: feeIncomeUsd(feeXdx, position, priceBookOnDay(bucket.date, dayBooks, book)),
         kind: "fee",
       });
     }

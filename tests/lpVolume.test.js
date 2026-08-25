@@ -15,6 +15,7 @@ import {
   xdxVolumeFromDexscreenerPair,
   xdxVolumeFromGeckoPool,
   xdxVolumeFromTokenCard,
+  dailyPricesFromOhlc,
   dailyXdxFlowsFromOhlc,
   overlayPoolFlowVolumes,
   xrpVolumeFromOhlc,
@@ -79,6 +80,16 @@ test("token card, OHLC, and Dexscreener convert into XDX, never USD", () => {
   );
   assert.equal(daily.length, 3);
   assert.equal(daily[0].pair, "XDX/XRP");
+  const marks = dailyPricesFromOhlc(
+    [
+      [Date.parse("2026-08-20T00:00:00.000Z"), 0.00003, 0.00004, 0.00003, 0.00004, 3],
+      [Date.parse("2026-08-21T00:00:00.000Z"), 0.00004, 0.00005, 0.00004, 0.00008, 4],
+    ],
+    { xrpUsd: 2, now: Date.parse("2026-08-25T00:00:00.000Z") }
+  );
+  assert.equal(marks["2026-08-20"].xdxUsd, 0.00004);
+  assert.equal(marks["2026-08-21"].xdxUsd, 0.00008);
+  assert.equal(marks["2026-08-20"].xrpUsd, 2);
   assert.ok(Math.abs(daily.find((row) => row.timestamp.startsWith("2026-08-21")).xdx - 100_000) < 1e-6);
   const dex = xdxVolumeFromDexscreenerPair(
     { volume: { h24: 183.33 }, priceUsd: 0.00004734 },

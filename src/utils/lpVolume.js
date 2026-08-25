@@ -91,6 +91,20 @@ export function xrpVolumeFromOhlc(rows = [], { now = Date.now(), windowMs = DAY_
   return sum;
 }
 
+export function dailyPricesFromOhlc(rows = [], { xrpUsd, now = Date.now(), maxDays = 365 } = {}) {
+  const cutoff = Number(now) - Math.max(1, Number(maxDays) || 365) * DAY_MS;
+  const byDay = {};
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const time = Number(Array.isArray(row) ? row[0] : Date.parse(row?.timestamp || row?.time || row?.day || 0));
+    const close = Number(Array.isArray(row) ? row[4] : row?.close ?? row?.price ?? row?.xdxUsd);
+    const ts = time > 1e12 ? time : time * 1000;
+    if (!Number.isFinite(ts) || ts < cutoff || !(close > 0)) continue;
+    const day = new Date(ts).toISOString().slice(0, 10);
+    byDay[day] = { xdxUsd: close, xrpUsd: numPos(xrpUsd) || numPos(byDay[day]?.xrpUsd) || 0 };
+  }
+  return byDay;
+}
+
 export function dailyXdxFlowsFromOhlc(
   rows = [],
   { xrpPerXdx, pair = "XDX/XRP", now = Date.now(), maxDays = 365 } = {}

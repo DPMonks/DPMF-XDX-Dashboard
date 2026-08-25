@@ -14,6 +14,7 @@ import {
   lpFeeIncomeRows,
   lpIncomeCsv,
   lpTokenUsd,
+  priceBookOnDay,
   mergeLpIncomeRows,
   mergeRecordedLpIncome,
   pageLpIncome,
@@ -303,6 +304,70 @@ test("fee history records each historical day from the volume series, not only t
   assert.ok(Math.abs(today.lpTokens - (fromOhlc / 50_000) * 1000) < 1e-9);
   assert.ok(fromOhlc > fromTape);
   assert.equal(HISTORICAL_INCOME_DAYS, 365);
+});
+
+test("XDX/XIO fee history starts from the held day, not the first catalog volume day", () => {
+  const now = Date.parse("2026-08-25T18:00:00.000Z");
+  const rows = lpFeeIncomeRows({
+    now,
+    positions: [
+      {
+        pool: "XDX/XIO",
+        quote: "XIO",
+        lp_share_percent: 5,
+        trading_fee: 1000,
+        reserve_asset: 50_000,
+        reserve_currency: 60,
+        lp_supply: 1_000,
+        lp_balance: 50,
+        volume24hXdx: 20_000,
+      },
+    ],
+    activity: [{ side: "addLp", pair: "XDX/XIO", lp: 50, timestamp: "2026-08-11T10:00:00.000Z" }],
+    xdxUsd: 0.00005,
+  });
+  const days = rows.map((row) => row.date);
+  assert.ok(days.includes("2026-08-25"));
+  assert.ok(days.includes("2026-08-11"));
+  assert.ok(rows.every((row) => row.pair === "XDX/XIO" && row.kind === "fee"));
+});
+
+test("fee USD uses the XDX mark on that UTC day, not today's live price", () => {
+  const now = Date.parse("2026-08-25T18:00:00.000Z");
+  const rows = lpFeeIncomeRows({
+    now,
+    positions: [
+      {
+        pool: "XDX/XIO",
+        quote: "XIO",
+        lp_share_percent: 10,
+        trading_fee: 1000,
+        reserve_asset: 50_000,
+        reserve_currency: 60,
+        lp_supply: 1_000,
+      },
+    ],
+    volumeDays: [
+      { pair: "XDX/XIO", xdx: 1_000_000, timestamp: "2026-08-20T00:00:00.000Z" },
+      { pair: "XDX/XIO", xdx: 1_000_000, timestamp: "2026-08-25T00:00:00.000Z" },
+    ],
+    xdxUsd: 0.00008,
+    dailyPrices: {
+      "2026-08-20": { xdxUsd: 0.00004 },
+      "2026-08-25": { xdxUsd: 0.00008 },
+    },
+  });
+  const older = rows.find((row) => row.date === "2026-08-20");
+  const today = rows.find((row) => row.date === "2026-08-25");
+  assert.ok(older.usd > 0);
+  assert.ok(today.usd > 0);
+  assert.ok(Math.abs(today.usd / older.usd - 2) < 1e-9);
+  const book = priceBookOnDay(
+    "2026-08-20",
+    { "2026-08-20": { xdxUsd: 0.00004, xrpUsd: 2 } },
+    { xdxUsd: 0.00008, xrpUsd: 2 }
+  );
+  assert.equal(book.xdxUsd, 0.00004);
 });
 
 test("signed-in LP lines still produce daily income when wallet/lp is empty", () => {
