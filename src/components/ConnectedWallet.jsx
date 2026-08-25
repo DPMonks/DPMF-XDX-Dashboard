@@ -164,7 +164,7 @@ function SupplyShareBars({ supply, locale, t, empty }) {
           <b>—</b>
         </div>
         <span className="wallet-micro-track">
-          <i />
+          <i style={{ width: "0%" }} />
         </span>
       </div>
       <div className="wallet-micro is-pending">
@@ -173,7 +173,7 @@ function SupplyShareBars({ supply, locale, t, empty }) {
           <b>—</b>
         </div>
         <span className="wallet-micro-track">
-          <i />
+          <i style={{ width: "0%" }} />
         </span>
       </div>
     </div>

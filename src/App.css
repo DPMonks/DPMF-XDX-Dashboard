@@ -2534,6 +2534,8 @@ body {
 .wallet-micro-track i {
   display: block;
   height: 100%;
+  width: 0;
+  max-width: 100%;
   background: linear-gradient(90deg, var(--dpmf-neon-cyan), var(--dpmf-neon-violet));
   transition: width 0.4s ease;
 }
