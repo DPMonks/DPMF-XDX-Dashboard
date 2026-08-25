@@ -176,10 +176,12 @@ export function rowsFromOhlc(payload, asset = "XDX") {
         const time = Number(row[0]);
         const close = Number(row[4] ?? row[1]);
         if (!Number.isFinite(time) || !(close > 0)) return null;
+        const volume = Number(row[5] ?? row.volume ?? row.vol);
         return {
           timestamp: new Date(time > 1e12 ? time : time * 1000).toISOString(),
           price_usd: close,
           asset,
+          volume: Number.isFinite(volume) && volume > 0 ? volume : null,
         };
       }
       const price = rawNumber(row?.price_usd ?? row?.price ?? row?.c);

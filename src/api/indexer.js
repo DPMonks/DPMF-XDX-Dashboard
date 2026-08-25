@@ -832,6 +832,10 @@ export async function getChartHistory() {
   return rows;
 }
 
+export async function getDailyXdxVolumeRows() {
+  return fetchXrplToOhlc();
+}
+
 export async function getXdxFlows() {
   let payload;
   try {
@@ -1035,7 +1039,7 @@ export async function getConnectedWallet(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return emptyWalletSnapshot(null);
 
-  const [balances, networth, account, lpRows, rank, prices, token, pools, books, flows, offers, ledgerActivity, lines] =
+  const [balances, networth, account, lpRows, rank, prices, token, pools, books, flows, offers, ledgerActivity, lines, ohlcRows] =
     await Promise.all([
       getWalletBalances(name).catch(() => ({})),
       getWalletNetworth(name).catch(() => ({})),
@@ -1050,6 +1054,7 @@ export async function getConnectedWallet(address, extra = {}) {
       getWalletOffers(name, extra).catch(() => []),
       getWalletActivity(name, extra).catch(() => []),
       getWalletLines(name, extra).catch(() => []),
+      getDailyXdxVolumeRows().catch(() => []),
     ]);
 
   return composeWalletSnapshot({
@@ -1067,5 +1072,6 @@ export async function getConnectedWallet(address, extra = {}) {
     offers,
     ledgerActivity,
     lines: lines.length ? lines : balances.lines || balances.raw?.lines || [],
+    ohlcRows,
   });
 }

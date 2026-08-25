@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { lpFeeEarnings } from "../src/wallet/composeWallet.js";
 import {
   DEFAULT_INCOME_PAIR,
+  HISTORICAL_INCOME_DAYS,
   dailyLpIncomeTotals,
   filterIncomeByPair,
   incomePairChoices,
@@ -226,6 +227,45 @@ test("fee history fills missing recent days from catalog volume after sign-in", 
   assert.ok(days.includes("2026-08-24"));
   assert.ok(days.length >= 7);
   assert.ok(rows.every((row) => row.kind === "fee" && row.lpTokens > 0));
+});
+
+test("fee history records each historical day from the volume series, not only today", () => {
+  const now = Date.parse("2026-08-25T18:00:00.000Z");
+  const volumeDays = [
+    { pair: "XDX/XRP", xdx: 1_000_000, timestamp: "2026-08-01T00:00:00.000Z" },
+    { pair: "XDX/XRP", xdx: 2_000_000, timestamp: "2026-08-10T00:00:00.000Z" },
+    { pair: "XDX/XRP", xdx: 3_000_000, timestamp: "2026-08-24T00:00:00.000Z" },
+    { pair: "XDX/XRP", xdx: 4_000_000, timestamp: "2026-08-25T00:00:00.000Z" },
+  ];
+  const rows = lpFeeIncomeRows({
+    now,
+    positions: [
+      {
+        pool: "XDX/XRP",
+        quote: "XRP",
+        lp_share_percent: 10,
+        trading_fee: 1000,
+        reserve_asset: 50_000,
+        reserve_currency: 2,
+        lp_supply: 1000,
+      },
+    ],
+    flows: [{ pool: "XDX/XRP", xdx: 500, timestamp: "2026-08-25T10:00:00.000Z" }],
+    volumeDays,
+    xdxUsd: 0.00004,
+    xrpUsd: 2,
+  });
+  assert.deepEqual(
+    rows.map((row) => row.date),
+    ["2026-08-25", "2026-08-24", "2026-08-10", "2026-08-01"]
+  );
+  const today = rows.find((row) => row.date === "2026-08-25");
+  const fromTape = 500 * 0.01 * 0.1;
+  const fromOhlc = 4_000_000 * 0.01 * 0.1;
+  assert.ok(today.lpTokens > 0);
+  assert.ok(Math.abs(today.lpTokens - (fromOhlc / 50_000) * 1000) < 1e-9);
+  assert.ok(fromOhlc > fromTape);
+  assert.equal(HISTORICAL_INCOME_DAYS, 365);
 });
 
 test("signed-in LP lines still produce daily income when wallet/lp is empty", () => {

@@ -4,6 +4,7 @@ import { detectQuoteUsd, normalizePriceBook } from "../utils/poolSplit.js";
 export const DEFAULT_INCOME_PAIR = "XDX/XRP";
 export const INCOME_FEATURED_PAIRS = ["XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"];
 export const LP_INCOME_STORE_PREFIX = "dpmf-lp-income-v1:";
+export const HISTORICAL_INCOME_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CATALOG_FILL_DAYS = 7;
 
@@ -257,9 +258,23 @@ function fillCatalogVolumeDays(buckets, positions = [], now = Date.now()) {
   return buckets;
 }
 
+function overlayVolumeDays(buckets, volumeDays = []) {
+  for (const row of Array.isArray(volumeDays) ? volumeDays : []) {
+    const day = utcDayKey(row.timestamp || row.date || row.day);
+    const pair = normalizeWalletPair(row.pool || row.pool_name || row.pair);
+    const xdx = Math.abs(Number(row.xdx) || 0);
+    if (!day || !isXdxAmmPair(pair) || !(xdx > 0)) continue;
+    const key = `${day}|${pair}`;
+    const current = buckets.get(key);
+    if (!current || xdx > current.xdx) buckets.set(key, { date: day, pair, xdx });
+  }
+  return buckets;
+}
+
 export function lpFeeIncomeRows({
   positions = [],
   flows = [],
+  volumeDays = [],
   activity = [],
   xdxUsd = 0,
   xrpUsd = 0,
@@ -272,16 +287,18 @@ export function lpFeeIncomeRows({
   );
   if (!held.length) return [];
 
+  const oldest = utcDayKey(now - HISTORICAL_INCOME_DAYS * DAY_MS);
   const buckets = new Map();
   for (const flow of Array.isArray(flows) ? flows : []) {
     const day = utcDayKey(flow.timestamp);
     const pair = normalizeWalletPair(flow.pool || flow.pool_name || flow.pair);
-    if (!day || !isXdxAmmPair(pair)) continue;
+    if (!day || !isXdxAmmPair(pair) || (oldest && day < oldest)) continue;
     const key = `${day}|${pair}`;
     const current = buckets.get(key) || { date: day, pair, xdx: 0 };
     current.xdx += Math.abs(Number(flow.xdx) || 0);
     buckets.set(key, current);
   }
+  overlayVolumeDays(buckets, volumeDays);
   fillCatalogVolumeDays(buckets, held, now);
 
   const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
@@ -294,6 +311,7 @@ export function lpFeeIncomeRows({
     for (const bucket of buckets.values()) {
       if (bucket.pair !== pair) continue;
       if (heldFrom && bucket.date < heldFrom) continue;
+      if (oldest && bucket.date < oldest) continue;
       const feeXdx = bucket.xdx * rate * share;
       if (!(feeXdx > 0)) continue;
       const lpTokens = lpEquivalent(feeXdx, position);

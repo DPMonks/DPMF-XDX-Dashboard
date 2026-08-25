@@ -7,7 +7,7 @@ import {
   XDX_XRP_LP_HEX,
 } from "../constants/ledger.js";
 import { fillMissingXdxFiat } from "../utils/fiatFx.js";
-import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
+import { catalogXdxVolume24h, catalogXdxVolume7d, dailyXdxFlowsFromOhlc } from "../utils/lpVolume.js";
 import { looksLikeXrpPerXdx, saneXrpUsd } from "../utils/recordedPrice.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
 import { isXdxAmmPair, lpFeeIncomeRows } from "./lpIncome.js";
@@ -769,6 +769,7 @@ export function composeWalletSnapshot({
   offers = [],
   ledgerActivity = [],
   lines = [],
+  ohlcRows = [],
 } = {}) {
   if (!address) return emptyWalletSnapshot(null);
 
@@ -856,6 +857,7 @@ export function composeWalletSnapshot({
   const income = lpFeeIncomeRows({
     positions: lp,
     flows,
+    volumeDays: dailyXdxFlowsFromOhlc(ohlcRows, { xrpPerXdx: xdxPerXrp }),
     activity: ledgerRows,
     xdxUsd,
     xrpUsd,

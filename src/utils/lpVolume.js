@@ -91,6 +91,30 @@ export function xrpVolumeFromOhlc(rows = [], { now = Date.now(), windowMs = DAY_
   return sum;
 }
 
+export function dailyXdxFlowsFromOhlc(
+  rows = [],
+  { xrpPerXdx, pair = "XDX/XRP", now = Date.now(), maxDays = 365 } = {}
+) {
+  const px = numPos(xrpPerXdx);
+  const cutoff = Number(now) - Math.max(1, Number(maxDays) || 365) * DAY_MS;
+  const byDay = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const time = Number(Array.isArray(row) ? row[0] : Date.parse(row?.timestamp || row?.time || row?.day || 0));
+    const vol = Number(Array.isArray(row) ? row[5] : row?.volume ?? row?.vol);
+    const ts = time > 1e12 ? time : time * 1000;
+    if (!Number.isFinite(ts) || ts < cutoff || !(vol > 0)) continue;
+    const xdx = xdxFromXrpVolume(vol, px);
+    if (!(xdx > 0)) continue;
+    const timestamp = new Date(ts).toISOString();
+    const day = timestamp.slice(0, 10);
+    const current = byDay.get(day);
+    if (!current || xdx > current.xdx) {
+      byDay.set(day, { timestamp, pool: pair, pair, xdx, source: "ohlc" });
+    }
+  }
+  return [...byDay.values()].sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
+}
+
 export function xdxVolumeFromDexscreenerPair(pair = {}, xdxUsd) {
   const usd = numPos(pair?.volume?.h24 ?? pair?.volume24h);
   const price = numPos(pair?.priceUsd) || numPos(xdxUsd);
