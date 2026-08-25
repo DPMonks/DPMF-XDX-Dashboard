@@ -46,7 +46,7 @@ export function xrpReserveBreakdown({
   reserveIncDrops = DEFAULT_RESERVE_INC_DROPS,
 } = {}) {
   const drops = dropsOrNull(balanceDrops);
-  const fromAccount = drops != null ? drops / DROPS : null;
+  const fromAccount = drops != null && drops > 0 ? drops / DROPS : null;
   const fromBalances = num(balance);
   const total = fromAccount != null ? fromAccount : fromBalances;
   if (total == null) {
@@ -591,6 +591,68 @@ export function walletAvailableAmounts({ balances = {}, account = {}, lines = []
     xrp: xrp.spendable ?? xrp.balance,
     xdx,
     quote: quoteAmt,
+  };
+}
+
+function keepAmount(next, current) {
+  if (next != null && Number(next) > 0) return Number(next);
+  if (current != null && Number(current) > 0) return Number(current);
+  return next != null && Number.isFinite(Number(next)) ? Number(next) : current ?? next;
+}
+
+function feeEarningsFilled(fees) {
+  const earn = fees?.earnings || {};
+  return [earn.usd24h, earn.usd7d, earn.xdx24h, earn.xrp24h, earn.rlusd24h].some((value) => Number(value) > 0);
+}
+
+function mergeKeptLp(current = [], next = []) {
+  if (!Array.isArray(next) || !next.length) return current || [];
+  const map = new Map();
+  for (const row of Array.isArray(current) ? current : []) {
+    const name = normalizeWalletPair(row.pool || row.pool_name);
+    if (isXdxAmmPair(name)) map.set(name, row);
+  }
+  for (const row of next) {
+    const name = normalizeWalletPair(row.pool || row.pool_name);
+    if (isXdxAmmPair(name)) map.set(name, row);
+  }
+  return [...map.values()];
+}
+
+export function preferFilledWalletSnapshot(current, next) {
+  if (!next) return current || emptyWalletSnapshot(null);
+  if (!current?.filled || !current.address || current.address !== next.address) return next;
+  if (!next.filled) return current;
+
+  const holdings = {
+    xdx: keepAmount(next.holdings?.xdx, current.holdings?.xdx),
+    xrp: keepAmount(next.holdings?.xrp, current.holdings?.xrp),
+    rlusd: keepAmount(next.holdings?.rlusd, current.holdings?.rlusd),
+  };
+  const keptXdx = !(Number(next.holdings?.xdx) > 0) && Number(current.holdings?.xdx) > 0;
+  const nextXdx = next.xdx && typeof next.xdx === "object" ? next.xdx : {};
+  const xdx = keptXdx ? { ...(current.xdx || {}) } : { ...(current.xdx || {}) };
+  if (!keptXdx) {
+    for (const [key, value] of Object.entries(nextXdx)) {
+      if (value != null) xdx[key] = value;
+    }
+  }
+  const nextHasEarn = feeEarningsFilled(next.fees);
+  const currentHasEarn = feeEarningsFilled(current.fees);
+  const nextShare = Number(next.supply?.supplyPct) || Number(next.supply?.circulatingPct);
+  const keepSupply = nextShare > 0 || !(Number(current.supply?.supplyPct) > 0 || Number(current.supply?.circulatingPct) > 0);
+
+  return {
+    ...next,
+    filled: true,
+    holdings,
+    xdx,
+    xrp: next.xrp?.balance > 0 ? next.xrp : current.xrp?.balance > 0 ? current.xrp : next.xrp,
+    supply: keepSupply ? next.supply : current.supply,
+    fees: nextHasEarn || !currentHasEarn ? next.fees : current.fees,
+    lp: mergeKeptLp(current.lp, next.lp),
+    income: Array.isArray(next.income) && next.income.length ? next.income : current.income,
+    rank: next.rank != null ? next.rank : current.rank,
   };
 }
 

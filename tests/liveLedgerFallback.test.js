@@ -12,6 +12,7 @@ import {
   lpHoldingsFromLines,
   loadWalletBalancesFromLedger,
   loadWalletLpFromLedger,
+  preferPositiveAmount,
   rlusdBalanceFromLines,
   xdxBalanceFromLines,
 } from "../server/walletLedger.js";
@@ -47,6 +48,45 @@ test("XDX and LP holdings are read from account_lines", () => {
   assert.equal(lps.length, 1);
   assert.equal(lps[0].lp_balance, 3.25);
   assert.equal(lps[0].amm_account, XDX_XRP_AMM);
+});
+
+test("preferPositiveAmount keeps a catalog XDX total when the live read is zero", () => {
+  assert.equal(preferPositiveAmount(0, 3004952684.62), 3004952684.62);
+  assert.equal(preferPositiveAmount(null, 12.5), 12.5);
+  assert.equal(preferPositiveAmount(88, 0), 88);
+  assert.equal(preferPositiveAmount(null, null), null);
+});
+
+test("live wallet balances take XDX from gateway_balances when account_lines miss", async () => {
+  const fetchImpl = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    if (body.method === "account_info") {
+      return {
+        ok: true,
+        json: async () => ({
+          result: { status: "success", account_data: { Balance: "25000000", OwnerCount: 4 } },
+        }),
+      };
+    }
+    if (body.method === "gateway_balances") {
+      return {
+        ok: true,
+        json: async () => ({
+          result: { assets: { [XDX_ISSUER]: [{ currency: "XDX", value: "1500.25" }] } },
+        }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ result: { status: "success", lines: [] } }),
+    };
+  };
+  const snap = await loadWalletBalancesFromLedger("rWallet111111111111111111111111111", {
+    fetchImpl,
+    fresh: true,
+  });
+  assert.equal(snap.xdx, 1500.25);
+  assert.equal(snap.xrp, 25);
 });
 
 test("live wallet balances prefer the XRPL account and XDX line", async () => {

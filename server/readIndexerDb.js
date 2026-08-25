@@ -62,6 +62,7 @@ import {
   loadWalletActivity,
   loadWalletLpIncome,
   loadWalletBalancesFromLedger,
+  preferPositiveAmount,
   loadWalletLines,
   loadWalletLpFromLedger,
   loadWalletNetworthFromLedger,
@@ -1772,7 +1773,10 @@ async function tokenBalanceFor(db, address) {
     "SELECT balance FROM token_holders_latest WHERE account = $1 LIMIT 1",
     [address]
   );
-  if (latest.rows[0]) return Number(latest.rows[0].balance || 0);
+  if (latest.rows[0]) {
+    const n = Number(latest.rows[0].balance);
+    return Number.isFinite(n) ? n : null;
+  }
   const history = await tryQuery(
     db,
     `SELECT balance
@@ -1782,7 +1786,9 @@ async function tokenBalanceFor(db, address) {
      LIMIT 1`,
     [address]
   );
-  return Number(history.rows[0]?.balance || 0);
+  if (!history.rows[0]) return null;
+  const n = Number(history.rows[0].balance);
+  return Number.isFinite(n) ? n : null;
 }
 
 let xrpQuote = { at: 0, usd: 0, gbp: 0, eur: 0, jpy: 0 };
@@ -2336,9 +2342,22 @@ function walletLedgerResult(suffix, search = "") {
   }
   const balances = String(suffix || "").match(/^(?:wallet\/)?balances\/([^/]+)$/);
   if (balances) {
-    return loadWalletBalancesFromLedger(decodeURIComponent(balances[1]), {
-      fresh: walletFresh(search),
-    }).then((body) => ok(body));
+    const address = decodeURIComponent(balances[1]);
+    return (async () => {
+      const body = await loadWalletBalancesFromLedger(address, {
+        fresh: walletFresh(search),
+      });
+      if (!(Number(body.xdx) > 0) && hasIndexerDatabase()) {
+        try {
+          const fromDb = await tokenBalanceFor(getPool(), address);
+          const merged = preferPositiveAmount(body.xdx, fromDb);
+          if (merged != null) body.xdx = merged;
+        } catch {
+          // live total stands
+        }
+      }
+      return ok(body);
+    })();
   }
   const walletLp = String(suffix || "").match(/^wallet\/lp\/([^/]+)$/);
   if (walletLp) {
@@ -2661,7 +2680,7 @@ export async function readIndexerDb(suffix, search = "") {
       }
       return ok({
         xrp: Number.isFinite(xrpAmt) ? xrpAmt : null,
-        xdx: xdxBalance,
+        xdx: Number(xdxBalance) > 0 ? Number(xdxBalance) : xdxBalance,
         lp: Number(lp.rows[0]?.lp_balance || 0),
         source: "db",
         ...(Number.isFinite(xrpAmt) ? { balance_drops: Math.round(xrpAmt * 1_000_000) } : {}),
