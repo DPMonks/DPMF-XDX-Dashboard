@@ -125,6 +125,9 @@ test("live wallet balances prefer the XRPL account and XDX line", async () => {
   assert.equal(snap.xdx, 88);
   assert.equal(snap.rlusd, 3);
   assert.equal(snap.balance_drops, 25_000_000);
+  assert.equal(snap.lines.length, 1);
+  assert.equal(snap.lines[0].ticker, "RLUSD");
+  assert.equal(snap.lines[0].issuer, RLUSD_ISSUER);
 });
 
 test("a down database still has a live token and price payload", async () => {

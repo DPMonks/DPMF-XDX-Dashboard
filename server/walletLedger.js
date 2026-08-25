@@ -274,6 +274,7 @@ export async function loadWalletBalancesFromLedger(address, options = {}) {
       xdx,
       rlusd,
       lp: lpRows.reduce((sum, row) => sum + Number(row.lp_balance || 0), 0),
+      lines: linesFromAccountLines(raw.lines),
       source,
       balance_drops: Number.isFinite(drops) ? drops : null,
     };

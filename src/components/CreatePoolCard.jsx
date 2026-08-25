@@ -17,6 +17,7 @@ import {
   hasAssetLine,
   hasXdxLine,
   issuedBalance,
+  preferWalletLines,
   ratioDeltaPct,
   resolveCreateQuote,
 } from "../wallet/ammCreate";
@@ -37,19 +38,20 @@ import BrandSelect from "./BrandSelect";
 import WalletModal from "./WalletModal";
 
 function mergeWalletLines(balances, lines) {
+  const raw = (balances && balances.raw) || {};
   return {
     ...(balances || {}),
     raw: {
-      ...((balances && balances.raw) || {}),
-      lines: Array.isArray(lines) ? lines : [],
+      ...raw,
+      lines: preferWalletLines(lines, raw),
     },
   };
 }
 
-async function loadCreatePoolAssets(account) {
+async function loadCreatePoolAssets(account, extra = {}) {
   const [balances, lines, accountInfo] = await Promise.all([
     getWalletBalances(account).catch(() => ({})),
-    getWalletLines(account).catch(() => []),
+    getWalletLines(account, extra).catch(() => []),
     getWalletAccount(account).catch(() => ({})),
   ]);
   const drops = Number(accountInfo?.balance_drops);
@@ -170,13 +172,23 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
       return () => window.clearTimeout(timer);
     }
     let cancelled = false;
-    loadCreatePoolAssets(account)
-      .then((next) => {
-        if (!cancelled) setBalances(next || {});
-      })
-      .catch(() => {});
+    function pull(extra = {}) {
+      loadCreatePoolAssets(account, extra)
+        .then((next) => {
+          if (!cancelled) setBalances(next || {});
+        })
+        .catch(() => {});
+    }
+    pull();
+    function onRefresh() {
+      pull({ fresh: true });
+    }
+    window.addEventListener("dpmf-wallet-refresh", onRefresh);
+    window.addEventListener(WALLET_EVENTS.signedIn, onRefresh);
     return () => {
       cancelled = true;
+      window.removeEventListener("dpmf-wallet-refresh", onRefresh);
+      window.removeEventListener(WALLET_EVENTS.signedIn, onRefresh);
     };
   }, [account]);
 
@@ -313,7 +325,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
                 setFormError("");
               }}
               ariaLabel={t.createPoolSecondary}
-              searchable={options.length > 6}
+              searchable={options.length > 4}
               placeholder={t.searchPair || t.createPoolSecondary}
             />
           </label>
