@@ -550,6 +550,38 @@ export function walletAvailableAmounts({ balances = {}, account = {}, lines = []
   };
 }
 
+function keepAmount(next, current) {
+  return next != null ? next : current;
+}
+
+export function preferFilledWalletSnapshot(current, next) {
+  if (!next) return current || emptyWalletSnapshot(null);
+  if (!current?.filled || !current.address || current.address !== next.address) return next;
+  if (!next.filled) return current;
+
+  const nextXdx = next.xdx && typeof next.xdx === "object" ? next.xdx : {};
+  const xdx = { ...(current.xdx || {}) };
+  for (const [key, value] of Object.entries(nextXdx)) {
+    if (value != null) xdx[key] = value;
+  }
+  const nextFees = next.fees || {};
+  const keepFees = nextFees.xdx != null || nextFees.usd != null || nextFees.earnings?.usd24h != null;
+  return {
+    ...next,
+    filled: true,
+    holdings: {
+      xdx: keepAmount(next.holdings?.xdx, current.holdings?.xdx),
+      xrp: keepAmount(next.holdings?.xrp, current.holdings?.xrp),
+      rlusd: keepAmount(next.holdings?.rlusd, current.holdings?.rlusd),
+    },
+    xdx,
+    xrp: next.xrp?.balance != null ? next.xrp : current.xrp,
+    fees: keepFees ? next.fees : current.fees,
+    lp: Array.isArray(next.lp) && next.lp.length ? next.lp : current.lp,
+    income: Array.isArray(next.income) && next.income.length ? next.income : current.income,
+  };
+}
+
 export function emptyWalletSnapshot(address = null) {
   return {
     address,

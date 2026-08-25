@@ -157,6 +157,18 @@ export function shouldCancelConnectNavigation(result) {
   return Boolean(result?.telegram && result?.opened);
 }
 
+export function shouldShowXamanConnect({
+  xapp = false,
+  phone = false,
+  telegram = false,
+  confirming = false,
+  loading = false,
+  hasLink = false,
+} = {}) {
+  if (xapp || confirming || loading || !hasLink) return false;
+  return Boolean(phone || telegram);
+}
+
 export function isPhoneDevice(
   userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "",
   extras = typeof navigator !== "undefined" ? navigator : {}

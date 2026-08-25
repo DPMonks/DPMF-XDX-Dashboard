@@ -20,6 +20,7 @@ import {
   emptyWalletSnapshot,
   normalizeWalletPair,
   preferredWalletPair,
+  preferFilledWalletSnapshot,
   sortWalletPairs,
   xrpBarPercents,
 } from "../wallet/composeWallet";
@@ -380,11 +381,9 @@ export default function ConnectedWallet() {
     let cancelled = false;
 
     async function load(fresh = false) {
-      const next = await getConnectedWallet(walletAddress, { fresh }).catch(() =>
-        emptyWalletSnapshot(walletAddress)
-      );
-      if (cancelled) return;
-      setSnap(next);
+      const next = await getConnectedWallet(walletAddress, { fresh }).catch(() => null);
+      if (cancelled || !next) return;
+      setSnap((current) => preferFilledWalletSnapshot(current, next));
       setPair((current) =>
         preferredWalletPair(
           next.lp.map((row) => row.pool),
