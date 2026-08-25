@@ -345,6 +345,42 @@ export async function getAmm() {
   );
 }
 
+export async function discoverLiveAmmPool(pair, extra = {}) {
+  const name = String(pair || "").replace(/\s+/g, "").toUpperCase();
+  const ammAccount = String(extra.ammAccount || extra.amm_account || "").trim();
+  const validPair = /^XDX\/[A-Z0-9]{2,12}$/.test(name);
+  if (!validPair && !/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(ammAccount)) return null;
+  const live = await getLiveLpReserves({
+    pair: validPair ? name : extra.pair || extra.pool,
+    quote: extra.quote || (validPair ? name.split("/")[1] : undefined),
+    issuer: extra.issuer || extra.quote_issuer,
+    hex: extra.hex || extra.quote_hex,
+    ammAccount,
+  }).catch(() => null);
+  if (!live || live.empty || live.reserve_source === "empty") return null;
+  if (
+    !(
+      numberOrNull(live.reserve_xdx ?? live.reserve_asset) ||
+      numberOrNull(live.reserve_currency ?? live.reserve_quote) ||
+      numberOrNull(live.lp_supply)
+    )
+  ) {
+    return null;
+  }
+  const resolved = String(live.pair || name || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  return mapPool({
+    ...live,
+    pool: resolved || live.pair,
+    pool_name: resolved || live.pair,
+    quote: extra.quote || (resolved.includes("/") ? resolved.split("/")[1] : live.quote),
+    quote_issuer: extra.issuer || live.quote_issuer,
+    quote_hex: extra.hex || live.quote_hex,
+    amm_account: live.amm_account || ammAccount,
+  });
+}
+
 let lastOrderbooks = null;
 
 function emptyCatalog() {

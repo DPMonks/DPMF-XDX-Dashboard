@@ -29,6 +29,57 @@ import {
   loadXrpSparkline,
 } from "./xrplToCatalog.js";
 import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
+import { QUOTE_ASSETS } from "../src/xaman/tradeTx.js";
+
+export function knownLivePoolSpecs(extra = []) {
+  const specs = [];
+  const seen = new Set();
+  function add(spec) {
+    const pair = String(spec.pair || "")
+      .replace(/\s+/g, "")
+      .toUpperCase();
+    if (!/^XDX\/[A-Z0-9]{2,12}$/.test(pair) || seen.has(pair)) return;
+    seen.add(pair);
+    specs.push({
+      ...spec,
+      pair,
+      quote: spec.quote || pair.split("/")[1],
+    });
+  }
+  for (const pool of POOLS) {
+    add({
+      pair: pool.pair,
+      quote: pool.quote,
+      amm: pool.amm,
+      ammAccount: pool.amm,
+      issuer: pool.quoteIssuer,
+      hex: pool.quoteHex,
+      lpHex: pool.lpHex,
+    });
+  }
+  for (const asset of QUOTE_ASSETS) {
+    add({
+      pair: `XDX/${asset.id}`,
+      quote: asset.id,
+      issuer: asset.issuer,
+      hex: asset.hex,
+    });
+  }
+  for (const pair of FEATURED_ORDERBOOK_PAIRS) {
+    add({ pair, quote: String(pair).split("/")[1] });
+  }
+  for (const row of Array.isArray(extra) ? extra : []) {
+    add({
+      pair: row.pool_name || row.pool || row.pair,
+      quote: row.quote,
+      amm: row.amm_account || row.amm,
+      ammAccount: row.amm_account || row.amm,
+      issuer: row.quote_issuer,
+      hex: row.quote_hex,
+    });
+  }
+  return specs;
+}
 
 let marketCache = { at: 0, prices: null, pools: null, overview: null };
 let tokenCache = { at: 0, body: null };
@@ -182,17 +233,18 @@ export async function loadLiveMarket(options = {}) {
     loadIssuerBlackholeLive(options),
     loadXrplToLpCounts({ ...options, pool: "all" }).catch(() => null),
   ]);
+  const liveSpecs = knownLivePoolSpecs();
   const lives = await loadLiveAmmReservesMany(
-    POOLS.map((pool) => ({
-      ammAccount: pool.amm,
-      pair: pool.pair,
-      quote: pool.quote,
-      issuer: pool.quoteIssuer,
-      hex: pool.quoteHex,
+    liveSpecs.map((spec) => ({
+      ammAccount: spec.ammAccount || spec.amm,
+      pair: spec.pair,
+      quote: spec.quote,
+      issuer: spec.issuer,
+      hex: spec.hex,
     })),
     options
   );
-  const xrpPool = lives[0] || {};
+  const xrpPool = lives[liveSpecs.findIndex((spec) => spec.pair === "XDX/XRP")] || lives[0] || {};
   const rlusdPool = lives.find((row) => String(row?.pair || "").includes("RLUSD")) || lives[1] || {};
   const xrpUsd = num(quote.usd);
   const xdxUsd = pickXdxUsd({
@@ -240,7 +292,9 @@ export async function loadLiveMarket(options = {}) {
     fetchImpl: options.fetchImpl,
   }).catch(() => ({}));
   const pools = applyPoolVolumes(
-    POOLS.map((spec, index) => poolRowFromLive(spec, lives[index], prices)),
+    liveSpecs
+      .map((spec, index) => poolRowFromLive(spec, lives[index], prices))
+      .filter((row) => row.amm_account || row.reserve_asset || row.lp_supply),
     volumes
   );
   const volume24h = num(volumes["XDX/XRP"]?.volume24hXdx) || num(pools[0]?.volume24h);

@@ -1,7 +1,11 @@
+import { useRef, useState } from "react";
 import { pairParts } from "../utils/currency";
 import { displayPoolSplit, formatPoolPct } from "../utils/poolSplit";
 import { formatNumber, formatToken, formatUsd, formatUsdPrice, formatWhen, shortAddress } from "../utils/format";
 import { formatAmmFee } from "../wallet/composeWallet";
+import { filterAmmPools, mergeAmmPoolLists, searchAmmAccount, searchPairHint } from "../ammPools";
+import { discoverLiveAmmPool } from "../api/indexer";
+import { QUOTE_ASSETS } from "../xaman/tradeTx";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 import WalletButton from "./WalletButton";
@@ -51,8 +55,46 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
 
 export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemoveLiquidity }) {
   const { t, locale } = useI18n();
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState([]);
+  const [looking, setLooking] = useState(false);
+  const lookupGen = useRef(0);
+  const lookupTimer = useRef(0);
+  const catalog = mergeAmmPoolLists(pools, found);
+  const visible = filterAmmPools(catalog, query);
 
-  if (loading && !pools.length) {
+  async function lookup(nextQuery) {
+    const ammAccount = searchAmmAccount(nextQuery);
+    const pair = searchPairHint(nextQuery);
+    const quote = pair.split("/")[1] || "";
+    if ((!pair && !ammAccount) || filterAmmPools(catalog, nextQuery).length) return;
+    const known = QUOTE_ASSETS.find((row) => row.id === quote);
+    const gen = (lookupGen.current += 1);
+    setLooking(true);
+    const hit = await discoverLiveAmmPool(pair, {
+      quote,
+      issuer: known?.issuer,
+      hex: known?.hex,
+      ammAccount,
+    }).catch(() => null);
+    if (gen !== lookupGen.current) return;
+    setLooking(false);
+    if (!hit) return;
+    setFound((current) => mergeAmmPoolLists(current, [hit]));
+  }
+
+  function onSearch(value) {
+    setQuery(value);
+    window.clearTimeout(lookupTimer.current);
+    if (!value.trim() || filterAmmPools(catalog, value).length) {
+      lookupGen.current += 1;
+      setLooking(false);
+      return;
+    }
+    lookupTimer.current = window.setTimeout(() => lookup(value), 320);
+  }
+
+  if (loading && !pools.length && !found.length) {
     return (
       <div className="pool-grid">
         {Array.from({ length: 6 }, (_, i) => (
@@ -62,17 +104,32 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     );
   }
 
-  if (error && !pools.length) {
+  if (error && !pools.length && !found.length) {
     return <p className="error-message">{error}</p>;
   }
 
-  if (!pools.length) {
-    return <p className="empty-message">{t.emptyPools}</p>;
-  }
-
   return (
-    <div className="pool-grid">
-      {pools.map((pool, index) => {
+    <div className="amm-pools">
+      <label className="amm-pools-search">
+        <span className="sr-only">{t.searchPair || "Search XDX / asset"}</span>
+        <input
+          type="search"
+          className="orderbook-search"
+          value={query}
+          placeholder={t.searchPair || "Search XDX / asset"}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => onSearch(event.target.value)}
+        />
+      </label>
+      {looking ? <p className="amm-pools-looking">{t.lookingForPool || "Looking up that XDX pool on the ledger…"}</p> : null}
+      {!catalog.length && !query.trim() ? (
+        <p className="empty-message">{t.emptyPools}</p>
+      ) : !visible.length ? (
+        <p className="empty-message">{t.noMatchingPools || "No live XDX pools match that search."}</p>
+      ) : (
+        <div className="pool-grid">
+          {visible.map((pool, index) => {
         const { asset, quote } = pairParts(pool.pool);
         const quoteName = pool.quote || quote;
         return (
@@ -185,7 +242,9 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
             ) : null}
           </article>
         );
-      })}
+          })}
+        </div>
+      )}
     </div>
   );
 }
