@@ -3,6 +3,7 @@ import {
   RLUSD_ISSUER,
   XDX_CURRENCY,
   XDX_ISSUER,
+  XIO_HEX,
   XIO_ISSUER,
   XSQUAD_HEX,
   XSQUAD_ISSUER,
@@ -114,7 +115,7 @@ export function pairFromVoteAssets(asset, asset2) {
     const code = String(row.currency || "").toUpperCase();
     if (code === "XDX" || code.startsWith("584458")) return "XDX";
     if (code === RLUSD_HEX || code === "RLUSD") return "RLUSD";
-    if (code === "XIO" || (row.issuer === XIO_ISSUER)) return "XIO";
+    if (code === "XIO" || code === XIO_HEX || row.issuer === XIO_ISSUER) return "XIO";
     if (code === XSQUAD_HEX || code === "XSQUAD" || row.issuer === XSQUAD_ISSUER) return "XSQUAD";
     if (/^[A-Z0-9]{3}$/.test(code)) return code;
     return quoteIdFromName(code) || "XRP";

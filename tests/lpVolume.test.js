@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { RLUSD_HEX, XDX_HEX } from "../src/constants/ledger.js";
+import { RLUSD_HEX, XDX_HEX, XIO_HEX, XIO_ISSUER } from "../src/constants/ledger.js";
 import {
   attachPoolVolumes,
   catalogXdxVolume24h,
@@ -29,6 +29,10 @@ test("history legs tag XDX/XRP, XDX/RLUSD, and other XDX pairs", () => {
   assert.equal(tickerFromCurrency({ currency: "XRP" }), "XRP");
   assert.equal(tickerFromCurrency({ currency: XDX_HEX }), "XDX");
   assert.equal(tickerFromCurrency({ currency: RLUSD_HEX }), "RLUSD");
+  assert.equal(tickerFromCurrency({ currency: "XIO" }), "XIO");
+  assert.equal(tickerFromCurrency({ currency: XIO_HEX }), "XIO");
+  assert.equal(tickerFromCurrency({ currency: XIO_HEX, issuer: XIO_ISSUER }), "XIO");
+  assert.equal(pairFromTradeLegs({ currency: XDX_HEX }, { currency: XIO_HEX, issuer: XIO_ISSUER }), "XDX/XIO");
   assert.equal(tickerFromCurrency({ currency: "504C580000000000000000000000000000000000" }), "PLX");
   assert.equal(pairFromTradeLegs({ currency: "XRP" }, { currency: "XDX" }), "XDX/XRP");
   assert.equal(pairFromTradeLegs({ currency: XDX_HEX }, { currency: RLUSD_HEX }), "XDX/RLUSD");

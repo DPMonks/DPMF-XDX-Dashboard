@@ -8,6 +8,7 @@ import {
   fillContinuousVolumeDays,
   filterIncomeByPair,
   incomePairChoices,
+  incomePositionForPair,
   incomeRowsForPair,
   isXdxAmmPair,
   lpDepositIncomeRows,
@@ -368,6 +369,61 @@ test("fee USD uses the XDX mark on that UTC day, not today's live price", () => 
     { xdxUsd: 0.00008, xrpUsd: 2 }
   );
   assert.equal(book.xdxUsd, 0.00004);
+});
+
+test("XDX/XIO income uses pool volume and add-LP history even without a share field", () => {
+  const now = Date.parse("2026-08-25T18:00:00.000Z");
+  const position = incomePositionForPair(
+    "XDX/XIO",
+    [{ pool: "XDX/XIO", lp_balance: 50 }],
+    [
+      {
+        pool: "XDX/XIO",
+        quote: "XIO",
+        lp_supply: 1_000,
+        reserve_asset: 50_000,
+        reserve_currency: 60,
+        trading_fee: 1000,
+        volume24hXdx: 20_000,
+        volume7dXdx: 80_000,
+      },
+    ],
+    [{ side: "addLp", pair: "XDX/XIO", lp: 50, timestamp: "2026-08-11T10:00:00.000Z" }]
+  );
+  assert.ok(position);
+  assert.equal(position.lp_share_percent, 5);
+  const rows = incomeRowsForPair({
+    now,
+    pair: "XDX/XIO",
+    positions: [{ pool: "XDX/XIO", lp_balance: 50 }],
+    pools: [
+      {
+        pool: "XDX/XIO",
+        quote: "XIO",
+        lp_supply: 1_000,
+        reserve_asset: 50_000,
+        reserve_currency: 60,
+        trading_fee: 1000,
+        volume24hXdx: 20_000,
+        volume7dXdx: 80_000,
+      },
+    ],
+    historyActivity: [{ side: "addLp", pair: "XDX/XIO", lp: 50, timestamp: "2026-08-11T10:00:00.000Z" }],
+    prices: {
+      xdxUsd: 0.00008,
+      dailyPrices: {
+        "2026-08-11": { xdxUsd: 0.00003 },
+        "2026-08-25": { xdxUsd: 0.00008 },
+      },
+    },
+  });
+  const days = rows.map((row) => row.date);
+  assert.ok(days.includes("2026-08-25"));
+  assert.ok(days.includes("2026-08-11"));
+  assert.ok(rows.every((row) => row.pair === "XDX/XIO" && row.kind === "fee" && row.usd > 0));
+  const older = rows.find((row) => row.date === "2026-08-11");
+  const today = rows.find((row) => row.date === "2026-08-25");
+  assert.ok(older.usd < today.usd);
 });
 
 test("signed-in LP lines still produce daily income when wallet/lp is empty", () => {

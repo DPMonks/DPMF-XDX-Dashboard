@@ -10,10 +10,22 @@ import {
   voteHistoryFromActivity,
   weightedVotedFee,
   knownGovernancePairs,
+  pairFromVoteAssets,
   poolForVotePair,
   quoteIssue,
 } from "../src/wallet/ammVote.js";
-import { XDX_ISSUER } from "../src/constants/ledger.js";
+import { XDX_CURRENCY, XDX_ISSUER, XIO_HEX, XIO_ISSUER } from "../src/constants/ledger.js";
+
+test("pairFromVoteAssets tags XDX/XIO from the XIO hex or issuer", () => {
+  assert.equal(
+    pairFromVoteAssets({ currency: XDX_CURRENCY, issuer: XDX_ISSUER }, { currency: XIO_HEX, issuer: XIO_ISSUER }),
+    "XDX/XIO"
+  );
+  assert.equal(
+    pairFromVoteAssets({ currency: XDX_CURRENCY, issuer: XDX_ISSUER }, { currency: "XIO", issuer: XIO_ISSUER }),
+    "XDX/XIO"
+  );
+});
 
 test("fee units map 0.25% to 250 and back", () => {
   assert.equal(feeUnitsFromPercent(0.25), 250);

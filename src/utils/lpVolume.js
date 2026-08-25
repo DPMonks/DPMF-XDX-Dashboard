@@ -1,4 +1,4 @@
-import { RLUSD_HEX, XDX_HEX } from "../constants/ledger.js";
+import { RLUSD_HEX, XDX_HEX, XIO_HEX, XIO_ISSUER } from "../constants/ledger.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Token 24h XDX volume is millions. A raw card number under this is XRP or USD, not XDX.
@@ -26,6 +26,7 @@ export function tickerFromCurrency(leg = {}) {
   if (!upper || upper === "XRP") return "XRP";
   if (upper === "XDX" || upper === XDX_HEX) return "XDX";
   if (upper === "RLUSD" || upper === RLUSD_HEX) return "RLUSD";
+  if (upper === "XIO" || upper === XIO_HEX || leg.issuer === XIO_ISSUER) return "XIO";
   if (/^[A-Z0-9]{3}$/.test(upper)) return upper;
   if (/^[A-F0-9]{40}$/i.test(currency)) {
     const label = hexCurrencyLabel(currency);

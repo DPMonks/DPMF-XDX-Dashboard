@@ -108,6 +108,75 @@ function preferLargest(...values) {
   return values.reduce((best, value) => (value > best ? value : best), 0);
 }
 
+export function netHeldLp(pair, activity = [], currentBalance = 0) {
+  const want = incomePairName(pair);
+  let added = 0;
+  let removed = 0;
+  let first = "";
+  for (const item of Array.isArray(activity) ? activity : []) {
+    if (!item || incomePairName(item.pair || item.pool) !== want) continue;
+    const tokens = num(item.lp);
+    const day = utcDayKey(item.timestamp);
+    if (item.side === "addLp" || item.side === "createPool") {
+      added += tokens;
+      if (day && (!first || day < first)) first = day;
+    }
+    if (item.side === "removeLp") removed += tokens;
+  }
+  const current = num(currentBalance);
+  return {
+    first,
+    added,
+    removed,
+    held: current > 0 ? current : Math.max(0, added - removed),
+  };
+}
+
+export function incomePositionForPair(pair, positions = [], pools = [], activity = []) {
+  const want = incomePairName(pair);
+  const catalog = poolForIncomePair(want, positions, pools);
+  const existing =
+    (Array.isArray(positions) ? positions : []).find(
+      (row) => incomePairName(row?.pool || row?.pool_name || row?.pair) === want
+    ) || {};
+  const held = netHeldLp(want, activity, existing.lp_balance);
+  const balance = preferPositive(num(existing.lp_balance), held.held, held.added);
+  const supply = preferLargest(num(catalog.lp_supply), num(existing.lp_supply));
+  const sharePct =
+    supply > 0 && balance > 0
+      ? (balance / supply) * 100
+      : preferPositive(num(existing.lp_share_percent), num(catalog.lp_share_percent));
+  if (!(sharePct > 0)) return null;
+  return {
+    ...catalog,
+    ...existing,
+    pool: want,
+    pool_name: want,
+    pair: want,
+    quote: existing.quote || catalog.quote || want.split("/")[1],
+    lp_balance: balance,
+    lp_supply: supply,
+    lp_share_percent: sharePct,
+    trading_fee: preferPositive(num(existing.trading_fee), num(catalog.trading_fee)) || 1000,
+    volume24h: preferPositive(num(existing.volume24h), num(catalog.volume24h), num(existing.volume24hXdx), num(catalog.volume24hXdx)),
+    volume24hXdx: preferPositive(num(existing.volume24hXdx), num(catalog.volume24hXdx), num(existing.volume24h), num(catalog.volume24h)),
+    volume7d: preferPositive(num(existing.volume7d), num(catalog.volume7d), num(existing.volume7dXdx), num(catalog.volume7dXdx)),
+    volume7dXdx: preferPositive(num(existing.volume7dXdx), num(catalog.volume7dXdx), num(existing.volume7d), num(catalog.volume7d)),
+  };
+}
+
+function volumeDaysFromPools(pools = [], now = Date.now()) {
+  const today = utcDayKey(now);
+  return (Array.isArray(pools) ? pools : [])
+    .map((pool) => {
+      const pair = incomePairName(pool?.pool || pool?.pool_name || pool?.pair);
+      const xdx = num(pool?.volume24hXdx ?? pool?.volume24h);
+      if (!pair || !(xdx > 0) || !today) return null;
+      return { pair, pool: pair, xdx, timestamp: `${today}T12:00:00.000Z` };
+    })
+    .filter(Boolean);
+}
+
 export function poolForIncomePair(pair, positions = [], pools = []) {
   const want = incomePairName(pair);
   const position =
@@ -360,9 +429,20 @@ export function lpFeeIncomeRows({
   dailyPrices,
   now = Date.now(),
 } = {}) {
-  const held = (Array.isArray(positions) ? positions : []).filter(
-    (row) => isXdxAmmPair(row) && num(row.lp_share_percent) > 0
-  );
+  const held = (Array.isArray(positions) ? positions : [])
+    .map((row) => {
+      if (!isXdxAmmPair(row)) return null;
+      const supply = num(row.lp_supply);
+      const balance = num(row.lp_balance);
+      const share = num(row.lp_share_percent) || (supply > 0 && balance > 0 ? (balance / supply) * 100 : 0);
+      if (!(share > 0)) return null;
+      return {
+        ...row,
+        lp_share_percent: share,
+        trading_fee: num(row.trading_fee) || 1000,
+      };
+    })
+    .filter(Boolean);
   if (!held.length) return [];
 
   const oldest = utcDayKey(now - HISTORICAL_INCOME_DAYS * DAY_MS);
@@ -530,6 +610,7 @@ export function incomeRowsForPair({
   historyDays = [],
   recordedRows = [],
   positions = [],
+  pools = [],
   prices,
   xdxUsd = 0,
   xrpUsd = 0,
@@ -538,24 +619,18 @@ export function incomeRowsForPair({
 } = {}) {
   const want = incomePairName(pair);
   const snapshot = filterIncomeByPair(snapshotRows, want);
-  const heldFrom = earliestHeldDay(
-    want,
-    historyActivity,
-    (Array.isArray(positions) ? positions : []).find(
-      (row) => incomePairName(row?.pool || row?.pool_name || row?.pair) === want
-    )?.lp_balance
-  );
+  const position = incomePositionForPair(want, positions, pools, historyActivity || []);
+  const heldFrom = earliestHeldDay(want, historyActivity, position?.lp_balance) || netHeldLp(want, historyActivity || [], position?.lp_balance).first;
   const rebuilt = lpFeeIncomeRows({
-    positions: (Array.isArray(positions) ? positions : []).filter(
-      (row) => incomePairName(row?.pool || row?.pool_name || row?.pair) === want
-    ),
+    positions: position ? [position] : [],
     flows: [],
-    volumeDays: filterIncomeByPair(historyDays, want),
+    volumeDays: [...filterIncomeByPair(historyDays, want), ...volumeDaysFromPools(position ? [position] : [], now)],
     activity: historyActivity || [],
     xdxUsd,
     xrpUsd,
     rlusdUsd,
     prices,
+    dailyPrices: prices?.dailyPrices,
     now,
   });
   return dailyLpIncomeTotals(
