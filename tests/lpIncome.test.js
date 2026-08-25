@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { lpFeeEarnings } from "../src/wallet/composeWallet.js";
 import {
+  DEFAULT_INCOME_PAIR,
+  filterIncomeByPair,
+  incomePairChoices,
+  incomeRowsForPair,
   isXdxAmmPair,
   lpDepositIncomeRows,
   lpFeeIncomeRows,
@@ -121,4 +125,41 @@ test("lpTokenUsd prices both pool reserves at the quote mark, not 2x XDX", () =>
   });
   assert.equal(deposited.length, 1);
   assert.ok(Math.abs(deposited[0].usd - usd) < 1e-9);
+});
+
+test("income pair list defaults to XDX/XRP and keeps live plus featured pairs", () => {
+  const pairs = incomePairChoices({
+    positions: [{ pool: "XDX/XIO" }, { pool: "XDX/RLUSD" }],
+    activity: [{ pair: "XDX/XSQUAD" }],
+  });
+  assert.equal(pairs[0], DEFAULT_INCOME_PAIR);
+  assert.deepEqual(pairs, ["XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"]);
+});
+
+test("income rows keep one selected pair and replace snapshot deposits with wallet history", () => {
+  const snapshot = [
+    { date: "2026-08-23", pair: "XDX/XRP", lpTokens: 1, usd: 0.01, kind: "deposit" },
+    { date: "2026-08-23", pair: "XDX/XIO", lpTokens: 9, usd: 0.02, kind: "deposit" },
+    { date: "2026-08-22", pair: "XDX/XRP", lpTokens: 0.2, usd: 0.001, kind: "fee" },
+  ];
+  assert.deepEqual(
+    filterIncomeByPair(snapshot, "XDX/XRP").map((row) => row.kind),
+    ["deposit", "fee"]
+  );
+  const history = incomeRowsForPair({
+    pair: "XDX/XRP",
+    snapshotRows: snapshot,
+    historyActivity: [
+      { side: "addLp", pair: "XDX/XRP", lp: 6100.5985, timestamp: "2026-08-23T10:00:00.000Z", txid: "A" },
+      { side: "createPool", pair: "XDX/XRP", lp: 12, timestamp: "2026-06-01T10:00:00.000Z", txid: "B" },
+      { side: "addLp", pair: "XDX/RLUSD", lp: 40, timestamp: "2026-08-21T10:00:00.000Z", txid: "C" },
+    ],
+    positions: [{ pool: "XDX/XRP", reserve_asset: 1000, reserve_currency: 1, lp_supply: 100 }],
+    xdxUsd: 0.00004,
+    xrpUsd: 2,
+  });
+  assert.equal(history.some((row) => row.kind === "fee"), true);
+  assert.equal(history.some((row) => row.lpTokens === 1), false);
+  assert.equal(history.filter((row) => row.kind !== "fee").length, 2);
+  assert.ok(history.every((row) => row.pair === "XDX/XRP"));
 });

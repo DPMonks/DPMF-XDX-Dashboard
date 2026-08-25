@@ -2656,8 +2656,50 @@ body {
   margin: 0;
 }
 
+.wallet-income-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wallet-income-select {
+  min-width: 0;
+}
+
+.wallet-income-select select {
+  max-width: 140px;
+}
+
 .wallet-income-copy {
   flex-shrink: 0;
+}
+
+.wallet-income-load {
+  height: 2px;
+  margin: 0 0 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.wallet-income-load span {
+  display: block;
+  height: 100%;
+  width: 36%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--dpmf-neon-cyan), var(--dpmf-neon-violet));
+  animation: wallet-income-slide 0.9s ease-in-out infinite;
+}
+
+@keyframes wallet-income-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(380%);
+  }
 }
 
 .wallet-income {
@@ -3320,12 +3362,20 @@ body {
     flex-wrap: wrap;
   }
 
-  .wallet-lp-select {
+  .wallet-income-tools {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .wallet-lp-select,
+  .wallet-income-select {
     width: 100%;
   }
 
-  .wallet-lp-select select {
+  .wallet-lp-select select,
+  .wallet-income-select select {
     width: 100%;
+    max-width: none;
     min-height: 44px;
     font-size: 16px;
   }
@@ -3433,6 +3483,7 @@ body {
   .pair-select-control,
   .brand-select-list button,
   .wallet-lp-select select,
+  .wallet-income-select select,
   .wallet-income-copy {
     min-height: 44px;
   }

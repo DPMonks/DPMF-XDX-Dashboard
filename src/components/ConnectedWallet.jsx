@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getConnectedWallet } from "../api/indexer";
+import { getConnectedWallet, loadWalletLpIncomeHistory } from "../api/indexer";
 import { pendingVoteFromExecution } from "../wallet/ammVote";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
@@ -27,9 +27,12 @@ import { formatFeePercent } from "../wallet/ammVote";
 import { useMorph } from "../wallet/useMorph";
 import { mergeWalletActivity, mergeWalletOrders, pendingFromExecution } from "../wallet/ledgerOrders";
 import {
+  DEFAULT_INCOME_PAIR,
   INCOME_PAGE_DAYS,
   downloadTextFile,
   incomeDayKeys,
+  incomePairChoices,
+  incomeRowsForPair,
   lpIncomeCsv,
   pageLpIncome,
 } from "../wallet/lpIncome";
@@ -213,17 +216,85 @@ function LpInfographic({ position, earn, locale, t, empty }) {
   );
 }
 
-function WalletIncomePanel({ rows, locale, t, empty }) {
-  const all = Array.isArray(rows) ? rows : [];
+function WalletIncomePanel({ address, snapshotRows, positions, priceBook, locale, t, empty }) {
+  const [incomePair, setIncomePair] = useState(DEFAULT_INCOME_PAIR);
+  const [historyActivity, setHistoryActivity] = useState(null);
+  const [loading, setLoading] = useState(() => Boolean(address) && !empty);
+  const [historyComplete, setHistoryComplete] = useState(false);
   const [daysShown, setDaysShown] = useState(INCOME_PAGE_DAYS);
+  const [epoch, setEpoch] = useState(0);
+  const cacheRef = useRef(new Map());
   const sentinelRef = useRef(null);
+  const pairs = incomePairChoices({
+    positions,
+    activity: [...(Array.isArray(snapshotRows) ? snapshotRows : []), ...(historyActivity || [])],
+  });
+  const all = incomeRowsForPair({
+    pair: incomePair,
+    snapshotRows,
+    historyActivity,
+    positions,
+    prices: priceBook,
+    xdxUsd: priceBook?.xdxUsd,
+    xrpUsd: priceBook?.xrpUsd,
+    rlusdUsd: priceBook?.RLUSD,
+  });
   const dayCount = incomeDayKeys(all).length;
   const visible = pageLpIncome(all, daysShown);
-  const done = empty || dayCount === 0 || daysShown >= dayCount;
+  const pagedOut = empty || dayCount === 0 || daysShown >= dayCount;
+  const done = pagedOut && !loading && (empty || historyComplete || historyActivity != null);
+
+  useEffect(() => {
+    if (!address || empty) return undefined;
+    const key = `${address}:${incomePair}`;
+    const cached = cacheRef.current.get(key);
+    if (cached) {
+      setHistoryActivity(cached.activity);
+      setHistoryComplete(cached.complete);
+      setLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setHistoryComplete(false);
+    loadWalletLpIncomeHistory(address, { pair: incomePair, fresh: epoch > 0 })
+      .then((result) => {
+        if (cancelled) return;
+        cacheRef.current.set(key, result);
+        setHistoryActivity(result.activity);
+        setHistoryComplete(result.complete);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [address, incomePair, empty, epoch]);
+
+  useEffect(() => {
+    if (!address) return undefined;
+    function bust() {
+      for (const key of [...cacheRef.current.keys()]) {
+        if (key.startsWith(`${address}:`)) cacheRef.current.delete(key);
+      }
+      setEpoch((current) => current + 1);
+    }
+    window.addEventListener("dpmf-wallet-refresh", bust);
+    window.addEventListener("dpmf-trade-executed", bust);
+    window.addEventListener("dpmf-function-confirmed", bust);
+    return () => {
+      window.removeEventListener("dpmf-wallet-refresh", bust);
+      window.removeEventListener("dpmf-trade-executed", bust);
+      window.removeEventListener("dpmf-function-confirmed", bust);
+    };
+  }, [address]);
 
   useEffect(() => {
     const node = sentinelRef.current;
-    if (!node || done) return undefined;
+    if (!node || pagedOut) return undefined;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
@@ -234,22 +305,62 @@ function WalletIncomePanel({ rows, locale, t, empty }) {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [done, daysShown]);
+  }, [pagedOut, daysShown]);
+
+  function onPairChange(next) {
+    setIncomePair(next);
+    setDaysShown(INCOME_PAGE_DAYS);
+    const cached = address ? cacheRef.current.get(`${address}:${next}`) : null;
+    if (cached) {
+      setHistoryActivity(cached.activity);
+      setHistoryComplete(cached.complete);
+      setLoading(false);
+      return;
+    }
+    setHistoryActivity(null);
+    setHistoryComplete(false);
+    setLoading(true);
+  }
 
   return (
     <section className={`wallet-book wallet-income${empty ? " is-empty" : " is-filled"}`}>
       <div className="wallet-income-head">
         <h3>{t.lpPassiveIncome || "LP Earning/Passive income"}</h3>
-        <button
-          type="button"
-          className="copy-btn wallet-income-copy"
-          disabled={empty || !all.length}
-          onClick={() => downloadTextFile("lp-earnings.csv", lpIncomeCsv(all))}
-          aria-label={t.downloadLpIncome || "Download LP earnings"}
-        >
-          {t.copy || "Copy"}
-        </button>
+        <div className="wallet-income-tools">
+          <label className="wallet-lp-select wallet-income-select">
+            <span className="sr-only">{t.incomePairSelect || t.incomePair || "Pair"}</span>
+            <select
+              value={incomePair}
+              disabled={empty}
+              onChange={(event) => onPairChange(event.target.value)}
+            >
+              {pairs.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="copy-btn wallet-income-copy"
+            disabled={empty || !all.length}
+            onClick={() => downloadTextFile("lp-earnings.csv", lpIncomeCsv(all))}
+            aria-label={t.downloadLpIncome || "Download LP earnings"}
+          >
+            {t.copy || "Copy"}
+          </button>
+        </div>
       </div>
+      {loading ? (
+        <div
+          className="wallet-income-load"
+          role="progressbar"
+          aria-label={t.loadingLpIncome || "Loading LP history"}
+        >
+          <span />
+        </div>
+      ) : null}
       <div className="wallet-income-scroll">
         <table className="wallet-income-table">
           <thead>
@@ -267,7 +378,7 @@ function WalletIncomePanel({ rows, locale, t, empty }) {
               </tr>
             ) : (
               visible.map((row) => (
-                <tr key={`${row.date}-${row.pair}-${row.kind || "fee"}`}>
+                <tr key={`${row.txid || row.date}-${row.pair}-${row.kind || "fee"}-${row.lpTokens}`}>
                   <td>{row.date}</td>
                   <td className="is-earn">{formatToken(row.lpTokens, locale, 4)}</td>
                   <td>{row.pair}</td>
@@ -532,11 +643,14 @@ export default function ConnectedWallet() {
       </section>
 
       <WalletIncomePanel
-        key={`${view.address || "out"}:${(view.income || []).length}`}
-        rows={view.income}
+        key={walletAddress || "out"}
+        address={walletAddress}
+        snapshotRows={view.income}
+        positions={view.lp}
+        priceBook={view.priceBook}
         locale={locale}
         t={t}
-        empty={empty}
+        empty={!walletAddress}
       />
 
       <section className={`wallet-activity${empty ? " is-empty" : " is-filled"}`}>

@@ -947,6 +947,44 @@ export async function getWalletActivity(address, extra = {}) {
   return asArray(body?.activity || body);
 }
 
+export async function getWalletLpIncome(address, extra = {}) {
+  const name = String(address || "").trim();
+  if (!name) return { account: null, pair: extra.pair || "XDX/XRP", activity: [], complete: true, marker: null };
+  const body = await api.walletLpIncome(name, extra);
+  return {
+    account: body?.account || name,
+    pair: body?.pair || extra.pair || "XDX/XRP",
+    activity: asArray(body?.activity),
+    complete: Boolean(body?.complete) || !body?.marker,
+    marker: body?.marker || null,
+    source: body?.source || null,
+  };
+}
+
+const LP_INCOME_CLIENT_PAGES = 40;
+
+export async function loadWalletLpIncomeHistory(address, extra = {}) {
+  const name = String(address || "").trim();
+  const pair = extra.pair || "XDX/XRP";
+  if (!name) return { account: null, pair, activity: [], complete: true };
+  const merged = [];
+  let marker = extra.marker || null;
+  let complete = false;
+  for (let page = 0; page < LP_INCOME_CLIENT_PAGES; page += 1) {
+    const next = await getWalletLpIncome(name, {
+      pair,
+      marker,
+      fresh: extra.fresh && page === 0,
+    });
+    merged.push(...next.activity);
+    marker = next.marker;
+    complete = Boolean(next.complete) || !marker;
+    extra.onPage?.({ activity: merged, complete, pages: page + 1 });
+    if (complete) break;
+  }
+  return { account: name, pair, activity: merged, complete, marker: complete ? null : marker };
+}
+
 export async function getConnectedWallet(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return emptyWalletSnapshot(null);

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   activityFromAccountTx,
+  activityFromAmmLpTx,
   activityFromOfferTx,
   activityFromPaymentTx,
   activityFromTrustSetTx,
@@ -138,6 +139,43 @@ test("pendingFromExecution paints the buy immediately and skips IOC as an open o
   assert.equal(swap.order, null);
   assert.equal(swap.activity.side, "buy");
   assert.equal(swap.activity.status, "filled");
+});
+
+test("activityFromAmmLpTx reads LP tokens received from ledger metadata", () => {
+  const history = activityFromAmmLpTx(
+    {
+      hash: "A".repeat(64),
+      close_time_iso: "2026-08-23T10:00:00.000Z",
+      tx: {
+        TransactionType: "AMMDeposit",
+        Account: "rLp",
+        Asset: { currency: "XDX", issuer: XDX_ISSUER },
+        Asset2: { currency: "XRP" },
+      },
+      meta: {
+        TransactionResult: "tesSUCCESS",
+        AffectedNodes: [
+          {
+            ModifiedNode: {
+              LedgerEntryType: "RippleState",
+              FinalFields: {
+                Balance: { currency: "03E7A465A6E95CDA21E1110056AA51A71FA55CB9", value: "6100.5985" },
+                HighLimit: { issuer: "rLp" },
+                LowLimit: { issuer: "rAmm" },
+              },
+              PreviousFields: {
+                Balance: { currency: "03E7A465A6E95CDA21E1110056AA51A71FA55CB9", value: "0" },
+              },
+            },
+          },
+        ],
+      },
+    },
+    "rLp"
+  );
+  assert.equal(history.side, "addLp");
+  assert.equal(history.pair, "XDX/XRP");
+  assert.equal(history.lp, 6100.5985);
 });
 
 test("pendingFromExecution records an AMM deposit as filled LP activity", () => {

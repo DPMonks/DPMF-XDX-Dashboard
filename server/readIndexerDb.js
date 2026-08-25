@@ -60,6 +60,7 @@ import {
 } from "../src/wallet/composeWallet.js";
 import {
   loadWalletActivity,
+  loadWalletLpIncome,
   loadWalletBalancesFromLedger,
   loadWalletLines,
   loadWalletLpFromLedger,
@@ -115,6 +116,7 @@ const CATALOG = {
     walletOffers: "/api/wallet/offers/:address",
     walletLines: "/api/wallet/lines/:address",
     walletActivity: "/api/wallet/activity/:address",
+    walletLpIncome: "/api/wallet/lp-income/:address",
     walletVotes: "/api/wallet/votes/:address",
     ammGovernance: "/api/amm/governance",
     walletLp: "/api/wallet/lp/:address",
@@ -2287,6 +2289,25 @@ function walletLedgerResult(suffix, search = "") {
   const activity = String(suffix || "").match(/^wallet\/activity\/([^/]+)$/);
   if (activity) {
     return loadWalletActivity(decodeURIComponent(activity[1]), fresh).then((body) => ok(body));
+  }
+  const lpIncome = String(suffix || "").match(/^wallet\/lp-income\/([^/]+)$/);
+  if (lpIncome) {
+    const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+    let marker = null;
+    const rawMarker = params.get("marker");
+    if (rawMarker) {
+      try {
+        const parsed = JSON.parse(rawMarker);
+        if (parsed && typeof parsed === "object") marker = parsed;
+      } catch {
+        marker = null;
+      }
+    }
+    return loadWalletLpIncome(decodeURIComponent(lpIncome[1]), {
+      fresh: walletFresh(search),
+      pair: params.get("pair") || "XDX/XRP",
+      marker,
+    }).then((body) => ok(body));
   }
   const votes = String(suffix || "").match(/^wallet\/votes\/([^/]+)$/);
   if (votes) {

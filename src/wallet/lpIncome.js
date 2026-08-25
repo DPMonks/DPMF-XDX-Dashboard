@@ -1,5 +1,8 @@
 import { detectQuoteUsd, normalizePriceBook } from "../utils/poolSplit.js";
 
+export const DEFAULT_INCOME_PAIR = "XDX/XRP";
+export const INCOME_FEATURED_PAIRS = ["XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"];
+
 function normalizeWalletPair(value) {
   const raw = String(value || "")
     .trim()
@@ -10,6 +13,30 @@ function normalizeWalletPair(value) {
   if (raw === "XRP" || raw === "XRP/XDX") return "XDX/XRP";
   if (raw.startsWith("XDX/")) return raw;
   return `XDX/${raw}`;
+}
+
+export function incomePairName(value) {
+  return normalizeWalletPair(value) || DEFAULT_INCOME_PAIR;
+}
+
+export function incomePairChoices({ positions = [], activity = [], featured = INCOME_FEATURED_PAIRS } = {}) {
+  const names = [DEFAULT_INCOME_PAIR, ...(Array.isArray(featured) ? featured : INCOME_FEATURED_PAIRS)];
+  for (const row of Array.isArray(positions) ? positions : []) {
+    names.push(normalizeWalletPair(row?.pool || row?.pool_name || row?.pair || row));
+  }
+  for (const row of Array.isArray(activity) ? activity : []) {
+    names.push(normalizeWalletPair(row?.pair || row?.pool || row?.pool_name));
+  }
+  return [...new Set(names.filter((name) => isXdxAmmPair(name)))].sort((left, right) => {
+    if (left === DEFAULT_INCOME_PAIR) return -1;
+    if (right === DEFAULT_INCOME_PAIR) return 1;
+    return left.localeCompare(right);
+  });
+}
+
+export function filterIncomeByPair(rows = [], pair = DEFAULT_INCOME_PAIR) {
+  const want = incomePairName(pair);
+  return (Array.isArray(rows) ? rows : []).filter((row) => incomePairName(row?.pair) === want);
 }
 
 function tradingFeeRate(tradingFee) {
@@ -177,7 +204,7 @@ export function lpDepositIncomeRows({
   const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
   const rows = [];
   for (const item of Array.isArray(activity) ? activity : []) {
-    if (item?.side !== "addLp") continue;
+    if (item?.side !== "addLp" && item?.side !== "createPool") continue;
     const date = utcDayKey(item.timestamp);
     const pair = normalizeWalletPair(item.pair || item.pool);
     const lpTokens = num(item.lp);
@@ -187,7 +214,8 @@ export function lpDepositIncomeRows({
       lpTokens,
       pair,
       usd: lpTokenUsd(lpTokens, byPair.get(pair) || { pair }, book),
-      kind: "deposit",
+      kind: item.side === "createPool" ? "create" : "deposit",
+      txid: item.txid || null,
     });
   }
   return rows;
@@ -198,8 +226,36 @@ export function mergeLpIncomeRows(...lists) {
   return rows.sort((left, right) => {
     if (left.date !== right.date) return left.date < right.date ? 1 : -1;
     if (left.pair !== right.pair) return left.pair.localeCompare(right.pair);
+    if ((left.txid || "") !== (right.txid || "")) return String(right.txid || "").localeCompare(String(left.txid || ""));
     return String(left.kind || "").localeCompare(String(right.kind || ""));
   });
+}
+
+export function incomeRowsForPair({
+  pair = DEFAULT_INCOME_PAIR,
+  snapshotRows = [],
+  historyActivity = null,
+  positions = [],
+  prices,
+  xdxUsd = 0,
+  xrpUsd = 0,
+  rlusdUsd = 1,
+} = {}) {
+  const want = incomePairName(pair);
+  const snapshot = filterIncomeByPair(snapshotRows, want);
+  const fees = snapshot.filter((row) => row.kind === "fee");
+  const deposits =
+    historyActivity == null
+      ? snapshot.filter((row) => row.kind !== "fee")
+      : lpDepositIncomeRows({
+          activity: historyActivity,
+          positions,
+          xdxUsd,
+          xrpUsd,
+          rlusdUsd,
+          prices,
+        }).filter((row) => incomePairName(row.pair) === want);
+  return mergeLpIncomeRows(fees, deposits);
 }
 
 export function incomeDayKeys(rows = []) {

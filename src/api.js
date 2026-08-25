@@ -494,6 +494,18 @@ export const api = {
       queue: false,
       cache: false,
     }),
+  walletLpIncome: (address, extra = {}) => {
+    const search = new URLSearchParams();
+    if (extra.pair) search.set("pair", extra.pair);
+    if (extra.marker) search.set("marker", JSON.stringify(extra.marker));
+    if (extra.fresh) search.set("fresh", "1");
+    const query = search.toString();
+    return getJson(`/wallet/lp-income/${encodeURIComponent(address)}${query ? `?${query}` : ""}`, {
+      retries: 1,
+      queue: false,
+      cache: false,
+    });
+  },
   walletVotes: (address) =>
     getJson(`/wallet/votes/${encodeURIComponent(address)}`, {
       retries: 1,
