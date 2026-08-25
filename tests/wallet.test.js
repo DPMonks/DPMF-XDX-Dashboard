@@ -110,6 +110,28 @@ test("xdxFiatValues keeps USD and GBP from recorded prices", () => {
   assert.ok(Math.abs(fiat.rlusd - 0.04) < 1e-12);
 });
 
+test("xdxFiatValues prices the XDX stack in XRP and RLUSD, not other wallet holdings", () => {
+  const stack = 3_004_952_684.62;
+  const fiat = xdxFiatValues(stack, {
+    xdxUsd: 0.0000498,
+    xrpUsd: 2.62,
+    rlusdUsd: 1,
+    xdxXrp: 0.000019,
+  });
+  assert.equal(fiat.xdx, stack);
+  assert.ok(Math.abs(fiat.xrp - stack * 0.000019) < 1e-6);
+  assert.ok(Math.abs(fiat.rlusd - stack * 0.0000498) < 1e-4);
+  assert.ok(fiat.xrp > 50_000);
+  assert.ok(Math.abs(fiat.rlusd - 149_646.64) < 1);
+});
+
+test("xdxFiatValues fills XRP worth from USD when the XDX/XRP mark is missing", () => {
+  const fiat = xdxFiatValues(1_000_000, { xdxUsd: 0.00005, xrpUsd: 2 });
+  assert.ok(Math.abs(fiat.usd - 50) < 1e-12);
+  assert.ok(Math.abs(fiat.xrp - 25) < 1e-12);
+  assert.ok(Math.abs(fiat.rlusd - 50) < 1e-12);
+});
+
 test("xdxFiatValues fills EUR and JPY from XRP FX when those marks are missing", () => {
   const fiat = xdxFiatValues(1000, {
     xdxUsd: 0.00005,
@@ -348,8 +370,10 @@ test("composeWalletSnapshot stays blank until an address is signed in", () => {
   assert.equal(filled.holdings.xdx, 5000);
   assert.equal(filled.holdings.xrp, 12);
   assert.equal(filled.holdings.rlusd, 127.3);
+  assert.equal(filled.xdx.xdx, 5000);
   assert.equal(filled.xdx.usd, 0.2);
   assert.equal(filled.xdx.rlusd, 0.2);
+  assert.equal(filled.xdx.xrp, 0.15);
   assert.equal(filled.xdx.gbp, 0.15);
   assert.ok(Math.abs(filled.xdx.eur - 0.18) < 1e-12);
   assert.ok(Math.abs(filled.xdx.jpy - 30) < 1e-12);

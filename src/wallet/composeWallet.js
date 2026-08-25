@@ -157,14 +157,21 @@ export function xdxFiatValues(xdx, prices = {}) {
   }
   const usdValue = usd != null && usd > 0 ? bal * usd : null;
   const rlusdUsd = num(filled.rlusdUsd ?? filled.RLUSD) || 1;
+  const xrpUsd = num(filled.xrpUsd);
   const viaUsd = (rate) => (usdValue != null && Number(rate) > 0 ? usdValue * Number(rate) : null);
+  const xrpWorth =
+    xrp != null && xrp > 0
+      ? bal * xrp
+      : usdValue != null && xrpUsd != null && xrpUsd > 0
+        ? usdValue / xrpUsd
+        : null;
   return {
     xdx: bal,
     usd: usdValue,
     gbp: fiatAmount(bal, filled.xdxGbp, usd, filled.xrpUsd, filled.xrpGbp) ?? viaUsd(filled.usdGbp),
     eur: fiatAmount(bal, filled.xdxEur, usd, filled.xrpUsd, filled.xrpEur) ?? viaUsd(filled.usdEur),
     jpy: fiatAmount(bal, filled.xdxJpy, usd, filled.xrpUsd, filled.xrpJpy) ?? viaUsd(filled.usdJpy),
-    xrp: xrp != null ? bal * xrp : null,
+    xrp: xrpWorth,
     rlusd: usdValue != null ? usdValue / rlusdUsd : null,
   };
 }
