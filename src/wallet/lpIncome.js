@@ -142,11 +142,19 @@ export function poolForIncomePair(pair, positions = [], pools = []) {
   };
 }
 
+function quoteReserveForUsd(reserveQuote, supply) {
+  const quote = num(reserveQuote);
+  const lp = num(supply);
+  if (!(quote > 0)) return 0;
+  if (lp > 0 && Math.abs(quote - lp) / Math.max(quote, lp) < 0.05) return 0;
+  return quote;
+}
+
 export function lpTokenUsd(lpTokens, pool = {}, prices = {}) {
   const tokens = num(lpTokens);
   const supply = num(pool.lp_supply);
   const reserveXdx = num(pool.reserve_asset ?? pool.reserve_xdx);
-  const reserveQuote = num(pool.reserve_currency ?? pool.reserve_quote);
+  const reserveQuote = quoteReserveForUsd(pool.reserve_currency ?? pool.reserve_quote, supply);
   if (!(tokens > 0) || !(supply > 0)) return 0;
   const book = normalizePriceBook(prices);
   const quoteId = pairQuote(pool.pool || pool.pool_name || pool.pair, pool.quote);
@@ -170,7 +178,10 @@ export function lpTokenUsd(lpTokens, pool = {}, prices = {}) {
 
 function feeIncomeUsd(feeXdx, position, book) {
   const reserveXdx = num(position?.reserve_asset ?? position?.reserve_xdx);
-  const reserveQuote = num(position?.reserve_currency ?? position?.reserve_quote);
+  const reserveQuote = quoteReserveForUsd(
+    position?.reserve_currency ?? position?.reserve_quote,
+    position?.lp_supply
+  );
   const quoteId = pairQuote(position?.pool || position?.pool_name || position?.pair, position?.quote);
   const xdxUsd = num(book?.xdxUsd ?? book?.recorded_price);
   const quoteUsd = detectQuoteUsd({
@@ -436,7 +447,6 @@ export function incomeRowsForPair({
   historyDays = [],
   recordedRows = [],
   positions = [],
-  pools = [],
   prices,
   xdxUsd = 0,
   xrpUsd = 0,
@@ -473,19 +483,7 @@ export function incomeRowsForPair({
       now,
     });
   }
-  const deposits =
-    historyActivity == null
-      ? snapshot.filter((row) => row.kind && row.kind !== "fee")
-      : lpDepositIncomeRows({
-          activity: historyActivity,
-          positions,
-          pools,
-          xdxUsd,
-          xrpUsd,
-          rlusdUsd,
-          prices,
-        }).filter((row) => incomePairName(row.pair) === want);
-  return fees.length ? fees : mergeLpIncomeRows(deposits);
+  return fees;
 }
 
 export function incomeDayKeys(rows = []) {

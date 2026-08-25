@@ -111,6 +111,24 @@ test("income list is newest XDX pair days first and pages by 10 days", () => {
   assert.match(lpIncomeCsv(rows), /^Date,LP tokens received,Trading pair,USD\n/);
 });
 
+test("lpTokenUsd does not mark LP tokens at the XRP price when quote reserve is LP supply", () => {
+  const pool = {
+    pool: "XDX/XRP",
+    quote: "XRP",
+    reserve_asset: 64_520_961.62244989,
+    reserve_currency: 233_179_846.2759734,
+    lp_supply: 233_179_846.2759734,
+  };
+  const prices = { xdxUsd: 0.0000473979, xrpUsd: 1.47 };
+  const tokens = 5_654_599.2309;
+  const usd = lpTokenUsd(tokens, pool, prices);
+  const xdxSide = pool.reserve_asset * prices.xdxUsd;
+  assert.ok(usd > 100);
+  assert.ok(usd < 1_000);
+  assert.ok(Math.abs(usd - (tokens / pool.lp_supply) * xdxSide * 2) < 1);
+  assert.ok(Math.abs(usd - tokens * prices.xrpUsd) > 1_000_000);
+});
+
 test("lpTokenUsd prices both pool reserves at the quote mark, not 2x XDX", () => {
   const pool = {
     pool: "XDX/XIO",
