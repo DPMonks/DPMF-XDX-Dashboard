@@ -389,6 +389,12 @@ export default function TradePanel({
       quoteHex: quote.hex || null,
       pair: quote.pair || `XDX/${quoteId}`,
       ...(isLp ? { lpMode, singleAsset: isSingleLp ? singleAsset : undefined } : {}),
+      ...(action === "addLp"
+        ? { amount: addXdx, quoteQty: addQuote, lpOut: Number(lpHint) || 0 }
+        : {}),
+      ...(action === "removeLp"
+        ? { lpAmount: Number(withdrawLp) || 0, withdraw }
+        : {}),
     };
   }
 

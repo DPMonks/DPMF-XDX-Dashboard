@@ -6,7 +6,9 @@ import { formatAmmFee } from "../wallet/composeWallet";
 import {
   ammPoolName,
   applyLivePoolReserves,
+  applyTradePoolReserves,
   compactPoolAmount,
+  looksLikeLpAsQuote,
   filterAmmPools,
   isLpPoolTrade,
   mergeAmmPoolLists,
@@ -161,6 +163,16 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     })
       .then((live) => {
         if (!live || live.empty || live.reserve_source === "empty") return;
+        if (
+          looksLikeLpAsQuote({
+            reserveXdx: live.reserve_xdx ?? live.reserve_asset,
+            reserveQuote: live.reserve_currency ?? live.reserve_quote,
+            lpSupply: live.lp_supply,
+            quote: live.quote || live.pair || pool.quote || pool.pool,
+          })
+        ) {
+          return;
+        }
         setLiveByKey((current) => ({ ...current, [poolKey(pool)]: live }));
       })
       .catch(() => {});
@@ -172,6 +184,30 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     liveTimer.current = window.setTimeout(() => {
       rows.forEach((pool) => pullLive(pool, extra));
     }, extra.fresh ? 220 : 40);
+  }
+
+  function applyTradeThenLive(detail) {
+    const pair = tradePoolHint(detail);
+    const rows = filterAmmPools(mergeAmmPoolLists(pools, found), query);
+    const targets = pair ? rows.filter((row) => ammPoolName(row) === pair) : rows.slice(0, 6);
+    const nextTargets = targets.length ? targets : rows.slice(0, 6);
+    setLiveByKey((current) => {
+      const next = { ...current };
+      for (const row of nextTargets) {
+        const shown = applyLivePoolReserves(row, current[poolKey(row)]);
+        const traded = applyTradePoolReserves(shown, detail);
+        next[poolKey(row)] = {
+          reserve_xdx: traded.reserve_asset ?? traded.reserve_xdx,
+          reserve_asset: traded.reserve_asset ?? traded.reserve_xdx,
+          reserve_currency: traded.reserve_currency,
+          reserve_quote: traded.reserve_currency,
+          lp_supply: traded.lp_supply,
+          reserve_source: traded.reserve_source || "trade",
+        };
+      }
+      return next;
+    });
+    refreshLive(nextTargets, { fresh: true });
   }
   const signing = status === "loading" || status === "waiting";
   const account = liveWalletAddress(walletAddress);
@@ -227,19 +263,23 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
   }
 
   useEffect(() => {
+    refreshLive(filterAmmPools(mergeAmmPoolLists(pools, found), query).slice(0, 8));
+    // refreshLive reads the latest pullLive closure; pool identity is the dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalog rows
+  }, [pools, found, query]);
+
+  useEffect(() => {
     function onTrade(event) {
       const detail = event?.detail || {};
       if (!isLpPoolTrade(detail)) return;
-      const pair = tradePoolHint(detail);
-      const rows = filterAmmPools(mergeAmmPoolLists(pools, found), query);
-      const targets = pair ? rows.filter((row) => ammPoolName(row) === pair) : rows.slice(0, 6);
-      refreshLive(targets.length ? targets : rows.slice(0, 6), { fresh: true });
+      applyTradeThenLive(detail);
     }
     window.addEventListener("dpmf-trade-executed", onTrade);
     return () => {
       window.removeEventListener("dpmf-trade-executed", onTrade);
       window.clearTimeout(liveTimer.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- signed LP amounts
   }, [found, pools, query]);
 
   if (loading && !pools.length && !found.length) {
@@ -369,7 +409,7 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
               {pool.volume24h != null ? (
                 <div>
                   <dt>{t.volume24h}</dt>
-                  <dd>{formatToken(pool.volume24h, locale)}</dd>
+                  <dd className="is-volume">{formatToken(pool.volume24h, locale)}</dd>
                 </div>
               ) : null}
             </dl>

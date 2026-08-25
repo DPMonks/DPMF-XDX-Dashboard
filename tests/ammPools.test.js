@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   applyLivePoolReserves,
+  applyTradePoolReserves,
+  looksLikeLpAsQuote,
   compactPoolAmount,
   filterAmmPools,
   isLpPoolTrade,
@@ -78,12 +80,26 @@ test("compact pool amounts and 1 LP shares fit the ratio box", () => {
   assert.equal(compactPoolAmount(0.5403), "0.5403");
   const meta = poolSplitMeta({
     reserve_asset: 51709564.3635,
-    reserve_currency: 52421.3323,
-    lp_supply: 52421.3323,
+    reserve_currency: 59.8319,
+    lp_supply: 44896.6467,
   });
-  assert.ok(Math.abs(meta.xdxPerLp - 51709564.3635 / 52421.3323) < 1e-9);
-  assert.equal(meta.quotePerLp, 1);
-  assert.equal(meta.lpSupply, 52421.3323);
+  assert.ok(Math.abs(meta.xdxPerLp - 51709564.3635 / 44896.6467) < 1e-9);
+  assert.ok(Math.abs(meta.quotePerLp - 59.8319 / 44896.6467) < 1e-9);
+  assert.equal(meta.lpSupply, 44896.6467);
+  const leaked = poolSplitMeta({
+    pool: "XDX/XIO",
+    quote: "XIO",
+    reserve_asset: 51709564.3635,
+    reserve_currency: 56027.4283,
+    lp_supply: 56027.4283,
+  });
+  assert.equal(leaked.reserveQuote, null);
+  assert.equal(looksLikeLpAsQuote({
+    reserveXdx: 63_105_563,
+    reserveQuote: 220_406_408,
+    lpSupply: 220_406_408,
+    quote: "XRP",
+  }), true);
 });
 
 test("live amm_info updates the ratio box after an LP deposit or withdraw", () => {
@@ -97,20 +113,77 @@ test("live amm_info updates the ratio box after an LP deposit or withdraw", () =
   };
   const live = {
     reserve_xdx: 51709564.3635,
-    reserve_currency: 52421.3323,
-    lp_supply: 52421.3323,
+    reserve_currency: 59.8319,
+    lp_supply: 44896.6467,
     reserve_source: "amm_info",
   };
   const next = applyLivePoolReserves(catalog, live);
   assert.equal(next.reserve_asset, 51709564.3635);
-  assert.equal(next.reserve_currency, 52421.3323);
-  assert.equal(next.lp_supply, 52421.3323);
+  assert.equal(next.reserve_currency, 59.8319);
+  assert.equal(next.lp_supply, 44896.6467);
   assert.ok(next.xdx_pct > 99);
   assert.ok(next.quote_pct < 1);
+  const leakedLive = applyLivePoolReserves(catalog, {
+    reserve_xdx: 51709564.3635,
+    reserve_currency: 56027.4283,
+    lp_supply: 56027.4283,
+    reserve_source: "amm_info",
+  });
+  assert.equal(leakedLive.reserve_currency, 80000);
+  const leakedCatalog = applyLivePoolReserves(
+    {
+      pool: "XDX/XIO",
+      quote: "XIO",
+      reserve_asset: 51709564.3635,
+      reserve_currency: 56027.4283,
+      lp_supply: 56027.4283,
+    },
+    {
+      reserve_xdx: 51709564.3635,
+      reserve_currency: 56027.4283,
+      lp_supply: 56027.4283,
+      reserve_source: "amm_info",
+    }
+  );
+  assert.equal(leakedCatalog.reserve_currency, null);
   assert.equal(isLpPoolTrade({ trade: { action: "addLp", pair: "XDX/XIO" } }), true);
   assert.equal(isLpPoolTrade({ txjson: { TransactionType: "AMMWithdraw" } }), true);
   assert.equal(isLpPoolTrade({ trade: { action: "buy" } }), false);
   assert.equal(tradePoolHint({ trade: { pair: "XDX/XIO" } }), "XDX/XIO");
+});
+
+test("add or remove LP updates the card from the signed amounts immediately", () => {
+  const pool = {
+    pool: "XDX/XIO",
+    quote: "XIO",
+    reserve_asset: 1000,
+    reserve_currency: 40,
+    lp_supply: 200,
+  };
+  const added = applyTradePoolReserves(pool, {
+    trade: { action: "addLp", pair: "XDX/XIO", amount: 100, quoteQty: 4, lpOut: 20 },
+  });
+  assert.equal(added.reserve_asset, 1100);
+  assert.equal(added.reserve_currency, 44);
+  assert.equal(added.lp_supply, 220);
+  const removed = applyTradePoolReserves(added, {
+    trade: { action: "removeLp", pair: "XDX/XIO", withdraw: { base: 50, quote: 2 }, lpAmount: 10 },
+  });
+  assert.equal(removed.reserve_asset, 1050);
+  assert.equal(removed.reserve_currency, 42);
+  assert.equal(removed.lp_supply, 210);
+  const leaked = applyTradePoolReserves(
+    {
+      pool: "XDX/XIO",
+      quote: "XIO",
+      reserve_asset: 51_709_564.3635,
+      reserve_currency: 56027.4283,
+      lp_supply: 56027.4283,
+    },
+    { trade: { action: "addLp", pair: "XDX/XIO", amount: 100, quoteQty: 4, lpOut: 20 } }
+  );
+  assert.equal(leaked.reserve_currency, 4);
+  assert.equal(leaked.lp_supply, 56047.4283);
 });
 
 test("known live pool specs include featured XDX quotes, not only XRP and RLUSD", () => {
