@@ -200,7 +200,7 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
 
   if (
     method === "GET" &&
-    (/^wallet\/(offers|activity|votes|account|balances|lines|lp|networth)\//.test(suffix) ||
+    (/^wallet\/(offers|activity|votes|account|balances|lines|lp|lp-income|networth)\//.test(suffix) ||
       /^balances\//.test(suffix) ||
       suffix === "amm/governance" ||
       suffix === "lp-pools/live")

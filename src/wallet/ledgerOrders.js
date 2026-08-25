@@ -189,6 +189,46 @@ export function offerStillOnLedger(meta, account) {
   return false;
 }
 
+export function isLpCurrencyHex(value) {
+  return /^03[A-Fa-f0-9]{38}$/.test(String(value || "").trim());
+}
+
+export function lpDeltaFromMeta(meta, account) {
+  const nodes = Array.isArray(meta?.AffectedNodes) ? meta.AffectedNodes : meta?.meta?.AffectedNodes;
+  let best = 0;
+  for (const wrap of Array.isArray(nodes) ? nodes : []) {
+    const node = wrap.ModifiedNode || wrap.CreatedNode;
+    if (!node || node.LedgerEntryType !== "RippleState") continue;
+    const final = node.FinalFields || node.NewFields || {};
+    const prev = node.PreviousFields || {};
+    const currency = String(final.Balance?.currency || "");
+    if (!isLpCurrencyHex(currency)) continue;
+    const high = final.HighLimit || {};
+    const low = final.LowLimit || {};
+    if (
+      account &&
+      !sameWallet(high.issuer, account) &&
+      !sameWallet(low.issuer, account) &&
+      !sameWallet(final.Account, account)
+    ) {
+      continue;
+    }
+    const after = Math.abs(Number(final.Balance?.value));
+    const before = Math.abs(Number(prev.Balance?.value || 0));
+    if (!Number.isFinite(after)) continue;
+    const delta = after - (Number.isFinite(before) ? before : 0);
+    if (delta > best) best = delta;
+  }
+  return best > 0 ? best : 0;
+}
+
+export function lpTokensFromAmmTx(tx, meta, address) {
+  const credited = lpDeltaFromMeta(meta, address || tx?.Account);
+  if (credited > 0) return credited;
+  const requested = Number(tx?.LPTokenOut?.value ?? tx?.LPTokenIn?.value ?? tx?.lp);
+  return Number.isFinite(requested) && requested > 0 ? requested : 0;
+}
+
 export function unwrapAccountTx(row = {}) {
   const tx = row.tx || row.tx_json || row;
   const meta = row.meta || row.metaData || tx.meta || {};
@@ -287,11 +327,13 @@ export function activityFromAmmCreateTx(row, address) {
   const result = meta.TransactionResult || row.TransactionResult || "";
   if (result && result !== "tesSUCCESS") return null;
   const pair = pairFromVoteAssets(amountAsIssue(tx.Amount), amountAsIssue(tx.Amount2));
+  const lp = lpTokensFromAmmTx(tx, meta, address);
   return {
     account: tx.Account || address,
     side: "createPool",
     pair,
     pool: pair,
+    lp: lp > 0 ? lp : null,
     timestamp: timestamp || new Date().toISOString(),
     txid: hash,
     status: "filled",
@@ -305,13 +347,13 @@ export function activityFromAmmLpTx(row, address) {
   const result = meta.TransactionResult || row.TransactionResult || "";
   if (result && result !== "tesSUCCESS") return null;
   const pair = pairFromVoteAssets(tx.Asset, tx.Asset2);
-  const lp = Number(tx.LPTokenIn?.value ?? tx.lp);
+  const lp = lpTokensFromAmmTx(tx, meta, address);
   return {
     account: tx.Account || address,
     side: tx.TransactionType === "AMMDeposit" ? "addLp" : "removeLp",
     pair,
     pool: pair,
-    lp: Number.isFinite(lp) && lp > 0 ? lp : null,
+    lp: lp > 0 ? lp : null,
     timestamp: timestamp || new Date().toISOString(),
     txid: hash,
     status: "filled",
@@ -447,7 +489,9 @@ export function pendingFromExecution(detail = {}, address = "") {
         ? pairFromVoteAssets(amountAsIssue(txjson.Amount), amountAsIssue(txjson.Amount2))
         : pairFromVoteAssets(txjson.Asset, txjson.Asset2);
     const side = type === "AMMCreate" ? "createPool" : type === "AMMDeposit" ? "addLp" : "removeLp";
-    const lp = Number(txjson.LPTokenIn?.value ?? txjson.lp ?? detail.lp);
+    const lp = Number(
+      txjson.LPTokenOut?.value ?? txjson.LPTokenIn?.value ?? txjson.lp ?? detail.lpReceived ?? detail.lp
+    );
     return {
       order: null,
       activity: {

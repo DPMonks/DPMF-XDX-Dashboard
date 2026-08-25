@@ -630,6 +630,7 @@ export function emptyWalletSnapshot(address = null) {
     },
     lp: [],
     income: [],
+    priceBook: {},
     rank: null,
     book: null,
     orders: [],
@@ -764,6 +765,7 @@ export function composeWalletSnapshot({
     }),
     lp,
     income,
+    priceBook,
     rank: num(rank ?? token.rank ?? balances.rank),
     book: xrpBook
       ? {

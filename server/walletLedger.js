@@ -3,11 +3,15 @@ import { hexCurrencyLabel } from "../src/wallet/ammCreate.js";
 import { activityFromAccountTx, ordersFromAccountOffers } from "../src/wallet/ledgerOrders.js";
 import { POOLS, RLUSD_ISSUER, XDX_ISSUER } from "../src/constants/ledger.js";
 import { lpPositionFromPool } from "../src/wallet/composeWallet.js";
+import { DEFAULT_INCOME_PAIR, incomePairName, isXdxAmmPair } from "../src/wallet/lpIncome.js";
 import { loadLiveAmmReserves } from "./liveAmmReserves.js";
 import { loadLiveMarket } from "./liveCatalog.js";
 
 const CACHE_MS = 8_000;
+const LP_INCOME_CACHE_MS = 90_000;
 const LINE_PAGE_LIMIT = 8;
+export const LP_INCOME_TX_LIMIT = 200;
+export const LP_INCOME_PAGES_PER_REQUEST = 4;
 const LP_CURRENCY_RE = /^03[A-F0-9]{38}$/i;
 const XDX_CURRENCY_RE = /^(XDX|5844580000000000000000000000000000000000)$/i;
 const RLUSD_CURRENCY_RE = /^(RLUSD|524C555344000000000000000000000000000000)$/i;
@@ -31,6 +35,9 @@ export function invalidateWalletLedger(address) {
   cache.delete(`raw-lines:${name}`);
   cache.delete(`balances:${name}`);
   cache.delete(`lp:${name}`);
+  for (const key of [...cache.keys()]) {
+    if (key.startsWith(`lp-income:${name}:`)) cache.delete(key);
+  }
 }
 
 function iouBalanceFromLines(rows = [], issuer, currencyRe) {
@@ -353,14 +360,18 @@ export async function loadWalletActivity(address, options = {}) {
   if (options.fresh) cache.delete(`activity:${name}`);
   return cached(`activity:${name}`, async () => {
     try {
-      const result = await xrplRpc("account_tx", {
-        account: name,
-        ledger_index_min: -1,
-        ledger_index_max: -1,
-        limit: 30,
-        binary: false,
-        forward: false,
-      });
+      const result = await xrplRpc(
+        "account_tx",
+        {
+          account: name,
+          ledger_index_min: -1,
+          ledger_index_max: -1,
+          limit: 30,
+          binary: false,
+          forward: false,
+        },
+        { fetchImpl: options.fetchImpl, rpcUrl: options.rpcUrl }
+      );
       return {
         account: name,
         activity: activityFromAccountTx(result.transactions || [], name),
@@ -370,4 +381,75 @@ export async function loadWalletActivity(address, options = {}) {
       return { account: name, activity: [], source: "empty" };
     }
   });
+}
+
+function lpIncomeCacheKey(address, pair, marker) {
+  return `lp-income:${address}:${pair}:${marker ? JSON.stringify(marker) : "start"}`;
+}
+
+function isLpIncomeRow(row, pair) {
+  if (!row || (row.side !== "addLp" && row.side !== "createPool")) return false;
+  if (!(Number(row.lp) > 0)) return false;
+  return incomePairName(row.pair || row.pool) === pair;
+}
+
+export async function loadWalletLpIncome(address, options = {}) {
+  const name = String(address || "").trim();
+  const pair = incomePairName(options.pair || DEFAULT_INCOME_PAIR);
+  const marker = options.marker && typeof options.marker === "object" ? options.marker : null;
+  const maxPages = Math.max(1, Number(options.maxPages) || LP_INCOME_PAGES_PER_REQUEST);
+  if (!name || !isXdxAmmPair(pair)) {
+    return { account: name || null, pair, activity: [], complete: true, marker: null, source: "empty" };
+  }
+  const key = lpIncomeCacheKey(name, pair, marker);
+  if (options.fresh) cache.delete(key);
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < LP_INCOME_CACHE_MS && !options.fresh) return hit.body;
+
+  const rpc = { fetchImpl: options.fetchImpl, rpcUrl: options.rpcUrl };
+  const activity = [];
+  let nextMarker = marker;
+  let complete = false;
+  let source = "xrpl";
+  try {
+    for (let page = 0; page < maxPages; page += 1) {
+      const result = await xrplRpc(
+        "account_tx",
+        {
+          account: name,
+          ledger_index_min: -1,
+          ledger_index_max: -1,
+          limit: Number(options.limit) || LP_INCOME_TX_LIMIT,
+          binary: false,
+          forward: false,
+          ...(nextMarker ? { marker: nextMarker } : {}),
+        },
+        rpc
+      );
+      const batch = activityFromAccountTx(result.transactions || [], name).filter((row) =>
+        isLpIncomeRow(row, pair)
+      );
+      activity.push(...batch);
+      nextMarker = result.marker || null;
+      if (!nextMarker || !(result.transactions || []).length) {
+        complete = true;
+        nextMarker = null;
+        break;
+      }
+    }
+  } catch {
+    source = "empty";
+    complete = !activity.length;
+  }
+
+  const body = {
+    account: name,
+    pair,
+    activity,
+    complete,
+    marker: complete ? null : nextMarker,
+    source,
+  };
+  cache.set(key, { at: Date.now(), body });
+  return body;
 }

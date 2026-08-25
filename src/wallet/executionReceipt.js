@@ -1,5 +1,5 @@
 import { poolFromTradeContext } from "../xaman/exchangeMemo.js";
-import { currencyCode, readAmount, sameWallet } from "./ledgerOrders.js";
+import { currencyCode, lpDeltaFromMeta, readAmount } from "./ledgerOrders.js";
 
 function unwrapLedger(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -26,32 +26,7 @@ function pushAmount(list, amount) {
 
 export function lpDeltaFromLedger(raw, account) {
   const ledger = unwrapLedger(raw);
-  const nodes = ledger?.meta?.AffectedNodes || ledger?.AffectedNodes || [];
-  let best = 0;
-  for (const wrap of Array.isArray(nodes) ? nodes : []) {
-    const node = wrap.ModifiedNode || wrap.CreatedNode;
-    if (!node || node.LedgerEntryType !== "RippleState") continue;
-    const final = node.FinalFields || node.NewFields || {};
-    const prev = node.PreviousFields || {};
-    const currency = String(final.Balance?.currency || "");
-    if (!isLpCurrency(currency)) continue;
-    const high = final.HighLimit || {};
-    const low = final.LowLimit || {};
-    if (
-      account &&
-      !sameWallet(high.issuer, account) &&
-      !sameWallet(low.issuer, account) &&
-      !sameWallet(final.Account, account)
-    ) {
-      continue;
-    }
-    const after = Math.abs(Number(final.Balance?.value));
-    const before = Math.abs(Number(prev.Balance?.value || 0));
-    if (!Number.isFinite(after)) continue;
-    const delta = after - (Number.isFinite(before) ? before : 0);
-    if (delta > best) best = delta;
-  }
-  return best > 0 ? best : 0;
+  return lpDeltaFromMeta(ledger?.meta || ledger, account);
 }
 
 export function executionReceipt(detail = {}) {
