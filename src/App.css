@@ -1877,6 +1877,18 @@ body {
   color: var(--dpmf-text-muted);
 }
 
+.xdx-swap-dirs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.xdx-swap-dirs .pair-chip {
+  min-height: 44px;
+  width: 100%;
+}
+
 .xdx-swap-legs {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -1922,6 +1934,36 @@ body {
   display: flex;
   align-items: center;
   font-weight: 700;
+}
+
+.xdx-swap-lock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(199, 112, 255, 0.45);
+  background: rgba(199, 112, 255, 0.12);
+  color: #ffffff;
+}
+
+.xdx-swap-lock span {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.xdx-swap-lock b {
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+
+.xdx-swap-leg.is-xdx {
+  border-color: rgba(199, 112, 255, 0.28);
 }
 
 .xdx-swap-max,

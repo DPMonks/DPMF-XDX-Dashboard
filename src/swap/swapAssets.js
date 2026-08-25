@@ -40,10 +40,16 @@ export function swapAssetOptions({ pools = [], lines = [], balances = {} } = {})
   );
 }
 
+export function swapCounterOptions(source = {}) {
+  return swapAssetOptions(source).filter((row) => row.id !== "XDX");
+}
+
 export function swapCounterAsset(fromId, toId) {
   const from = String(fromId || "").toUpperCase();
   const to = String(toId || "").toUpperCase();
-  return from === "XDX" ? to : from;
+  if (from === "XDX") return to && to !== "XDX" ? to : "XRP";
+  if (to === "XDX") return from && from !== "XDX" ? from : "XRP";
+  return to && to !== "XDX" ? to : from || "XRP";
 }
 
 export function swapSellingXdx(fromId) {
@@ -53,7 +59,7 @@ export function swapSellingXdx(fromId) {
 export function pickOtherAsset(current, next, fallback = "XRP") {
   const a = String(current || "").toUpperCase();
   const b = String(next || "").toUpperCase();
-  if (b && b !== a) return b;
-  if (a === "XDX") return fallback;
-  return "XDX";
+  if (b && b !== "XDX" && b !== a) return b;
+  if (a && a !== "XDX") return a;
+  return fallback;
 }

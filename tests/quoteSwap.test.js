@@ -8,7 +8,7 @@ import {
   walkBook,
   walkHybrid,
 } from "../src/swap/quoteSwap.js";
-import { pickOtherAsset, swapCounterAsset, swapSellingXdx } from "../src/swap/swapAssets.js";
+import { pickOtherAsset, swapAssetOptions, swapCounterAsset, swapCounterOptions, swapSellingXdx } from "../src/swap/swapAssets.js";
 import { filterBookTape } from "../src/orderbook.js";
 
 test("ammSwapOut follows the constant-product fee walk", () => {
@@ -86,8 +86,17 @@ test("expectedFromMid and swap helpers keep one side on XDX", () => {
   assert.equal(swapSellingXdx("XDX"), true);
   assert.equal(swapCounterAsset("XDX", "RLUSD"), "RLUSD");
   assert.equal(swapCounterAsset("XRP", "XDX"), "XRP");
+  assert.equal(swapCounterAsset("XDX", "XDX"), "XRP");
   assert.equal(pickOtherAsset("XDX", "XDX", "XRP"), "XRP");
   assert.equal(pickOtherAsset("RLUSD", "XRP"), "XRP");
+  const counters = swapCounterOptions({
+    lines: [{ currency: "RLUSD", issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", ticker: "RLUSD", balance: "12" }],
+    balances: { xdx: 100, xrp: 5 },
+  });
+  assert.equal(counters.some((row) => row.id === "XDX"), false);
+  assert.ok(counters.some((row) => row.id === "XRP"));
+  assert.ok(counters.some((row) => row.id === "RLUSD"));
+  assert.ok(swapAssetOptions({ balances: { xdx: 1 } }).some((row) => row.id === "XDX"));
 });
 
 test("filterBookTape splits hybrid, DEX, and AMM rows", () => {

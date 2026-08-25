@@ -5,7 +5,7 @@ import { useI18n } from "../i18n/useI18n";
 import { ammSpot } from "../ammCurve";
 import { bookHeader, emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
 import { IMPACT_HIGH_PCT, IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
-import { pickOtherAsset, swapAssetOptions, swapCounterAsset, swapSellingXdx } from "../swap/swapAssets";
+import { swapCounterOptions } from "../swap/swapAssets";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import { walletAvailableAmounts } from "../wallet/composeWallet";
 import { formatPercent, formatToken } from "../utils/format";
@@ -27,12 +27,21 @@ function reserveFrom(book, live) {
   };
 }
 
+function LockedXdx({ label }) {
+  return (
+    <p className="xdx-swap-lock">
+      <span>{label}</span>
+      <b>XDX</b>
+    </p>
+  );
+}
+
 export default function XdxSwapPanel() {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
   const account = liveWalletAddress(walletAddress);
-  const [fromId, setFromId] = useState("XDX");
-  const [toId, setToId] = useState("XRP");
+  const [sellingXdx, setSellingXdx] = useState(true);
+  const [quoteId, setQuoteId] = useState("XRP");
   const [amount, setAmount] = useState("");
   const [routingMode, setRoutingMode] = useState("smart");
   const [lines, setLines] = useState([]);
@@ -42,8 +51,6 @@ export default function XdxSwapPanel() {
   const [book, setBook] = useState(null);
   const [live, setLive] = useState(null);
 
-  const sellingXdx = swapSellingXdx(fromId);
-  const quoteId = swapCounterAsset(fromId, toId);
   const pair = normalizeOrderbookPair(`XDX/${quoteId || "XRP"}`);
 
   useEffect(() => {
@@ -93,20 +100,17 @@ export default function XdxSwapPanel() {
   }, [pair]);
 
   const options = useMemo(
-    () => swapAssetOptions({ pools, lines, balances: { xdx: balances.xdx, xrp: balances.xrp } }),
+    () => swapCounterOptions({ pools, lines, balances: { xdx: balances.xdx, xrp: balances.xrp } }),
     [pools, lines, balances]
   );
-  const fromOptions = options.filter((row) => row.id !== toId);
-  const toOptions = options.filter((row) => row.id !== fromId);
-  const fromAsset = options.find((row) => row.id === fromId) || options[0];
-  const toAsset = options.find((row) => row.id === toId) || options.find((row) => row.id === "XRP");
+  const quoteAsset = options.find((row) => row.id === quoteId) || options.find((row) => row.id === "XRP") || options[0];
   const hold = walletAvailableAmounts({
     balances,
     account: walletAccount,
     lines,
-    quote: fromId === "XRP" ? { currency: "XRP" } : fromAsset,
+    quote: quoteId === "XRP" ? { currency: "XRP" } : quoteAsset,
   });
-  const available = sellingXdx ? hold.xdx : fromId === "XRP" ? hold.xrp : hold.quote;
+  const available = sellingXdx ? hold.xdx : quoteId === "XRP" ? hold.xrp : hold.quote;
   const header = bookHeader(book || emptyOrderbook(pair));
   const reserves = reserveFrom(book, live);
   const qty = Number(amount) || 0;
@@ -127,34 +131,20 @@ export default function XdxSwapPanel() {
   const impactHigh = quote && Math.abs(quote.priceImpactPercent) >= IMPACT_HIGH_PCT;
   const noRoute = Boolean(qty > 0 && (!quote || quote.routeUsed === "none" || !(quote.actualOutput > 0)));
 
-  function changeFrom(id) {
+  function changeQuote(id) {
     const next = String(id || "").toUpperCase();
-    setFromId(next);
-    if (next !== "XDX" && toId !== "XDX") setToId("XDX");
-    if (next === "XDX" && toId === "XDX") setToId(pickOtherAsset(next, "XRP"));
-  }
-
-  function changeTo(id) {
-    const next = String(id || "").toUpperCase();
-    setToId(next);
-    if (next !== "XDX" && fromId !== "XDX") setFromId("XDX");
-    if (next === "XDX" && fromId === "XDX") setFromId(pickOtherAsset(next, "XRP"));
-  }
-
-  function flip() {
-    setFromId(toId);
-    setToId(fromId);
+    if (!next || next === "XDX") return;
+    setQuoteId(next);
   }
 
   function openSwap(nextAmount = qty, nextMode = routingMode) {
-    const other = options.find((row) => row.id === quoteId) || toAsset || fromAsset;
     window.dispatchEvent(
       new CustomEvent("dpmf-open-trade", {
         detail: {
           action: sellingXdx ? "sell" : "buy",
           quote: quoteId,
-          quoteIssuer: other?.issuer,
-          quoteHex: other?.hex,
+          quoteIssuer: quoteAsset?.issuer,
+          quoteHex: quoteAsset?.hex,
           amount: sellingXdx ? nextAmount : quote?.actualOutput,
           routingMode: nextMode,
         },
@@ -162,75 +152,94 @@ export default function XdxSwapPanel() {
     );
   }
 
+  const counterSelect = (
+    <BrandSelect
+      value={quoteAsset?.id || quoteId}
+      options={options}
+      onChange={changeQuote}
+      ariaLabel={sellingXdx ? t.swapTo : t.swapFrom}
+      searchable
+    />
+  );
+
   return (
-    <section className="xdx-swap" aria-label={t.swapTitle || "Swap"}>
+    <section className="xdx-swap" aria-label={t.swapTitle}>
       <div className="xdx-swap-head">
-        <h3 className="orderbook-title">{t.swapTitle || "Swap"}</h3>
+        <h3 className="orderbook-title">{t.swapTitle}</h3>
         <p className="xdx-swap-pair">{pair}</p>
       </div>
 
+      <div className="xdx-swap-dirs" role="tablist" aria-label={t.swapTitle}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={sellingXdx}
+          className={sellingXdx ? "pair-chip active" : "pair-chip"}
+          onClick={() => setSellingXdx(true)}
+        >
+          {t.swapSellXdx}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!sellingXdx}
+          className={!sellingXdx ? "pair-chip active" : "pair-chip"}
+          onClick={() => setSellingXdx(false)}
+        >
+          {t.swapBuyXdx}
+        </button>
+      </div>
+
       <div className="xdx-swap-legs">
-        <label className="xdx-swap-leg">
-          <span>{t.swapFrom || "From"}</span>
-          <BrandSelect
-            value={fromId}
-            options={fromOptions}
-            onChange={changeFrom}
-            ariaLabel={t.swapFrom || "From"}
-            searchable
-          />
+        <div className={`xdx-swap-leg${sellingXdx ? " is-xdx" : ""}`}>
+          <span>{t.swapFrom}</span>
+          {sellingXdx ? <LockedXdx label={t.swapLockedXdx} /> : counterSelect}
           <input
             type="text"
             inputMode="decimal"
             className="xdx-swap-input"
             value={amount}
             placeholder="0"
-            aria-label={t.swapAmount || "Amount"}
+            aria-label={t.swapAmount}
             onChange={(event) => setAmount(sanitizeQtyInput(event.target.value))}
           />
           <button type="button" className="xdx-swap-max" disabled={!account || !(available > 0)} onClick={() => setAmount(String(available))}>
-            {t.swapMax || "Max"}
+            {t.swapMax}
             {account && available != null ? ` ${formatToken(available, locale, sellingXdx ? 2 : 4)}` : ""}
           </button>
-        </label>
+        </div>
 
-        <button type="button" className="xdx-swap-flip" onClick={flip} aria-label={t.swapFlip || "Flip"}>
+        <button type="button" className="xdx-swap-flip" onClick={() => setSellingXdx((on) => !on)} aria-label={t.swapFlip}>
           ⇄
         </button>
 
-        <label className="xdx-swap-leg">
-          <span>{t.swapTo || "To"}</span>
-          <BrandSelect
-            value={toId}
-            options={toOptions}
-            onChange={changeTo}
-            ariaLabel={t.swapTo || "To"}
-            searchable
-          />
+        <div className={`xdx-swap-leg${!sellingXdx ? " is-xdx" : ""}`}>
+          <span>{t.swapTo}</span>
+          {sellingXdx ? counterSelect : <LockedXdx label={t.swapLockedXdx} />}
           <p className="xdx-swap-out">{quote ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "—"}</p>
-          <small>{t.swapActual || "You receive"}</small>
-        </label>
+          <small>{t.swapActual}</small>
+        </div>
       </div>
 
       <dl className="xdx-swap-stats">
         <div>
-          <dt>{t.swapExpected || "Expected"}</dt>
+          <dt>{t.swapExpected}</dt>
           <dd>{quote ? formatToken(quote.expectedOutput, locale, 4) : "—"}</dd>
         </div>
         <div>
-          <dt>{t.swapSlippage || "Slippage"}</dt>
+          <dt>{t.swapSlippage}</dt>
           <dd className={quote?.isNegativeSlippage ? "is-warn" : ""}>
             {quote ? formatPercent(quote.slippagePercent, locale) : "—"}
           </dd>
         </div>
         <div>
-          <dt>{t.swapImpact || "Price impact"}</dt>
+          <dt>{t.swapImpact}</dt>
           <dd className={impactHot ? "is-warn" : ""}>
             {quote ? formatPercent(quote.priceImpactPercent, locale) : "—"}
           </dd>
         </div>
         <div>
-          <dt>{t.swapRoute || "Route"}</dt>
+          <dt>{t.swapRoute}</dt>
           <dd>{t[ROUTES[quote?.routeUsed] || "swapRouteNone"] || quote?.routeUsed || "—"}</dd>
         </div>
       </dl>
@@ -238,10 +247,7 @@ export default function XdxSwapPanel() {
       {noRoute ? <p className="xdx-swap-warn">{t.swapNoRoute}</p> : null}
       {quote?.isNegativeSlippage ? (
         <p className="xdx-swap-warn">
-          {(t.swapNegative || "This size is below mid. You would leave {amount} on the table.").replace(
-            "{amount}",
-            formatToken(quote.lossAmount, locale, 4)
-          )}
+          {t.swapNegative.replace("{amount}", formatToken(quote.lossAmount, locale, 4))}
         </p>
       ) : null}
       {impactHigh ? <p className="xdx-swap-warn">{t.swapImpactHigh}</p> : null}
@@ -258,11 +264,7 @@ export default function XdxSwapPanel() {
                 if (row.id === "amm" || row.id === "book") setRoutingMode(row.id);
               }}
             >
-              {row.id === "half"
-                ? t.swapSaferHalf
-                : row.id === "amm"
-                  ? t.swapSaferAmm
-                  : t.swapSaferBook}
+              {row.id === "half" ? t.swapSaferHalf : row.id === "amm" ? t.swapSaferAmm : t.swapSaferBook}
             </button>
           ))}
         </div>
