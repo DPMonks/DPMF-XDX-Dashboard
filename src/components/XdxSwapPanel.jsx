@@ -264,18 +264,18 @@ export default function XdxSwapPanel() {
       <dl className="xdx-swap-stats">
         <div>
           <dt>{t.swapExpected}</dt>
-          <dd>{quote ? formatToken(quote.expectedOutput, locale, 4) : "—"}</dd>
+          <dd>{quote?.actualOutput > 0 && quote.expectedOutput > 0 ? formatToken(quote.expectedOutput, locale, 4) : "—"}</dd>
         </div>
         <div>
           <dt>{t.swapSlippage}</dt>
           <dd className={quote?.isNegativeSlippage ? "is-warn" : ""}>
-            {quote ? formatPercent(quote.slippagePercent, locale) : "—"}
+            {formatPercent(quote?.slippagePercent, locale)}
           </dd>
         </div>
         <div>
           <dt>{t.swapImpact}</dt>
           <dd className={impactHot ? "is-warn" : ""}>
-            {quote ? formatPercent(quote.priceImpactPercent, locale) : "—"}
+            {formatPercent(quote?.priceImpactPercent, locale)}
           </dd>
         </div>
         <div>
@@ -284,8 +284,11 @@ export default function XdxSwapPanel() {
         </div>
       </dl>
 
-      {noRoute ? <p className="xdx-swap-warn">{t.swapNoRoute}</p> : null}
-      {quote?.isNegativeSlippage ? (
+      {noRoute ? (
+        <p className="xdx-swap-warn">{routingMode === "book" ? t.swapNoBook || t.swapNoRoute : t.swapNoRoute}</p>
+      ) : null}
+      {quote?.partialFill ? <p className="xdx-swap-warn">{t.swapPartialFill}</p> : null}
+      {!noRoute && quote?.isNegativeSlippage ? (
         <p className="xdx-swap-warn">
           {t.swapNegative.replace("{amount}", formatToken(quote.lossAmount, locale, 4))}
         </p>

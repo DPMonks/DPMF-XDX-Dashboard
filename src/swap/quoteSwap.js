@@ -28,8 +28,13 @@ export function ammSwapOut({ reserveIn, reserveOut, amountIn, tradingFee = 1000 
   return out > 0 ? out : 0;
 }
 
-export function copyLevels(rows = []) {
+function isAmmSource(source) {
+  return String(source || "").toLowerCase() === "amm";
+}
+
+export function copyLevels(rows = [], { dexOnly = false } = {}) {
   return (Array.isArray(rows) ? rows : [])
+    .filter((row) => !dexOnly || !isAmmSource(row?.source))
     .map((row) => ({
       price: num(row?.price),
       base_size: num(row?.base_size),
@@ -37,6 +42,37 @@ export function copyLevels(rows = []) {
       source: row?.source || "dex",
     }))
     .filter((row) => row.price > 0 && row.base_size > 0);
+}
+
+export function bookVenueMid(bids = [], asks = []) {
+  const bidRows = copyLevels(bids, { dexOnly: true });
+  const askRows = copyLevels(asks, { dexOnly: true });
+  let bestBid = 0;
+  for (const row of bidRows) bestBid = Math.max(bestBid, row.price);
+  let bestAsk = 0;
+  for (const row of askRows) bestAsk = bestAsk > 0 ? Math.min(bestAsk, row.price) : row.price;
+  if (bestBid > 0 && bestAsk > 0) return (bestBid + bestAsk) / 2;
+  return bestBid || bestAsk || 0;
+}
+
+export function ammVenueMid(reserveBase, reserveQuote) {
+  const x = num(reserveBase);
+  const y = num(reserveQuote);
+  return x > 0 && y > 0 ? y / x : 0;
+}
+
+export function resolveVenueMid({
+  routingMode = "smart",
+  mid,
+  reserveBase,
+  reserveQuote,
+  bids = [],
+  asks = [],
+} = {}) {
+  const mode = String(routingMode || "smart").toLowerCase();
+  if (mode === "book") return bookVenueMid(bids, asks);
+  if (mode === "amm") return ammVenueMid(reserveBase, reserveQuote) || num(mid);
+  return num(mid) || bookVenueMid(bids, asks) || ammVenueMid(reserveBase, reserveQuote);
 }
 
 export function walkBook({ levels, amountIn, inIsBase } = {}) {
@@ -163,10 +199,10 @@ export function quoteSwap({
   routingMode = "smart",
 } = {}) {
   const input = num(amountIn);
-  const expected = expectedFromMid(input, mid, sellingXdx);
   const levels = sellingXdx ? bids : asks;
   const inIsBase = Boolean(sellingXdx);
   const mode = String(routingMode || "smart").toLowerCase();
+  const venueMid = resolveVenueMid({ routingMode: mode, mid, reserveBase, reserveQuote, bids, asks });
 
   let walk;
   if (mode === "amm") {
@@ -175,7 +211,7 @@ export function quoteSwap({
       : ammSwapOut({ reserveIn: reserveQuote, reserveOut: reserveBase, amountIn: input, tradingFee });
     walk = { out, leftover: out > 0 ? 0 : input, route: out > 0 ? "amm" : "none", usedAmm: out > 0, usedDex: false };
   } else if (mode === "book") {
-    const book = walkBook({ levels, amountIn: input, inIsBase });
+    const book = walkBook({ levels: copyLevels(levels, { dexOnly: true }), amountIn: input, inIsBase });
     walk = { ...book, route: book.out > 0 ? "book" : "none", usedAmm: false, usedDex: book.out > 0 };
   } else {
     walk = walkHybrid({
@@ -189,29 +225,38 @@ export function quoteSwap({
   }
 
   const actual = walk.out;
-  const slippagePercent = expected > 0 ? ((actual - expected) / expected) * 100 : 0;
-  const isNegativeSlippage = actual < expected;
-  const lossAmount = isNegativeSlippage ? expected - actual : 0;
+  const leftover = num(walk.leftover);
+  const filledIn = Math.max(0, input - leftover);
+  const expectedFilled = expectedFromMid(filledIn, venueMid, sellingXdx);
+  const expectedFull = expectedFromMid(input, venueMid, sellingXdx);
+  const hasFill = actual > 0 && walk.route !== "none";
+  const expected = hasFill && leftover > 0 ? expectedFilled : expectedFull;
+  const slippagePercent = hasFill && expectedFilled > 0 ? ((actual - expectedFilled) / expectedFilled) * 100 : null;
+  const isNegativeSlippage = hasFill && expectedFilled > 0 && actual < expectedFilled;
+  const lossAmount = isNegativeSlippage ? expectedFilled - actual : 0;
   const execPrice = sellingXdx
-    ? input > 0 && actual > 0
-      ? actual / input
+    ? filledIn > 0 && actual > 0
+      ? actual / filledIn
       : 0
     : actual > 0
-      ? input / actual
+      ? filledIn / actual
       : 0;
-  const priceImpactPercent = num(mid) > 0 && execPrice > 0 ? ((execPrice - num(mid)) / num(mid)) * 100 : 0;
+  const priceImpactPercent =
+    hasFill && venueMid > 0 && execPrice > 0 ? ((execPrice - venueMid) / venueMid) * 100 : null;
 
   return {
-    expectedOutput: expected,
+    expectedOutput: hasFill ? expected : 0,
     actualOutput: actual,
-    leftover: walk.leftover,
+    leftover,
+    filledIn,
     routeUsed: walk.route,
     slippagePercent,
     priceImpactPercent,
     isNegativeSlippage,
     lossAmount,
     execPrice,
-    mid: num(mid) || 0,
+    mid: venueMid,
+    partialFill: hasFill && leftover > 0,
   };
 }
 

@@ -4,6 +4,7 @@ import {
   ammSwapOut,
   expectedFromMid,
   quoteSwap,
+  resolveVenueMid,
   saferSwapAlternatives,
   walkBook,
   walkHybrid,
@@ -162,6 +163,47 @@ test("swap counters are individual assets from active XDX pools, then wallet lin
     swapCounterOptions({ lines: [rlusdLine], signedIn: true }).map((row) => row.id),
     ["XRP"]
   );
+});
+
+test("empty book-only does not report -100% slippage from an AMM mid", () => {
+  const quote = quoteSwap({
+    amountIn: 1_000_000,
+    sellingXdx: true,
+    mid: 0.0001157745,
+    reserveBase: 10_000_000,
+    reserveQuote: 1_157.745,
+    tradingFee: 1000,
+    routingMode: "book",
+    bids: [{ price: 0.0001157745, base_size: 50, source: "amm" }],
+    asks: [],
+  });
+  assert.equal(quote.routeUsed, "none");
+  assert.equal(quote.actualOutput, 0);
+  assert.equal(quote.expectedOutput, 0);
+  assert.equal(quote.slippagePercent, null);
+  assert.equal(quote.priceImpactPercent, null);
+  assert.equal(quote.isNegativeSlippage, false);
+  assert.equal(resolveVenueMid({ routingMode: "book", mid: 0.0001157745, bids: [], asks: [] }), 0);
+});
+
+test("book slippage uses only the filled slice against the DEX mid", () => {
+  const quote = quoteSwap({
+    amountIn: 1_000,
+    sellingXdx: true,
+    mid: 0.03,
+    routingMode: "book",
+    bids: [
+      { price: 0.02, base_size: 100, source: "dex" },
+      { price: 0.03, base_size: 50, source: "amm" },
+    ],
+    asks: [{ price: 0.021, base_size: 100, source: "dex" }],
+  });
+  assert.equal(quote.routeUsed, "book");
+  assert.ok(quote.partialFill);
+  assert.ok(Math.abs(quote.actualOutput - 2) < 1e-12);
+  assert.ok(quote.slippagePercent != null);
+  assert.ok(Math.abs(quote.slippagePercent) < 10);
+  assert.ok(quote.slippagePercent > -90);
 });
 
 test("filterBookTape splits hybrid, DEX, and AMM rows", () => {

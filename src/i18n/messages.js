@@ -228,6 +228,10 @@ const en = {
   swapAction: "Swap",
   swapConnect: "Connect to swap",
   swapNoRoute: "No XDX pool or book for this asset yet.",
+  swapNoBook:
+    "This pair has no posted buy or sell orders, so order book only cannot fill. Slippage is blank until a book or the XDX pool can actually fill.",
+  swapPartialFill:
+    "The order book cannot take the whole size. Slippage is only for the part that can fill.",
   emptyOrderbookSide: "No DEX levels yet.",
   topHolders: "XDX Rich list",
   lpHolders: "XDX Lp Owners",
