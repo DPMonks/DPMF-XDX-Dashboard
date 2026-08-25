@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getAmm, getLiveLpReserves, getOrderbook, getWalletAccount, getWalletBalances, getWalletLines } from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
+import { ammSpot } from "../ammCurve";
 import { bookHeader, emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
 import { IMPACT_HIGH_PCT, IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
 import { pickOtherAsset, swapAssetOptions, swapCounterAsset, swapSellingXdx } from "../swap/swapAssets";
@@ -110,9 +111,10 @@ export default function XdxSwapPanel() {
   const header = bookHeader(book || emptyOrderbook(pair));
   const reserves = reserveFrom(book, live);
   const qty = Number(amount) || 0;
+  const mid = header.mid || ammSpot(reserves.reserveBase, reserves.reserveQuote);
   const extras = {
     sellingXdx,
-    mid: header.mid,
+    mid,
     bids: book?.bids || [],
     asks: book?.asks || [],
     reserveBase: reserves.reserveBase,
