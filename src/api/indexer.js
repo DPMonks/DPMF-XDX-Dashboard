@@ -14,6 +14,7 @@ import {
   xrplToHolderGraphUrl,
 } from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
+import { composeTokenDetailHistory } from "../tokenDetailsHistory";
 import { fillMissingXdxFiat, pricesNeedFiat } from "../utils/fiatFx";
 import {
   applyXrplToChange,
@@ -636,6 +637,50 @@ export async function getTokenDetails(onPartial) {
     lpTrustlines: numberOrNull(lpTrustlines?.count)
       ? lpTrustlines
       : { count: backed.overview.lp_trustline_count },
+  });
+}
+
+export async function getTokenDetailsHistory() {
+  const take = (promise) => promise.then(chartArray).catch(() => []);
+  const [holders, trustlinesOrEmpty, tvl, lpHolders, lpTrustlines, sparkline, overview, prices] =
+    await Promise.all([
+      take(api.holdersHistory({ queue: false, retries: 1 })),
+      take(api.trustlinesHistory()),
+      take(api.tvlHistory()),
+      take(api.lpHoldersHistory()),
+      take(api.lpTrustlinesHistory({ pool: "all" })),
+      take(api.sparkline("XDX")),
+      api.overview().catch(() => ({})),
+      api.prices().catch(() => ({})),
+    ]);
+  const activity =
+    !holders.length || !trustlinesOrEmpty.length ? await take(api.activityHistory()) : [];
+  const live = composeTokenDetails({
+    overview,
+    prices: fillMissingXdxFiat(prices),
+    holders: { count: overview.holder_count },
+    trustlines: { count: overview.trustline_count },
+    lpHolders: { count: overview.lp_holder_count },
+    lpTrustlines: { count: overview.lp_trustline_count },
+  });
+  return composeTokenDetailHistory({
+    holders: holders.length ? holders : activity,
+    trustlines: trustlinesOrEmpty.length ? trustlinesOrEmpty : activity,
+    tvl,
+    lpHolders,
+    lpTrustlines,
+    sparkline,
+    live: {
+      ...live,
+      timestamp: new Date().toISOString(),
+      xrpUsd: live.xrpUsd ?? prices?.xrpUsd ?? overview?.xrpUsd,
+      price: live.recorded_price ?? live.xdxUsd,
+      holders: live.holders,
+      trustlines: live.trustlines,
+      lpHolders: live.lp_holder_count,
+      lpTrustlines: live.lp_trustline_count,
+      lpSupply: live.lp_supply,
+    },
   });
 }
 

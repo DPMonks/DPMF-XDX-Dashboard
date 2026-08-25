@@ -121,35 +121,35 @@ function SupplyShareBars({ supply, locale, t, empty }) {
     ? 0
     : Math.min(100, Math.max(Number(supplyPct) > 0 ? 4 : 0, Number(supplyPct)));
   return (
-    <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
+    <div className={`wallet-panel wallet-share${empty ? " is-empty" : " is-filled"}`}>
       <p className="wallet-panel-title is-center">{t.supplyShare}</p>
       <div className="wallet-micro">
         <span>{t.circulating}</span>
+        <b>{empty ? "—" : formatSharePercent(circ, locale)}</b>
         <span className="wallet-micro-track">
           <i style={{ width: `${circWidth}%` }} />
         </span>
-        <b>{empty ? "—" : formatSharePercent(circ, locale)}</b>
       </div>
       <div className="wallet-micro">
         <span>{t.xdxSupplyShare}</span>
+        <b>{empty ? "—" : formatSupplySharePercent(supplyPct, locale)}</b>
         <span className="wallet-micro-track">
           <i className="is-amm" style={{ width: `${supplyWidth}%` }} />
         </span>
-        <b>{empty ? "—" : formatSupplySharePercent(supplyPct, locale)}</b>
       </div>
       <div className="wallet-micro is-pending">
         <span>{t.borrowed}</span>
-        <span className="wallet-micro-track">
-          <i />
-        </span>
         <b>—</b>
+        <span className="wallet-micro-track">
+          <i style={{ width: 0 }} />
+        </span>
       </div>
       <div className="wallet-micro is-pending">
         <span>{t.lending}</span>
-        <span className="wallet-micro-track">
-          <i />
-        </span>
         <b>—</b>
+        <span className="wallet-micro-track">
+          <i style={{ width: 0 }} />
+        </span>
       </div>
     </div>
   );

@@ -545,12 +545,36 @@ body {
   align-items: start;
 }
 
-.wallet-token-row > .dashboard-card {
+.wallet-token-row > .dashboard-card,
+.token-details-stack > .dashboard-card {
   display: flex;
   flex-direction: column;
   height: auto;
   min-height: 0;
   overflow: visible;
+}
+
+.token-details-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.token-details-chart .activity-controls {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.token-details-chart .tabs,
+.token-details-chart .ranges {
+  width: 100%;
+}
+
+.token-details-chart .tab {
+  font-size: 11px;
+  padding: 7px 10px;
 }
 
 .lists-row > .dashboard-card {
@@ -2294,6 +2318,11 @@ body {
   border: 1px solid var(--dpmf-border-soft);
   border-radius: 10px;
   padding: 10px;
+  min-width: 0;
+}
+
+.wallet-share {
+  overflow: hidden;
 }
 
 .wallet-panel.is-empty dd,
@@ -2431,6 +2460,16 @@ body {
   align-items: center;
   font-size: 11px;
   margin-bottom: 6px;
+  min-width: 0;
+}
+
+.wallet-share .wallet-micro {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "label value"
+    "track track";
+  gap: 3px 8px;
+  margin-bottom: 8px;
 }
 
 .wallet-micro span:first-child {
@@ -2439,9 +2478,32 @@ body {
   white-space: nowrap;
 }
 
+.wallet-share .wallet-micro span:first-child {
+  grid-area: label;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .wallet-micro b {
   text-align: end;
   white-space: nowrap;
+}
+
+.wallet-share .wallet-micro b {
+  grid-area: value;
+  min-width: 0;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.wallet-share .wallet-micro-track {
+  grid-area: track;
+  min-width: 0;
+}
+
+.wallet-micro.is-pending .wallet-micro-track i {
+  width: 0;
 }
 
 .wallet-micro-track {
@@ -2935,8 +2997,14 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .wallet-token-row > .dashboard-card {
+  .wallet-token-row > .dashboard-card,
+  .token-details-stack > .dashboard-card {
     min-height: 0;
+  }
+
+  .token-details-chart .tab,
+  .token-details-chart .range {
+    min-height: 44px;
   }
 }
 
@@ -3268,7 +3336,8 @@ body {
 }
 
 @media (min-width: 835px) and (max-width: 1180px) and (orientation: landscape) {
-  .wallet-token-row > .dashboard-card {
+  .wallet-token-row > .dashboard-card,
+  .token-details-stack > .dashboard-card {
     min-height: 0;
   }
 
