@@ -448,14 +448,18 @@ export default function ConnectedWallet() {
       );
       if (cancelled) return;
       setSnap((current) => preferFilledWalletSnapshot(current, next));
-      setPair((current) =>
-        preferredWalletPair(walletXdxPairs(next.lp), current)
-      );
+      setPair((current) => {
+        const pairs = walletXdxPairs(next.lp);
+        if (!pairs.length) return current;
+        return preferredWalletPair(pairs, current);
+      });
     }
 
     load();
-    const id = setInterval(load, 30000);
     const retries = [];
+    retries.push(window.setTimeout(() => load(false), 800));
+    retries.push(window.setTimeout(() => load(true), 2800));
+    const id = setInterval(load, 30000);
     function refreshConfirmed() {
       load(true);
       retries.push(window.setTimeout(() => load(true), 2500));

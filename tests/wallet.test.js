@@ -64,6 +64,13 @@ test("xrpReserveBreakdown prefers ledger drops and does not reserve more than th
   });
   assert.equal(missingLedger.balance, 18.5);
   assert.equal(missingLedger.spendable, 16.7);
+
+  const zeroDrops = xrpReserveBreakdown({
+    balance: 57.1375,
+    balanceDrops: 0,
+    ownerCount: 4,
+  });
+  assert.equal(zeroDrops.balance, 57.1375);
 });
 
 test("xrpBarPercents keeps total XRP as a full reference bar", () => {
@@ -351,6 +358,18 @@ test("preferFilledWalletSnapshot keeps last balances when a refresh is hollow", 
   const other = emptyWalletSnapshot("rOther");
   assert.equal(preferFilledWalletSnapshot(filled, other).address, "rOther");
   assert.equal(preferFilledWalletSnapshot(filled, other).filled, false);
+
+  const zeroed = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 0, xdx: 3_004_952_684.62, rlusd: 0 },
+    account: { balance_drops: 0 },
+    prices: { xdxUsd: 0.0000469, xrpUsd: 1.48 },
+    token: { circulating: 10_000_000_000 },
+  });
+  const held = preferFilledWalletSnapshot(filled, zeroed);
+  assert.equal(held.holdings.xrp, filled.holdings.xrp);
+  assert.equal(held.xrp.balance, filled.xrp.balance);
+  assert.equal(held.holdings.rlusd, filled.holdings.rlusd);
 });
 
 test("preferFilledWalletSnapshot keeps last LP earnings when a refresh returns zeros", () => {

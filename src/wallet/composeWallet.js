@@ -38,7 +38,7 @@ export function xrpReserveBreakdown({
   reserveIncDrops = DEFAULT_RESERVE_INC_DROPS,
 } = {}) {
   const drops = dropsOrNull(balanceDrops);
-  const fromAccount = drops != null ? drops / DROPS : null;
+  const fromAccount = drops != null && drops > 0 ? drops / DROPS : null;
   const fromBalances = num(balance);
   const total = fromAccount != null ? fromAccount : fromBalances;
   if (total == null) {
@@ -639,6 +639,8 @@ export function walletAvailableAmounts({ balances = {}, account = {}, lines = []
 }
 
 function keepAmount(next, current) {
+  if (next != null && Number(next) > 0) return Number(next);
+  if (current != null && Number(current) > 0) return Number(current);
   return next != null && Number.isFinite(Number(next)) ? Number(next) : current ?? next;
 }
 
@@ -671,7 +673,7 @@ export function preferFilledWalletSnapshot(current, next) {
       rlusd: keepAmount(next.holdings?.rlusd, current.holdings?.rlusd),
     },
     xdx,
-    xrp: next.xrp?.balance != null ? next.xrp : current.xrp,
+    xrp: next.xrp?.balance > 0 ? next.xrp : current.xrp?.balance > 0 ? current.xrp : next.xrp,
     supply: keepSupply ? next.supply : current.supply,
     fees: nextHasEarn || !currentHasEarn ? next.fees : current.fees,
     lp: mergeKeptLp(current.lp, next.lp),

@@ -551,6 +551,7 @@ body {
   height: auto;
   min-height: 0;
   overflow: visible;
+  scrollbar-width: none;
 }
 
 .lists-row > .dashboard-card {
@@ -1960,6 +1961,7 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .wallet-hero-brand {
@@ -2301,8 +2303,9 @@ body {
 
 .wallet-infographics {
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.2fr) minmax(0, 0.95fr);
+  grid-template-columns: minmax(6.5rem, 0.9fr) minmax(0, 1.25fr) minmax(8.75rem, 1fr);
   gap: 8px;
+  min-width: 0;
 }
 
 .wallet-panel,
@@ -2312,7 +2315,9 @@ body {
   background: var(--dpmf-bg-elevated);
   border: 1px solid var(--dpmf-border-soft);
   border-radius: 10px;
-  padding: 10px;
+  padding: 10px 12px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .wallet-panel.is-empty dd,
@@ -2505,11 +2510,16 @@ body {
 
 .wallet-micro-head b {
   text-align: start;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding-inline-end: 2px;
 }
 
 .wallet-micro-track {
   height: 8px;
+  width: 100%;
+  max-width: 100%;
+  flex: 0 0 8px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.06);
   overflow: hidden;
