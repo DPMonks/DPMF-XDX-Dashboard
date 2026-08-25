@@ -1436,6 +1436,20 @@ body {
   font-weight: 600;
 }
 
+.rich-balance-unit {
+  margin-inline-start: 0.3em;
+}
+
+.rich-list.is-lp-holders .rich-balance-qty {
+  color: var(--dpmf-neon-violet);
+  font-weight: 700;
+}
+
+.rich-list.is-lp-holders .rich-balance-unit {
+  color: #fff;
+  font-weight: 600;
+}
+
 .col-copy {
   width: 3.75rem;
 }

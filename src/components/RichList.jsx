@@ -264,7 +264,8 @@ export default function RichList({
                 </td>
               )}
               <td className="col-num col-balance">
-                {formatToken(row[valueKey], locale, 8)} {unit}
+                <span className="rich-balance-qty">{formatToken(row[valueKey], locale, 8)}</span>
+                {unit ? <span className="rich-balance-unit">{unit}</span> : null}
               </td>
               <td className="col-num col-share">
                 {formatPercent(shareOf(row[valueKey], total), locale)}
