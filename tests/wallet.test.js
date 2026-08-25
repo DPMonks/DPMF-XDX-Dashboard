@@ -6,6 +6,7 @@ import {
   walletAvailableAmounts,
   lpFeeEarnings,
   lpPositionFromPool,
+  resolveLpPairName,
   normalizeWalletPair,
   preferredWalletPair,
   sortWalletPairs,
@@ -120,6 +121,38 @@ test("xdxFiatValues fills EUR and JPY from XRP FX when those marks are missing",
   assert.ok(Math.abs(fiat.eur - 0.045) < 1e-12);
   assert.ok(Math.abs(fiat.jpy - 7.5) < 1e-12);
   assert.equal(fiat.gbp, null);
+});
+
+test("resolveLpPairName does not stamp an unknown LP line as XDX/XRP", () => {
+  assert.equal(
+    resolveLpPairName({
+      pool_name: "XDX/XRP",
+      amm_account: "rXsquadAmm11111111111111111111111",
+      lp_currency: "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      quote: "XSQUAD",
+    }),
+    "XDX/XSQUAD"
+  );
+  assert.equal(
+    resolveLpPairName(
+      {
+        amm_account: "rXsquadAmm11111111111111111111111",
+        lp_currency: "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      },
+      "XDX/XRP"
+    ) === "XDX/XRP",
+    false
+  );
+  const row = lpPositionFromPool(80, {
+    quote: "XSQUAD",
+    amm_account: "rXsquadAmm11111111111111111111111",
+    lp_currency: "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    lp_supply: 800,
+    reserve_asset: 1000,
+    reserve_currency: 40,
+  });
+  assert.equal(row.pool, "XDX/XSQUAD");
+  assert.equal(row.quote, "XSQUAD");
 });
 
 test("lpPositionFromPool estimates withdraw from pool share", () => {

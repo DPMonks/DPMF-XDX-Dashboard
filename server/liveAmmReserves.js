@@ -128,8 +128,11 @@ export async function loadLiveAmmReserves(query = {}, options = {}) {
   }
 
   const parsed = poolReservesFromAmmInfo(result);
+  // Prefer the pair encoded in the AMM assets. A missing query pair used to
+  // default to XDX/XRP and then stamp every other LP position as that pool.
+  const resolvedPair = parsed?.pair || pair;
   const body = parsed
-    ? { ...parsed, pair, reserve_source: "amm_info", source: "xrpl" }
+    ? { ...parsed, pair: resolvedPair, reserve_source: "amm_info", source: "xrpl" }
     : emptyLive(pair);
   if (parsed || !transient) {
     cache.set(key, { at: now, body });

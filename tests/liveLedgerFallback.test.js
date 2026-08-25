@@ -4,14 +4,18 @@ import {
   XDX_ISSUER,
   XDX_XRP_AMM,
   XDX_XRP_LP_HEX,
+  XSQUAD_HEX,
+  XSQUAD_ISSUER,
 } from "../src/constants/ledger.js";
 import {
   iouFromGatewayBalances,
   lpHoldingsFromLines,
   loadWalletBalancesFromLedger,
+  loadWalletLpFromLedger,
   rlusdBalanceFromLines,
   xdxBalanceFromLines,
 } from "../server/walletLedger.js";
+import { lpHeldForPair } from "../src/xaman/tradeTx.js";
 import { liveCatalogPayload } from "../server/liveCatalog.js";
 import { RLUSD_HEX, RLUSD_ISSUER } from "../src/constants/ledger.js";
 
@@ -180,4 +184,71 @@ test("a down database still has a live token and price payload", async () => {
   const lpChart = await liveCatalogPayload("charts/lp-holders", { fetchImpl, fresh: true, now });
   assert.ok(Array.isArray(lpChart));
   assert.equal(lpChart[0].lp_holder_count, 58);
+});
+
+test("wallet LP from ledger keeps XDX/XSQUAD tokens off the XDX/XRP pair", async () => {
+  const xsquadAmm = "rXsquadAmm11111111111111111111111";
+  const xsquadLp = "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const fetchImpl = async (url, options) => {
+    if (options?.body) {
+      const body = JSON.parse(options.body);
+      if (body.method === "account_lines") {
+        return {
+          ok: true,
+          json: async () => ({
+            result: {
+              status: "success",
+              lines: [
+                { account: xsquadAmm, currency: xsquadLp, balance: "88.5" },
+                { account: XDX_XRP_AMM, currency: XDX_XRP_LP_HEX, balance: "4" },
+              ],
+            },
+          }),
+        };
+      }
+      if (body.method === "amm_info") {
+        const account = body.params?.[0]?.amm_account;
+        if (account === xsquadAmm) {
+          return {
+            ok: true,
+            json: async () => ({
+              result: {
+                amm: {
+                  account: xsquadAmm,
+                  amount: { currency: "XDX", issuer: XDX_ISSUER, value: "1000" },
+                  amount2: { currency: XSQUAD_HEX, issuer: XSQUAD_ISSUER, value: "40" },
+                  lp_token: { currency: xsquadLp, issuer: xsquadAmm, value: "200" },
+                },
+              },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            result: {
+              amm: {
+                account: XDX_XRP_AMM,
+                amount: { currency: "XDX", issuer: XDX_ISSUER, value: "50000" },
+                amount2: "2000000",
+                lp_token: { currency: XDX_XRP_LP_HEX, issuer: XDX_XRP_AMM, value: "1000" },
+              },
+            },
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ result: { status: "success" } }) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  const body = await loadWalletLpFromLedger("rWallet111111111111111111111111111", {
+    fetchImpl,
+    fresh: true,
+  });
+  const xsquad = body.positions.find((row) => row.pool === "XDX/XSQUAD");
+  const xrp = body.positions.find((row) => row.pool === "XDX/XRP");
+  assert.equal(xsquad?.lp_balance, 88.5);
+  assert.equal(xrp?.lp_balance, 4);
+  assert.equal(lpHeldForPair(body.positions, "XDX/XRP", "XRP"), 4);
+  assert.equal(lpHeldForPair(body.positions, "XDX/XSQUAD", "XSQUAD"), 88.5);
 });

@@ -109,13 +109,25 @@ export function pairFromRow(row = {}) {
     .join(" ")
     .toUpperCase();
 
-  if (haystack.includes(XDX_RLUSD_AMM.toUpperCase()) || haystack.includes(XDX_RLUSD_LP_HEX)) {
+  const quoteHint = [row.quote, row.quote_hex, row.quote_issuer, row.asset2]
+    .filter(Boolean)
+    .join(" ")
+    .toUpperCase();
+  const look = `${haystack} ${quoteHint}`;
+
+  if (look.includes(XDX_RLUSD_AMM.toUpperCase()) || look.includes(XDX_RLUSD_LP_HEX)) {
     return "XDX/RLUSD";
   }
-  if (haystack.includes(XDX_XRP_AMM.toUpperCase()) || haystack.includes(XDX_XRP_LP_HEX)) {
+  if (look.includes(XDX_XRP_AMM.toUpperCase()) || look.includes(XDX_XRP_LP_HEX)) {
     return "XDX/XRP";
   }
-  if (haystack.includes("RLUSD") || haystack.includes(RLUSD_HEX)) {
+  if (look.includes(XSQUAD_ISSUER.toUpperCase()) || look.includes(XSQUAD_HEX) || look.includes("XSQUAD")) {
+    return "XDX/XSQUAD";
+  }
+  if (look.includes(XIO_ISSUER.toUpperCase()) || look.includes(XIO_HEX) || /(^|\s)XIO(\s|$)/.test(look)) {
+    return "XDX/XIO";
+  }
+  if (look.includes("RLUSD") || look.includes(RLUSD_HEX)) {
     return "XDX/RLUSD";
   }
 
@@ -123,6 +135,10 @@ export function pairFromRow(row = {}) {
   if (amm && String(amm).length >= 8) {
     const text = String(amm);
     return `XDX/${text.slice(0, 4)}…${text.slice(-4)}`;
+  }
+  const lpHex = String(row.lp_currency || row.lp_currency_hex || "").replace(/^0x/i, "").toUpperCase();
+  if (/^03[A-F0-9]{38}$/.test(lpHex) && lpHex !== XDX_XRP_LP_HEX && lpHex !== XDX_RLUSD_LP_HEX) {
+    return "";
   }
   return "XDX/XRP";
 }

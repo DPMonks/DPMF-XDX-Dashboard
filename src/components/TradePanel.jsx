@@ -107,6 +107,7 @@ export default function TradePanel({
   const [loadedFor, setLoadedFor] = useState("");
   const startRef = useRef(start);
   const resumeOnceRef = useRef(false);
+  const filledPairRef = useRef("");
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
   const quote = useMemo(
@@ -128,7 +129,7 @@ export default function TradePanel({
   const haveLpLine =
     lpLineReady ||
     hasLpTrustline(walletLines, lpSpec) ||
-    lpHeldForPair(walletLp, quotePair, quoteId) > 0;
+    lpHeldForPair(walletLp, quotePair, quoteId, lpSpec) > 0;
   const walletReady = !signedIn || loadedFor === `${account || ""}:${action || ""}:${quoteId}`;
   const haveQuoteLine =
     quoteLineReady ||
@@ -225,7 +226,7 @@ export default function TradePanel({
         quoteUsd,
       });
   const splitReady = Boolean(deposit.measured);
-  const lpHeld = lpHeldForPair(walletLp, quotePair, quoteId);
+  const lpHeld = lpHeldForPair(walletLp, quotePair, quoteId, lpSpec);
   const available = walletAvailableAmounts({
     balances: walletHold,
     account: walletAccount,
@@ -283,8 +284,15 @@ export default function TradePanel({
       setLineHint(JSON.stringify(nextHold?.raw || {}).toUpperCase());
       setLoadedFor(`${account || ""}:${action || ""}:${quoteId}`);
       if (action === "removeLp") {
-        const have = lpHeldForPair(rows, quotePair, quoteId);
-        if (have > 0) setLpAmount((current) => current || String(have));
+        const spec = poolForQuote(
+          resolveQuote(quoteId, { quote_issuer: quoteIssuer, quote_hex: quoteHex }),
+          nextPools
+        );
+        const have = lpHeldForPair(rows, quotePair, quoteId, spec);
+        const switched = filledPairRef.current !== quotePair;
+        filledPairRef.current = quotePair;
+        if (switched) setLpAmount(have > 0 ? String(have) : "");
+        else if (have > 0) setLpAmount((current) => current || String(have));
       }
     });
     return () => {

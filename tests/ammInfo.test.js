@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { XDX_ISSUER } from "../src/constants/ledger.js";
+import { XDX_ISSUER, XSQUAD_HEX, XSQUAD_ISSUER } from "../src/constants/ledger.js";
 import {
   issuedAmountValue,
   lpShareAmounts,
@@ -90,6 +90,20 @@ test("previewReserves uses live XDX/XIO shares and ignores another pair", () => 
   assert.equal(stale.quote, 1947.36782);
 });
 
+test("poolReservesFromAmmInfo labels XDX/XSQUAD from AMM assets, not XDX/XRP", () => {
+  const row = poolReservesFromAmmInfo({
+    amm: {
+      account: "rXsquadAmm",
+      amount: { currency: "XDX", issuer: XDX_ISSUER, value: "1000" },
+      amount2: { currency: XSQUAD_HEX, issuer: XSQUAD_ISSUER, value: "40" },
+      lp_token: { currency: "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", issuer: "rXsquadAmm", value: "80" },
+    },
+  });
+  assert.equal(row.pair, "XDX/XSQUAD");
+  assert.equal(row.quote, "XSQUAD");
+  assert.equal(row.reserve_currency, 40);
+});
+
 test("poolReservesFromAmmInfo treats XRP drops as the quote reserve", () => {
   const row = poolReservesFromAmmInfo({
     amm: {
@@ -102,4 +116,5 @@ test("poolReservesFromAmmInfo treats XRP drops as the quote reserve", () => {
   assert.equal(row.reserve_asset, 50000);
   assert.equal(row.reserve_quote, 2);
   assert.equal(row.lp_supply, 1000);
+  assert.equal(row.pair, "XDX/XRP");
 });

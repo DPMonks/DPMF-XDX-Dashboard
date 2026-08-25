@@ -1,4 +1,5 @@
 import { XDX_HEX, XDX_ISSUER } from "../constants/ledger.js";
+import { pairFromVoteAssets } from "../wallet/ammVote.js";
 
 const XDX_PREFIX = "584458";
 
@@ -108,6 +109,18 @@ export function lpShareAmounts(lpAmount, reserveBase, reserveQuote, lpSupply) {
   };
 }
 
+function ammAssetFromAmount(amount) {
+  if (amount == null) return null;
+  if (typeof amount !== "object") return { currency: "XRP" };
+  return { currency: amount.currency, issuer: amount.issuer };
+}
+
+export function pairFromAmmInfo(result) {
+  const amm = result?.amm || result;
+  if (!amm) return "";
+  return pairFromVoteAssets(ammAssetFromAmount(amm.amount), ammAssetFromAmount(amm.amount2));
+}
+
 export function poolReservesFromAmmInfo(result) {
   const amm = result?.amm || result;
   if (!amm || (amm.amount == null && amm.amount2 == null && !amm.lp_token)) return null;
@@ -126,6 +139,7 @@ export function poolReservesFromAmmInfo(result) {
       ? issuedAmountValue(first)
       : issuedAmountValue(second);
   const lpSupply = issuedAmountValue(amm.lp_token);
+  const pair = pairFromAmmInfo(amm);
   return {
     amm_account: amm.account || null,
     lp_supply: lpSupply,
@@ -135,5 +149,7 @@ export function poolReservesFromAmmInfo(result) {
     reserve_quote: reserveQuote,
     lp_currency: amm.lp_token?.currency || null,
     trading_fee: amm.trading_fee ?? null,
+    pair,
+    quote: pair.includes("/") ? pair.split("/")[1] : "",
   };
 }
