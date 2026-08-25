@@ -407,16 +407,22 @@ export default function App() {
               openTrade({
                 action: "addLp",
                 pair: pool.pool || pool.pool_name,
+                quote: pool.quote,
                 quote_issuer: pool.quote_issuer,
                 quote_hex: pool.quote_hex,
+                amm: pool.amm_account,
+                lp_currency: pool.lp_currency,
               })
             }
             onRemoveLiquidity={(pool) =>
               openTrade({
                 action: "removeLp",
                 pair: pool.pool || pool.pool_name,
+                quote: pool.quote,
                 quote_issuer: pool.quote_issuer,
                 quote_hex: pool.quote_hex,
+                amm: pool.amm_account,
+                lp_currency: pool.lp_currency,
               })
             }
           />

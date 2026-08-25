@@ -298,6 +298,14 @@ test("walletAvailableAmounts reports spendable XRP and issued quote", () => {
     quote: { currency: "RLUSD", issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De", id: "RLUSD" },
   });
   assert.equal(rlusd.quote, 12.5);
+
+  const usdc = walletAvailableAmounts({
+    balances: { xrp: 8, xdx: 50 },
+    lines: [{ currency: "5553444300000000000000000000000000000000", issuer: "rUsdcIssuer", ticker: "USDC", balance: "77.25" }],
+    quote: { id: "USDC", currency: "USDC", pair: "XDX/USDC" },
+  });
+  assert.equal(usdc.quote, 77.25);
+  assert.notEqual(usdc.quote, usdc.xrp);
 });
 
 test("preferFilledWalletSnapshot keeps last XDX when a refresh returns zero", () => {

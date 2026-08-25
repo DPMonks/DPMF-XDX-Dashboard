@@ -11,6 +11,7 @@ import {
   expectedLpTokens,
   expectedSingleLpTokens,
   expectedSingleWithdraw,
+  hasLpRow,
   hasLpTrustline,
   hasQuoteTrustline,
   lpTrustSetTxjson,
@@ -18,6 +19,7 @@ import {
   offerCreateBuyXdx,
   offerCreateSellXdx,
   poolForQuote,
+  quoteHintsFromLines,
   quoteChoices,
   quoteIdFromPair,
   quoteTrustSetTxjson,
@@ -110,25 +112,39 @@ export default function TradePanel({
   const filledPairRef = useRef("");
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
-  const quote = useMemo(
-    () =>
-      resolveQuote(quoteId, {
-        ...quoteExtra,
-        quote_issuer: quoteExtra?.quoteIssuer || matched?.quote_issuer,
-        quote_hex: quoteExtra?.quoteHex || matched?.quote_hex,
-      }),
-    [quoteId, quoteExtra, matched]
-  );
+  const quote = useMemo(() => {
+    const resolved = resolveQuote(quoteId, {
+      ...quoteExtra,
+      quote_issuer: quoteExtra?.quoteIssuer || matched?.quote_issuer,
+      quote_hex: quoteExtra?.quoteHex || matched?.quote_hex,
+      currency: matched?.quote && !String(matched.quote).includes("/") ? matched.quote : quoteExtra?.quote,
+      amm: quoteExtra?.amm || matched?.amm_account,
+      lp_currency: quoteExtra?.lpCurrency || matched?.lp_currency,
+    });
+    if (resolved.issuer) return resolved;
+    const hinted = quoteHintsFromLines(walletLines, resolved);
+    if (!hinted.issuer) return resolved;
+    return { ...resolved, issuer: hinted.issuer, hex: hinted.hex || resolved.hex };
+  }, [quoteId, quoteExtra, matched, walletLines]);
   const quoteIssuer = quote.issuer || "";
   const quoteHex = quote.hex || "";
   const quotePair = quote.pair || "";
   const isLp = action === "addLp" || action === "removeLp";
   const account = liveWalletAddress(walletAddress);
   const signedIn = Boolean(account);
-  const lpSpec = useMemo(() => poolForQuote(quote, pools, liveReserves), [quote, pools, liveReserves]);
+  const lpSpec = useMemo(
+    () =>
+      poolForQuote(quote, pools, {
+        ...liveReserves,
+        amm_account: liveReserves?.amm_account || quote.amm || matched?.amm_account,
+        lp_currency: liveReserves?.lp_currency || quote.lpCurrency || matched?.lp_currency,
+      }),
+    [quote, pools, liveReserves, matched]
+  );
   const haveLpLine =
     lpLineReady ||
     hasLpTrustline(walletLines, lpSpec) ||
+    hasLpRow(walletLp, quotePair, quoteId, lpSpec) ||
     lpHeldForPair(walletLp, quotePair, quoteId, lpSpec) > 0;
   const walletReady = !signedIn || loadedFor === `${account || ""}:${action || ""}:${quoteId}`;
   const haveQuoteLine =
@@ -307,7 +323,10 @@ export default function TradePanel({
     function pull() {
       getLiveLpReserves({
         pair,
-        ammAccount: lpSpec.amm || matched?.amm_account,
+        ammAccount:
+          quoteId === "XRP" || pair === "XDX/XRP"
+            ? lpSpec.amm || matched?.amm_account
+            : matched?.amm_account || quote.amm || lpSpec.amm,
         quote: quoteId,
         issuer: quoteIssuer,
         hex: quoteHex,
@@ -327,7 +346,7 @@ export default function TradePanel({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [action, quotePair, quoteId, quoteIssuer, quoteHex, lpSpec.amm, matched?.amm_account]);
+  }, [action, quotePair, quoteId, quoteIssuer, quoteHex, quote.amm, lpSpec.amm, matched?.amm_account]);
 
   function close() {
     reset();

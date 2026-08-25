@@ -10,6 +10,7 @@ import { fillMissingXdxFiat } from "../utils/fiatFx.js";
 import { catalogXdxVolume24h, catalogXdxVolume7d, dailyPricesFromOhlc, dailyXdxFlowsFromOhlc } from "../utils/lpVolume.js";
 import { looksLikeXrpPerXdx, saneXrpUsd } from "../utils/recordedPrice.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
+import { isNativeXrpQuote, lineCounterparty, lineCurrencyCodes, sameIssuedCurrency } from "../utils/currency.js";
 import { isXdxAmmPair, lpFeeIncomeRows } from "./lpIncome.js";
 
 const LP_CURRENCY_RE = /^03[A-F0-9]{38}$/i;
@@ -631,20 +632,17 @@ export function walletAvailableAmounts({ balances = {}, account = {}, lines = []
     reserveIncDrops: account.reserve_inc_drops,
   });
   const xdx = num(balances.xdx);
-  const quoteIsXrp = !quote?.issuer || quote?.currency === "XRP";
+  const quoteIsXrp = isNativeXrpQuote(quote);
   const lineRows = Array.isArray(lines) && lines.length ? lines : balances.raw?.lines || [];
+  const names = [quote?.currency, quote?.hex, quote?.id, quote?.label].filter(Boolean);
   const quoteAmt = quoteIsXrp
     ? xrp.spendable ?? xrp.balance
     : num(
         lineRows.find((row) => {
-          const currency = String(row.currency || row.ticker || "").toUpperCase();
-          const issuer = String(row.issuer || row.account || "").toUpperCase();
+          const issuer = lineCounterparty(row);
           const wantIss = String(quote?.issuer || "").toUpperCase();
-          const names = [quote?.currency, quote?.hex, quote?.id, quote?.label]
-            .filter(Boolean)
-            .map((name) => String(name).toUpperCase());
           if (wantIss && issuer && issuer !== wantIss) return false;
-          return names.some((name) => currency === name || currency.includes(name));
+          return names.some((name) => lineCurrencyCodes(row).some((code) => sameIssuedCurrency(code, name)));
         })?.balance
       );
   return {
