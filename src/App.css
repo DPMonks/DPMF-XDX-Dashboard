@@ -2194,12 +2194,12 @@ body {
 
 .wallet-earn-row {
   margin: 0;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 2.6em minmax(0, 1fr) minmax(3.25em, auto);
+  column-gap: 10px;
   align-items: baseline;
-  gap: 8px;
   font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 .wallet-earn-range {
@@ -2212,16 +2212,9 @@ body {
 }
 
 .wallet-earn-value {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 13px;
+  display: contents;
+  font-size: 12px;
   font-weight: 700;
-  text-align: right;
-  min-width: 0;
   color: #39ff14;
 }
 
@@ -2231,10 +2224,18 @@ body {
   font-weight: 700;
   font-style: normal;
   white-space: nowrap;
+  text-align: right;
+  justify-self: end;
+  min-width: 0;
 }
 
 .wallet-earn-value i {
   opacity: 0.82;
+  padding-inline-start: 2px;
+}
+
+.wallet-earn-total .wallet-earn-value b {
+  grid-column: 2 / -1;
 }
 
 .wallet-mini-list dd.is-earn {
@@ -2258,6 +2259,24 @@ body {
     grid-template-areas:
       "xrp xdx"
       "rlusd total";
+  }
+
+  .wallet-earn-row {
+    grid-template-columns: 2.6em minmax(0, 1fr);
+    row-gap: 1px;
+  }
+
+  .wallet-earn-value {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    grid-column: 2;
+    min-width: 0;
+  }
+
+  .wallet-earn-total .wallet-earn-value b {
+    grid-column: auto;
   }
 }
 
@@ -2909,7 +2928,7 @@ body {
   }
 
   .wallet-earn-value {
-    font-size: 13px;
+    font-size: 12px;
   }
 
   .wallet-token-row {
