@@ -2836,6 +2836,26 @@ body {
   .wallet-fees-pct {
     justify-content: center;
   }
+
+  .wallet-earn-beam {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "xrp xdx"
+      "rlusd total";
+  }
+
+  .wallet-earn-cell {
+    padding: 8px 10px 9px;
+  }
+
+  .wallet-earn-label,
+  .wallet-earn-range {
+    font-size: 10px;
+  }
+
+  .wallet-earn-value {
+    font-size: 13px;
+  }
 }
 
 @media (max-width: 1100px) {
@@ -2872,18 +2892,9 @@ body {
 
 @media (max-width: 900px) {
   .wallet-token-row,
-  .wallet-infographics,
-  .wallet-earn-beam {
+  .wallet-infographics {
     grid-template-columns: 1fr;
     grid-template-rows: none;
-  }
-
-  .wallet-earn-beam {
-    grid-template-areas:
-      "xrp"
-      "xdx"
-      "rlusd"
-      "total";
   }
 
   .lists-row > .dashboard-card {
@@ -3074,8 +3085,35 @@ body {
     padding: 6px 3px;
   }
 
-  .copy-btn {
+  .copy-btn:not(.wallet-income-copy) {
     display: none;
+  }
+
+  .wallet-income-copy {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+
+  .wallet-income-table th,
+  .wallet-income-table td {
+    white-space: normal;
+  }
+
+  .wallet-lp-head,
+  .wallet-income-head {
+    flex-wrap: wrap;
+  }
+
+  .wallet-lp-select {
+    width: 100%;
+  }
+
+  .wallet-lp-select select {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
   }
 
   .rich-table col.col-copy,
@@ -3178,7 +3216,9 @@ body {
   .trade-field select,
   .trade-panel .pair-select-control,
   .pair-select-control,
-  .brand-select-list button {
+  .brand-select-list button,
+  .wallet-lp-select select,
+  .wallet-income-copy {
     min-height: 44px;
   }
 
