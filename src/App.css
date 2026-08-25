@@ -541,7 +541,8 @@ body {
 }
 
 .wallet-token-row {
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
 }
 
 .wallet-token-row > .dashboard-card {
@@ -1950,6 +1951,8 @@ body {
   gap: 12px;
   flex: 0 0 auto;
   min-height: min-content;
+  container-type: inline-size;
+  container-name: wallet;
 }
 
 .wallet-hero {
@@ -2138,10 +2141,10 @@ body {
 
 .wallet-earn-title {
   margin: 0;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #39ff14;
+  color: var(--dpmf-text-main);
 }
 
 .wallet-earn-beam {
@@ -2173,7 +2176,7 @@ body {
 .wallet-earn-cell {
   min-width: 0;
   padding: 5px 8px 6px;
-  border: 1px solid rgba(57, 255, 20, 0.16);
+  border: 1px solid var(--dpmf-border-soft);
   border-radius: 8px;
   background: var(--dpmf-bg-elevated);
   display: flex;
@@ -2186,8 +2189,7 @@ body {
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #39ff14;
-  opacity: 0.92;
+  color: var(--dpmf-text-main);
 }
 
 .wallet-earn-row {
@@ -2205,7 +2207,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #39ff14;
+  color: var(--dpmf-text-main);
   opacity: 0.72;
 }
 
@@ -2225,6 +2227,7 @@ body {
 
 .wallet-earn-value b,
 .wallet-earn-value i {
+  color: #39ff14;
   font-weight: 700;
   font-style: normal;
   white-space: nowrap;
@@ -2249,9 +2252,18 @@ body {
   animation: walletFill 0.42s ease;
 }
 
+@container wallet (max-width: 560px) {
+  .wallet-earn-beam {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "xrp xdx"
+      "rlusd total";
+  }
+}
+
 .wallet-infographics {
   display: grid;
-  grid-template-columns: 1.15fr 0.9fr 1.15fr;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.2fr) minmax(0, 0.95fr);
   gap: 8px;
 }
 
@@ -2885,13 +2897,6 @@ body {
 
   .wallet-fees-pct {
     justify-content: center;
-  }
-
-  .wallet-earn-beam {
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas:
-      "xrp xdx"
-      "rlusd total";
   }
 
   .wallet-earn-cell {
