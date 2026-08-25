@@ -20,16 +20,27 @@ function cached(key, loader) {
   });
 }
 
-export async function loadPoolGovernance(pair, address = "", lpBalance = 0) {
+export async function loadPoolGovernance(pair, address = "", extra = {}) {
   const name = String(pair || "XDX/XRP").replace(/\s+/g, "").toUpperCase() || "XDX/XRP";
-  const quote = { id: quoteIdFromName(name), currency: quoteIdFromName(name) };
-  return cached(`gov:${name}:${address || "-"}`, async () => {
+  const lpBalance = typeof extra === "number" ? extra : Number(extra?.lpBalance ?? extra?.lp ?? 0) || 0;
+  const quoteId = quoteIdFromName(name);
+  const quote = {
+    id: quoteId,
+    currency: extra?.currency || extra?.hex || extra?.quote_hex || quoteId,
+    issuer: extra?.issuer || extra?.quote_issuer,
+    hex: extra?.hex || extra?.quote_hex,
+  };
+  const ammAccount = String(extra?.ammAccount || extra?.amm || extra?.amm_account || "").trim();
+  return cached(`gov:${name}:${address || "-"}:${quote.issuer || ""}:${ammAccount}`, async () => {
     try {
-      const result = await xrplRpc("amm_info", {
-        asset: xdxIssue(),
-        asset2: quoteIssue(quote),
-        ledger_index: "validated",
-      });
+      const asset2 = quoteIssue(quote);
+      const unresolvedIssued = quoteId !== "XRP" && asset2.currency === "XRP";
+      const result = await xrplRpc(
+        "amm_info",
+        unresolvedIssued && ammAccount
+          ? { amm_account: ammAccount, ledger_index: "validated" }
+          : { asset: xdxIssue(), asset2, ledger_index: "validated" }
+      );
       return {
         ...governanceFromAmmInfo(result, { address, pair: name, lpBalance }),
         source: "xrpl",

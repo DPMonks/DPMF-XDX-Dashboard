@@ -10,6 +10,8 @@ import {
   ammVoteTxjson,
   feePercentFromUnits,
   knownGovernancePairs,
+  normalizeVotePair,
+  poolForVotePair,
   voteHistoryFromActivity,
 } from "../../wallet/ammVote";
 import WalletModal from "../WalletModal";
@@ -30,17 +32,18 @@ export default function VotingContainer() {
   const [history, setHistory] = useState([]);
   const [fee, setFee] = useState(0.25);
   const [confirming, setConfirming] = useState(false);
+  const [needLp, setNeedLp] = useState(false);
 
-  const heldPairs = useMemo(
-    () =>
-      knownGovernancePairs(pools).filter((name) => lpHeldForPair(lpRows, name, name.split("/")[1]) > 0),
-    [pools, lpRows]
-  );
+  const selectedPool = useMemo(() => poolForVotePair(pools, lpRows, pair), [pools, lpRows, pair]);
+  const held = lpHeldForPair(lpRows, pair, pair.split("/")[1], {
+    amm: selectedPool?.amm_account || selectedPool?.amm,
+    lp_currency: selectedPool?.lp_currency,
+  });
   const options = useMemo(() => {
-    const names = heldPairs.length ? heldPairs : knownGovernancePairs(pools);
+    const names = knownGovernancePairs(pools, [...lpRows, ...history, { pair }]);
     return names.map((name) => ({ id: name, label: name }));
-  }, [heldPairs, pools]);
-  const eligible = lpHeldForPair(lpRows, pair, pair.split("/")[1]) > 0;
+  }, [pools, lpRows, history, pair]);
+  const eligible = held > 0 || Number(gov?.lpBalance) > 0 || Boolean(gov?.eligible);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,18 +66,15 @@ export default function VotingContainer() {
   }, [walletAddress]);
 
   useEffect(() => {
-    if (heldPairs.length && !heldPairs.includes(pair)) {
-      const id = setTimeout(() => setPair(heldPairs[0]), 0);
-      return () => clearTimeout(id);
-    }
-    return undefined;
-  }, [heldPairs, pair]);
-
-  useEffect(() => {
     let cancelled = false;
     async function loadGov() {
       const [nextGov, votes] = await Promise.all([
-        getPoolGovernance(pair, walletAddress).catch(() => null),
+        getPoolGovernance(pair, walletAddress, {
+          issuer: selectedPool?.quote_issuer,
+          hex: selectedPool?.quote_hex,
+          ammAccount: selectedPool?.amm_account || selectedPool?.amm,
+          lpBalance: held,
+        }).catch(() => null),
         walletAddress ? getWalletVotes(walletAddress).catch(() => []) : [],
       ]);
       if (cancelled) return;
@@ -97,14 +97,18 @@ export default function VotingContainer() {
       window.removeEventListener("dpmf-wallet-refresh", onRefresh);
       window.removeEventListener("dpmf-trade-executed", onRefresh);
     };
-  }, [pair, walletAddress]);
+  }, [pair, walletAddress, selectedPool, held]);
 
   function askConfirm() {
     if (!signedAccount) {
       window.dispatchEvent(new Event(WALLET_EVENTS.needSignIn));
       return;
     }
-    if (!eligible) return;
+    if (!eligible) {
+      setNeedLp(true);
+      return;
+    }
+    setNeedLp(false);
     setConfirming(true);
   }
 
@@ -115,8 +119,8 @@ export default function VotingContainer() {
       return;
     }
     const quote = resolveQuote(pair.split("/")[1], {
-      quote_issuer: pools.find((row) => String(row.pool || row.pool_name).toUpperCase() === pair)?.quote_issuer,
-      quote_hex: pools.find((row) => String(row.pool || row.pool_name).toUpperCase() === pair)?.quote_hex,
+      quote_issuer: selectedPool?.quote_issuer,
+      quote_hex: selectedPool?.quote_hex,
     });
     start({
       body: {
@@ -151,7 +155,11 @@ export default function VotingContainer() {
       <PoolSelector
         value={pair}
         options={options}
-        onChange={setPair}
+        onChange={(next) => {
+          setPair(normalizeVotePair(next));
+          setConfirming(false);
+          setNeedLp(false);
+        }}
         ariaLabel={t.votePool}
       />
       <GovernanceDataPanel data={gov} locale={locale} t={t} />
@@ -159,6 +167,7 @@ export default function VotingContainer() {
         fee={fee}
         onFee={setFee}
         eligible={eligible}
+        needLp={needLp}
         signedIn={Boolean(signedAccount)}
         confirming={confirming}
         onAskConfirm={askConfirm}

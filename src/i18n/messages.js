@@ -331,6 +331,7 @@ const en = {
   signVote: "Sign with Xaman",
   voteConfirmHint: "Sign AMMVote for {pair} at {fee}?",
   voteCannotWithdraw: "XRPL keeps a vote until you replace it or no longer hold LP tokens.",
+  needLpToVote: "Hold LP tokens for this pool to vote.",
   voteWeightHint: "Voting weight = your LP token balance / pool LP supply.",
   voteHistory: "Vote history",
   voteDate: "Date",

@@ -26,7 +26,9 @@ export default function BrandSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState(null);
-  const selected = (Array.isArray(options) ? options : []).find((row) => row.id === value) || options[0];
+  const selected =
+    (Array.isArray(options) ? options : []).find((row) => row.id === value) ||
+    (value ? { id: value, label: value } : options[0]);
   const matches = useMemo(() => {
     const rows = Array.isArray(options) ? options : [];
     const q = query.trim().toUpperCase();
