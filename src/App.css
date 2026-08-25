@@ -542,7 +542,7 @@ body {
 
 .wallet-token-row {
   grid-template-columns: 1fr 1fr;
-  align-items: start;
+  align-items: stretch;
 }
 
 .wallet-token-row > .dashboard-card,
@@ -552,6 +552,10 @@ body {
   height: auto;
   min-height: 0;
   overflow: visible;
+}
+
+.wallet-token-row > .dashboard-card {
+  min-height: 100%;
 }
 
 .token-details-stack {
@@ -569,12 +573,38 @@ body {
 
 .token-details-chart .tabs,
 .token-details-chart .ranges {
+  display: grid;
   width: 100%;
+  gap: 8px;
+}
+
+.token-details-chart .tabs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.token-details-chart .ranges {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+}
+
+.token-details-chart .tab,
+.token-details-chart .range {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.2;
+  text-wrap: balance;
 }
 
 .token-details-chart .tab {
-  font-size: 11px;
-  padding: 7px 10px;
+  min-height: 40px;
+  padding: 8px 6px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.token-details-chart .range {
+  min-height: 36px;
+  padding: 8px 4px;
 }
 
 .lists-row > .dashboard-card {
@@ -1973,8 +2003,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  flex: 0 0 auto;
-  min-height: min-content;
+  flex: 1 1 auto;
+  min-height: 0;
   container-type: inline-size;
   container-name: wallet;
 }
@@ -2630,8 +2660,17 @@ body {
   flex-shrink: 0;
 }
 
+.wallet-income {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .wallet-income-scroll {
-  max-height: 240px;
+  flex: 1 1 auto;
+  min-height: 160px;
+  max-height: none;
   overflow: auto;
   padding-right: 2px;
 }
@@ -2995,11 +3034,30 @@ body {
 
   .wallet-token-row {
     grid-template-columns: 1fr;
+    align-items: start;
   }
 
   .wallet-token-row > .dashboard-card,
   .token-details-stack > .dashboard-card {
     min-height: 0;
+  }
+
+  .connected-wallet,
+  .wallet-income {
+    flex: 0 0 auto;
+  }
+
+  .wallet-income-scroll {
+    min-height: 0;
+    max-height: 240px;
+  }
+
+  .token-details-chart .tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .token-details-chart .ranges {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .token-details-chart .tab,
@@ -3037,6 +3095,12 @@ body {
   .copy-btn {
     padding: 4px 6px;
     font-size: 11px;
+  }
+}
+
+@media (max-width: 700px) {
+  .token-details-chart .tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
