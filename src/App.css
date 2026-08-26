@@ -279,23 +279,23 @@ body {
 
 @media (max-width: 767px) {
   .site-chrome {
-    padding-top: calc(4px + var(--header-safe));
+    padding-top: var(--header-safe);
   }
 
   .dashboard-header {
-    padding-bottom: 4px;
+    padding-bottom: 2px;
   }
 
   .header-bar {
-    gap: 8px;
+    gap: 6px;
   }
 
   .header-actions {
-    gap: 8px;
+    gap: 6px;
   }
 
   .site-jump {
-    padding-top: 4px;
+    padding-top: 2px;
     padding-bottom: 4px;
   }
 
@@ -4687,30 +4687,51 @@ body {
     overflow: visible;
   }
 
+  .site-chrome {
+    padding-top: var(--header-safe);
+  }
+
+  .dashboard-header {
+    padding-bottom: 2px;
+  }
+
   .header-bar {
     flex-direction: column;
     align-items: stretch;
     text-align: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   .header-brand {
     flex: 0 0 auto;
     justify-content: center;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
   }
 
   .header-actions {
     width: 100%;
-    flex-direction: column;
+    flex-direction: row;
     align-items: stretch;
-    gap: 8px;
+    gap: 6px;
   }
 
-  .wallet-control,
-  .connect-wallet-btn {
+  .header-actions .wallet-control {
+    flex: 1 1 0;
+    min-width: 0;
+    align-items: stretch;
+  }
+
+  .header-actions .connect-wallet-btn {
     width: 100%;
-    align-items: center;
+    min-height: 44px;
+    padding: 0 8px;
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+
+  .indexer-source {
+    margin-top: 6px;
   }
 
   .wallet-modal {
@@ -4934,18 +4955,20 @@ body {
 
 @media (max-width: 767px) {
   .header-mark {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
   }
 
   .dashboard-title {
-    font-size: clamp(1.15rem, 6vw, 1.5rem);
+    font-size: clamp(1.05rem, 5.2vw, 1.28rem);
     letter-spacing: 0.04em;
+    line-height: 1.05;
   }
 
   .dashboard-subtitle {
-    margin-top: 0.12rem;
-    font-size: 0.78rem;
+    margin-top: 0;
+    font-size: 0.7rem;
+    line-height: 1.15;
   }
 
   .xdx-swap-layout,
