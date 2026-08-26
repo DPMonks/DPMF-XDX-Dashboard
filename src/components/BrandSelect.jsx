@@ -1,14 +1,17 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-function menuBox(node) {
+function menuBox(node, count = 6) {
   const box = node?.getBoundingClientRect?.();
   if (!box) return null;
+  const rows = Math.max(1, Number(count) || 6);
+  const need = rows * 44 + 12;
+  const room = Math.max(160, window.innerHeight - box.bottom - 16);
   return {
     top: box.bottom + 4,
     left: box.left,
     width: box.width,
-    maxHeight: Math.min(240, Math.max(120, window.innerHeight - box.bottom - 16)),
+    maxHeight: Math.min(need, room),
   };
 }
 
@@ -41,7 +44,7 @@ export default function BrandSelect({
   }, [options, query]);
 
   function openMenu() {
-    setMenu(menuBox(boxRef.current));
+    setMenu(menuBox(boxRef.current, (Array.isArray(options) ? options : []).length));
     setOpen(true);
   }
 
@@ -63,7 +66,7 @@ export default function BrandSelect({
   useEffect(() => {
     if (!open) return undefined;
     function onMove() {
-      const next = menuBox(boxRef.current);
+      const next = menuBox(boxRef.current, (Array.isArray(options) ? options : []).length);
       const list = listRef.current;
       if (!next || !list) return;
       list.style.top = `${next.top}px`;
@@ -77,7 +80,7 @@ export default function BrandSelect({
       window.removeEventListener("resize", onMove);
       window.removeEventListener("scroll", onMove, true);
     };
-  }, [open]);
+  }, [open, options]);
 
   function select(id) {
     onChange?.(id);

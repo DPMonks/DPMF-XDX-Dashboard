@@ -19,6 +19,7 @@ import { rememberTradeNotice } from "../wallet/tradeNotice.js";
 import { pendingVoteFromExecution } from "../wallet/ammVote.js";
 import { preferMarkWhenPoolInsane } from "../wallet/quoteMarker.js";
 import { liveWalletAddress } from "../wallet/walletStorage.js";
+import { paymentFlagsForMode } from "../swap/swapRouting.js";
 import { extractTradeMarker } from "./signMarker.js";
 import { isConsumedUuid, isPayloadUuid, peekPendingPayload, rememberConsumedUuid, rememberPendingPayload } from "./payloadResume.js";
 
@@ -29,6 +30,8 @@ export const ACTION_TX_TYPES = {
   removeLp: ["AMMWithdraw"],
   createPool: ["AMMCreate"],
   vote: ["AMMVote"],
+  xdxPlatformFee: ["Payment"],
+  crossSwap: ["Payment"],
 };
 
 export function executionTxType(detail = {}) {
@@ -84,6 +87,8 @@ export function executionBelongsToOpenTrade(current, detail = {}) {
 export const DROPS_PER_XRP = 1_000_000;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
 export const TF_PARTIAL_PAYMENT = 131072;
+export const TF_NO_DIRECT_RIPPLE = 65536;
+export const TF_LIMIT_QUALITY = 262144;
 export const TF_TWO_ASSET = 1_048_576;
 export const TF_SINGLE_ASSET = 524_288;
 export const TF_LP_TOKEN = 65_536;
@@ -173,6 +178,15 @@ export const WALLET_EVENTS = {
   tradePending: "dpmf-trade-pending",
 };
 
+function optionalText(value) {
+  const text = String(value || "").trim();
+  return text || null;
+}
+
+function optionalAmount(value) {
+  return value != null && Number(value) > 0 ? Number(value) : null;
+}
+
 export function normalizeTradeRequest(detail) {
   if (!detail) return null;
   if (typeof detail === "string") return { action: detail, quote: "XRP" };
@@ -180,9 +194,19 @@ export function normalizeTradeRequest(detail) {
   if (!action) return null;
   return {
     action,
-    quote: quoteIdFromPair(detail.quote || detail.pair || detail.pool || "XRP"),
+    quote: quoteIdFromPair(detail.quote || detail.pair || detail.pool || detail.toId || "XRP"),
     quoteIssuer: detail.quoteIssuer || detail.quote_issuer || null,
     quoteHex: detail.quoteHex || detail.quote_hex || null,
+    amount: optionalAmount(detail.amount),
+    fromId: optionalText(detail.fromId),
+    toId: optionalText(detail.toId),
+    fromIssuer: optionalText(detail.fromIssuer),
+    fromHex: optionalText(detail.fromHex),
+    toIssuer: optionalText(detail.toIssuer),
+    toHex: optionalText(detail.toHex),
+    receive: optionalAmount(detail.receive),
+    feeUsd: optionalAmount(detail.feeUsd),
+    nextTrade: detail.nextTrade && typeof detail.nextTrade === "object" ? detail.nextTrade : null,
   };
 }
 
@@ -273,14 +297,19 @@ export function xdxAmount(value) {
  * AMM. OfferCreate + Immediate-or-Cancel only hits resting CLOB offers and
  * returns tecKILLED when those are empty (ImmediateOfferKilled).
  */
-export function marketBuyXdx({ account, quote, xdx, cost } = {}) {
+export function applySwapRouteFlags(txjson, routingMode) {
+  if (!txjson || txjson.TransactionType !== "Payment") return txjson;
+  return { ...txjson, Flags: (Number(txjson.Flags) || 0) | paymentFlagsForMode(routingMode) };
+}
+
+export function marketBuyXdx({ account, quote, xdx, cost, routingMode } = {}) {
   const sendMax = withMarketSlippage(cost, "buy");
-  const txjson = {
+  const txjson = applySwapRouteFlags({
     TransactionType: "Payment",
     Amount: xdxAmount(xdx),
     SendMax: quoteAmount(quote, sendMax),
     Flags: TF_PARTIAL_PAYMENT,
-  };
+  }, routingMode);
   if (account) {
     txjson.Account = account;
     txjson.Destination = account;
@@ -288,14 +317,29 @@ export function marketBuyXdx({ account, quote, xdx, cost } = {}) {
   return txjson;
 }
 
-export function marketSellXdx({ account, quote, xdx, proceeds } = {}) {
+export function crossAssetSwapTxjson({ account, fromQuote, toQuote, sendMax, deliver, routingMode } = {}) {
+  const minOut = withMarketSlippage(deliver, "sell");
+  const txjson = applySwapRouteFlags({
+    TransactionType: "Payment",
+    Amount: quoteAmount(toQuote, minOut),
+    SendMax: quoteAmount(fromQuote, sendMax),
+    Flags: TF_PARTIAL_PAYMENT,
+  }, routingMode);
+  if (account) {
+    txjson.Account = account;
+    txjson.Destination = account;
+  }
+  return txjson;
+}
+
+export function marketSellXdx({ account, quote, xdx, proceeds, routingMode } = {}) {
   const deliver = withMarketSlippage(proceeds, "sell");
-  const txjson = {
+  const txjson = applySwapRouteFlags({
     TransactionType: "Payment",
     Amount: quoteAmount(quote, deliver),
     SendMax: xdxAmount(xdx),
     Flags: TF_PARTIAL_PAYMENT,
-  };
+  }, routingMode);
   if (account) {
     txjson.Account = account;
     txjson.Destination = account;
@@ -303,8 +347,8 @@ export function marketSellXdx({ account, quote, xdx, proceeds } = {}) {
   return txjson;
 }
 
-export function offerCreateBuyXdx({ account, quote, xdx, cost, market = false } = {}) {
-  if (market) return marketBuyXdx({ account, quote, xdx, cost });
+export function offerCreateBuyXdx({ account, quote, xdx, cost, market = false, routingMode } = {}) {
+  if (market) return marketBuyXdx({ account, quote, xdx, cost, routingMode });
   const txjson = {
     TransactionType: "OfferCreate",
     TakerPays: xdxAmount(xdx),
@@ -314,8 +358,8 @@ export function offerCreateBuyXdx({ account, quote, xdx, cost, market = false } 
   return txjson;
 }
 
-export function offerCreateSellXdx({ account, quote, xdx, proceeds, market = false } = {}) {
-  if (market) return marketSellXdx({ account, quote, xdx, proceeds });
+export function offerCreateSellXdx({ account, quote, xdx, proceeds, market = false, routingMode } = {}) {
+  if (market) return marketSellXdx({ account, quote, xdx, proceeds, routingMode });
   const txjson = {
     TransactionType: "OfferCreate",
     TakerGets: xdxAmount(xdx),
@@ -346,8 +390,25 @@ export function ammDepositTx({ account, quote, xdx, quoteQty, mode = "double", s
   return txjson;
 }
 
+export function ledgerCurrencyCode(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^0x/i, "")
+    .toUpperCase();
+}
+
 export function isLpCurrency(value) {
-  return /^03[A-Fa-f0-9]{38}$/.test(String(value || "").trim());
+  return /^03[A-F0-9]{38}$/.test(ledgerCurrencyCode(value));
+}
+
+export function sameLedgerCurrency(left, right) {
+  const a = ledgerCurrencyCode(left);
+  const b = ledgerCurrencyCode(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (/^[A-F0-9]{40}$/.test(a) && b.length <= 20 && asciiCurrencyHex(b) === a) return true;
+  if (/^[A-F0-9]{40}$/.test(b) && a.length <= 20 && asciiCurrencyHex(a) === b) return true;
+  return false;
 }
 
 export function poolForQuote(quote, pools = [], live = null) {
@@ -367,14 +428,15 @@ export function poolForQuote(quote, pools = [], live = null) {
   });
   const amm = row?.amm_account || row?.amm || liveAmm || null;
   const rawLp = row?.lp_currency || row?.lp_currency_hex || liveLp || null;
-  const lpCurrency = isLpCurrency(rawLp) ? String(rawLp).trim().toUpperCase() : null;
+  const lpCurrency = isLpCurrency(rawLp) ? ledgerCurrencyCode(rawLp) : null;
   if (amm && lpCurrency) return { amm, lpCurrency, pair };
   if (quote?.currency === "RLUSD" || pair === "XDX/RLUSD") {
-    return { amm: XDX_RLUSD_AMM, lpCurrency: XDX_RLUSD_LP_HEX, pair: "XDX/RLUSD" };
+    return { amm: amm || XDX_RLUSD_AMM, lpCurrency: XDX_RLUSD_LP_HEX, pair: "XDX/RLUSD" };
   }
-  if (quote?.currency === "XRP" || pair === "XDX/XRP" || !quote?.issuer) {
-    return { amm: XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX, pair: pair || "XDX/XRP" };
+  if (quote?.currency === "XRP" || pair === "XDX/XRP") {
+    return { amm: amm || XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX, pair: "XDX/XRP" };
   }
+  if (amm) return { amm, lpCurrency, pair };
   return { amm: null, lpCurrency: null, pair };
 }
 
@@ -398,15 +460,16 @@ export function lpTrustSetTxjson(account, spec = {}) {
 }
 
 export function hasLpTrustline(lines, spec = {}) {
-  const currency = String(spec.lpCurrency || spec.currency || "").toUpperCase();
-  const issuer = String(spec.amm || spec.issuer || "").toUpperCase();
+  const currency = ledgerCurrencyCode(spec.lpCurrency || spec.currency || spec.lp_currency);
+  const issuer = String(spec.amm || spec.issuer || spec.amm_account || "").toUpperCase();
   if (!currency && !issuer) return false;
   return (Array.isArray(lines) ? lines : []).some((row) => {
-    const who = String(row?.issuer || row?.account || "").toUpperCase();
+    const who = String(row?.issuer || row?.account || row?.counterparty || "").toUpperCase();
     if (issuer && who && who !== issuer) return false;
-    const code = String(row?.currency || row?.hex || "").toUpperCase();
-    if (currency && code === currency) return true;
-    return Boolean(row?.lp) && Boolean(issuer) && who === issuer;
+    const code = ledgerCurrencyCode(row?.currency || row?.hex || row?.lp_currency);
+    if (currency && sameLedgerCurrency(code, currency)) return true;
+    const isLp = Boolean(row?.lp) || isLpCurrency(code);
+    return Boolean(issuer) && who === issuer && isLp;
   });
 }
 
@@ -462,17 +525,18 @@ export function quoteTrustSetTxjson(account, quote) {
 }
 
 export function hasQuoteTrustline(lines, quote = {}) {
-  if (!quote?.issuer) return true;
+  if (!quote?.issuer) return false;
   const issuer = String(quote.issuer || "").toUpperCase();
   const codes = new Set(
     [quote.currency, quote.hex, quote.id, quote.label, quoteLedgerCurrency(quote)]
-      .map((value) => String(value || "").toUpperCase())
+      .map((value) => ledgerCurrencyCode(value))
       .filter(Boolean)
   );
   return (Array.isArray(lines) ? lines : []).some((row) => {
-    if (String(row?.issuer || row?.account || "").toUpperCase() !== issuer) return false;
-    const code = String(row?.currency || row?.hex || row?.ticker || "").toUpperCase();
-    return codes.has(code);
+    if (String(row?.issuer || row?.account || row?.counterparty || "").toUpperCase() !== issuer) return false;
+    const code = ledgerCurrencyCode(row?.currency || row?.hex || row?.ticker);
+    if (codes.has(code)) return true;
+    return [...codes].some((want) => sameLedgerCurrency(code, want));
   });
 }
 
@@ -690,6 +754,8 @@ export function tradeSides({
   amount,
   quoteQty,
   quoteLabel,
+  fromLabel,
+  toLabel,
   total,
   lpAmount,
   lpOut,
@@ -697,6 +763,18 @@ export function tradeSides({
   singleAsset,
 } = {}) {
   const label = quoteLabel || "XRP";
+  if (action === "xdxPlatformFee") {
+    return {
+      pay: [{ value: Number(amount) || 0, asset: "XDX" }],
+      receive: [],
+    };
+  }
+  if (action === "crossSwap") {
+    return {
+      pay: [{ value: Number(amount) || 0, asset: fromLabel || label }],
+      receive: [{ value: Number(quoteQty) || 0, asset: toLabel || label }],
+    };
+  }
   if (action === "buy") {
     return {
       pay: [{ value: Number(quoteQty || total) || 0, asset: label }],

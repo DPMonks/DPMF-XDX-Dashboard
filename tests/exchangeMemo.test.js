@@ -110,6 +110,13 @@ test("LP, vote, and pool-create memos follow the natural templates", () => {
     exchangeMemoText({ txjson: xdxTrustSetTxjson("rA") }),
     `${EXCHANGE_PLATFORM} | XDX trustline opened`
   );
+  assert.equal(
+    exchangeMemoText({
+      txjson: { TransactionType: "Payment", Destination: "rDPMFBANKMexTKkC7e4n3ekD9HfhmWHva8" },
+      trade: { action: "xdxPlatformFee" },
+    }),
+    `${EXCHANGE_PLATFORM} | 1% XDX platform fee`
+  );
 });
 
 test("stamping keeps the platform memo and the sign marker together", () => {

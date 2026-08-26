@@ -19,6 +19,7 @@ import {
   estimatedCreateLp,
   estimatedPoolValueXrp,
   existingPoolForQuote,
+  issuedBalance,
   hasAssetLine,
   normalizeWalletLines,
   preferWalletLines,
@@ -180,6 +181,20 @@ test("secondary picker lists every account_lines trustline as a singular asset",
   assert.equal(usd.length, 2);
   assert.ok(usd.every((row) => row.id.startsWith("USD:")));
   assert.ok(usd.every((row) => row.label.startsWith("USD · ")));
+});
+
+test("create pool options and balances see hex IOUs such as USDC", () => {
+  const usdcHex = "5553444300000000000000000000000000000000";
+  const usdcIssuer = "rUSDCIssuer11111111111111111111111";
+  const raw = {
+    lines: [{ currency: usdcHex, issuer: usdcIssuer, ticker: "USDC", balance: "12.5" }],
+  };
+  const options = createQuoteOptions([], raw);
+  assert.ok(options.some((row) => row.ticker === "USDC"));
+  assert.equal(
+    issuedBalance(raw, { issuer: usdcIssuer, currency: "USDC", hex: usdcHex, id: "USDC" }),
+    12.5
+  );
 });
 
 test("deposit ratio warns when the mark is 20 percent off", () => {

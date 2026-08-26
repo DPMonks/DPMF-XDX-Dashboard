@@ -4,7 +4,7 @@ let catalogDownUntil = 0;
 export function isLiveLedgerPath(path) {
   const text = String(path || "");
   if (/\/xaman\b/i.test(text)) return true;
-  return /\/(wallet\/|balances\/|networth\/|prices|change24h|lp-pools|orderbooks?|overview|token-details|issuer-locked|holders|trustlines|top-|amm|pools|trades|xdx-flows|sparkline|charts?|xaman)\b/i.test(
+  return /\/(wallet\/|balances\/|networth\/|prices|change24h|lp-pools|swap-market|orderbooks?|overview|token-details|issuer-locked|holders|trustlines|top-|amm|pools|trades|xdx-flows|sparkline|charts?|xaman)\b/i.test(
     text
   );
 }

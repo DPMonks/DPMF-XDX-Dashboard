@@ -23,18 +23,11 @@ import {
   tradePoolHint,
   tradeXdxVolume,
 } from "../ammPools";
-import { discoverLiveAmmPool, getLiveLpReserves } from "../api/indexer";
-import { xdxTrustSetTxjson } from "../constants/ledger";
+import { discoverLiveAmmPool, getLiveLpReserves, getWalletBalances, getWalletLines } from "../api/indexer";
+import { issuedBalance } from "../wallet/ammCreate";
+import { assetTrustTxjson, lpTrustTxjson, poolQuote } from "../ammTrustActions";
 import { useWallet } from "../context/useWallet";
-import {
-  QUOTE_ASSETS,
-  isLpCurrency,
-  lpTrustSetTxjson,
-  notifyWalletRefresh,
-  poolForQuote,
-  quoteTrustSetTxjson,
-  resolveQuote,
-} from "../xaman/tradeTx";
+import { QUOTE_ASSETS, notifyWalletRefresh } from "../xaman/tradeTx";
 import { useXamanPayload } from "../xaman/useXamanPayload";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import { useI18n } from "../i18n/useI18n";
@@ -110,32 +103,6 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead, reserveXdx, reserveQuo
   );
 }
 
-function poolQuote(pool) {
-  const ticker = String(pool?.quote || "")
-    .replace(/^XDX\//i, "")
-    .toUpperCase() || poolAssetTrustlineId(pool);
-  return resolveQuote(ticker === "XDX" ? "XRP" : ticker, {
-    quote_issuer: pool.quote_issuer,
-    quote_hex: pool.quote_hex,
-  });
-}
-
-function assetTrustTxjson(pool, account) {
-  if (poolAssetTrustlineId(pool) === "XDX") return xdxTrustSetTxjson(account);
-  return quoteTrustSetTxjson(account, poolQuote(pool));
-}
-
-function lpTrustTxjson(pool, account) {
-  const lpHex = pool?.lp_currency || pool?.lp_currency_hex;
-  if (pool?.amm_account && isLpCurrency(lpHex)) {
-    return lpTrustSetTxjson(account, { amm: pool.amm_account, lpCurrency: lpHex });
-  }
-  const quoteId = poolQuoteTicker(pool);
-  const spec = poolForQuote(poolQuote(pool), [pool], pool);
-  if (quoteId !== "XRP" && spec.pair === "XDX/XRP") return null;
-  return lpTrustSetTxjson(account, spec);
-}
-
 export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemoveLiquidity }) {
   const { t, locale } = useI18n();
   const { walletAddress, connectWallet } = useWallet();
@@ -148,6 +115,7 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
   const [lineError, setLineError] = useState("");
   const [liveByKey, setLiveByKey] = useState({});
   const [volumeByKey, setVolumeByKey] = useState({});
+  const [walletHold, setWalletHold] = useState({ xdx: 0, xrp: 0, raw: {} });
   const lookupGen = useRef(0);
   const lookupTimer = useRef(0);
   const liveTimer = useRef(0);
@@ -240,6 +208,53 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
   }
   const signing = status === "loading" || status === "waiting";
   const account = liveWalletAddress(walletAddress);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLines() {
+      if (!account) {
+        setWalletHold({ xdx: 0, xrp: 0, raw: {} });
+        return;
+      }
+      const [next, bals] = await Promise.all([
+        getWalletLines(account, { fresh: true }).catch(() => []),
+        getWalletBalances(account).catch(() => ({})),
+      ]);
+      if (cancelled) return;
+      setWalletHold({
+        xdx: Number(bals?.xdx) || 0,
+        xrp: Number(bals?.xrp) || 0,
+        raw: { ...(bals?.raw || {}), lines: Array.isArray(next) ? next : bals?.raw?.lines || [] },
+      });
+    }
+    loadLines();
+    window.addEventListener("dpmf-wallet-refresh", loadLines);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("dpmf-wallet-refresh", loadLines);
+    };
+  }, [account]);
+
+  function poolHaveCopy(pool) {
+    if (!account) return "";
+    const quote = poolQuote(pool);
+    const quoteId = poolQuoteTicker(pool);
+    const quoteAmt =
+      quoteId === "XRP" ? Number(walletHold.xrp) || 0 : issuedBalance(walletHold.raw, quote);
+    const xdxAmt = Number(walletHold.xdx) || 0;
+    const have = t.poolHave || "Have {amount} {asset}";
+    const parts = [
+      have.replace("{amount}", formatToken(xdxAmt, locale, 2)).replace("{asset}", "XDX"),
+    ];
+    if (quoteId && quoteId !== "XDX") {
+      parts.push(
+        have
+          .replace("{amount}", formatToken(Number(quoteAmt) || 0, locale, quoteId === "XRP" ? 4 : 2))
+          .replace("{asset}", quoteId)
+      );
+    }
+    return parts.join(" · ");
+  }
 
   function signTrustline(pool, kind) {
     const txjson = kind === "lp" ? lpTrustTxjson(pool, account) : assetTrustTxjson(pool, account);
@@ -415,6 +430,7 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
               </div>
             </dl>
             <div className="pool-card-actions">
+              {account ? <p className="pool-have">{poolHaveCopy(pool)}</p> : null}
               {onAddLiquidity ? (
                 <WalletButton
                   label={t.addLiquidity}

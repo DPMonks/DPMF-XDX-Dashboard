@@ -948,8 +948,10 @@ export async function getWalletAccount(address) {
   return api.walletAccount(address);
 }
 
-export async function getWalletLp(address) {
-  const body = await api.walletLp(address);
+export async function getWalletLp(address, extra = {}) {
+  const name = String(address || "").trim();
+  if (!name) return [];
+  const body = await api.walletLp(name, extra);
   return asArray(body?.positions || body);
 }
 
@@ -995,6 +997,11 @@ export async function getPoolGovernance(pair, account, extra = {}) {
 
 export async function getLiveLpReserves(query = {}) {
   const body = await api.lpPoolsLive(query);
+  return body && typeof body === "object" ? body : null;
+}
+
+export async function getSwapMarket(query = {}) {
+  const body = await api.swapMarket(query);
   return body && typeof body === "object" ? body : null;
 }
 

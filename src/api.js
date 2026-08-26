@@ -468,10 +468,15 @@ export const api = {
     getJson(endpoint("walletAccount", { address }) || `/wallet/account/${encodeURIComponent(address)}`, {
       retries: 1,
     }),
-  walletLp: (address) =>
-    getJson(endpoint("walletLp", { address }) || `/wallet/lp/${encodeURIComponent(address)}`, {
-      retries: 1,
-    }),
+  walletLp: (address, extra = {}) =>
+    getJson(
+      `${endpoint("walletLp", { address }) || `/wallet/lp/${encodeURIComponent(address)}`}${extra.fresh ? "?fresh=1" : ""}`,
+      {
+        retries: 1,
+        queue: false,
+        cache: extra.fresh === false ? true : extra.fresh ? false : true,
+      }
+    ),
   walletRank: (address) =>
     getJson(endpoint("walletRank", { address }) || `/wallet/rank/${encodeURIComponent(address)}`, {
       retries: 1,
@@ -522,6 +527,17 @@ export const api = {
     }
     if (extra.lpBalance != null || extra.lp != null) search.set("lp", String(extra.lpBalance ?? extra.lp));
     return getJson(`/amm/governance?${search}`, { retries: 1, queue: false, cache: false });
+  },
+  swapMarket: (query = {}) => {
+    const search = new URLSearchParams();
+    if (query.from || query.fromId) search.set("from", query.from || query.fromId);
+    if (query.to || query.toId) search.set("to", query.to || query.toId);
+    if (query.fromIssuer || query.from_issuer) search.set("fromIssuer", query.fromIssuer || query.from_issuer);
+    if (query.toIssuer || query.to_issuer) search.set("toIssuer", query.toIssuer || query.to_issuer);
+    if (query.fromHex || query.from_hex) search.set("fromHex", query.fromHex || query.from_hex);
+    if (query.toHex || query.to_hex) search.set("toHex", query.toHex || query.to_hex);
+    if (query.fresh) search.set("fresh", "1");
+    return getJson(`/swap-market?${search}`, { retries: 1, queue: false, cache: false });
   },
   lpPoolsLive: (query = {}) => {
     const search = new URLSearchParams();

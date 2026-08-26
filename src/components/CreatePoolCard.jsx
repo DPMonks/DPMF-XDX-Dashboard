@@ -56,13 +56,16 @@ async function loadCreatePoolAssets(account, extra = {}) {
   ]);
   const drops = Number(accountInfo?.balance_drops);
   const liveXrp = Number.isFinite(drops) ? drops / 1_000_000 : null;
-  return mergeWalletLines(
-    {
-      ...balances,
-      xrp: Number.isFinite(Number(balances.xrp)) && Number(balances.xrp) > 0 ? Number(balances.xrp) : liveXrp,
-    },
-    lines
-  );
+  return {
+    ...mergeWalletLines(
+      {
+        ...balances,
+        xrp: Number.isFinite(Number(balances.xrp)) && Number(balances.xrp) > 0 ? Number(balances.xrp) : liveXrp,
+      },
+      lines
+    ),
+    lines: Array.isArray(lines) ? lines : [],
+  };
 }
 
 export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }) {
@@ -82,7 +85,10 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
 
   const account = liveWalletAddress(walletAddress);
   const signedIn = Boolean(account);
-  const options = useMemo(() => createQuoteOptions(pools, balances.raw), [pools, balances.raw]);
+  const options = useMemo(
+    () => createQuoteOptions(pools, balances.raw, balances.lines),
+    [pools, balances.raw, balances.lines]
+  );
   const selected = options.find((row) => row.id === quoteId) || options[0];
   const existing = existingPoolForQuote(pools, selected?.ticker || selected?.id || quoteId);
   const quote = useMemo(
@@ -146,11 +152,11 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
 
   useEffect(() => {
     if (quoteTouchedRef.current) return undefined;
-    const next = defaultCreateQuoteId(pools, balances.raw);
+    const next = defaultCreateQuoteId(pools, balances.raw, balances.lines);
     if (!next || next === quoteId) return undefined;
     const timer = window.setTimeout(() => setQuoteId(next), 0);
     return () => window.clearTimeout(timer);
-  }, [pools, quoteId, balances.raw]);
+  }, [pools, quoteId, balances.raw, balances.lines]);
 
   useEffect(() => {
     let cancelled = false;
@@ -292,7 +298,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
   }[blocker];
 
   return (
-    <section className="dashboard-card neon-card create-pool-card">
+    <section className="dashboard-card neon-card create-pool-card" id="create-pool">
       <div className="create-pool-head">
         <div>
           <h2 className="card-title">{t.createPoolTitle}</h2>

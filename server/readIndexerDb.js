@@ -74,6 +74,7 @@ import { catalogHealth } from "./sourceControl.js";
 import { FREE_API_HEADERS } from "./xrplToCatalog.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
 import { loadLiveAmmReserves, loadLiveAmmReservesMany } from "./liveAmmReserves.js";
+import { loadDirectPairMarket } from "./directPairMarket.js";
 import { canSelect, loadIndexerSchema, peekIndexerSchema, pickColumns } from "./indexerSchema.js";
 
 let pool = null;
@@ -2326,6 +2327,18 @@ function walletLedgerResult(suffix, search = "") {
       hex: params.get("hex") || params.get("quote_hex"),
       ammAccount: params.get("amm") || params.get("amm_account"),
       lpBalance: params.get("lp") || params.get("lp_balance"),
+    }).then((body) => ok(body));
+  }
+  if (suffix === "swap-market") {
+    const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+    return loadDirectPairMarket({
+      from: params.get("from") || params.get("fromId"),
+      to: params.get("to") || params.get("toId"),
+      fromIssuer: params.get("fromIssuer") || params.get("from_issuer"),
+      toIssuer: params.get("toIssuer") || params.get("to_issuer"),
+      fromHex: params.get("fromHex") || params.get("from_hex"),
+      toHex: params.get("toHex") || params.get("to_hex"),
+      fresh: params.get("fresh") === "1",
     }).then((body) => ok(body));
   }
   if (suffix === "lp-pools/live") {

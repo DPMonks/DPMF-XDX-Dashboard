@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   asOrderbookPayload,
+  bookFromMarketPayload,
   bookHasNativeDex,
   bookHeader,
   collectPairOptions,
@@ -25,6 +26,26 @@ import {
   topDexLevels,
 } from "../src/orderbook.js";
 import { ammSizeToPrice, ammSpot } from "../src/ammCurve.js";
+
+test("bookFromMarketPayload unwraps a catalog onto the named pair book", () => {
+  const catalog = {
+    pairs: ["XDX/XRP", "XDX/RLUSD"],
+    books: {
+      "XDX/XRP": {
+        pair: "XDX/XRP",
+        bids: [{ price: 0.0002, base_size: 1000, source: "dex" }],
+        asks: [],
+      },
+    },
+  };
+  const book = bookFromMarketPayload(catalog, "XDX/XRP");
+  assert.equal(book.bids.length, 1);
+  assert.equal(book.bids[0].price, 0.0002);
+  assert.equal(bookFromMarketPayload(catalog, "XRP").bids[0].base_size, 1000);
+  assert.equal(bookFromMarketPayload(book, "XDX/XRP").bids[0].base_size, 1000);
+  assert.equal(bookFromMarketPayload({ book: catalog }, "XDX/XRP").bids.length, 1);
+  assert.equal(bookFromMarketPayload({ pairs: [], books: {} }, "XDX/XRP").bids.length, 0);
+});
 
 test("normalizeOrderbookPair maps quote aliases onto featured and detected AMM pairs", () => {
   assert.equal(normalizeOrderbookPair("XRP"), "XDX/XRP");

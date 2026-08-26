@@ -12,6 +12,8 @@ import AmmCard from "./components/AmmCard";
 import CreatePoolCard from "./components/CreatePoolCard";
 import VotingContainer from "./components/governance/VotingContainer";
 import OrderBook from "./components/OrderBook";
+import XdxSwapPanel from "./components/XdxSwapPanel";
+import SiteJump from "./components/SiteJump";
 import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
@@ -237,6 +239,9 @@ export default function App() {
       setTradeAction((current) => {
         if (!current) return null;
         if (!executionBelongsToOpenTrade(current, detail)) return current;
+        if (current.action === "xdxPlatformFee" && current.nextTrade) {
+          return { ...normalizeTradeRequest(current.nextTrade), openId: Date.now() };
+        }
         return null;
       });
       refreshLists();
@@ -300,21 +305,25 @@ export default function App() {
 
   return (
     <div className="dashboard-container">
-      <header className="dashboard-header neon-border">
-        <div className="header-bar">
-          <div className="header-brand">
-            <img src="/favicon.png" alt="" className="header-mark" />
-            <div className="header-brand-copy">
-              <h1 className="dashboard-title">{t.title}</h1>
-              <p className="dashboard-subtitle">{t.subtitle}</p>
+      <div className="site-chrome">
+        <header className="dashboard-header neon-border">
+          <div className="header-bar">
+            <div className="header-brand">
+              <img src="/favicon.png" alt="" className="header-mark" />
+              <div className="header-brand-copy">
+                <h1 className="dashboard-title">{t.title}</h1>
+                <p className="dashboard-subtitle">{t.subtitle}</p>
+              </div>
+            </div>
+            <div className="header-actions">
+              <XdxTrustline />
+              <ConnectWallet />
             </div>
           </div>
-          <div className="header-actions">
-            <XdxTrustline />
-            <ConnectWallet />
-          </div>
-        </div>
-      </header>
+        </header>
+
+        <SiteJump />
+      </div>
 
       <p className={`indexer-source is-${linkState.tone}`} title={INDEXER_ORIGIN}>
         <span className="handshake-dot" aria-hidden="true" />
@@ -323,12 +332,12 @@ export default function App() {
 
       <div className="dashboard-grid">
         <div className="wallet-token-row">
-          <section className="dashboard-card neon-card">
+          <section className="dashboard-card neon-card" id="wallet">
             <h2 className="card-title">{t.connectedWallet}</h2>
             <ConnectedWallet />
           </section>
           <div className="token-details-stack">
-            <section className="dashboard-card neon-card">
+            <section className="dashboard-card neon-card" id="details">
               <h2 className="card-title">{t.tokenDetails}</h2>
               <TokenDetails />
             </section>
@@ -341,18 +350,19 @@ export default function App() {
           </div>
         </div>
 
-        <section className="dashboard-card neon-card">
+        <section className="dashboard-card neon-card" id="trading">
           <h2 className="card-title">{t.tradingChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
             <TradingChart />
           </Suspense>
-          <div className="orderbook-wrap">
+          <XdxSwapPanel />
+          <div className="orderbook-wrap" id="orderbook">
             <h3 className="card-title orderbook-title">{t.orderbook}</h3>
             <OrderBook />
           </div>
         </section>
 
-        <section className="dashboard-card neon-card">
+        <section className="dashboard-card neon-card" id="activity">
           <h2 className="card-title">{t.activityChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
             <ActivityChart />
@@ -360,7 +370,7 @@ export default function App() {
         </section>
 
         <div className="lists-row">
-          <section className="dashboard-card neon-card">
+          <section className="dashboard-card neon-card" id="holders">
             <h2 className="card-title">{t.topHolders}</h2>
             <RichList
               className="is-xdx-owners"
@@ -376,7 +386,7 @@ export default function App() {
             />
           </section>
 
-          <section className="dashboard-card neon-card">
+          <section className="dashboard-card neon-card" id="lp-owners">
             <h2 className="card-title">{t.lpHolders}</h2>
             <RichList
               className="is-lp-holders"
@@ -397,7 +407,7 @@ export default function App() {
 
         <CreatePoolCard pools={ammData} onJoinExisting={openTrade} onCreated={refreshLists} />
 
-        <section className="dashboard-card neon-card">
+        <section className="dashboard-card neon-card amm-pools-card" id="pools">
           <h2 className="card-title">{t.ammPools}</h2>
           <AmmCard
             pools={ammData}
@@ -422,7 +432,7 @@ export default function App() {
           />
         </section>
 
-        <section className="dashboard-card neon-card governance-card">
+        <section className="dashboard-card neon-card governance-card" id="governance">
           <h2 className="card-title">{t.poolGovernance}</h2>
           <VotingContainer />
         </section>
@@ -434,11 +444,18 @@ export default function App() {
           key={tradeAction.openId || `${tradeAction.action}-${tradeAction.quote}`}
           action={tradeAction.action}
           initialQuote={tradeAction.quote}
+          initialAmount={tradeAction.amount}
           quoteExtra={tradeAction}
           initialPools={ammData}
           resumeUuid={tradeAction.resumeUuid}
           resumeTxjson={tradeAction.resumeTxjson}
-          onClose={() => setTradeAction(null)}
+          onClose={(next) => {
+            if (next?.action) {
+              setTradeAction({ ...normalizeTradeRequest(next), openId: Date.now() });
+              return;
+            }
+            setTradeAction(null);
+          }}
         />
       ) : null}
       <TradeExecuted />

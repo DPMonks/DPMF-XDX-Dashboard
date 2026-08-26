@@ -8,6 +8,13 @@ export const HISTORICAL_INCOME_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CATALOG_FILL_DAYS = 7;
 
+export function looksLikeXrplAddress(value) {
+  const text = String(value || "").trim();
+  if (/^r[1-9A-HJ-NP-Za-km-z]{3,}(?:…|\.\.\.)[1-9A-HJ-NP-Za-km-z]{2,}$/.test(text)) return true;
+  const compact = text.replace(/[.…]/g, "");
+  return /^r[1-9A-HJ-NP-Za-km-z]{20,34}$/.test(compact);
+}
+
 function normalizeWalletPair(value) {
   const raw = String(value || "")
     .trim()
@@ -15,6 +22,9 @@ function normalizeWalletPair(value) {
     .replace(/\s+/g, "")
     .replace(/-/g, "/");
   if (!raw) return "";
+  if (looksLikeXrplAddress(value) || looksLikeXrplAddress(raw) || looksLikeXrplAddress(raw.split("/")[1])) {
+    return "";
+  }
   if (raw === "XRP" || raw === "XRP/XDX") return "XDX/XRP";
   if (raw.startsWith("XDX/")) return raw;
   return `XDX/${raw}`;
@@ -58,7 +68,7 @@ export function isXdxAmmPair(value) {
       ? value.pool || value.pool_name || value.pair
       : value
   );
-  return /^XDX\/[A-Z0-9]{2,12}$/.test(pair);
+  return /^XDX\/[A-Z0-9]{2,20}$/.test(pair);
 }
 
 export function utcDayKey(value) {
