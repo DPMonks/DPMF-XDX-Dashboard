@@ -3496,11 +3496,23 @@ body {
 .wallet-earn-row {
   margin: 0;
   display: grid;
-  grid-template-columns: 2.6em minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 2.6em minmax(0, 1fr);
   column-gap: 8px;
   align-items: baseline;
   font-variant-numeric: tabular-nums;
   line-height: 1.25;
+}
+
+.wallet-earn-values {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.wallet-earn-cell.is-usd-only .wallet-earn-values {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .wallet-earn-row.is-head {
@@ -3611,17 +3623,24 @@ body {
   }
 
   .wallet-earn-row {
-    grid-template-columns: 2.2em minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 6px;
+    grid-template-columns: 2.4em minmax(0, 1fr);
+    column-gap: 8px;
+  }
+
+  .wallet-earn-values {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: end;
+    row-gap: 1px;
   }
 
   .wallet-earn-cell.is-usd-only .wallet-earn-row {
-    grid-template-columns: 2.2em minmax(0, 1fr);
+    grid-template-columns: 2.4em minmax(0, 1fr);
   }
 
   .wallet-earn-lp,
   .wallet-earn-usd {
-    font-size: 11px;
+    font-size: 12px;
+    max-width: 100%;
   }
 }
 
@@ -4448,6 +4467,7 @@ body {
   .wallet-earn-lp,
   .wallet-earn-usd {
     font-size: 12px;
+    max-width: 100%;
   }
 
   .wallet-token-row {
@@ -4539,6 +4559,12 @@ body {
 @media (max-width: 700px) {
   .token-details-chart .tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wallet-earn-values {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: end;
+    row-gap: 1px;
   }
 }
 
