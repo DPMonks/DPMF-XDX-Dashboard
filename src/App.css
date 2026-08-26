@@ -46,25 +46,32 @@ body {
   width: min(1280px, 100%);
   max-width: 100%;
   margin: 0 auto;
-  padding: calc(20px + var(--header-safe)) 20px max(32px, env(safe-area-inset-bottom, 0px));
+  padding: 0 20px max(32px, env(safe-area-inset-bottom, 0px));
   padding-left: max(12px, env(safe-area-inset-left, 0px), var(--side-safe));
   padding-right: max(12px, env(safe-area-inset-right, 0px));
   box-sizing: border-box;
 }
 
-.dashboard-header {
-  border-bottom: 2px solid rgba(152, 24, 240, 0.45);
-  padding: 1.25rem 0 1.4rem;
-}
-
-.site-jump {
+.site-chrome {
   position: sticky;
   top: 0;
   z-index: 40;
-  margin: 0 0 12px;
-  padding-top: var(--header-safe);
-  background:
-    linear-gradient(180deg, #050507 0 72%, rgba(5, 5, 7, 0.92) 88%, transparent);
+  padding-top: calc(16px + var(--header-safe));
+  background: #050507;
+}
+
+.dashboard-header {
+  border-bottom: 2px solid rgba(152, 24, 240, 0.45);
+  padding: 0 0 12px;
+  background: #050507;
+}
+
+.site-jump {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 8px 0 0;
+  background: #050507;
 }
 
 .site-jump-bar {
@@ -241,7 +248,7 @@ body {
 #create-pool,
 #pools,
 #governance {
-  scroll-margin-top: calc(var(--jump-sticky) + var(--header-safe) + 12px);
+  scroll-margin-top: var(--jump-sticky, 120px);
 }
 
 @keyframes site-jump-pip {
@@ -260,6 +267,44 @@ body {
   100% {
     transform: none;
     filter: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .site-chrome {
+    padding-top: calc(8px + var(--header-safe));
+  }
+
+  .dashboard-header {
+    padding-bottom: 8px;
+  }
+
+  .site-jump {
+    padding-top: 4px;
+  }
+
+  .site-jump-now {
+    gap: 8px;
+    padding: 4px 10px;
+    border-radius: 12px;
+  }
+
+  .site-jump-copy small {
+    font-size: 9px;
+    letter-spacing: 0.12em;
+  }
+
+  .site-jump-copy b {
+    font-size: 15px;
+  }
+
+  .site-jump-travel {
+    height: 2px;
+  }
+
+  .site-jump-panel {
+    margin-top: 6px;
+    padding: 10px;
   }
 }
 
@@ -4513,7 +4558,7 @@ body {
 
 @media (max-width: 834px) {
   .dashboard-container {
-    padding-top: calc(16px + var(--header-safe));
+    padding-top: 0;
   }
 
   .dashboard-card {
@@ -4547,7 +4592,7 @@ body {
   }
 
   .dashboard-container {
-    padding: calc(14px + var(--header-safe)) 10px max(24px, env(safe-area-inset-bottom, 0px));
+    padding: 0 10px max(24px, env(safe-area-inset-bottom, 0px));
     padding-left: max(10px, env(safe-area-inset-left, 0px));
     padding-right: max(10px, env(safe-area-inset-right, 0px));
   }

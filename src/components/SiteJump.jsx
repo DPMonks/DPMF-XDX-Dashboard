@@ -6,6 +6,7 @@ import {
   readJumpHash,
   sectionAtLockLine,
   siteJumpItems,
+  trailChromeOffset,
 } from "../siteJump";
 
 function prefersReducedMotion() {
@@ -13,8 +14,18 @@ function prefersReducedMotion() {
 }
 
 function lockOffset() {
+  const chrome = document.querySelector(".site-chrome");
+  const header = document.querySelector(".dashboard-header");
   const bar = document.querySelector(".site-jump-bar");
-  return Math.round((bar?.getBoundingClientRect().height || 56) + 10);
+  const padTop = chrome ? Number.parseFloat(getComputedStyle(chrome).paddingTop) || 0 : 0;
+  const offset = trailChromeOffset({
+    headerH: header?.getBoundingClientRect().height || 0,
+    barH: bar?.getBoundingClientRect().height || 56,
+    padTop,
+  });
+  document.documentElement.style.setProperty("--jump-sticky", `${offset}px`);
+  document.documentElement.style.setProperty("--site-header-h", `${Math.round((header?.getBoundingClientRect().height || 0) + padTop)}px`);
+  return offset;
 }
 
 function scrollToDeck(id) {
@@ -95,7 +106,9 @@ export default function SiteJump() {
     setActive(id);
     setOpen(false);
     if (window.history?.replaceState) window.history.replaceState(null, "", `#${id}`);
-    scrollToDeck(id);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => scrollToDeck(id));
+    });
     window.setTimeout(() => setLocking(""), 700);
   }
 

@@ -42,6 +42,10 @@ export function pageTravelPercent(scrollY, maxScroll) {
   return Math.min(100, Math.max(0, (top / max) * 100));
 }
 
+export function trailChromeOffset({ headerH = 0, barH = 0, padTop = 0 } = {}) {
+  return Math.round(Math.max(0, Number(padTop) || 0) + Math.max(0, Number(headerH) || 0) + Math.max(0, Number(barH) || 0));
+}
+
 export function sectionAtLockLine(ids = SITE_JUMP_IDS, offset = 72, lookup = globalThis.document?.getElementById?.bind(globalThis.document)) {
   if (typeof lookup !== "function") return ids[0];
   let current = ids[0];

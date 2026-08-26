@@ -305,23 +305,25 @@ export default function App() {
 
   return (
     <div className="dashboard-container">
-      <header className="dashboard-header neon-border">
-        <div className="header-bar">
-          <div className="header-brand">
-            <img src="/favicon.png" alt="" className="header-mark" />
-            <div className="header-brand-copy">
-              <h1 className="dashboard-title">{t.title}</h1>
-              <p className="dashboard-subtitle">{t.subtitle}</p>
+      <div className="site-chrome">
+        <header className="dashboard-header neon-border">
+          <div className="header-bar">
+            <div className="header-brand">
+              <img src="/favicon.png" alt="" className="header-mark" />
+              <div className="header-brand-copy">
+                <h1 className="dashboard-title">{t.title}</h1>
+                <p className="dashboard-subtitle">{t.subtitle}</p>
+              </div>
+            </div>
+            <div className="header-actions">
+              <XdxTrustline />
+              <ConnectWallet />
             </div>
           </div>
-          <div className="header-actions">
-            <XdxTrustline />
-            <ConnectWallet />
-          </div>
-        </div>
-      </header>
+        </header>
 
-      <SiteJump />
+        <SiteJump />
+      </div>
 
       <p className={`indexer-source is-${linkState.tone}`} title={INDEXER_ORIGIN}>
         <span className="handshake-dot" aria-hidden="true" />
