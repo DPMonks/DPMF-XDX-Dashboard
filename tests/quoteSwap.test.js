@@ -19,7 +19,7 @@ import {
   swapCounterOptions,
   swapSellingXdx,
 } from "../src/swap/swapAssets.js";
-import { filterBookTape } from "../src/orderbook.js";
+import { bookFromMarketPayload, filterBookTape } from "../src/orderbook.js";
 
 test("ammSwapOut follows the constant-product fee walk", () => {
   const out = ammSwapOut({ reserveIn: 1000, reserveOut: 10, amountIn: 100, tradingFee: 1000 });
@@ -78,6 +78,32 @@ test("quoteSwap marks negative slippage when actual is below mid", () => {
   assert.equal(quote.routeUsed, "amm");
   assert.equal(quote.bookOutput, 0);
   assert.ok(quote.ammOutput > 0);
+});
+
+test("unwrapped catalog bids fill a book-only sell quote", () => {
+  const catalog = {
+    pairs: ["XDX/XRP"],
+    books: {
+      "XDX/XRP": {
+        bids: [{ price: 0.02, base_size: 100, source: "dex" }],
+        asks: [],
+      },
+    },
+  };
+  assert.equal((catalog.bids || []).length, 0);
+  const book = bookFromMarketPayload(catalog, "XDX/XRP");
+  const quote = quoteSwap({
+    amountIn: 50,
+    sellingXdx: true,
+    routingMode: "book",
+    bids: book.bids,
+    asks: book.asks,
+    reserveBase: 0,
+    reserveQuote: 0,
+  });
+  assert.equal(quote.routeUsed, "book");
+  assert.ok(Math.abs(quote.actualOutput - 1) < 1e-12);
+  assert.ok(quote.bookOutput > 0);
 });
 
 test("saferSwapAlternatives offers a smaller size when impact is high", () => {

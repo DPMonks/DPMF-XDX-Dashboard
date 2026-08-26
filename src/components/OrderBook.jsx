@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getOrderbook, getOrderbooks } from "../api/indexer";
 import {
+  bookFromMarketPayload,
   bookHeader,
   emptyOrderbook,
   FEATURED_ORDERBOOK_PAIRS,
@@ -143,7 +144,7 @@ export default function OrderBook() {
 
   const rawBook = useMemo(() => {
     const name = normalizeOrderbookPair(pair);
-    return books?.books?.[name] || books?.books?.[pair] || emptyOrderbook(name);
+    return bookFromMarketPayload(books, name);
   }, [books, pair]);
   const book = useMemo(() => filterBookTape(rawBook, "hybrid"), [rawBook]);
   const dexBook = useMemo(() => filterBookTape(rawBook, "dex"), [rawBook]);

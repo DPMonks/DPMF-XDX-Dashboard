@@ -107,6 +107,23 @@ export function filterOrderbookPairs(pairs, query) {
   });
 }
 
+export function bookFromMarketPayload(payload, pair = "XDX/XRP") {
+  const name = normalizeOrderbookPair(pair);
+  if (!payload || typeof payload !== "object") return emptyOrderbook(name);
+  if (payload.books && typeof payload.books === "object") {
+    const nested =
+      payload.books[name] || payload.books[pair] || payload.books[normalizeOrderbookPair(payload.pair || name)];
+    if (nested && typeof nested === "object") return nested;
+  }
+  if (payload.book && typeof payload.book === "object") {
+    const inner = payload.book;
+    if (inner.books && typeof inner.books === "object") return bookFromMarketPayload(inner, name);
+    if (Array.isArray(inner.bids) || Array.isArray(inner.asks)) return inner;
+  }
+  if (Array.isArray(payload.bids) || Array.isArray(payload.asks)) return payload;
+  return emptyOrderbook(name);
+}
+
 export function emptyOrderbook(pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(pair);
   const quote = name.split("/")[1] || "XRP";

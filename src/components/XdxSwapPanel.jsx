@@ -3,6 +3,7 @@ import {
   getAmm,
   getLiveLpReserves,
   getOrderbook,
+  getOrderbooks,
   getPrices,
   getWalletAccount,
   getWalletBalances,
@@ -12,7 +13,7 @@ import {
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { ammSpot } from "../ammCurve";
-import { bookHeader, emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
+import { bookFromMarketPayload, bookHeader, emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
 import { IMPACT_HIGH_PCT, IMPACT_WARN_PCT, quoteBridgeSwap, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
 import {
   SWAP_LP_GOVERNANCE_PAIRS,
@@ -207,17 +208,22 @@ export default function XdxSwapPanel() {
     let cancelled = false;
     async function loadMarket() {
       const pairs = marketKey ? marketKey.split("|") : [];
-      const [nextPools, nextPrices, ...pairRows] = await Promise.all([
+      const [nextPools, nextPrices, catalog] = await Promise.all([
         getAmm().catch(() => []),
         getPrices().catch(() => ({})),
-        ...pairs.map(async (nextPair) => {
-          const [book, live] = await Promise.all([
-            getOrderbook(nextPair).catch(() => null),
+        getOrderbooks().catch(() => null),
+      ]);
+      const pairRows = await Promise.all(
+        pairs.map(async (nextPair) => {
+          const have = bookFromMarketPayload(catalog, nextPair);
+          const needOne = !((have.bids || []).length || (have.asks || []).length || have.present);
+          const [one, live] = await Promise.all([
+            needOne ? getOrderbook(nextPair).catch(() => null) : Promise.resolve(null),
             getLiveLpReserves({ pair: nextPair, fresh: true }).catch(() => null),
           ]);
-          return [nextPair, { book: book || emptyOrderbook(nextPair), live }];
-        }),
-      ]);
+          return [nextPair, { book: bookFromMarketPayload(one || catalog, nextPair), live }];
+        })
+      );
       if (cancelled) return;
       setPools(Array.isArray(nextPools) ? nextPools : nextPools?.pools || []);
       setPrices(nextPrices || {});
@@ -263,12 +269,15 @@ export default function XdxSwapPanel() {
   const qty = Number(amount) || 0;
   const fromVenue = venueFrom(markets[fromPair]?.book, markets[fromPair]?.live);
   const toVenue = venueFrom(markets[toPair]?.book, markets[toPair]?.live);
-  const quote = (() => {
+  function quoteForMode(mode) {
     if (!(qty > 0)) return null;
-    if (sellingXdx) return quoteSwap({ ...toVenue, amountIn: qty, sellingXdx: true, routingMode });
-    if (buyingXdx) return quoteSwap({ ...fromVenue, amountIn: qty, sellingXdx: false, routingMode });
-    return quoteBridgeSwap({ amountIn: qty, fromVenue, toVenue, routingMode });
-  })();
+    if (sellingXdx) return quoteSwap({ ...toVenue, amountIn: qty, sellingXdx: true, routingMode: mode });
+    if (buyingXdx) return quoteSwap({ ...fromVenue, amountIn: qty, sellingXdx: false, routingMode: mode });
+    return quoteBridgeSwap({ amountIn: qty, fromVenue, toVenue, routingMode: mode });
+  }
+  const quote = quoteForMode(routingMode);
+  const bookQuote = quoteForMode("book");
+  const ammQuote = quoteForMode("amm");
   const impactHot =
     quote && (Math.abs(quote.priceImpactPercent) >= IMPACT_WARN_PCT || quote.isNegativeSlippage);
   const impactHigh = quote && Math.abs(quote.priceImpactPercent) >= IMPACT_HIGH_PCT;
@@ -429,6 +438,8 @@ export default function XdxSwapPanel() {
       ? (t.swapHave || "Have {amount}").replace("{amount}", formatToken(available, locale, sellingXdx ? 2 : 4))
       : "";
   const gotFill = Boolean(quote?.actualOutput > 0);
+  const bookFill = Number(bookQuote?.actualOutput || bookQuote?.bookOutput || 0);
+  const ammFill = Number(ammQuote?.actualOutput || ammQuote?.ammOutput || 0);
   const routeLabel = gotFill
     ? quote.routeUsed === "amm"
       ? t.swapRoutePool || "Pool"
@@ -516,26 +527,26 @@ export default function XdxSwapPanel() {
                 <div>
                   <dt>{t.swapFromBook || "Order book"}</dt>
                   <dd>
-                    {formatToken(gotFill ? quote.bookOutput || 0 : 0, locale, sellingXdx ? 4 : 2)}
+                    {formatToken(bookFill, locale, sellingXdx ? 4 : 2)}
                     {toTicker ? ` ${toTicker}` : ""}
                   </dd>
                   <small>
                     {(t.swapVenueUsd || "worth {usd}").replace(
                       "{usd}",
-                      formatUsd(gotFill ? tokenUsd(toTicker, quote.bookOutput, prices) : 0, locale)
+                      formatUsd(tokenUsd(toTicker, bookFill, prices), locale)
                     )}
                   </small>
                 </div>
                 <div>
                   <dt>{t.swapFromAmm || "AMM"}</dt>
                   <dd>
-                    {formatToken(gotFill ? quote.ammOutput || 0 : 0, locale, sellingXdx ? 4 : 2)}
+                    {formatToken(ammFill, locale, sellingXdx ? 4 : 2)}
                     {toTicker ? ` ${toTicker}` : ""}
                   </dd>
                   <small>
                     {(t.swapVenueUsd || "worth {usd}").replace(
                       "{usd}",
-                      formatUsd(gotFill ? tokenUsd(toTicker, quote.ammOutput, prices) : 0, locale)
+                      formatUsd(tokenUsd(toTicker, ammFill, prices), locale)
                     )}
                   </small>
                 </div>
