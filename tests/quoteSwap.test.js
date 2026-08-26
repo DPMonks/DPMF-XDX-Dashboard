@@ -153,7 +153,7 @@ test("swap counters are individual assets from active XDX pools, then wallet lin
   const browse = swapCounterOptions({ pools: [activeXrp, activeRlusd, deadXio, listedUnknown] });
   assert.deepEqual(
     browse.map((row) => row.id),
-    ["XRP", "RLUSD", "XIO"]
+    ["XRP", "RLUSD", "XIO", "XSQUAD"]
   );
   assert.equal(
     browse.some((row) => String(row.id).includes("/") || row.id === "XDX" || row.id === "SOLO"),

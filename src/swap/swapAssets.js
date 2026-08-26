@@ -110,6 +110,7 @@ export function swapCounterOptions({ pools = [], lines = [], balances = {}, sign
   if (signedIn) {
     for (const row of quotesFromWalletLines(lines)) add(row);
   } else {
+    for (const row of QUOTE_ASSETS) add(row);
     for (const row of quotesFromActiveXdxPools(pools)) add(row);
   }
   const rows = finishOptions(collected, balances);
