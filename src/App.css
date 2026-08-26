@@ -1869,15 +1869,27 @@ body {
 
 .xdx-swap-layout {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   width: 100%;
   justify-content: stretch;
   align-items: start;
 }
 
+.xdx-swap-main,
+.xdx-swap-guide,
+.xdx-swap-gov {
+  grid-column: 1;
+}
+
 @media (min-width: 768px) {
   .xdx-swap-layout {
     grid-template-columns: minmax(0, 1.25fr) minmax(15rem, 1fr);
+  }
+
+  .xdx-swap-main,
+  .xdx-swap-guide {
+    grid-column: auto;
   }
 
   .xdx-swap-gov {
@@ -4441,6 +4453,21 @@ body {
   .pair-chip {
     padding: 5px 8px;
     font-size: 11px;
+  }
+}
+
+@media (max-width: 767px) {
+  .xdx-swap-layout,
+  .xdx-swap-main,
+  .xdx-swap-guide,
+  .xdx-swap-gov {
+    grid-column: 1;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .xdx-swap-mode-list {
+    max-height: min(40vh, 18rem);
   }
 }
 
