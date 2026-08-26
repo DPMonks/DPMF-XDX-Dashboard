@@ -407,7 +407,7 @@ export default function App() {
 
         <CreatePoolCard pools={ammData} onJoinExisting={openTrade} onCreated={refreshLists} />
 
-        <section className="dashboard-card neon-card" id="pools">
+        <section className="dashboard-card neon-card amm-pools-card" id="pools">
           <h2 className="card-title">{t.ammPools}</h2>
           <AmmCard
             pools={ammData}

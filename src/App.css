@@ -1076,6 +1076,14 @@ body {
   font-size: 1.15rem;
 }
 
+.amm-pools-card {
+  overflow: visible;
+}
+
+.amm-pools {
+  min-width: 0;
+}
+
 .amm-pools-search {
   display: block;
   width: min(360px, 100%);
@@ -1810,18 +1818,25 @@ body {
   align-items: stretch;
 }
 
+.pool-card,
+.pool-card * {
+  box-sizing: border-box;
+}
+
 .pool-card {
   display: grid;
-  grid-template-rows: 32px 92px minmax(0, 1fr) 104px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   grid-template-areas:
     "head"
     "split"
     "stats"
     "actions";
-  height: 420px;
-  min-height: 420px;
-  max-height: 420px;
-  overflow: hidden;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  isolation: isolate;
   background: linear-gradient(180deg, rgba(18, 16, 28, 0.96) 0%, #0b0c10 100%);
   border: 1px solid var(--dpmf-border-soft);
   border-radius: 16px;
@@ -2033,13 +2048,13 @@ body {
   grid-area: stats;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(28px, auto);
   align-content: start;
-  gap: 4px 12px;
+  gap: 8px 12px;
   min-width: 0;
   min-height: 0;
-  margin: 8px 0 0;
-  overflow: hidden;
+  margin: 0;
+  overflow: visible;
 }
 
 .pool-stats > div {
@@ -2081,9 +2096,11 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-items: stretch;
+  align-content: start;
   gap: 8px;
   margin: 0;
-  padding-top: 8px;
+  padding-top: 4px;
+  min-width: 0;
 }
 
 .pool-have {
