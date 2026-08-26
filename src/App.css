@@ -1907,6 +1907,20 @@ body {
   }
 }
 
+.xdx-swap-help {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .xdx-swap-help {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
 .xdx-swap-head {
   display: flex;
   justify-content: space-between;
@@ -2340,12 +2354,10 @@ body {
 
 .xdx-swap-mode-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  max-height: min(52vh, 24rem);
-  overflow: auto;
-  padding-right: 2px;
-  scrollbar-color: var(--dpmf-scroll-thumb) var(--dpmf-scroll-track);
-  scrollbar-width: thin;
+  max-height: none;
+  overflow: visible;
 }
 
 .xdx-swap-radios {
@@ -2355,13 +2367,13 @@ body {
 
 .xdx-swap-radios button {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 16px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-height: 44px;
-  padding: 6px 12px;
+  padding: 6px 8px;
   border: 1px solid var(--dpmf-border-soft);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(11, 12, 16, 0.72);
   color: var(--dpmf-text-main);
   font: inherit;
@@ -2403,15 +2415,17 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  font-size: 14px;
+  gap: 4px;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .xdx-swap-radio-copy em {
-  padding: 2px 6px;
+  padding: 1px 5px;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 8px;
   font-style: normal;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2426,8 +2440,10 @@ body {
   white-space: nowrap;
 }
 
-.xdx-swap-radio-copy small {
-  font-size: 11px;
+.xdx-swap-mode-line {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
   color: var(--dpmf-text-muted);
 }
 
@@ -4460,26 +4476,38 @@ body {
   .xdx-swap-layout,
   .xdx-swap-main,
   .xdx-swap-guide,
-  .xdx-swap-gov {
+  .xdx-swap-gov,
+  .xdx-swap-help {
     grid-column: 1;
     width: 100%;
     max-width: 100%;
   }
 
+  .xdx-swap-main {
+    order: 1;
+  }
+
+  .xdx-swap-guide {
+    order: 2;
+  }
+
+  .xdx-swap-help {
+    order: 3;
+  }
+
+  .xdx-swap-gov {
+    order: 4;
+  }
+
   .xdx-swap-mode-list {
-    max-height: min(40vh, 18rem);
+    max-height: none;
+    overflow: visible;
   }
 }
 
 @media (max-width: 420px) {
   .xdx-swap-radios button {
-    grid-template-columns: 18px minmax(0, 1fr);
     align-items: start;
-  }
-
-  .xdx-swap-fee-badge {
-    grid-column: 2;
-    justify-self: start;
   }
 
   .token-details-grid {

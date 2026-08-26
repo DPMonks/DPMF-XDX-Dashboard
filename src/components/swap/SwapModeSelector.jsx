@@ -21,11 +21,10 @@ export default function SwapModeSelector({ value, onChange }) {
             <span className="xdx-swap-radio-copy">
               <b>
                 {mode.title}
-                {mode.recommended ? <em>Recommended</em> : null}
+                {mode.recommended ? <em>Rec</em> : null}
               </b>
-              <small>{mode.short}</small>
+              <span className="xdx-swap-fee-badge">{feeBadgeForMode(mode.id)}</span>
             </span>
-            <span className="xdx-swap-fee-badge">{feeBadgeForMode(mode.id)}</span>
           </button>
         );
       })}

@@ -17,7 +17,7 @@ import { ammSpot } from "../ammCurve";
 import { bookFromMarketPayload, bookHeader, emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
 import { quoteSelectedPair, venueFromDirectMarket } from "../swap/directPair";
 import { IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
-import { normalizeSwapMode } from "../swap/swapModes";
+import { normalizeSwapMode, swapModeById } from "../swap/swapModes";
 import {
   buildSwapHops,
   quotePassesMode,
@@ -671,45 +671,8 @@ export default function XdxSwapPanel() {
             <div className="xdx-swap-radios">
               <SwapModeSelector value={routingMode} onChange={setRoutingMode} />
             </div>
+            <p className="xdx-swap-mode-line">{swapModeById(routingMode).short}</p>
           </div>
-
-          <div key={routingMode} className="xdx-swap-tip">
-            <div className="xdx-swap-tip-scan" aria-hidden="true" />
-            <SwapModeExplanation
-              modeId={routingMode}
-              quote={quote}
-              fromTicker={fromTicker}
-              toTicker={toTicker}
-              hops={hops}
-              developer={developerView}
-              onToggleView={() => setDeveloperView((on) => !on)}
-            />
-          </div>
-
-          {chatRows.length || showRecommendation ? (
-            <div key={recKey || chatRows.join("|")} className="xdx-swap-rec">
-              <div className="xdx-swap-tip-scan" aria-hidden="true" />
-              <p className="xdx-swap-tip-kicker">{t.swapChatTitle || "Smart Swap chat"}</p>
-              {chatRows.map((row) => (
-                <p key={row}>{row}</p>
-              ))}
-              {showRecommendation ? <p>{recText}</p> : null}
-              {showRecommendation ? (
-                <button
-                  type="button"
-                  className="xdx-swap-rec-accept"
-                  onClick={() => {
-                    if (recommendation.id === "half") setAmount(String(recommendation.amountIn));
-                    const nextMode = recommendation.nextMode || recommendation.id;
-                    if (nextMode && nextMode !== "half") setRoutingMode(nextMode);
-                    setAcceptedRecKey(recKey);
-                  }}
-                >
-                  {t.swapRecAccept}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
         </aside>
 
         <aside className="xdx-swap-gov" aria-label={t.swapLpGateTitle}>
@@ -730,6 +693,50 @@ export default function XdxSwapPanel() {
             ))}
           </ul>
         </aside>
+
+        <section className="xdx-swap-help" aria-label={t.swapGuideTitle || "Swap guide"}>
+          <div key={routingMode} className="xdx-swap-tip">
+            <div className="xdx-swap-tip-scan" aria-hidden="true" />
+            <p className="xdx-swap-tip-kicker">{t.swapGuideTitle || "How this swap works"}</p>
+            <SwapModeExplanation
+              modeId={routingMode}
+              quote={quote}
+              fromTicker={fromTicker}
+              toTicker={toTicker}
+              hops={hops}
+              developer={developerView}
+              onToggleView={() => setDeveloperView((on) => !on)}
+            />
+          </div>
+          <div key={recKey || chatRows.join("|") || "chat"} className="xdx-swap-rec">
+            <div className="xdx-swap-tip-scan" aria-hidden="true" />
+            <p className="xdx-swap-tip-kicker">{t.swapChatTitle || "Smart Swap chat"}</p>
+            {chatRows.length || showRecommendation ? (
+              <>
+                {chatRows.map((row) => (
+                  <p key={row}>{row}</p>
+                ))}
+                {showRecommendation ? <p>{recText}</p> : null}
+                {showRecommendation ? (
+                  <button
+                    type="button"
+                    className="xdx-swap-rec-accept"
+                    onClick={() => {
+                      if (recommendation.id === "half") setAmount(String(recommendation.amountIn));
+                      const nextMode = recommendation.nextMode || recommendation.id;
+                      if (nextMode && nextMode !== "half") setRoutingMode(nextMode);
+                      setAcceptedRecKey(recKey);
+                    }}
+                  >
+                    {t.swapRecAccept}
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <p>{t.swapChatIdle || "Enter a size to scan supply and demand on both assets."}</p>
+            )}
+          </div>
+        </section>
       </div>
     </section>
   );

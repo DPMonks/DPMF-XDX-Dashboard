@@ -33,9 +33,9 @@ export default function SwapModeExplanation({
   return (
     <div className="xdx-swap-explain">
       <div className="xdx-swap-explain-head">
-        <p className="xdx-swap-tip-kicker">Route advisor</p>
+        <p className="xdx-swap-tip-kicker">{mode.title}</p>
         <button type="button" className="xdx-swap-view" onClick={onToggleView}>
-          {developer ? "Simple view" : "Technical view"}
+          {developer ? "Simple" : "Technical"}
         </button>
       </div>
       <p>{developer ? mode.technical : mode.user}</p>
