@@ -504,8 +504,11 @@ function mergeDexTape(nativeRows, bridgeRows, reserveMeta, side) {
   const bridged = takeSideLevels(bridgeRows, side, ORDERBOOK_VISIBLE_LEVELS).filter(
     (row) => !seen.has(priceKey(row))
   );
-  const merged = takeSideLevels([...native, ...bridged], side, ORDERBOOK_VISIBLE_LEVELS);
-  return withCumulative(measureAmmAgainstDex(merged, reserveMeta, side), side);
+  const merged = [
+    ...native,
+    ...bridged.slice(0, Math.max(0, ORDERBOOK_VISIBLE_LEVELS - native.length)),
+  ];
+  return withCumulative(measureAmmAgainstDex(takeSideLevels(merged, side, merged.length), reserveMeta, side), side);
 }
 
 function ammTape(impliedRows, side) {

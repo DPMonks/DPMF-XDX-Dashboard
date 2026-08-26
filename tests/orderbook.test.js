@@ -415,6 +415,35 @@ test("composeAmmBook keeps a full AMM tape when native DEX already has 20 levels
   assert.equal(amm.asks.length, 20);
 });
 
+test("composeAmmBook keeps a worse native offer when bridged XRP already fills 20 levels", () => {
+  const xrpAsks = Array.from({ length: 20 }, (_, i) => ({
+    price: 0.00004 + i * 0.0000001,
+    base_size: 1000 + i,
+    source: "dex",
+  }));
+  const book = composeAmmBook(
+    {
+      pair: "XDX/RLUSD",
+      bids: [],
+      asks: [{ price: 0.03, base_size: 1_000_000, source: "dex" }],
+    },
+    {
+      reserve_asset: 50_000_000,
+      reserve_currency: 2500,
+      trading_fee: 1000,
+    },
+    "XDX/RLUSD",
+    {
+      xrpBook: { pair: "XDX/XRP", bids: [], asks: xrpAsks },
+      quotePerXrp: 2,
+    }
+  );
+  const nativeAsk = book.asks.find((row) => row.source === "dex" && row.base_size === 1_000_000);
+  assert.ok(nativeAsk);
+  assert.equal(nativeAsk.price, 0.03);
+  assert.equal(book.asks.filter((row) => row.source === "bridge").length, 19);
+});
+
 test("composeAmmBook keeps bridged XRP DEX on a pair whose AMM already fills 20 rungs", () => {
   const xrp = {
     pair: "XDX/XRP",
