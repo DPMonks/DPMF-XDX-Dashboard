@@ -264,9 +264,10 @@ const en = {
   swapPayFee: "Pay fee, then swap",
   swapConnect: "Connect to swap",
   swapRouteBridge: "Via XDX",
-  swapLpGateTitle: "LP Governance Access",
-  swapLpGateHint: "Hold $10 of LP in any one of XDX/XRP, XDX/RLUSD, XDX/XIO, or XDX/XSQUAD to swap any asset. Buy and sell XDX stay open.",
-  swapLpGateNeed: "Need $10 of LP in XDX/XRP, XDX/RLUSD, XDX/XIO, or XDX/XSQUAD to swap assets that are not XDX.",
+  swapLpGateTitle: "XDX LP Governance",
+  swapLpGateHint:
+    "Unlock any one pair below with $10 of LP. When one pair is unlocked, you can swap any asset for any asset. Buy and sell XDX stay open either way.",
+  swapLpGateNeed: "Unlock any one pair below with $10 of LP to swap any asset for any asset.",
   swapLpGateOpen: "Unlocked",
   swapLpGateClosed: "Locked",
   swapLpChecking: "Checking LP…",

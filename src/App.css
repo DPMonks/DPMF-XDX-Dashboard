@@ -2237,6 +2237,7 @@ body {
   font-size: 12px;
   color: var(--dpmf-text-muted);
   line-height: 1.4;
+  overflow-wrap: break-word;
 }
 
 .xdx-swap-gov-status {
