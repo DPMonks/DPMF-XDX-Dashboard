@@ -3162,28 +3162,50 @@ body {
   margin-top: 10px;
 }
 
+.governance-history-stack {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.governance-history {
+  min-width: 0;
+}
+
 .governance-history h3 {
   margin: 0 0 8px;
   font-size: 13px;
   color: var(--dpmf-text-main);
 }
 
+.governance-history-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .governance-history table {
   width: 100%;
+  min-width: 420px;
   border-collapse: collapse;
   font-size: 12px;
 }
 
 .governance-history th,
 .governance-history td {
-  padding: 6px 4px;
+  padding: 8px 6px;
   text-align: left;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
 }
 
 .governance-history th {
   color: var(--dpmf-text-muted);
   font-weight: 600;
+}
+
+.governance-history tr.is-you td {
+  color: var(--dpmf-neon-lime);
 }
 
 @media (max-width: 700px) {

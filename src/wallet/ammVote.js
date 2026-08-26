@@ -197,6 +197,49 @@ export function activityFromAmmVoteTx(row, address) {
   };
 }
 
+export function formatVoteWeight(weightPct, locale = "en") {
+  const n = Number(weightPct);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toLocaleString(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: n < 1 ? 3 : 2,
+  })}%`;
+}
+
+export function assetVoteRowsFromSlots(slots = [], pair = "") {
+  const name = normalizeVotePair(pair);
+  return (Array.isArray(slots) ? slots : [])
+    .filter((row) => row?.account)
+    .map((row) => ({
+      account: row.account,
+      pair: name || row.pair || "",
+      feePercent: row.feePercent,
+      voteWeight: Number(row.voteWeight) || 0,
+      weightPct: Number(row.weightPct) || 0,
+      status: "active",
+    }));
+}
+
+export function mergeAssetVoteRows(...lists) {
+  const seen = new Set();
+  const out = [];
+  for (const list of lists) {
+    for (const row of Array.isArray(list) ? list : []) {
+      const account = String(row?.account || "").trim();
+      const pair = normalizeVotePair(row?.pair);
+      const key = `${account.toLowerCase()}|${pair}`;
+      if (!account || !pair || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ ...row, account, pair });
+    }
+  }
+  return out.sort((left, right) => {
+    const weight = (Number(right.voteWeight) || 0) - (Number(left.voteWeight) || 0);
+    if (weight) return weight;
+    return String(left.pair).localeCompare(String(right.pair)) || String(left.account).localeCompare(String(right.account));
+  });
+}
+
 export function voteHistoryFromActivity(rows = [], slots = []) {
   const live = new Set(
     (Array.isArray(slots) ? slots : [])
