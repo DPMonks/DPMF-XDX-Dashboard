@@ -4462,9 +4462,19 @@ body {
   font-size: 13px;
 }
 
-.footer-link {
-  display: inline-block;
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 20px;
   margin-top: 10px;
+}
+
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--dpmf-neon-cyan);
   text-decoration: none;
 }
@@ -4474,6 +4484,12 @@ body {
 }
 
 @media (max-width: 1180px) {
+  .footer-link {
+    min-height: 44px;
+    padding: 0 10px;
+    font-size: 16px;
+  }
+
   .pool-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
