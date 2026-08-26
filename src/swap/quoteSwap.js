@@ -81,7 +81,7 @@ export function walkBook({ levels, amountIn, inIsBase } = {}) {
   let left = num(amountIn);
   let out = 0;
   const used = [];
-  for (const row of copyLevels(levels)) {
+  for (const row of copyLevels(levels, { dexOnly: true })) {
     if (!(left > 0)) break;
     if (inIsBase) {
       const take = Math.min(left, row.base_size);
@@ -133,7 +133,9 @@ export function walkHybrid({
   reserveQuote,
   tradingFee = 1000,
 } = {}) {
-  const queue = copyLevels(levels).sort((a, b) => (inIsBase ? b.price - a.price : a.price - b.price));
+  const queue = copyLevels(levels, { dexOnly: true }).sort((a, b) =>
+    inIsBase ? b.price - a.price : a.price - b.price
+  );
   const state = { base: num(reserveBase), quote: num(reserveQuote) };
   let left = num(amountIn);
   let out = 0;

@@ -1007,10 +1007,6 @@ function rememberGoodBook(pair, book) {
 
 async function withLiveTape(composed, pair, pool, extras = {}) {
   const name = normalizeOrderbookPair(pair);
-  if (composed?.dex_present) {
-    rememberGoodBook(name, composed);
-    return composed;
-  }
   const live = await fillNativeBookFromXrpl(name, pool);
   if (live) {
     const filled = {
@@ -1031,6 +1027,7 @@ async function withLiveTape(composed, pair, pool, extras = {}) {
     rememberGoodBook(name, filled);
     return filled;
   }
+  if (composed?.dex_present) rememberGoodBook(name, composed);
   return keepLastGoodBook(lastGoodBooks.get(name), composed, name);
 }
 
@@ -1178,12 +1175,28 @@ async function loadOrderbooks(db) {
     };
   }
 
+  const xrpPoolRow = (lp.pools || []).find(
+    (row) => normalizeOrderbookPair(row.pool_name || row.pool) === "XDX/XRP"
+  );
+  const xrpFilled = await withLiveTape(books["XDX/XRP"], "XDX/XRP", xrpPoolRow);
+  books["XDX/XRP"] = {
+    ...xrpFilled,
+    as_of: xrpFilled.as_of || books["XDX/XRP"]?.as_of || null,
+  };
+
   await Promise.all(
-    FEATURED_ORDERBOOK_PAIRS.map(async (pair) => {
+    FEATURED_ORDERBOOK_PAIRS.filter((pair) => pair !== "XDX/XRP").map(async (pair) => {
       const pool = (lp.pools || []).find(
         (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
       );
-      const filled = await withLiveTape(books[pair], pair, pool);
+      const extras = {
+        xrpBook: books["XDX/XRP"],
+        quotePerXrp: quotePerXrpFromSpots(
+          loadPairReserves(pair, reserveIndex, xrpPool, pool).price || books[pair]?.amm?.price,
+          books["XDX/XRP"]?.amm?.price
+        ),
+      };
+      const filled = await withLiveTape(books[pair], pair, pool, extras);
       books[pair] = {
         ...filled,
         as_of: filled.as_of || books[pair]?.as_of || null,

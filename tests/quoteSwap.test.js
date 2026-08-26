@@ -41,6 +41,20 @@ test("walkBook consumes bids when selling XDX", () => {
   assert.ok(Math.abs(fill.out - (100 * 0.02 + 50 * 0.019)) < 1e-12);
 });
 
+test("walkHybrid does not treat implied AMM tape rows as resting DEX offers", () => {
+  const fill = walkHybrid({
+    inIsBase: true,
+    amountIn: 50,
+    reserveBase: 10_000,
+    reserveQuote: 200,
+    tradingFee: 1000,
+    levels: [{ price: 0.05, base_size: 50, source: "amm" }],
+  });
+  assert.equal(fill.usedDex, false);
+  assert.equal(fill.bookOut, 0);
+  assert.equal(fill.route, "amm");
+});
+
 test("walkHybrid prefers a better book level then finishes on the AMM", () => {
   const fill = walkHybrid({
     inIsBase: true,
