@@ -33,10 +33,13 @@ function scrollToDeck(id) {
   }
   go();
   window.requestAnimationFrame(go);
+  window.setTimeout(go, 300);
+  window.setTimeout(go, 900);
+  window.setTimeout(go, 1800);
   if (typeof ResizeObserver !== "function") return;
   const obs = new ResizeObserver(go);
   obs.observe(document.documentElement);
-  window.setTimeout(() => obs.disconnect(), 1200);
+  window.setTimeout(() => obs.disconnect(), 2500);
 }
 
 export default function SiteJump() {

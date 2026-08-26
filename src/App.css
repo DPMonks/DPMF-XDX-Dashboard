@@ -290,25 +290,6 @@ body {
     gap: 8px;
   }
 
-  .header-brand {
-    gap: 8px;
-  }
-
-  .header-mark {
-    width: 40px;
-    height: 40px;
-  }
-
-  .dashboard-title {
-    font-size: clamp(1.15rem, 6vw, 1.5rem);
-    letter-spacing: 0.04em;
-  }
-
-  .dashboard-subtitle {
-    margin-top: 0.12rem;
-    font-size: 0.78rem;
-  }
-
   .header-actions {
     gap: 8px;
   }
@@ -4629,18 +4610,20 @@ body {
     flex-direction: column;
     align-items: stretch;
     text-align: center;
-    gap: 10px;
+    gap: 8px;
   }
 
   .header-brand {
+    flex: 0 0 auto;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
   }
 
   .header-actions {
     width: 100%;
     flex-direction: column;
     align-items: stretch;
+    gap: 8px;
   }
 
   .wallet-control,
@@ -4856,6 +4839,21 @@ body {
 }
 
 @media (max-width: 767px) {
+  .header-mark {
+    width: 40px;
+    height: 40px;
+  }
+
+  .dashboard-title {
+    font-size: clamp(1.15rem, 6vw, 1.5rem);
+    letter-spacing: 0.04em;
+  }
+
+  .dashboard-subtitle {
+    margin-top: 0.12rem;
+    font-size: 0.78rem;
+  }
+
   .xdx-swap-layout,
   .xdx-swap-main,
   .xdx-swap-guide,
