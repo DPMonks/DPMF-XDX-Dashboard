@@ -29,6 +29,7 @@ import {
   loadXrpSparkline,
 } from "./xrplToCatalog.js";
 import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
+import { loadLedgerPoolVolumes, mergeVolumeMaps } from "./ammPoolVolume.js";
 import { QUOTE_ASSETS } from "../src/xaman/tradeTx.js";
 
 export function knownLivePoolSpecs(extra = []) {
@@ -292,12 +293,11 @@ export async function loadLiveMarket(options = {}) {
     fetchImpl: options.fetchImpl,
     pairs: liveSpecs.map((spec) => spec.pair),
   }).catch(() => ({}));
-  const pools = applyPoolVolumes(
-    liveSpecs
-      .map((spec, index) => poolRowFromLive(spec, lives[index], prices))
-      .filter((row) => row.amm_account || row.reserve_asset || row.lp_supply),
-    volumes
-  );
+  const liveRows = liveSpecs
+    .map((spec, index) => poolRowFromLive(spec, lives[index], prices))
+    .filter((row) => row.amm_account || row.reserve_asset || row.lp_supply);
+  const ledgerVolumes = await loadLedgerPoolVolumes(liveRows, options).catch(() => ({}));
+  const pools = applyPoolVolumes(liveRows, mergeVolumeMaps(volumes, ledgerVolumes));
   const volume24h = num(volumes["XDX/XRP"]?.volume24hXdx) || num(pools[0]?.volume24h);
   const volume24hUsd = num(volumes["XDX/XRP"]?.volume24hUsd);
   const volume24hXrp = num(volumes["XDX/XRP"]?.volume24hXrp) || num(token.vol24hXrp);

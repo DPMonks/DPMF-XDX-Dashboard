@@ -1,4 +1,5 @@
 import { preferRailwayXdxVolume } from "../src/utils/lpVolume.js";
+import { mergeTradePrints } from "../src/xdxTrades.js";
 import { payloadUsable, preferUsable, recallCatalog, rememberCatalog } from "./sourceControl.js";
 
 function asObject(value) {
@@ -211,6 +212,14 @@ export function mergePoolRows(dbPools, livePools) {
   return [...byKey.values()];
 }
 
+export function mergeTradeFlows(db, live) {
+  const dbRows = Array.isArray(db) ? db : Array.isArray(db?.rows) ? db.rows : [];
+  const liveRows = Array.isArray(live) ? live : Array.isArray(live?.rows) ? live.rows : [];
+  if (!liveRows.length) return db;
+  if (!dbRows.length) return live;
+  return mergeTradePrints(dbRows, liveRows);
+}
+
 export function mergeLivePools(db = {}, live = {}) {
   const livePools = Array.isArray(live.pools) ? live.pools : [];
   const dbPools = Array.isArray(db.pools) ? db.pools : Array.isArray(db) ? db : [];
@@ -286,7 +295,7 @@ export function mergeCatalogPayload(suffix, db, live) {
   if (path === "issuer-locked") return mergeIssuerLocked(db, live);
   if (/\/count$/.test(path) || path.endsWith("/count")) return mergeCountPayload(db, live);
   if (path === "xdx-flows" || path === "trades" || path === "charts/trades") {
-    return hasRows(db) ? db : live;
+    return mergeTradeFlows(db, live);
   }
   if (/^charts\//.test(path) || path === "chart/candles" || path === "charts/candles" || path.startsWith("sparkline/")) {
     return hasRows(db) ? db : live;

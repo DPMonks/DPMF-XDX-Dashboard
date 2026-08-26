@@ -241,7 +241,7 @@ function collectVolumePairs(requested = [], dex = {}, gecko = {}, flows = []) {
   const pairs = new Set();
   for (const value of Array.isArray(requested) ? requested : []) {
     const pair = xdxPairKey(value);
-    if (/^XDX\/[A-Z0-9]{2,12}$/.test(pair)) pairs.add(pair);
+    if (/^XDX\/[A-Z0-9$]{2,24}$/.test(pair)) pairs.add(pair);
   }
   for (const row of Array.isArray(dex?.pairs) ? dex.pairs : []) {
     const pair = pairFromDexRow(row);
@@ -253,7 +253,7 @@ function collectVolumePairs(requested = [], dex = {}, gecko = {}, flows = []) {
   }
   for (const row of Array.isArray(flows) ? flows : []) {
     const pair = xdxPairKey(row.pool || row.pool_name || row.pair);
-    if (/^XDX\/[A-Z0-9]{2,12}$/.test(pair)) pairs.add(pair);
+    if (/^XDX\/[A-Z0-9$]{2,24}$/.test(pair)) pairs.add(pair);
   }
   return [...pairs];
 }

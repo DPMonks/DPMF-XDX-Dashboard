@@ -293,7 +293,7 @@ export function volumesFromFlows(flows = [], { now = Date.now(), windowMs = DAY_
     const ts = new Date(row.timestamp || row.time).getTime();
     if (!Number.isFinite(ts) || ts < cutoff) continue;
     const pair = xdxPairKey(row.pool || row.pool_name || row.pair);
-    if (!/^XDX\/[A-Z0-9]{2,12}$/.test(pair)) continue;
+    if (!/^XDX\/[A-Z0-9$]{2,24}$/.test(pair)) continue;
     byPair[pair] = (byPair[pair] || 0) + Math.abs(Number(row.xdx) || 0);
   }
   return byPair;
@@ -342,10 +342,12 @@ export function preferRailwayXdxVolume(dbRow = {}, liveRow = {}) {
   const liveXdx = catalogXdxVolume24h(liveRow);
   const db7d = catalogXdxVolume7d(dbRow);
   const live7d = catalogXdxVolume7d(liveRow);
-  if (looksLikeXdxVolume(dbXdx)) {
+  const dbTagged = numPos(dbRow.volume24hXdx ?? dbRow.volume_24h_xdx);
+  const dbUsable = dbTagged || (looksLikeXdxVolume(dbXdx) ? dbXdx : 0);
+  if (dbUsable && dbUsable >= liveXdx) {
     return {
-      volume24h: dbXdx,
-      volume24hXdx: numPos(dbRow.volume24hXdx) || dbXdx,
+      volume24h: dbUsable,
+      volume24hXdx: dbUsable,
       volume24hXrp: numPos(dbRow.volume24hXrp) || numPos(liveRow.volume24hXrp) || null,
       volume24hUsd: numPos(dbRow.volume24hUsd) || numPos(liveRow.volume24hUsd) || null,
       volume7d: db7d || live7d || null,

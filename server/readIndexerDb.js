@@ -41,7 +41,9 @@ import {
   FEATURED_ORDERBOOK_PAIRS,
 } from "../src/orderbook.js";
 import { carryActivityMetrics, issuedActivitySeries } from "../src/activityHistory.js";
-import { inferTradesFromHistory } from "../src/xdxTrades.js";
+import { inferTradesFromHistory, mergeTradePrints } from "../src/xdxTrades.js";
+import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
+import { loadLedgerPoolVolumes, mergeVolumeMaps } from "./ammPoolVolume.js";
 import { loadIssuedHolderHistory } from "./issuedHolderHistory.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
 import { attachQuoteXrpPrices, loadQuoteXrpRates } from "./quoteXrpMarket.js";
@@ -1617,9 +1619,23 @@ async function loadXdxLpPools(db) {
     };
   });
 
+  const pairs = pools.map((row) => row.pool_name || row.pool).filter(Boolean);
+  const [freeVolumes, ledgerVolumes] = await Promise.all([
+    loadPoolXdxVolumes({
+      token: { exchXrp: xrpUsd > 0 && xdxUsd > 0 ? xdxUsd / xrpUsd : 0 },
+      reserveXdx: Number(pools[0]?.reserve_asset || 0),
+      reserveXrp: Number(pools[0]?.reserve_currency || 0),
+      xdxUsd,
+      xrpUsd,
+      pairs,
+    }).catch(() => ({})),
+    loadLedgerPoolVolumes(pools).catch(() => ({})),
+  ]);
+  const withVolume = applyPoolVolumes(pools, mergeVolumeMaps(freeVolumes, ledgerVolumes));
+
   return {
-    count: pools.length,
-    pools,
+    count: withVolume.length,
+    pools: withVolume,
     catching_up: false,
     source: "db",
   };
@@ -2057,17 +2073,15 @@ async function readAmmTrades(db) {
      LIMIT 500`
       )
     : { rows: [] };
-  if (named.rows.length) {
-    return named.rows.map((row) => ({
-      timestamp: row.timestamp,
-      pool: row.pool_name || "XDX/XRP",
-      side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
-      xdx: Number(row.xdx || row.amount || 0),
-      quote: Number(row.quote || 0),
-      price: Number(row.price || 0),
-      account: row.account || null,
-    }));
-  }
+  const namedPrints = named.rows.map((row) => ({
+    timestamp: row.timestamp,
+    pool: row.pool_name || "XDX/XRP",
+    side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
+    xdx: Number(row.xdx || row.amount || 0),
+    quote: Number(row.quote || 0),
+    price: Number(row.price || 0),
+    account: row.account || null,
+  }));
 
   const history = await tryQuery(
     db,
@@ -2091,7 +2105,7 @@ async function readAmmTrades(db) {
   const rows = [...history.rows, ...latest.rows].sort(
     (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
   );
-  return inferTradesFromHistory(rows);
+  return mergeTradePrints(namedPrints, inferTradesFromHistory(rows));
 }
 
 async function loadCatalogAmmMarketCap(db, xdxUsd) {
