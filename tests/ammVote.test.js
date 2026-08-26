@@ -7,6 +7,10 @@ import {
   feeUnitsFromPercent,
   governanceFromAmmInfo,
   medianVotedFee,
+  assetVoteRowsFromSlots,
+  displayVotePair,
+  formatVoteWeight,
+  mergeAssetVoteRows,
   voteHistoryFromActivity,
   weightedVotedFee,
   knownGovernancePairs,
@@ -25,6 +29,14 @@ test("pairFromVoteAssets tags XDX/XIO from the XIO hex or issuer", () => {
     pairFromVoteAssets({ currency: XDX_CURRENCY, issuer: XDX_ISSUER }, { currency: "XIO", issuer: XIO_ISSUER }),
     "XDX/XIO"
   );
+  assert.equal(
+    pairFromVoteAssets(
+      { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
+      { currency: "5553444300000000000000000000000000000000", issuer: "rUsdc" }
+    ),
+    "XDX/USDC"
+  );
+  assert.equal(displayVotePair("XDX/5553444300000000000000000000000000000000"), "XDX/USDC");
 });
 
 test("fee units map 0.25% to 250 and back", () => {
@@ -89,6 +101,32 @@ test("activityFromAmmVoteTx keeps a signed fee vote for recent activity", () => 
   assert.equal(row.kind, "vote");
   assert.equal(row.pair, "XDX/XRP");
   assert.equal(row.feePercent, 0.25);
+});
+
+test("asset vote rows list every wallet that holds a live AMM vote slot", () => {
+  const gov = governanceFromAmmInfo(
+    {
+      amm: {
+        account: "rAmm",
+        trading_fee: 1000,
+        lp_token: { value: "1000" },
+        vote_slots: [
+          { account: "rWhale", trading_fee: 1000, vote_weight: 60000 },
+          { account: "rSmall", trading_fee: 250, vote_weight: 4000 },
+        ],
+      },
+    },
+    { pair: "XDX/XAH" }
+  );
+  const rows = assetVoteRowsFromSlots(gov.voteSlots, "XDX/XAH");
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].account, "rWhale");
+  assert.equal(rows[0].pair, "XDX/XAH");
+  assert.equal(rows[0].feePercent, 1);
+  assert.equal(formatVoteWeight(rows[0].weightPct), "60%");
+  const merged = mergeAssetVoteRows(rows, assetVoteRowsFromSlots(gov.voteSlots, "xdx / xah"));
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].account, "rWhale");
 });
 
 test("voteHistoryFromActivity marks an older vote on the same pair replaced", () => {

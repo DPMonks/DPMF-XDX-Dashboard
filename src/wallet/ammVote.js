@@ -9,6 +9,7 @@ import {
   XSQUAD_ISSUER,
   asciiCurrencyHex,
 } from "../constants/ledger.js";
+import { hexToAscii } from "../xaman/signMarker.js";
 
 export const AMM_FEE_UNITS = 100_000;
 export const AMM_FEE_MAX_UNITS = 1000;
@@ -109,16 +110,35 @@ export function xdxIssue() {
   return { currency: XDX_CURRENCY, issuer: XDX_ISSUER };
 }
 
+export function quoteTickerFromCurrency(code, issuer = "") {
+  const raw = String(code || "")
+    .trim()
+    .toUpperCase()
+    .replace(/^0X/, "");
+  const who = String(issuer || "");
+  if (!raw || raw === "XRP") return "XRP";
+  if (raw === "XDX" || raw.startsWith("584458")) return "XDX";
+  if (raw === RLUSD_HEX || raw === "RLUSD") return "RLUSD";
+  if (raw === "XIO" || raw === XIO_HEX || who === XIO_ISSUER) return "XIO";
+  if (raw === XSQUAD_HEX || raw === "XSQUAD" || who === XSQUAD_ISSUER) return "XSQUAD";
+  if (/^[A-Z0-9.$]{2,12}$/.test(raw)) return raw;
+  if (/^[A-F0-9]{40}$/.test(raw)) {
+    const ascii = hexToAscii(raw).replace(/\0+$/g, "").trim();
+    if (/^[A-Za-z0-9.$]{2,20}$/.test(ascii)) return ascii.toUpperCase();
+  }
+  return "";
+}
+
+export function displayVotePair(pair) {
+  const name = normalizeVotePair(pair);
+  const quote = quoteTickerFromCurrency(name.includes("/") ? name.split("/")[1] : name) || "XRP";
+  return `XDX/${quote}`;
+}
+
 export function pairFromVoteAssets(asset, asset2) {
   const codes = [asset, asset2].map((row) => {
     if (!row || row.currency === "XRP") return "XRP";
-    const code = String(row.currency || "").toUpperCase();
-    if (code === "XDX" || code.startsWith("584458")) return "XDX";
-    if (code === RLUSD_HEX || code === "RLUSD") return "RLUSD";
-    if (code === "XIO" || code === XIO_HEX || row.issuer === XIO_ISSUER) return "XIO";
-    if (code === XSQUAD_HEX || code === "XSQUAD" || row.issuer === XSQUAD_ISSUER) return "XSQUAD";
-    if (/^[A-Z0-9]{3}$/.test(code)) return code;
-    return quoteIdFromName(code) || "XRP";
+    return quoteTickerFromCurrency(row.currency, row.issuer) || "XRP";
   });
   const quote = codes.find((code) => code !== "XDX") || "XRP";
   return `XDX/${quote}`;
@@ -195,6 +215,49 @@ export function activityFromAmmVoteTx(row, address) {
     txid: String(row.hash || tx.hash || "").toUpperCase() || null,
     status: "active",
   };
+}
+
+export function formatVoteWeight(weightPct, locale = "en") {
+  const n = Number(weightPct);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toLocaleString(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: n < 1 ? 3 : 2,
+  })}%`;
+}
+
+export function assetVoteRowsFromSlots(slots = [], pair = "") {
+  const name = displayVotePair(pair || "XDX/XRP");
+  return (Array.isArray(slots) ? slots : [])
+    .filter((row) => row?.account)
+    .map((row) => ({
+      account: row.account,
+      pair: displayVotePair(row.pair || name),
+      feePercent: row.feePercent,
+      voteWeight: Number(row.voteWeight) || 0,
+      weightPct: Number(row.weightPct) || 0,
+      status: "active",
+    }));
+}
+
+export function mergeAssetVoteRows(...lists) {
+  const seen = new Set();
+  const out = [];
+  for (const list of lists) {
+    for (const row of Array.isArray(list) ? list : []) {
+      const account = String(row?.account || "").trim();
+      const pair = normalizeVotePair(row?.pair);
+      const key = `${account.toLowerCase()}|${pair}`;
+      if (!account || !pair || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ ...row, account, pair });
+    }
+  }
+  return out.sort((left, right) => {
+    const weight = (Number(right.voteWeight) || 0) - (Number(left.voteWeight) || 0);
+    if (weight) return weight;
+    return String(left.pair).localeCompare(String(right.pair)) || String(left.account).localeCompare(String(right.account));
+  });
 }
 
 export function voteHistoryFromActivity(rows = [], slots = []) {

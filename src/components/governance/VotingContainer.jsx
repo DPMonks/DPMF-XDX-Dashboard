@@ -8,8 +8,10 @@ import { lpHeldForPair, resolveQuote, WALLET_EVENTS } from "../../xaman/tradeTx"
 import { useXamanPayload } from "../../xaman/useXamanPayload";
 import {
   ammVoteTxjson,
+  assetVoteRowsFromSlots,
   feePercentFromUnits,
   knownGovernancePairs,
+  mergeAssetVoteRows,
   normalizeVotePair,
   poolForVotePair,
   voteHistoryFromActivity,
@@ -30,6 +32,7 @@ export default function VotingContainer() {
   const [pair, setPair] = useState("XDX/XRP");
   const [gov, setGov] = useState(null);
   const [history, setHistory] = useState([]);
+  const [assetHistory, setAssetHistory] = useState([]);
   const [fee, setFee] = useState(0.25);
   const [confirming, setConfirming] = useState(false);
   const [needLp, setNeedLp] = useState(false);
@@ -98,6 +101,37 @@ export default function VotingContainer() {
       window.removeEventListener("dpmf-trade-executed", onRefresh);
     };
   }, [pair, walletAddress, selectedPool, held]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAssetVotes() {
+      const names = knownGovernancePairs(pools, [...lpRows, { pair }]).slice(0, 8);
+      const lists = await Promise.all(
+        names.map(async (name) => {
+          const pool = poolForVotePair(pools, lpRows, name);
+          const next = await getPoolGovernance(name, "", {
+            issuer: pool?.quote_issuer,
+            hex: pool?.quote_hex,
+            ammAccount: pool?.amm_account || pool?.amm,
+          }).catch(() => null);
+          return assetVoteRowsFromSlots(next?.voteSlots, name);
+        })
+      );
+      if (!cancelled) setAssetHistory(mergeAssetVoteRows(...lists));
+    }
+    const startLoad = setTimeout(loadAssetVotes, 0);
+    function onRefresh() {
+      loadAssetVotes();
+    }
+    window.addEventListener("dpmf-wallet-refresh", onRefresh);
+    window.addEventListener("dpmf-trade-executed", onRefresh);
+    return () => {
+      cancelled = true;
+      clearTimeout(startLoad);
+      window.removeEventListener("dpmf-wallet-refresh", onRefresh);
+      window.removeEventListener("dpmf-trade-executed", onRefresh);
+    };
+  }, [pools, lpRows, pair]);
 
   function askConfirm() {
     if (!signedAccount) {
@@ -177,7 +211,13 @@ export default function VotingContainer() {
         locale={locale}
         t={t}
       />
-      <VoteHistory rows={history} locale={locale} t={t} />
+      <VoteHistory
+        rows={history}
+        assetRows={mergeAssetVoteRows(assetVoteRowsFromSlots(gov?.voteSlots, pair), assetHistory)}
+        walletAddress={signedAccount}
+        locale={locale}
+        t={t}
+      />
       {error ? <p className="wallet-error">{error}</p> : null}
       <WalletModal
         visible={status === "loading" || status === "waiting"}
