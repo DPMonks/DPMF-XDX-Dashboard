@@ -147,11 +147,12 @@ test("wallet rank keeps a Railway rank and fills a blank one", () => {
   assert.equal(filled.source, "xrpl");
 });
 
-test("populated Railway history wins over the free tape", () => {
+test("Railway trade history merges with the live tape instead of hiding it", () => {
   const db = [{ timestamp: "2026-01-01T00:00:00.000Z", xdx: 10, side: "buy" }];
   const live = [{ timestamp: "2026-08-24T00:00:00.000Z", xdx: 99, side: "sell", source: "xrpl.to" }];
   const kept = mergeCatalogPayload("xdx-flows", db, live);
-  assert.equal(kept[0].xdx, 10);
+  assert.equal(kept[0].xdx, 99);
+  assert.equal(kept[1].xdx, 10);
   const empty = mergeCatalogPayload("xdx-flows", [], live);
   assert.equal(empty[0].xdx, 99);
 });
