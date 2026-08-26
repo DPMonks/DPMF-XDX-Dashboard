@@ -2343,10 +2343,11 @@ body {
 }
 
 .xdx-swap-amount > span {
-  font-size: 11px;
-  letter-spacing: 0.05em;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--dpmf-text-muted);
+  color: var(--dpmf-neon-cyan);
 }
 
 .xdx-swap-amount-field {
@@ -2357,10 +2358,10 @@ body {
   min-height: 56px;
   padding: 8px 10px 8px 14px;
   box-sizing: border-box;
-  border: 1px solid rgba(0, 234, 255, 0.62);
+  border: 2px solid var(--dpmf-neon-cyan);
   border-radius: 12px;
-  background: #050507;
-  box-shadow: inset 0 0 0 1px rgba(0, 234, 255, 0.14), 0 0 16px rgba(0, 234, 255, 0.1);
+  background: #1e2030;
+  box-shadow: inset 0 0 0 1px rgba(0, 234, 255, 0.18), 0 0 16px rgba(0, 234, 255, 0.12);
 }
 
 .xdx-swap-amount-field:focus-within {
