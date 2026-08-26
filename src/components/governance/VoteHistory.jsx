@@ -23,6 +23,7 @@ export default function VoteHistory({ rows, assetRows, walletAddress, locale, t 
             <table>
               <thead>
                 <tr>
+                  <th className="is-date">{t.voteDate}</th>
                   <th>{t.voteWallet}</th>
                   <th>{t.pair}</th>
                   <th>{t.feeVoted}</th>
@@ -38,6 +39,7 @@ export default function VoteHistory({ rows, assetRows, walletAddress, locale, t 
                       key={`${row.account}-${row.pair}-${index}`}
                       className={mine ? "is-you" : undefined}
                     >
+                      <td className="is-date">{formatDay(row.timestamp, locale)}</td>
                       <td title={row.account}>{shortAddress(row.account)}</td>
                       <td>{row.pair}</td>
                       <td>{formatFeePercent(row.feePercent, locale)}</td>
@@ -57,7 +59,7 @@ export default function VoteHistory({ rows, assetRows, walletAddress, locale, t 
             <table>
               <thead>
                 <tr>
-                  <th>{t.voteDate}</th>
+                  <th className="is-date">{t.voteDate}</th>
                   <th>{t.pair}</th>
                   <th>{t.feeVoted}</th>
                   <th>{t.voteStatus}</th>
@@ -66,7 +68,7 @@ export default function VoteHistory({ rows, assetRows, walletAddress, locale, t 
               <tbody>
                 {yours.map((row, index) => (
                   <tr key={row.txid || `${row.pair}-${row.timestamp}-${index}`}>
-                    <td>{formatDay(row.timestamp, locale)}</td>
+                    <td className="is-date">{formatDay(row.timestamp, locale)}</td>
                     <td>{row.pair}</td>
                     <td>{formatFeePercent(row.feePercent, locale)}</td>
                     <td>{row.status === "replaced" ? t.voteReplaced : t.voteActive}</td>

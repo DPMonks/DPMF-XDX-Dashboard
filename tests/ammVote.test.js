@@ -7,6 +7,7 @@ import {
   feeUnitsFromPercent,
   governanceFromAmmInfo,
   medianVotedFee,
+  attachVoteTimestamps,
   assetVoteRowsFromSlots,
   displayVotePair,
   formatVoteWeight,
@@ -101,6 +102,24 @@ test("activityFromAmmVoteTx keeps a signed fee vote for recent activity", () => 
   assert.equal(row.kind, "vote");
   assert.equal(row.pair, "XDX/XRP");
   assert.equal(row.feePercent, 0.25);
+  assert.equal(row.timestamp, "2026-08-23T02:00:00.000Z");
+});
+
+test("activityFromAmmVoteTx does not invent a vote date when the ledger omitted one", () => {
+  const row = activityFromAmmVoteTx(
+    {
+      tx_json: {
+        TransactionType: "AMMVote",
+        Account: "rVoter",
+        TradingFee: 250,
+        Asset: { currency: "XDX", issuer: XDX_ISSUER },
+        Asset2: { currency: "XRP" },
+      },
+      meta: { TransactionResult: "tesSUCCESS" },
+    },
+    "rVoter"
+  );
+  assert.equal(row.timestamp, null);
 });
 
 test("asset vote rows list every wallet that holds a live AMM vote slot", () => {
@@ -127,6 +146,28 @@ test("asset vote rows list every wallet that holds a live AMM vote slot", () => 
   const merged = mergeAssetVoteRows(rows, assetVoteRowsFromSlots(gov.voteSlots, "xdx / xah"));
   assert.equal(merged.length, 2);
   assert.equal(merged[0].account, "rWhale");
+});
+
+test("attachVoteTimestamps uses the latest AMMVote date for each wallet and pair", () => {
+  const rows = attachVoteTimestamps(
+    [
+      { account: "rDPMFBANK", pair: "XDX/RLUSD", feePercent: 1 },
+      { account: "rOther", pair: "XDX/USD", feePercent: 0.25 },
+    ],
+    [
+      { kind: "vote", account: "rDPMFBANK", pair: "XDX/RLUSD", timestamp: "2026-08-20T12:00:00.000Z", txid: "OLD" },
+      { kind: "vote", account: "rDPMFBANK", pair: "XDX/RLUSD", timestamp: "2026-08-25T09:15:00.000Z", txid: "NEW" },
+      { kind: "vote", account: "rDPMFBANK", pair: "XDX/XRP", timestamp: "2026-08-26T01:00:00.000Z", txid: "XRP" },
+    ]
+  );
+  assert.equal(rows[0].timestamp, "2026-08-25T09:15:00.000Z");
+  assert.equal(rows[0].txid, "NEW");
+  assert.equal(rows[1].timestamp, undefined);
+  const listed = assetVoteRowsFromSlots(
+    [{ account: "rWhale", pair: "XDX/XAH", feePercent: 1, voteWeight: 60000, weightPct: 60, timestamp: "2026-08-24T00:00:00.000Z" }],
+    "XDX/XAH"
+  );
+  assert.equal(listed[0].timestamp, "2026-08-24T00:00:00.000Z");
 });
 
 test("voteHistoryFromActivity marks an older vote on the same pair replaced", () => {

@@ -4358,9 +4358,13 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+.governance-history .is-date {
+  min-width: 6.5rem;
+}
+
 .governance-history table {
   width: 100%;
-  min-width: 420px;
+  min-width: 560px;
   border-collapse: collapse;
   font-size: 12px;
 }

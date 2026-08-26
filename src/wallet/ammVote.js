@@ -54,6 +54,8 @@ export function voteSlotsFromAmm(amm = {}) {
         feePercent: feePercentFromUnits(units),
         voteWeight: Number.isFinite(weight) ? weight : 0,
         weightPct: Number.isFinite(weight) ? weight / 1000 : 0,
+        timestamp: entry.timestamp || entry.close_time_iso || null,
+        txid: entry.txid || entry.hash || null,
       };
     })
     .filter(Boolean)
@@ -177,7 +179,7 @@ export function governanceFromAmmInfo(result = {}, { address = "", pair = "XDX/X
     weightedFeePct: weightedVotedFee(slots) ?? feePercentFromUnits(amm.trading_fee),
     medianFeePct: medianVotedFee(slots),
     voteCount: slots.length,
-    voteSlots: slots,
+    voteSlots: slots.map((row) => ({ ...row, pair })),
     yourVote: yours,
     lpSupply: Number.isFinite(lpSupply) ? lpSupply : null,
     lpBalance: held,
@@ -202,7 +204,7 @@ export function activityFromAmmVoteTx(row, address) {
     (Number.isFinite(Number(row.date ?? tx.date))
       ? new Date((Number(row.date ?? tx.date) + 946684800) * 1000).toISOString()
       : row.timestamp) ||
-    new Date().toISOString();
+    null;
   return {
     kind: "vote",
     account: tx.Account || address || null,
@@ -236,6 +238,8 @@ export function assetVoteRowsFromSlots(slots = [], pair = "") {
       feePercent: row.feePercent,
       voteWeight: Number(row.voteWeight) || 0,
       weightPct: Number(row.weightPct) || 0,
+      timestamp: row.timestamp || null,
+      txid: row.txid || null,
       status: "active",
     }));
 }
@@ -257,6 +261,33 @@ export function mergeAssetVoteRows(...lists) {
     const weight = (Number(right.voteWeight) || 0) - (Number(left.voteWeight) || 0);
     if (weight) return weight;
     return String(left.pair).localeCompare(String(right.pair)) || String(left.account).localeCompare(String(right.account));
+  });
+}
+
+export function voteDateKey(account, pair) {
+  return `${String(account || "").trim().toLowerCase()}|${normalizeVotePair(pair)}`;
+}
+
+export function attachVoteTimestamps(slots = [], activity = []) {
+  const latest = new Map();
+  for (const row of Array.isArray(activity) ? activity : []) {
+    if (!row?.account || String(row.kind || "vote") !== "vote") continue;
+    const ts = Date.parse(row.timestamp);
+    if (!Number.isFinite(ts)) continue;
+    const key = voteDateKey(row.account, row.pair || row.pool);
+    const prev = latest.get(key);
+    if (!prev || ts > prev.ts) {
+      latest.set(key, { timestamp: row.timestamp, txid: row.txid || null, ts });
+    }
+  }
+  return (Array.isArray(slots) ? slots : []).map((row) => {
+    const hit = latest.get(voteDateKey(row.account, row.pair));
+    if (!hit) return row;
+    return {
+      ...row,
+      timestamp: row.timestamp || hit.timestamp,
+      txid: row.txid || hit.txid,
+    };
   });
 }
 
