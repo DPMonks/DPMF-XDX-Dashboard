@@ -525,7 +525,7 @@ export function quoteTrustSetTxjson(account, quote) {
 }
 
 export function hasQuoteTrustline(lines, quote = {}) {
-  if (!quote?.issuer) return true;
+  if (!quote?.issuer) return false;
   const issuer = String(quote.issuer || "").toUpperCase();
   const codes = new Set(
     [quote.currency, quote.hex, quote.id, quote.label, quoteLedgerCurrency(quote)]

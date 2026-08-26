@@ -49,6 +49,8 @@ export function overlayLiveAmmReserves(row = {}, live = null) {
     trading_fee: live.trading_fee ?? row.trading_fee,
     amm_account: live.amm_account || row.amm_account || row.amm || null,
     lp_currency: live.lp_currency || row.lp_currency || row.lp_currency_hex || null,
+    quote_issuer: live.quote_issuer || live.issuer || row.quote_issuer || null,
+    quote_hex: live.quote_hex || live.hex || row.quote_hex || null,
     reserve_source: "amm_info",
   };
 }
@@ -140,6 +142,8 @@ export function poolReservesFromAmmInfo(result) {
       : issuedAmountValue(second);
   const lpSupply = issuedAmountValue(amm.lp_token);
   const pair = pairFromAmmInfo(amm);
+  const quoteAmt = firstIsXdx ? second : secondIsXdx ? first : second;
+  const quoteCurrency = quoteAmt && typeof quoteAmt === "object" ? String(quoteAmt.currency || "") : "";
   return {
     amm_account: amm.account || null,
     lp_supply: lpSupply,
@@ -151,5 +155,7 @@ export function poolReservesFromAmmInfo(result) {
     trading_fee: amm.trading_fee ?? null,
     pair,
     quote: pair.includes("/") ? pair.split("/")[1] : "",
+    quote_issuer: quoteAmt && typeof quoteAmt === "object" ? quoteAmt.issuer || null : null,
+    quote_hex: /^[A-Fa-f0-9]{40}$/.test(quoteCurrency) ? quoteCurrency.toUpperCase() : null,
   };
 }

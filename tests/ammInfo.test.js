@@ -29,6 +29,27 @@ test("poolReservesFromAmmInfo reads XDX/USDC ledger reserves", () => {
   assert.equal(row.lp_supply, 284023);
   assert.equal(row.reserve_xdx, 80000);
   assert.equal(row.reserve_currency, 250);
+  assert.equal(row.quote_issuer, "rUsdc");
+  assert.equal(row.quote, "USDC");
+});
+
+test("overlayLiveAmmReserves copies live quote issuer and LP identity onto the catalog row", () => {
+  const row = overlayLiveAmmReserves(
+    { pool: "XDX/ETH", quote: "ETH" },
+    {
+      reserve_xdx: 10,
+      reserve_currency: 2,
+      lp_supply: 4,
+      amm_account: "rEthAmm",
+      lp_currency: "03EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+      quote_issuer: "rEthIssuer",
+      quote_hex: "ETH",
+    }
+  );
+  assert.equal(row.quote_issuer, "rEthIssuer");
+  assert.equal(row.quote_hex, "ETH");
+  assert.equal(row.amm_account, "rEthAmm");
+  assert.equal(row.lp_currency, "03EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE");
 });
 
 test("overlayLiveAmmReserves replaces leftover quote reserves and LP supply", () => {
@@ -102,6 +123,8 @@ test("poolReservesFromAmmInfo labels XDX/XSQUAD from AMM assets, not XDX/XRP", (
   assert.equal(row.pair, "XDX/XSQUAD");
   assert.equal(row.quote, "XSQUAD");
   assert.equal(row.reserve_currency, 40);
+  assert.equal(row.quote_issuer, XSQUAD_ISSUER);
+  assert.equal(row.quote_hex, XSQUAD_HEX);
 });
 
 test("poolReservesFromAmmInfo treats XRP drops as the quote reserve", () => {

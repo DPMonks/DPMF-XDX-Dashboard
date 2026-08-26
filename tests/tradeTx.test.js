@@ -348,6 +348,8 @@ test("hasLpTrustline matches the pool LP line, not a quote IOU", () => {
     true
   );
   assert.equal(hasQuoteTrustline([], rlusd), false);
+  assert.equal(hasQuoteTrustline([], { currency: "ETH" }), false);
+  assert.equal(hasQuoteTrustline([{ currency: "ETH", issuer: "rEth" }], { currency: "ETH" }), false);
   const held = [{ pool: "XDX/RLUSD", pool_name: "XDX/RLUSD", lp_balance: 4383 }];
   assert.equal(lpHeldForPair(held, "XDX/RLUSD", "RLUSD") > 0, true);
   assert.equal(

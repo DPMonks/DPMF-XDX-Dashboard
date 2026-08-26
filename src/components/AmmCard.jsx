@@ -25,19 +25,9 @@ import {
 } from "../ammPools";
 import { discoverLiveAmmPool, getLiveLpReserves, getWalletBalances, getWalletLines } from "../api/indexer";
 import { issuedBalance } from "../wallet/ammCreate";
-import { XDX_HEX, XDX_ISSUER, xdxTrustSetTxjson } from "../constants/ledger";
+import { assetTrustTxjson, lpTrustTxjson, poolQuote } from "../ammTrustActions";
 import { useWallet } from "../context/useWallet";
-import {
-  QUOTE_ASSETS,
-  hasLpTrustline,
-  hasQuoteTrustline,
-  isLpCurrency,
-  lpTrustSetTxjson,
-  notifyWalletRefresh,
-  poolForQuote,
-  quoteTrustSetTxjson,
-  resolveQuote,
-} from "../xaman/tradeTx";
+import { QUOTE_ASSETS, notifyWalletRefresh } from "../xaman/tradeTx";
 import { useXamanPayload } from "../xaman/useXamanPayload";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import { useI18n } from "../i18n/useI18n";
@@ -113,36 +103,6 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead, reserveXdx, reserveQuo
   );
 }
 
-function poolQuote(pool) {
-  const ticker = String(pool?.quote || "")
-    .replace(/^XDX\//i, "")
-    .toUpperCase() || poolAssetTrustlineId(pool);
-  return resolveQuote(ticker === "XDX" ? "XRP" : ticker, {
-    quote_issuer: pool.quote_issuer,
-    quote_hex: pool.quote_hex,
-  });
-}
-
-function assetTrustTxjson(pool, account) {
-  if (poolAssetTrustlineId(pool) === "XDX") return xdxTrustSetTxjson(account);
-  return quoteTrustSetTxjson(account, poolQuote(pool));
-}
-
-function lpTrustSpec(pool) {
-  const lpHex = pool?.lp_currency || pool?.lp_currency_hex;
-  if (pool?.amm_account && isLpCurrency(lpHex)) {
-    return { amm: pool.amm_account, lpCurrency: lpHex };
-  }
-  const quoteId = poolQuoteTicker(pool);
-  const spec = poolForQuote(poolQuote(pool), [pool], pool);
-  if (quoteId !== "XRP" && spec.pair === "XDX/XRP") return null;
-  return spec;
-}
-
-function lpTrustTxjson(pool, account) {
-  return lpTrustSetTxjson(account, lpTrustSpec(pool) || {});
-}
-
 export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemoveLiquidity }) {
   const { t, locale } = useI18n();
   const { walletAddress, connectWallet } = useWallet();
@@ -155,7 +115,6 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
   const [lineError, setLineError] = useState("");
   const [liveByKey, setLiveByKey] = useState({});
   const [volumeByKey, setVolumeByKey] = useState({});
-  const [walletLines, setWalletLines] = useState([]);
   const [walletHold, setWalletHold] = useState({ xdx: 0, xrp: 0, raw: {} });
   const lookupGen = useRef(0);
   const lookupTimer = useRef(0);
@@ -254,7 +213,6 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     let cancelled = false;
     async function loadLines() {
       if (!account) {
-        setWalletLines([]);
         setWalletHold({ xdx: 0, xrp: 0, raw: {} });
         return;
       }
@@ -263,7 +221,6 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
         getWalletBalances(account).catch(() => ({})),
       ]);
       if (cancelled) return;
-      setWalletLines(Array.isArray(next) ? next : []);
       setWalletHold({
         xdx: Number(bals?.xdx) || 0,
         xrp: Number(bals?.xrp) || 0,
@@ -277,10 +234,6 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
       window.removeEventListener("dpmf-wallet-refresh", loadLines);
     };
   }, [account]);
-
-  function poolHasLpLine(pool) {
-    return hasLpTrustline(walletLines, lpTrustSpec(pool) || {});
-  }
 
   function poolHaveCopy(pool) {
     if (!account) return "";
@@ -301,15 +254,6 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
       );
     }
     return parts.join(" · ");
-  }
-
-  function poolHasAssetLine(pool) {
-    const id = poolAssetTrustlineId(pool);
-    if (id === "XRP") return true;
-    if (id === "XDX") {
-      return hasQuoteTrustline(walletLines, { issuer: XDX_ISSUER, currency: "XDX", hex: XDX_HEX });
-    }
-    return hasQuoteTrustline(walletLines, poolQuote(pool));
   }
 
   function signTrustline(pool, kind) {
@@ -502,24 +446,20 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
                   onClick={() => onRemoveLiquidity(pool)}
                 />
               ) : null}
-              {!account || !poolHasAssetLine(pool) ? (
-                <WalletButton
-                  className="is-trustline"
-                  label={(t.quoteTrustline || "{asset} Trustline").replace("{asset}", poolAssetTrustlineId(pool))}
-                  title={(t.quoteTrustline || "{asset} Trustline").replace("{asset}", poolAssetTrustlineId(pool))}
-                  disabled={signing}
-                  onClick={() => signTrustline(pool, "quote")}
-                />
-              ) : null}
-              {!account || !poolHasLpLine(pool) ? (
-                <WalletButton
-                  className="is-lp-trustline"
-                  label={t.lpTrustline}
-                  title={`${t.lpTrustline} ${pool.pool}`}
-                  disabled={signing}
-                  onClick={() => signTrustline(pool, "lp")}
-                />
-              ) : null}
+              <WalletButton
+                className="is-trustline"
+                label={(t.quoteTrustline || "{asset} Trustline").replace("{asset}", poolAssetTrustlineId(pool))}
+                title={(t.quoteTrustline || "{asset} Trustline").replace("{asset}", poolAssetTrustlineId(pool))}
+                disabled={signing}
+                onClick={() => signTrustline(pool, "quote")}
+              />
+              <WalletButton
+                className="is-lp-trustline"
+                label={t.lpTrustline}
+                title={`${t.lpTrustline} ${pool.pool}`}
+                disabled={signing}
+                onClick={() => signTrustline(pool, "lp")}
+              />
             </div>
           </article>
         );
