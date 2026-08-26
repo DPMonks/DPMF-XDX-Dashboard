@@ -191,6 +191,7 @@ export default function OrderBook() {
             </button>
           ))}
         </div>
+        <p className="orderbook-unit">{t.orderbookUnit} {quote}</p>
         <div className="orderbook-search-wrap">
           <input
             type="search"
@@ -215,7 +216,6 @@ export default function OrderBook() {
             </ul>
           ) : null}
         </div>
-        <p className="orderbook-unit">{t.orderbookUnit} {quote}</p>
       </div>
       <dl className="orderbook-header">
         <div>

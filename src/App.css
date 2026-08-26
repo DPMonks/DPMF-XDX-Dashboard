@@ -1757,6 +1757,18 @@ body {
   }
 }
 
+@media (min-width: 1024px) {
+  .orderbook-search-wrap {
+    width: 280px;
+    min-width: 240px;
+  }
+
+  .orderbook-toolbar .orderbook-search {
+    min-height: 44px;
+    padding: 10px 18px;
+  }
+}
+
 
 .frozen-badge,
 .pair-badge {
@@ -2909,7 +2921,7 @@ body {
 
 .orderbook-toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   gap: 10px;
   flex-wrap: nowrap;
@@ -2922,24 +2934,38 @@ body {
   flex-wrap: nowrap;
   overflow-x: auto;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .orderbook-search-wrap {
   position: relative;
-  flex: 1 1 160px;
-  min-width: 140px;
-  max-width: 240px;
+  flex: 0 0 auto;
+  width: min(280px, 100%);
+  min-width: 200px;
+  margin-left: auto;
 }
 
 .orderbook-search {
   width: 100%;
-  padding: 6px 12px;
+  min-height: 40px;
+  padding: 8px 16px;
   border-radius: 999px;
-  border: 1px solid var(--dpmf-border-soft);
-  background: var(--dpmf-bg-elevated);
+  border: 1.5px solid var(--dpmf-neon-violet);
+  background: #1c1428;
   color: var(--dpmf-text-main);
   font: inherit;
   font-size: 16px;
+  box-shadow: 0 0 0 1px rgba(199, 112, 255, 0.22), 0 0 18px rgba(199, 112, 255, 0.32);
+}
+
+.orderbook-search::placeholder {
+  color: #ddd6ea;
+}
+
+.orderbook-search:focus {
+  outline: none;
+  border-color: #e0b3ff;
+  box-shadow: 0 0 0 2px rgba(199, 112, 255, 0.45), 0 0 22px rgba(199, 112, 255, 0.4);
 }
 
 .orderbook-search-list {
@@ -2976,6 +3002,8 @@ body {
   margin: 0;
   color: var(--dpmf-text-muted);
   font-size: 12px;
+  flex: 0 1 auto;
+  white-space: nowrap;
 }
 
 .orderbook-header {
@@ -4701,6 +4729,14 @@ body {
 
   .orderbook-toolbar {
     flex-wrap: wrap;
+  }
+
+  .orderbook-search-wrap {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    margin-left: 0;
   }
 
   .orderbook-board {
