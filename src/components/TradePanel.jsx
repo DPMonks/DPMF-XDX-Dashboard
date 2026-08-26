@@ -377,6 +377,7 @@ export default function TradePanel({
         toQuote,
         sendMax: amount,
         deliver: quoteExtra?.receive,
+        routingMode: quoteExtra?.routingMode,
       });
     }
     if (action === "buy") {
@@ -386,6 +387,7 @@ export default function TradePanel({
         xdx: linked.xdx || amount,
         cost: linked.quote || shownQuoteQty || total,
         market: orderType === "market",
+        routingMode: quoteExtra?.routingMode,
       });
     }
     if (action === "sell") {
@@ -395,6 +397,7 @@ export default function TradePanel({
         xdx: linked.xdx || amount,
         proceeds: linked.quote || shownQuoteQty || total,
         market: orderType === "market",
+        routingMode: quoteExtra?.routingMode,
       });
     }
     if (action === "addLp") {

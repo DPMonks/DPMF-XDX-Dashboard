@@ -1,6 +1,8 @@
+import { quoteEngineMode } from "./swapModes.js";
+
 /**
  * Preview quote against the composed XDX book + AMM curve.
- * Execution still goes through rippled (self Payment) — this is not path_find.
+ * Execution still goes through rippled (self Payment). This is not path_find.
  */
 
 export const IMPACT_WARN_PCT = 1.5;
@@ -205,7 +207,7 @@ export function quoteSwap({
   const input = num(amountIn);
   const levels = sellingXdx ? bids : asks;
   const inIsBase = Boolean(sellingXdx);
-  const mode = String(routingMode || "smart").toLowerCase();
+  const mode = quoteEngineMode(routingMode);
   const venueMid = resolveVenueMid({ routingMode: mode, mid, reserveBase, reserveQuote, bids, asks });
 
   let walk;

@@ -1,6 +1,7 @@
 import { quoteIssue } from "../wallet/ammVote.js";
 import { sameLedgerCurrency } from "../xaman/tradeTx.js";
 import { quoteBridgeSwap, quoteSwap } from "./quoteSwap.js";
+import { normalizeSwapMode } from "./swapModes.js";
 
 function num(value) {
   const n = Number(value);
@@ -108,11 +109,43 @@ export function venueFromDirectMarket(market) {
   };
 }
 
-export function quoteSelectedPair({ amountIn, routingMode = "smart", directVenue = null, fromVenue = {}, toVenue = {} } = {}) {
+export function quoteSelectedPair({
+  amountIn,
+  routingMode = "smart",
+  directVenue = null,
+  fromVenue = {},
+  toVenue = {},
+  fromXrpVenue = null,
+  xrpToVenue = null,
+} = {}) {
+  const candidates = [];
   if (directVenue) {
     const direct = quoteSwap({ ...directVenue, amountIn, sellingXdx: true, routingMode });
-    if (direct?.actualOutput > 0) return { ...direct, via: "direct" };
+    if (direct?.actualOutput > 0) candidates.push({ ...direct, via: "direct" });
+  }
+  if (fromXrpVenue && xrpToVenue) {
+    const hop1 = quoteSwap({ ...fromXrpVenue, amountIn, sellingXdx: true, routingMode });
+    if (hop1.actualOutput > 0) {
+      const hop2 = quoteSwap({ ...xrpToVenue, amountIn: hop1.actualOutput, sellingXdx: true, routingMode });
+      if (hop2.actualOutput > 0) {
+        candidates.push({
+          ...hop2,
+          via: "xrp-bridge",
+          hops: [hop1, hop2],
+          bookOutput: hop2.bookOutput,
+          ammOutput: hop2.ammOutput,
+        });
+      }
+    }
   }
   const bridge = quoteBridgeSwap({ amountIn, fromVenue, toVenue, routingMode });
-  return bridge?.actualOutput > 0 ? { ...bridge, via: "bridge" } : bridge;
+  if (bridge?.actualOutput > 0) candidates.push({ ...bridge, via: "bridge" });
+  if (!candidates.length) return bridge;
+  const preferXrp = normalizeSwapMode(routingMode) === "auto-bridging";
+  if (preferXrp) {
+    const xrp = candidates.find((row) => row.via === "xrp-bridge");
+    if (xrp) return xrp;
+  }
+  candidates.sort((a, b) => b.actualOutput - a.actualOutput);
+  return candidates[0];
 }

@@ -16,7 +16,17 @@ import { useI18n } from "../i18n/useI18n";
 import { ammSpot } from "../ammCurve";
 import { bookFromMarketPayload, bookHeader, emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
 import { quoteSelectedPair, venueFromDirectMarket } from "../swap/directPair";
-import { IMPACT_HIGH_PCT, IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
+import { IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
+import { normalizeSwapMode } from "../swap/swapModes";
+import {
+  buildSwapHops,
+  quotePassesMode,
+  recommendSwapMode,
+  sameIssuerRipple,
+  smartChatMessages,
+} from "../swap/swapRouting";
+import SwapModeExplanation from "./swap/SwapModeExplanation";
+import SwapModeSelector from "./swap/SwapModeSelector";
 import {
   SWAP_LP_GOVERNANCE_PAIRS,
   needsSwapLpGovernance,
@@ -66,20 +76,8 @@ function tickerOf(asset, fallback) {
     .toUpperCase();
 }
 
-function pickSwapRecommendation({ qty, routingMode, alternatives, noRoute }) {
-  if (!(qty > 0)) return null;
-  if (noRoute) {
-    if (routingMode === "book") return { id: "amm", reason: "nobook", amountIn: qty };
-    if (routingMode === "amm") return { id: "smart", reason: "noamm", amountIn: qty };
-    return { id: "half", reason: "half", amountIn: qty / 2 };
-  }
-  const amm = alternatives.find((row) => row.id === "amm");
-  const book = alternatives.find((row) => row.id === "book");
-  const half = alternatives.find((row) => row.id === "half");
-  if (routingMode !== "amm" && amm) return { id: "amm", reason: "better", amountIn: qty };
-  if (routingMode !== "book" && book) return { id: "book", reason: "better", amountIn: qty };
-  if (half) return { id: "half", reason: "half", amountIn: half.amountIn };
-  return null;
+function pickSwapRecommendation(args) {
+  return recommendSwapMode(args);
 }
 
 function LpAccessLock({ open }) {
@@ -118,8 +116,13 @@ function recommendationCopy(rec, t, impactText) {
   }
   if (rec.reason === "nobook") return t.swapRecNoBook;
   if (rec.reason === "noamm") return t.swapRecNoAmm;
-  if (rec.id === "amm") return t.swapRecAmm;
-  if (rec.id === "book") return t.swapRecBook;
+  if (rec.reason === "noripple") return t.swapRecNoRipple || "Rippling needs the same issuer on both assets. Switch to Smart.";
+  if (rec.reason === "bridge") return t.swapRecBridge || "An XRP hop can complete this pair. Switch to Auto-bridging.";
+  if (rec.reason === "demand") return t.swapRecBook;
+  if (rec.reason === "supply") return t.swapRecAmm;
+  const next = rec.nextMode || rec.id;
+  if (next === "amm" || next === "amm-only") return t.swapRecAmm;
+  if (next === "book" || next === "orderbook-only") return t.swapRecBook;
   return "";
 }
 
@@ -138,6 +141,8 @@ export default function XdxSwapPanel() {
   const [pools, setPools] = useState([]);
   const [markets, setMarkets] = useState({});
   const [directMarket, setDirectMarket] = useState(null);
+  const [xrpHops, setXrpHops] = useState({ fromXrp: null, xrpTo: null });
+  const [developerView, setDeveloperView] = useState(false);
   const [prices, setPrices] = useState({});
   const [positions, setPositions] = useState([]);
   const [liveByPair, setLiveByPair] = useState({});
@@ -169,11 +174,16 @@ export default function XdxSwapPanel() {
   const toPair = toTicker === "XDX" ? null : normalizeOrderbookPair(`XDX/${toTicker}`);
   const pair = needsGate ? `${fromTicker} → ${toTicker}` : `XDX/${sellingXdx ? toTicker : fromTicker}`;
   const marketKey = [fromPair, toPair].filter(Boolean).join("|");
+  const fromIssuer = fromAsset?.issuer || "";
+  const fromHex = fromAsset?.hex || "";
+  const toIssuer = toAsset?.issuer || "";
+  const toHex = toAsset?.hex || "";
   const wantsDirect = Boolean(
-    needsGate && (fromTicker === "XRP" || fromAsset?.issuer) && (toTicker === "XRP" || toAsset?.issuer)
+    needsGate && (fromTicker === "XRP" || fromIssuer) && (toTicker === "XRP" || toIssuer)
   );
+  const wantsXrpHops = Boolean(wantsDirect && fromTicker !== "XRP" && toTicker !== "XRP");
   const directKey = wantsDirect
-    ? [effectiveFrom, fromAsset?.issuer || "", fromAsset?.hex || "", effectiveTo, toAsset?.issuer || "", toAsset?.hex || ""].join("|")
+    ? [effectiveFrom, fromIssuer, fromHex, effectiveTo, toIssuer, toHex].join("|")
     : "";
   const gate = swapLpGovernance({
     positions,
@@ -217,7 +227,7 @@ export default function XdxSwapPanel() {
     let cancelled = false;
     async function loadMarket() {
       const pairs = marketKey ? marketKey.split("|") : [];
-      const [nextPools, nextPrices, catalog, nextDirect] = await Promise.all([
+      const [nextPools, nextPrices, catalog, nextDirect, nextFromXrp, nextXrpTo] = await Promise.all([
         getAmm().catch(() => []),
         getPrices().catch(() => ({})),
         getOrderbooks().catch(() => null),
@@ -225,12 +235,18 @@ export default function XdxSwapPanel() {
           ? getSwapMarket({
               from: fromTicker,
               to: toTicker,
-              fromIssuer: fromAsset?.issuer,
-              toIssuer: toAsset?.issuer,
-              fromHex: fromAsset?.hex,
-              toHex: toAsset?.hex,
+              fromIssuer,
+              toIssuer,
+              fromHex,
+              toHex,
               fresh: true,
             }).catch(() => null)
+          : Promise.resolve(null),
+        wantsXrpHops
+          ? getSwapMarket({ from: fromTicker, to: "XRP", fromIssuer, fromHex, fresh: true }).catch(() => null)
+          : Promise.resolve(null),
+        wantsXrpHops
+          ? getSwapMarket({ from: "XRP", to: toTicker, toIssuer, toHex, fresh: true }).catch(() => null)
           : Promise.resolve(null),
       ]);
       const pairRows = await Promise.all(
@@ -249,6 +265,7 @@ export default function XdxSwapPanel() {
       setPrices(nextPrices || {});
       setMarkets(Object.fromEntries(pairRows));
       setDirectMarket(wantsDirect ? nextDirect : null);
+      setXrpHops({ fromXrp: nextFromXrp, xrpTo: nextXrpTo });
     }
     loadMarket();
     const id = setInterval(loadMarket, 30000);
@@ -256,7 +273,7 @@ export default function XdxSwapPanel() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [directKey, fromTicker, marketKey, toTicker, wantsDirect]);
+  }, [directKey, fromHex, fromIssuer, fromTicker, marketKey, toHex, toIssuer, toTicker, wantsDirect, wantsXrpHops]);
 
   useEffect(() => {
     let cancelled = false;
@@ -293,18 +310,45 @@ export default function XdxSwapPanel() {
   const fromVenue = venueFrom(markets[fromPair]?.book, markets[fromPair]?.live);
   const toVenue = venueFrom(markets[toPair]?.book, markets[toPair]?.live);
   const directVenue = venueFromDirectMarket(directMarket);
+  const fromXrpVenue = venueFromDirectMarket(xrpHops.fromXrp);
+  const xrpToVenue = venueFromDirectMarket(xrpHops.xrpTo);
   function quoteForMode(mode) {
     if (!(qty > 0)) return null;
-    if (sellingXdx) return quoteSwap({ ...toVenue, amountIn: qty, sellingXdx: true, routingMode: mode });
-    if (buyingXdx) return quoteSwap({ ...fromVenue, amountIn: qty, sellingXdx: false, routingMode: mode });
-    return quoteSelectedPair({ amountIn: qty, routingMode: mode, directVenue, fromVenue, toVenue });
+    if (normalizeSwapMode(mode) === "rippling" && !sameIssuerRipple(fromAsset, toAsset)) {
+      return { actualOutput: 0, routeUsed: "none", bookOutput: 0, ammOutput: 0 };
+    }
+    let next;
+    if (sellingXdx) next = quoteSwap({ ...toVenue, amountIn: qty, sellingXdx: true, routingMode: mode });
+    else if (buyingXdx) next = quoteSwap({ ...fromVenue, amountIn: qty, sellingXdx: false, routingMode: mode });
+    else {
+      next = quoteSelectedPair({
+        amountIn: qty,
+        routingMode: mode,
+        directVenue,
+        fromVenue,
+        toVenue,
+        fromXrpVenue,
+        xrpToVenue,
+      });
+    }
+    if (!quotePassesMode(next, mode)) return { ...next, actualOutput: 0, routeUsed: "none" };
+    return next;
   }
   const quote = quoteForMode(routingMode);
   const bookQuote = quoteForMode("book");
   const ammQuote = quoteForMode("amm");
+  const hops = buildSwapHops({ quote, fromTicker, toTicker });
+  const chatRows = smartChatMessages({
+    quote,
+    routingMode,
+    fromTicker,
+    toTicker,
+    bookQuote,
+    ammQuote,
+    qty,
+  });
   const impactHot =
     quote && (Math.abs(quote.priceImpactPercent) >= IMPACT_WARN_PCT || quote.isNegativeSlippage);
-  const impactHigh = quote && Math.abs(quote.priceImpactPercent) >= IMPACT_HIGH_PCT;
   const quoteExtras = sellingXdx
     ? { ...toVenue, sellingXdx: true, routingMode }
     : buyingXdx
@@ -312,24 +356,34 @@ export default function XdxSwapPanel() {
       : directVenue
         ? { ...directVenue, sellingXdx: true, routingMode }
         : null;
-  const alternatives = impactHigh && quoteExtras ? saferSwapAlternatives(qty, quote, quoteExtras) : [];
+  const alternatives = quote && quoteExtras ? saferSwapAlternatives(qty, quote, quoteExtras) : [];
   const noRoute = Boolean(qty > 0 && (!quote || quote.routeUsed === "none" || !(quote.actualOutput > 0)));
   const gatedOut = Boolean(needsGate && (!account || !gate.ok));
-  const recommendation = pickSwapRecommendation({ qty, routingMode, alternatives, noRoute });
+  const recommendation = pickSwapRecommendation({
+    qty,
+    routingMode,
+    alternatives,
+    noRoute,
+    quote,
+    bookQuote,
+    ammQuote,
+    fromAsset,
+    toAsset,
+    fromTicker,
+    toTicker,
+  });
   const recKey = recommendation ? `${routingMode}:${qty}:${recommendation.id}:${recommendation.reason}` : "";
   const showRecommendation = Boolean(recommendation && recKey !== acceptedRecKey);
-  const routeHelp =
-    routingMode === "amm" ? t.swapHelpAmm : routingMode === "book" ? t.swapHelpBook : t.swapHelpSmart;
   const recText = recommendationCopy(
     recommendation,
     t,
     quote?.priceImpactPercent != null ? formatPercent(quote.priceImpactPercent, locale) : ""
   );
-  const routeChoices = [
-    ["smart", t.swapRadioSmart || t.swapSmart, t.swapRadioSmartMeta || t.swapChipSmart],
-    ["book", t.swapRadioBook || t.swapRouteBook, t.swapRadioBookMeta || t.swapChipBook],
-    ["amm", t.swapRadioAmm || t.swapRouteAmm, t.swapRadioAmmMeta || t.swapChipAmm],
-  ];
+
+  function resetSmartRoute() {
+    setRoutingMode("smart");
+    setAcceptedRecKey("");
+  }
 
   function changeFrom(id) {
     const next = String(id || "").toUpperCase();
@@ -339,6 +393,7 @@ export default function XdxSwapPanel() {
       const other = assets.find((row) => row.id !== next);
       if (other) setToId(other.id);
     }
+    resetSmartRoute();
   }
 
   function changeTo(id) {
@@ -349,18 +404,21 @@ export default function XdxSwapPanel() {
       const other = assets.find((row) => row.id !== next);
       if (other) setFromId(other.id);
     }
+    resetSmartRoute();
   }
 
   function buyXdx() {
     const counter = fromTicker !== "XDX" ? effectiveFrom : toTicker !== "XDX" ? effectiveTo : "XRP";
     setFromId(counter);
     setToId("XDX");
+    resetSmartRoute();
   }
 
   function sellXdx() {
     const counter = toTicker !== "XDX" ? effectiveTo : fromTicker !== "XDX" ? effectiveFrom : "XRP";
     setFromId("XDX");
     setToId(counter);
+    resetSmartRoute();
   }
 
   function swapDetail(nextAmount = qty, nextMode = routingMode) {
@@ -586,7 +644,9 @@ export default function XdxSwapPanel() {
               {quote.slippagePercent != null ? ` · ${formatPercent(quote.slippagePercent, locale)}` : ""}
             </p>
           ) : noRoute ? (
-            <p className="xdx-swap-warn">{routingMode === "book" ? t.swapNoBook || t.swapNoRoute : t.swapNoRoute}</p>
+            <p className="xdx-swap-warn">
+              {normalizeSwapMode(routingMode) === "orderbook-only" ? t.swapNoBook || t.swapNoRoute : t.swapNoRoute}
+            </p>
           ) : null}
           {quote?.partialFill ? <p className="xdx-swap-warn">{t.swapPartialFill}</p> : null}
           {needsGate && gatedOut ? <p className="xdx-swap-warn">{t.swapLpGateNeed}</p> : null}
@@ -605,53 +665,49 @@ export default function XdxSwapPanel() {
           </div>
         </div>
 
-        <aside className="xdx-swap-guide" aria-label={t.swapRouting}>
-          <div className="xdx-swap-radios" role="radiogroup" aria-label={t.swapRouting}>
-            {routeChoices.map(([id, label, meta]) => {
-              const on = routingMode === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  role="radio"
-                  className={on ? "is-on" : ""}
-                  aria-checked={on}
-                  onClick={() => setRoutingMode(id)}
-                >
-                  <span className="xdx-swap-radio-mark" aria-hidden="true" />
-                  <span className="xdx-swap-radio-copy">
-                    <b>{label}</b>
-                    <small>{meta}</small>
-                  </span>
-                </button>
-              );
-            })}
+        <aside className="xdx-swap-guide" aria-label={t.swapOptions || "Swap options"}>
+          <div className="xdx-swap-options">
+            <p className="xdx-swap-options-title">{t.swapOptions || "Swap options"}</p>
+            <div className="xdx-swap-radios">
+              <SwapModeSelector value={routingMode} onChange={setRoutingMode} />
+            </div>
           </div>
 
           <div key={routingMode} className="xdx-swap-tip">
             <div className="xdx-swap-tip-scan" aria-hidden="true" />
-            <p className="xdx-swap-tip-kicker">{t.swapTipTitle}</p>
-            <p>{routeHelp}</p>
+            <SwapModeExplanation
+              modeId={routingMode}
+              quote={quote}
+              fromTicker={fromTicker}
+              toTicker={toTicker}
+              hops={hops}
+              developer={developerView}
+              onToggleView={() => setDeveloperView((on) => !on)}
+            />
           </div>
 
-          {showRecommendation ? (
-            <div key={recKey} className="xdx-swap-rec">
+          {chatRows.length || showRecommendation ? (
+            <div key={recKey || chatRows.join("|")} className="xdx-swap-rec">
               <div className="xdx-swap-tip-scan" aria-hidden="true" />
-              <p className="xdx-swap-tip-kicker">{t.swapRecTitle}</p>
-              <p>{recText}</p>
-              <button
-                type="button"
-                className="xdx-swap-rec-accept"
-                onClick={() => {
-                  if (recommendation.id === "half") setAmount(String(recommendation.amountIn));
-                  if (recommendation.id === "amm" || recommendation.id === "book" || recommendation.id === "smart") {
-                    setRoutingMode(recommendation.id);
-                  }
-                  setAcceptedRecKey(recKey);
-                }}
-              >
-                {t.swapRecAccept}
-              </button>
+              <p className="xdx-swap-tip-kicker">{t.swapChatTitle || "Smart Swap chat"}</p>
+              {chatRows.map((row) => (
+                <p key={row}>{row}</p>
+              ))}
+              {showRecommendation ? <p>{recText}</p> : null}
+              {showRecommendation ? (
+                <button
+                  type="button"
+                  className="xdx-swap-rec-accept"
+                  onClick={() => {
+                    if (recommendation.id === "half") setAmount(String(recommendation.amountIn));
+                    const nextMode = recommendation.nextMode || recommendation.id;
+                    if (nextMode && nextMode !== "half") setRoutingMode(nextMode);
+                    setAcceptedRecKey(recKey);
+                  }}
+                >
+                  {t.swapRecAccept}
+                </button>
+              ) : null}
             </div>
           ) : null}
         </aside>

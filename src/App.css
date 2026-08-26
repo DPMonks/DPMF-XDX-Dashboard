@@ -2318,6 +2318,24 @@ body {
   align-content: start;
 }
 
+.xdx-swap-options-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dpmf-text-muted);
+}
+
+.xdx-swap-mode-list {
+  display: grid;
+  gap: 6px;
+  max-height: min(52vh, 24rem);
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-color: var(--dpmf-scroll-thumb) var(--dpmf-scroll-track);
+  scrollbar-width: thin;
+}
+
 .xdx-swap-radios {
   display: grid;
   gap: 6px;
@@ -2325,7 +2343,7 @@ body {
 
 .xdx-swap-radios button {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-height: 44px;
@@ -2370,8 +2388,30 @@ body {
 }
 
 .xdx-swap-radio-copy b {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   font-weight: 700;
+}
+
+.xdx-swap-radio-copy em {
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #03141a;
+  background: var(--dpmf-neon-cyan);
+}
+
+.xdx-swap-fee-badge {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--dpmf-neon-cyan);
+  white-space: nowrap;
 }
 
 .xdx-swap-radio-copy small {
@@ -2436,16 +2476,72 @@ body {
   color: var(--dpmf-text-main);
 }
 
+.xdx-swap-explain {
+  display: grid;
+  gap: 8px;
+}
+
+.xdx-swap-explain-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.xdx-swap-view {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--dpmf-border-soft);
+  border-radius: 10px;
+  background: rgba(11, 12, 16, 0.6);
+  color: var(--dpmf-text-main);
+  font: inherit;
+  font-size: 12px;
+}
+
+.xdx-swap-fees,
+.xdx-swap-hops {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.xdx-swap-fees li,
+.xdx-swap-hops li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.xdx-swap-advisor-note,
+.xdx-swap-learn {
+  font-size: 12px;
+}
+
+.xdx-swap-learn {
+  color: var(--dpmf-neon-cyan);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
 .xdx-swap-rec-accept {
   width: 100%;
+  min-height: 44px;
   margin-top: 10px;
-  border-color: var(--dpmf-neon-cyan);
+  border: 1px solid var(--dpmf-neon-cyan);
+  border-radius: 12px;
   background: rgba(0, 234, 255, 0.12);
   color: #ffffff;
+  font: inherit;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   box-shadow: 0 0 14px rgba(0, 234, 255, 0.2);
+  cursor: pointer;
 }
 
 @keyframes xdx-swap-tip-in {
@@ -4349,6 +4445,16 @@ body {
 }
 
 @media (max-width: 420px) {
+  .xdx-swap-radios button {
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .xdx-swap-fee-badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
   .token-details-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

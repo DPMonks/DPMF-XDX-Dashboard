@@ -1,7 +1,7 @@
 import { quoteIssue } from "../src/wallet/ammVote.js";
 import { reservesFromAmm, splitDirectOffers } from "../src/swap/directPair.js";
 import { xrplRpc } from "./xrplBookOffers.js";
-import { isTransientXrplError, withXrplRetry } from "./liveAmmReserves.js";
+import { withXrplRetry } from "./liveAmmReserves.js";
 
 const CACHE_MS = 20_000;
 const cache = new Map();
@@ -59,13 +59,13 @@ export async function loadDirectPairMarket(query = {}, options = {}) {
 
   const rpc = { fetchImpl: options.fetchImpl, rpcUrl: options.rpcUrl };
   const retry = { retries: 2, waitMs: 220 };
-  let amm = null;
+  let ammRes;
   let bidOffers = [];
   let askOffers = [];
   try {
-    const [ammRes, bidRes, askRes] = await Promise.all([
+    const [nextAmm, bidRes, askRes] = await Promise.all([
       withXrplRetry(() => xrplRpc("amm_info", { asset: fromSpec, asset2: toSpec, ledger_index: "validated" }, rpc), retry).catch(
-        (err) => (isTransientXrplError(err) ? null : null)
+        () => null
       ),
       withXrplRetry(() => xrplRpc("book_offers", { taker_gets: toSpec, taker_pays: fromSpec, limit: 20 }, rpc), retry).catch(
         () => null
@@ -74,15 +74,15 @@ export async function loadDirectPairMarket(query = {}, options = {}) {
         () => null
       ),
     ]);
-    amm = ammRes?.amm || ammRes || null;
+    ammRes = nextAmm?.amm || nextAmm || null;
     bidOffers = bidRes?.offers || [];
     askOffers = askRes?.offers || [];
   } catch {
-    amm = null;
+    ammRes = null;
   }
 
   const book = splitDirectOffers([...bidOffers, ...askOffers], fromSpec, toSpec);
-  const reserves = reservesFromAmm(amm, fromSpec, toSpec);
+  const reserves = reservesFromAmm(ammRes, fromSpec, toSpec);
   const body = {
     pair: `${fromId}/${toId}`,
     from: fromId,

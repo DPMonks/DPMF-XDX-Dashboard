@@ -19,6 +19,7 @@ import { rememberTradeNotice } from "../wallet/tradeNotice.js";
 import { pendingVoteFromExecution } from "../wallet/ammVote.js";
 import { preferMarkWhenPoolInsane } from "../wallet/quoteMarker.js";
 import { liveWalletAddress } from "../wallet/walletStorage.js";
+import { paymentFlagsForMode } from "../swap/swapRouting.js";
 import { extractTradeMarker } from "./signMarker.js";
 import { isConsumedUuid, isPayloadUuid, peekPendingPayload, rememberConsumedUuid, rememberPendingPayload } from "./payloadResume.js";
 
@@ -86,6 +87,8 @@ export function executionBelongsToOpenTrade(current, detail = {}) {
 export const DROPS_PER_XRP = 1_000_000;
 export const TF_IMMEDIATE_OR_CANCEL = 131072;
 export const TF_PARTIAL_PAYMENT = 131072;
+export const TF_NO_DIRECT_RIPPLE = 65536;
+export const TF_LIMIT_QUALITY = 262144;
 export const TF_TWO_ASSET = 1_048_576;
 export const TF_SINGLE_ASSET = 524_288;
 export const TF_LP_TOKEN = 65_536;
@@ -294,14 +297,19 @@ export function xdxAmount(value) {
  * AMM. OfferCreate + Immediate-or-Cancel only hits resting CLOB offers and
  * returns tecKILLED when those are empty (ImmediateOfferKilled).
  */
-export function marketBuyXdx({ account, quote, xdx, cost } = {}) {
+export function applySwapRouteFlags(txjson, routingMode) {
+  if (!txjson || txjson.TransactionType !== "Payment") return txjson;
+  return { ...txjson, Flags: (Number(txjson.Flags) || 0) | paymentFlagsForMode(routingMode) };
+}
+
+export function marketBuyXdx({ account, quote, xdx, cost, routingMode } = {}) {
   const sendMax = withMarketSlippage(cost, "buy");
-  const txjson = {
+  const txjson = applySwapRouteFlags({
     TransactionType: "Payment",
     Amount: xdxAmount(xdx),
     SendMax: quoteAmount(quote, sendMax),
     Flags: TF_PARTIAL_PAYMENT,
-  };
+  }, routingMode);
   if (account) {
     txjson.Account = account;
     txjson.Destination = account;
@@ -309,14 +317,14 @@ export function marketBuyXdx({ account, quote, xdx, cost } = {}) {
   return txjson;
 }
 
-export function crossAssetSwapTxjson({ account, fromQuote, toQuote, sendMax, deliver } = {}) {
+export function crossAssetSwapTxjson({ account, fromQuote, toQuote, sendMax, deliver, routingMode } = {}) {
   const minOut = withMarketSlippage(deliver, "sell");
-  const txjson = {
+  const txjson = applySwapRouteFlags({
     TransactionType: "Payment",
     Amount: quoteAmount(toQuote, minOut),
     SendMax: quoteAmount(fromQuote, sendMax),
     Flags: TF_PARTIAL_PAYMENT,
-  };
+  }, routingMode);
   if (account) {
     txjson.Account = account;
     txjson.Destination = account;
@@ -324,14 +332,14 @@ export function crossAssetSwapTxjson({ account, fromQuote, toQuote, sendMax, del
   return txjson;
 }
 
-export function marketSellXdx({ account, quote, xdx, proceeds } = {}) {
+export function marketSellXdx({ account, quote, xdx, proceeds, routingMode } = {}) {
   const deliver = withMarketSlippage(proceeds, "sell");
-  const txjson = {
+  const txjson = applySwapRouteFlags({
     TransactionType: "Payment",
     Amount: quoteAmount(quote, deliver),
     SendMax: xdxAmount(xdx),
     Flags: TF_PARTIAL_PAYMENT,
-  };
+  }, routingMode);
   if (account) {
     txjson.Account = account;
     txjson.Destination = account;
@@ -339,8 +347,8 @@ export function marketSellXdx({ account, quote, xdx, proceeds } = {}) {
   return txjson;
 }
 
-export function offerCreateBuyXdx({ account, quote, xdx, cost, market = false } = {}) {
-  if (market) return marketBuyXdx({ account, quote, xdx, cost });
+export function offerCreateBuyXdx({ account, quote, xdx, cost, market = false, routingMode } = {}) {
+  if (market) return marketBuyXdx({ account, quote, xdx, cost, routingMode });
   const txjson = {
     TransactionType: "OfferCreate",
     TakerPays: xdxAmount(xdx),
@@ -350,8 +358,8 @@ export function offerCreateBuyXdx({ account, quote, xdx, cost, market = false } 
   return txjson;
 }
 
-export function offerCreateSellXdx({ account, quote, xdx, proceeds, market = false } = {}) {
-  if (market) return marketSellXdx({ account, quote, xdx, proceeds });
+export function offerCreateSellXdx({ account, quote, xdx, proceeds, market = false, routingMode } = {}) {
+  if (market) return marketSellXdx({ account, quote, xdx, proceeds, routingMode });
   const txjson = {
     TransactionType: "OfferCreate",
     TakerGets: xdxAmount(xdx),
