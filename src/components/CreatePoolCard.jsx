@@ -298,7 +298,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
   }[blocker];
 
   return (
-    <section className="dashboard-card neon-card create-pool-card">
+    <section className="dashboard-card neon-card create-pool-card" id="create-pool">
       <div className="create-pool-head">
         <div>
           <h2 className="card-title">{t.createPoolTitle}</h2>

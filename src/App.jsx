@@ -13,6 +13,7 @@ import CreatePoolCard from "./components/CreatePoolCard";
 import VotingContainer from "./components/governance/VotingContainer";
 import OrderBook from "./components/OrderBook";
 import XdxSwapPanel from "./components/XdxSwapPanel";
+import SiteJump from "./components/SiteJump";
 import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
@@ -320,6 +321,8 @@ export default function App() {
         </div>
       </header>
 
+      <SiteJump />
+
       <p className={`indexer-source is-${linkState.tone}`} title={INDEXER_ORIGIN}>
         <span className="handshake-dot" aria-hidden="true" />
         <span className="indexer-source-label">{linkState.label}</span>
@@ -327,12 +330,12 @@ export default function App() {
 
       <div className="dashboard-grid">
         <div className="wallet-token-row">
-          <section className="dashboard-card neon-card">
+          <section className="dashboard-card neon-card" id="wallet">
             <h2 className="card-title">{t.connectedWallet}</h2>
             <ConnectedWallet />
           </section>
           <div className="token-details-stack">
-            <section className="dashboard-card neon-card">
+            <section className="dashboard-card neon-card" id="details">
               <h2 className="card-title">{t.tokenDetails}</h2>
               <TokenDetails />
             </section>
@@ -345,19 +348,19 @@ export default function App() {
           </div>
         </div>
 
-        <section className="dashboard-card neon-card">
+        <section className="dashboard-card neon-card" id="trading">
           <h2 className="card-title">{t.tradingChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
             <TradingChart />
           </Suspense>
           <XdxSwapPanel />
-          <div className="orderbook-wrap">
+          <div className="orderbook-wrap" id="orderbook">
             <h3 className="card-title orderbook-title">{t.orderbook}</h3>
             <OrderBook />
           </div>
         </section>
 
-        <section className="dashboard-card neon-card">
+        <section className="dashboard-card neon-card" id="activity">
           <h2 className="card-title">{t.activityChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
             <ActivityChart />
@@ -365,7 +368,7 @@ export default function App() {
         </section>
 
         <div className="lists-row">
-          <section className="dashboard-card neon-card">
+          <section className="dashboard-card neon-card" id="holders">
             <h2 className="card-title">{t.topHolders}</h2>
             <RichList
               className="is-xdx-owners"
@@ -381,7 +384,7 @@ export default function App() {
             />
           </section>
 
-          <section className="dashboard-card neon-card">
+          <section className="dashboard-card neon-card" id="lp-owners">
             <h2 className="card-title">{t.lpHolders}</h2>
             <RichList
               className="is-lp-holders"
@@ -402,7 +405,7 @@ export default function App() {
 
         <CreatePoolCard pools={ammData} onJoinExisting={openTrade} onCreated={refreshLists} />
 
-        <section className="dashboard-card neon-card">
+        <section className="dashboard-card neon-card" id="pools">
           <h2 className="card-title">{t.ammPools}</h2>
           <AmmCard
             pools={ammData}
@@ -427,7 +430,7 @@ export default function App() {
           />
         </section>
 
-        <section className="dashboard-card neon-card governance-card">
+        <section className="dashboard-card neon-card governance-card" id="governance">
           <h2 className="card-title">{t.poolGovernance}</h2>
           <VotingContainer />
         </section>

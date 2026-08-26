@@ -1,0 +1,149 @@
+import { useEffect, useId, useRef, useState } from "react";
+import { useI18n } from "../i18n/useI18n";
+import {
+  SITE_JUMP_IDS,
+  pageTravelPercent,
+  readJumpHash,
+  sectionAtLockLine,
+  siteJumpItems,
+} from "../siteJump";
+
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+}
+
+function lockOffset() {
+  const bar = document.querySelector(".site-jump-bar");
+  return Math.round((bar?.getBoundingClientRect().height || 56) + 10);
+}
+
+function scrollToDeck(id) {
+  const node = document.getElementById(id);
+  if (!node) return;
+  const top = window.scrollY + node.getBoundingClientRect().top - lockOffset();
+  window.scrollTo({ top: Math.max(0, top), behavior: prefersReducedMotion() ? "auto" : "smooth" });
+}
+
+export default function SiteJump() {
+  const { t } = useI18n();
+  const uid = useId().replace(/:/g, "");
+  const boxRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [locking, setLocking] = useState("");
+  const [active, setActive] = useState(() =>
+    typeof window === "undefined" ? SITE_JUMP_IDS[0] : readJumpHash(window.location.hash) || SITE_JUMP_IDS[0]
+  );
+  const [travel, setTravel] = useState(0);
+  const items = siteJumpItems(t);
+  const here = items.find((row) => row.id === active) || items[0];
+
+  useEffect(() => {
+    function onDoc(event) {
+      if (boxRef.current?.contains(event.target)) return;
+      setOpen(false);
+    }
+    function onKey(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  useEffect(() => {
+    let frame = 0;
+    function read() {
+      frame = 0;
+      const next = sectionAtLockLine(SITE_JUMP_IDS, lockOffset());
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setActive((current) => (current === next ? current : next));
+      setTravel(pageTravelPercent(window.scrollY, max));
+    }
+    function onScroll() {
+      if (frame) return;
+      frame = window.requestAnimationFrame(read);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    const boot = window.requestAnimationFrame(onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      window.cancelAnimationFrame(boot);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
+    const want = readJumpHash(window.location.hash);
+    if (want) scrollToDeck(want);
+    function onHash() {
+      const next = readJumpHash(window.location.hash);
+      if (!next) return;
+      setActive(next);
+      scrollToDeck(next);
+    }
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  function lockOn(id) {
+    setLocking(id);
+    setActive(id);
+    setOpen(false);
+    if (window.history?.replaceState) window.history.replaceState(null, "", `#${id}`);
+    scrollToDeck(id);
+    window.setTimeout(() => setLocking(""), 700);
+  }
+
+  return (
+    <nav className={`site-jump${open ? " is-open" : ""}`} aria-label={t.jumpTo || "Jump to"} ref={boxRef}>
+      <div className="site-jump-bar">
+        <button
+          type="button"
+          className="site-jump-now"
+          aria-expanded={open}
+          aria-controls={`${uid}-decks`}
+          onClick={() => setOpen((on) => !on)}
+        >
+          <span className="site-jump-pip" aria-hidden="true" />
+          <span className="site-jump-copy">
+            <small>{t.jumpHere || "Now in"}</small>
+            <b>{here.short}</b>
+          </span>
+          <span className="site-jump-chevron" aria-hidden="true" />
+        </button>
+        <div className="site-jump-travel" aria-hidden="true">
+          <i style={{ width: `${travel}%` }} />
+        </div>
+      </div>
+
+      <div className="site-jump-panel" id={`${uid}-decks`} hidden={!open}>
+        <p className="site-jump-kicker">{t.jumpTo || "Jump to"}</p>
+        <p className="site-jump-hint">{t.jumpHint || "Pick a deck. The page locks on and slides there."}</p>
+        <div className="site-jump-grid" role="list">
+          {items.map((row, index) => {
+            const on = row.id === active;
+            return (
+              <button
+                key={row.id}
+                type="button"
+                role="listitem"
+                className={`${on ? "is-on" : ""}${locking === row.id ? " is-locking" : ""}`}
+                aria-current={on ? "location" : undefined}
+                title={row.label}
+                onClick={() => lockOn(row.id)}
+              >
+                <em>{String(index + 1).padStart(2, "0")}</em>
+                <span>{row.short}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </nav>
+  );
+}

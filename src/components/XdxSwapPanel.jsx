@@ -538,7 +538,7 @@ export default function XdxSwapPanel() {
   const swapLocked = noRoute || !(qty > 0) || gatedOut || checking;
 
   return (
-    <section className="xdx-swap" aria-label={t.swapTitle}>
+    <section className="xdx-swap" id="swap" aria-label={t.swapTitle}>
       <div className="xdx-swap-layout">
         <div className="xdx-swap-main">
           <div className="xdx-swap-head">
