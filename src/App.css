@@ -2335,12 +2335,82 @@ body {
   min-width: 0;
 }
 
+.xdx-swap-amount {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.xdx-swap-amount > span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dpmf-neon-cyan);
+}
+
+.xdx-swap-amount-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 10px 8px 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--dpmf-neon-cyan);
+  border-radius: 12px;
+  background: #1e2030;
+  box-shadow: inset 0 0 0 1px rgba(0, 234, 255, 0.18), 0 0 16px rgba(0, 234, 255, 0.12);
+}
+
+.xdx-swap-amount-field:focus-within {
+  border-color: var(--dpmf-neon-lime);
+  box-shadow: inset 0 0 0 1px rgba(152, 240, 80, 0.28), 0 0 18px rgba(152, 240, 80, 0.14);
+}
+
 .xdx-swap-input.is-amount {
-  margin-top: 10px;
+  min-width: 0;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #ffffff;
+  caret-color: var(--dpmf-neon-lime);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.xdx-swap-input.is-amount:focus {
+  outline: none;
+}
+
+.xdx-swap-input.is-amount::placeholder {
+  color: rgba(232, 232, 245, 0.42);
+  font-weight: 700;
+}
+
+.xdx-swap-amount-asset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 52px;
+  max-width: 42vw;
   padding: 0 12px;
-  border: 1px solid var(--dpmf-border-soft);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  border: 1px solid rgba(199, 112, 255, 0.55);
+  background: rgba(199, 112, 255, 0.2);
+  color: #ffffff;
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .xdx-swap-receive-block {
@@ -2433,6 +2503,13 @@ body {
   font: inherit;
   font-size: 16px;
   font-variant-numeric: tabular-nums;
+}
+
+.xdx-swap-input.is-amount {
+  min-height: 40px;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 700;
 }
 
 .xdx-swap-out {
@@ -4718,6 +4795,19 @@ body {
 
   .xdx-swap-row {
     grid-template-columns: 2.4rem minmax(0, 1fr) minmax(6.5rem, auto);
+  }
+
+  .xdx-swap-amount {
+    width: 100%;
+  }
+
+  .xdx-swap-amount-field {
+    width: 100%;
+    min-height: 56px;
+  }
+
+  .xdx-swap-input.is-amount {
+    font-size: 20px;
   }
 
   .xdx-swap-token,
