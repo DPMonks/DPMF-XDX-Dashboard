@@ -528,6 +528,7 @@ const en = {
   footerTagline: "Digital and Financial Asset Technology",
   footerAbout: "London-based FinTech building XD-Projects on the XRP Ledger.",
   footerSite: "dpmf.technology",
+  footerCommunity: "Community Support",
   detected: "Language from your nation",
 };
 
@@ -630,6 +631,7 @@ export const MESSAGES = {
     updated: "Actualizado",
     footerTagline: "Tecnología de activos digitales y financieros",
     footerAbout: "FinTech de Londres que construye XD-Projects en el XRP Ledger.",
+    footerCommunity: "Soporte comunitario",
     detected: "Idioma de tu país",
   }),
   fr: overlay({
@@ -720,6 +722,7 @@ export const MESSAGES = {
     updated: "Mis à jour",
     footerTagline: "Technologie des actifs numériques et financiers",
     footerAbout: "FinTech londonienne construisant les XD-Projects sur le XRP Ledger.",
+    footerCommunity: "Support communautaire",
     detected: "Langue de votre pays",
   }),
   de: overlay({
@@ -810,6 +813,7 @@ export const MESSAGES = {
     updated: "Aktualisiert",
     footerTagline: "Digitale und finanzielle Asset-Technologie",
     footerAbout: "Londoner FinTech für XD-Projects auf dem XRP Ledger.",
+    footerCommunity: "Community-Support",
     detected: "Sprache deines Landes",
   }),
   it: overlay({
@@ -887,6 +891,7 @@ export const MESSAGES = {
     updated: "Aggiornato",
     footerTagline: "Tecnologia di asset digitali e finanziari",
     footerAbout: "FinTech di Londra che sviluppa XD-Projects sul XRP Ledger.",
+    footerCommunity: "Supporto della community",
     detected: "Lingua della tua nazione",
   }),
   pt: overlay({
@@ -965,6 +970,7 @@ export const MESSAGES = {
     updated: "Atualizado",
     footerTagline: "Tecnologia de ativos digitais e financeiros",
     footerAbout: "FinTech de Londres a construir XD-Projects no XRP Ledger.",
+    footerCommunity: "Suporte da comunidade",
     detected: "Idioma do seu país",
   }),
   nl: overlay({
@@ -1042,6 +1048,7 @@ export const MESSAGES = {
     updated: "Bijgewerkt",
     footerTagline: "Digitale en financiële activatechnologie",
     footerAbout: "Londens FinTech-bedrijf dat XD-Projects bouwt op de XRP Ledger.",
+    footerCommunity: "Community-ondersteuning",
     detected: "Taal van je land",
   }),
   pl: overlay({
@@ -1119,6 +1126,7 @@ export const MESSAGES = {
     updated: "Zaktualizowano",
     footerTagline: "Technologia aktywów cyfrowych i finansowych",
     footerAbout: "Londyński FinTech budujący XD-Projects na XRP Ledger.",
+    footerCommunity: "Wsparcie społeczności",
     detected: "Język twojego kraju",
   }),
   ru: overlay({
@@ -1197,6 +1205,7 @@ export const MESSAGES = {
     updated: "Обновлено",
     footerTagline: "Технологии цифровых и финансовых активов",
     footerAbout: "Лондонский FinTech, создающий XD-Projects на XRP Ledger.",
+    footerCommunity: "Поддержка сообщества",
     detected: "Язык вашей страны",
   }),
   uk: overlay({
@@ -1315,6 +1324,7 @@ export const MESSAGES = {
     updated: "更新",
     footerTagline: "数字与金融资产技术",
     footerAbout: "总部位于伦敦的金融科技公司，在 XRP Ledger 上构建 XD 项目。",
+    footerCommunity: "社区支持",
     detected: "根据所在国家显示的语言",
   }),
   ja: overlay({
@@ -1393,6 +1403,7 @@ export const MESSAGES = {
     updated: "更新",
     footerTagline: "デジタルおよび金融資産テクノロジー",
     footerAbout: "ロンドン拠点のフィンテック。XRP Ledger 上で XD プロジェクトを構築。",
+    footerCommunity: "コミュニティサポート",
     detected: "所在国から検出した言語",
   }),
   ko: overlay({
@@ -1481,6 +1492,7 @@ export const MESSAGES = {
     updated: "تم التحديث",
     footerTagline: "تقنية الأصول الرقمية والمالية",
     footerAbout: "شركة تقنية مالية في لندن تبني مشاريع XD على XRP Ledger.",
+    footerCommunity: "دعم المجتمع",
     detected: "لغة بلدك",
   }),
   hi: overlay({
