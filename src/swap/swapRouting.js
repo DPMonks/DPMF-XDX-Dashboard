@@ -105,7 +105,7 @@ export function smartChatMessages({
     }
     return rows;
   }
-  if (quote.routeUsed === "book") {
+  if (quote.routeUsed === "book" && Number(bookQuote?.actualOutput ?? quote.bookOutput ?? 0) > 0) {
     rows.push("Smart routing avoided a 1% AMM fee by using the order book.");
   }
   if (quote.via === "xrp-bridge" || quote.via === "bridge") {

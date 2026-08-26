@@ -525,13 +525,15 @@ export default function XdxSwapPanel() {
   const bookFill = Number(bookQuote?.actualOutput || bookQuote?.bookOutput || 0);
   const ammFill = Number(ammQuote?.actualOutput || ammQuote?.ammOutput || 0);
   const routeLabel = gotFill
-    ? quote.routeUsed === "amm"
+    ? bookFill <= 0 && ammFill > 0
       ? t.swapRoutePool || "Pool"
-      : quote.routeUsed === "book"
-        ? t.swapBook || "Book"
-        : quote.routeUsed === "bridge"
-          ? t.swapRouteBridge || "Via XDX"
-          : t.swapSmart
+      : quote.routeUsed === "amm"
+        ? t.swapRoutePool || "Pool"
+        : quote.routeUsed === "book"
+          ? t.swapBook || "Book"
+          : quote.routeUsed === "bridge"
+            ? t.swapRouteBridge || "Via XDX"
+            : t.swapSmart
     : "";
   const swapLocked = noRoute || !(qty > 0) || gatedOut || checking;
 
