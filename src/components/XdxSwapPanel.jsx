@@ -130,8 +130,8 @@ export default function XdxSwapPanel() {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
   const account = liveWalletAddress(walletAddress);
-  const [fromId, setFromId] = useState("XDX");
-  const [toId, setToId] = useState("XRP");
+  const [fromId, setFromId] = useState("XRP");
+  const [toId, setToId] = useState("XDX");
   const [amount, setAmount] = useState("");
   const [routingMode, setRoutingMode] = useState("smart");
   const [acceptedRecKey, setAcceptedRecKey] = useState("");
