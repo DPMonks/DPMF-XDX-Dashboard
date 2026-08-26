@@ -23,7 +23,8 @@ import {
   tradePoolHint,
   tradeXdxVolume,
 } from "../ammPools";
-import { discoverLiveAmmPool, getLiveLpReserves, getWalletLines } from "../api/indexer";
+import { discoverLiveAmmPool, getLiveLpReserves, getWalletBalances, getWalletLines } from "../api/indexer";
+import { issuedBalance } from "../wallet/ammCreate";
 import { XDX_HEX, XDX_ISSUER, xdxTrustSetTxjson } from "../constants/ledger";
 import { useWallet } from "../context/useWallet";
 import {
@@ -155,6 +156,7 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
   const [liveByKey, setLiveByKey] = useState({});
   const [volumeByKey, setVolumeByKey] = useState({});
   const [walletLines, setWalletLines] = useState([]);
+  const [walletHold, setWalletHold] = useState({ xdx: 0, xrp: 0, raw: {} });
   const lookupGen = useRef(0);
   const lookupTimer = useRef(0);
   const liveTimer = useRef(0);
@@ -253,10 +255,20 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     async function loadLines() {
       if (!account) {
         setWalletLines([]);
+        setWalletHold({ xdx: 0, xrp: 0, raw: {} });
         return;
       }
-      const next = await getWalletLines(account, { fresh: true }).catch(() => []);
-      if (!cancelled) setWalletLines(Array.isArray(next) ? next : []);
+      const [next, bals] = await Promise.all([
+        getWalletLines(account, { fresh: true }).catch(() => []),
+        getWalletBalances(account).catch(() => ({})),
+      ]);
+      if (cancelled) return;
+      setWalletLines(Array.isArray(next) ? next : []);
+      setWalletHold({
+        xdx: Number(bals?.xdx) || 0,
+        xrp: Number(bals?.xrp) || 0,
+        raw: { ...(bals?.raw || {}), lines: Array.isArray(next) ? next : bals?.raw?.lines || [] },
+      });
     }
     loadLines();
     window.addEventListener("dpmf-wallet-refresh", loadLines);
@@ -268,6 +280,27 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
 
   function poolHasLpLine(pool) {
     return hasLpTrustline(walletLines, lpTrustSpec(pool) || {});
+  }
+
+  function poolHaveCopy(pool) {
+    if (!account) return "";
+    const quote = poolQuote(pool);
+    const quoteId = poolQuoteTicker(pool);
+    const quoteAmt =
+      quoteId === "XRP" ? Number(walletHold.xrp) || 0 : issuedBalance(walletHold.raw, quote);
+    const xdxAmt = Number(walletHold.xdx) || 0;
+    const have = t.poolHave || "Have {amount} {asset}";
+    const parts = [
+      have.replace("{amount}", formatToken(xdxAmt, locale, 2)).replace("{asset}", "XDX"),
+    ];
+    if (quoteId && quoteId !== "XDX") {
+      parts.push(
+        have
+          .replace("{amount}", formatToken(Number(quoteAmt) || 0, locale, quoteId === "XRP" ? 4 : 2))
+          .replace("{asset}", quoteId)
+      );
+    }
+    return parts.join(" · ");
   }
 
   function poolHasAssetLine(pool) {
@@ -453,6 +486,7 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
               </div>
             </dl>
             <div className="pool-card-actions">
+              {account ? <p className="pool-have">{poolHaveCopy(pool)}</p> : null}
               {onAddLiquidity ? (
                 <WalletButton
                   label={t.addLiquidity}

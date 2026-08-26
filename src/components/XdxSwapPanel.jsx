@@ -22,6 +22,7 @@ import {
 import { swapAssetOptions } from "../swap/swapAssets";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import { walletAvailableAmounts } from "../wallet/composeWallet";
+import { detectQuoteUsd } from "../utils/poolSplit";
 import { formatPercent, formatToken, formatUsd } from "../utils/format";
 import { sanitizeQtyInput } from "../xaman/tradeTx";
 import BrandSelect from "./BrandSelect";
@@ -94,6 +95,16 @@ function LpAccessLock({ open }) {
       )}
     </svg>
   );
+}
+
+function tokenUsd(ticker, qty, prices) {
+  const n = Number(qty);
+  if (!(n > 0) || !ticker) return 0;
+  const book = prices || {};
+  if (ticker === "XDX") return n * (Number(book.xdxUsd) || Number(book.XDX) || 0);
+  if (ticker === "XRP") return n * (Number(book.xrpUsd) || Number(book.XRP) || 0);
+  const px = detectQuoteUsd({ quoteId: ticker, prices: book, allowImplied: true });
+  return px > 0 ? n * px : 0;
 }
 
 function recommendationCopy(rec, t, impactText) {
@@ -492,30 +503,43 @@ export default function XdxSwapPanel() {
             <div className="xdx-swap-receive-block">
               <span>{t.swapReceive || "Receive"}</span>
               <p className="xdx-swap-out">
-                {gotFill ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "-"}
+                {gotFill ? formatToken(quote.actualOutput, locale, sellingXdx ? 4 : 2) : "0"}
               </p>
               <small>
                 {t.swapReceiveHint || "total tokens"}
                 {toTicker ? ` · ${toTicker}` : ""}
+                {gotFill && tokenUsd(toTicker, quote.actualOutput, prices) > 0
+                  ? ` · ${formatUsd(tokenUsd(toTicker, quote.actualOutput, prices), locale)}`
+                  : ""}
               </small>
-              {gotFill ? (
-                <dl className="xdx-swap-venues">
-                  <div>
-                    <dt>{t.swapFromBook || "Order book"}</dt>
-                    <dd>
-                      {formatToken(quote.bookOutput || 0, locale, sellingXdx ? 4 : 2)}
-                      {toTicker ? ` ${toTicker}` : ""}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t.swapFromAmm || "AMM"}</dt>
-                    <dd>
-                      {formatToken(quote.ammOutput || 0, locale, sellingXdx ? 4 : 2)}
-                      {toTicker ? ` ${toTicker}` : ""}
-                    </dd>
-                  </div>
-                </dl>
-              ) : null}
+              <dl className="xdx-swap-venues">
+                <div>
+                  <dt>{t.swapFromBook || "Order book"}</dt>
+                  <dd>
+                    {formatToken(gotFill ? quote.bookOutput || 0 : 0, locale, sellingXdx ? 4 : 2)}
+                    {toTicker ? ` ${toTicker}` : ""}
+                  </dd>
+                  <small>
+                    {(t.swapVenueUsd || "worth {usd}").replace(
+                      "{usd}",
+                      formatUsd(gotFill ? tokenUsd(toTicker, quote.bookOutput, prices) : 0, locale)
+                    )}
+                  </small>
+                </div>
+                <div>
+                  <dt>{t.swapFromAmm || "AMM"}</dt>
+                  <dd>
+                    {formatToken(gotFill ? quote.ammOutput || 0 : 0, locale, sellingXdx ? 4 : 2)}
+                    {toTicker ? ` ${toTicker}` : ""}
+                  </dd>
+                  <small>
+                    {(t.swapVenueUsd || "worth {usd}").replace(
+                      "{usd}",
+                      formatUsd(gotFill ? tokenUsd(toTicker, quote.ammOutput, prices) : 0, locale)
+                    )}
+                  </small>
+                </div>
+              </dl>
             </div>
           </div>
 

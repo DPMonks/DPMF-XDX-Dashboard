@@ -99,7 +99,6 @@ function BookSide({ title, rows, side, locale, t }) {
 export default function OrderBook() {
   const { t, locale } = useI18n();
   const [pair, setPair] = useState("XDX/XRP");
-  const [tape, setTape] = useState("hybrid");
   const [query, setQuery] = useState("");
   const [books, setBooks] = useState(null);
   const [error, setError] = useState(null);
@@ -142,14 +141,17 @@ export default function OrderBook() {
     [pairs, query]
   );
 
-  const book = useMemo(() => {
+  const rawBook = useMemo(() => {
     const name = normalizeOrderbookPair(pair);
-    const raw = books?.books?.[name] || books?.books?.[pair] || emptyOrderbook(name);
-    return filterBookTape(raw, tape);
-  }, [books, pair, tape]);
-
-  const bidRows = useMemo(() => padOrderbookLevels(book.bids || []), [book]);
-  const askRows = useMemo(() => padOrderbookLevels(book.asks || []), [book]);
+    return books?.books?.[name] || books?.books?.[pair] || emptyOrderbook(name);
+  }, [books, pair]);
+  const book = useMemo(() => filterBookTape(rawBook, "hybrid"), [rawBook]);
+  const dexBook = useMemo(() => filterBookTape(rawBook, "dex"), [rawBook]);
+  const ammBook = useMemo(() => filterBookTape(rawBook, "amm"), [rawBook]);
+  const bidRows = useMemo(() => padOrderbookLevels(dexBook.bids || []), [dexBook]);
+  const askRows = useMemo(() => padOrderbookLevels(dexBook.asks || []), [dexBook]);
+  const ammBidRows = useMemo(() => padOrderbookLevels(ammBook.bids || []), [ammBook]);
+  const ammAskRows = useMemo(() => padOrderbookLevels(ammBook.asks || []), [ammBook]);
 
   if (!books && !error) {
     return (
@@ -215,25 +217,6 @@ export default function OrderBook() {
         </div>
         <p className="orderbook-unit">{t.orderbookUnit} {quote}</p>
       </div>
-      <div className="orderbook-tapes" role="tablist" aria-label={t.orderbookTape}>
-        {[
-          ["hybrid", t.orderbookTapeHybrid],
-          ["dex", t.orderbookTapeDex],
-          ["amm", t.orderbookTapeAmm],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tape === id}
-            className={tape === id ? "pair-chip active" : "pair-chip"}
-            onClick={() => setTape(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       <dl className="orderbook-header">
         <div>
           <dt>{t.bestBid}</dt>
@@ -257,9 +240,21 @@ export default function OrderBook() {
         </div>
       </dl>
 
-      <div className="orderbook-board">
-        <BookSide title={t.bids} rows={bidRows} side="bid" locale={locale} t={t} />
-        <BookSide title={t.asks} rows={askRows} side="ask" locale={locale} t={t} />
+      <div className="orderbook-boards">
+        <section className="orderbook-panel" aria-label={t.orderbookTapeDex || "XDX book"}>
+          <h3 className="orderbook-panel-title">{t.orderbookTapeDex || "XDX book"}</h3>
+          <div className="orderbook-board">
+            <BookSide title={t.bids} rows={bidRows} side="bid" locale={locale} t={t} />
+            <BookSide title={t.asks} rows={askRows} side="ask" locale={locale} t={t} />
+          </div>
+        </section>
+        <section className="orderbook-panel" aria-label={t.orderbookTapeAmm || "AMM"}>
+          <h3 className="orderbook-panel-title">{t.orderbookTapeAmm || "AMM"}</h3>
+          <div className="orderbook-board">
+            <BookSide title={t.bids} rows={ammBidRows} side="bid" locale={locale} t={t} />
+            <BookSide title={t.asks} rows={ammAskRows} side="ask" locale={locale} t={t} />
+          </div>
+        </section>
       </div>
 
       {book.amm_implied ? (

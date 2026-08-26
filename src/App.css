@@ -1815,6 +1815,15 @@ body {
   padding-top: 8px;
 }
 
+.pool-have {
+  grid-column: 1 / -1;
+  margin: 0;
+  min-height: 16px;
+  font-size: 11px;
+  color: var(--dpmf-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .pool-card-actions .connect-wallet-btn {
   width: 100%;
   min-height: 44px;
@@ -1861,13 +1870,14 @@ body {
 .xdx-swap-layout {
   display: grid;
   gap: 12px;
-  justify-content: start;
+  width: 100%;
+  justify-content: stretch;
   align-items: start;
 }
 
 @media (min-width: 768px) {
   .xdx-swap-layout {
-    grid-template-columns: minmax(17rem, 26rem) minmax(15rem, 1fr);
+    grid-template-columns: minmax(0, 1.25fr) minmax(15rem, 1fr);
   }
 
   .xdx-swap-gov {
@@ -1877,7 +1887,7 @@ body {
 
 @media (min-width: 1100px) {
   .xdx-swap-layout {
-    grid-template-columns: minmax(17rem, 26rem) minmax(16rem, 22rem) minmax(12.5rem, 15rem);
+    grid-template-columns: minmax(0, 1.35fr) minmax(16rem, 0.95fr) minmax(14rem, 18rem);
   }
 
   .xdx-swap-gov {
@@ -1890,7 +1900,7 @@ body {
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  width: min(100%, 28rem);
+  width: 100%;
 }
 
 .xdx-swap-head .orderbook-title {
@@ -1910,7 +1920,7 @@ body {
 .xdx-swap-result,
 .xdx-swap-warn,
 .xdx-swap-alts {
-  width: min(100%, 28rem);
+  width: 100%;
 }
 
 .xdx-swap-main {
@@ -2057,6 +2067,15 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--dpmf-text-main);
+}
+
+.xdx-swap-venues small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dpmf-neon-lime);
 }
 
 .xdx-swap-row.is-for {
@@ -2573,6 +2592,29 @@ body {
 
 .orderbook-header .is-ask {
   color: #ff6b6b;
+}
+
+.orderbook-boards {
+  display: grid;
+  gap: 14px;
+}
+
+@media (min-width: 900px) {
+  .orderbook-boards {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.orderbook-panel {
+  min-width: 0;
+}
+
+.orderbook-panel-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .orderbook-board {

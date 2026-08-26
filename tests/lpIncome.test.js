@@ -32,6 +32,9 @@ test("only XDX AMM pairs count as earn pools", () => {
   assert.equal(isXdxAmmPair({ pool: "XDX/XIO" }), true);
   assert.equal(isXdxAmmPair("SOLO/USD"), false);
   assert.equal(isXdxAmmPair({ pool_name: "RLUSD/XRP" }), false);
+  assert.equal(isXdxAmmPair("rNFPUZZLEGmFHaccountxxxxxxxxxxxxxxxx"), false);
+  assert.equal(isXdxAmmPair("rNFPUZZLE…GmFH"), false);
+  assert.equal(isXdxAmmPair({ pool: "rNFPUZZLE…GmFH" }), false);
 });
 
 test("lp fee earnings ignore non-XDX AMM positions", () => {

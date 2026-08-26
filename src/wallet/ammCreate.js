@@ -3,9 +3,12 @@ import { feeUnitsFromPercent } from "./ammVote.js";
 import {
   DROPS_PER_XRP,
   QUOTE_ASSETS,
+  isLpCurrency,
+  ledgerCurrencyCode,
   quoteAmount,
   quoteIdFromPair,
   resolveQuote,
+  sameLedgerCurrency,
   xdxAmount,
 } from "../xaman/tradeTx.js";
 
@@ -89,26 +92,27 @@ export function hexCurrencyLabel(hex) {
 export function quotesFromWalletLines(raw) {
   const extra = [];
   for (const row of walletLineRows(raw)) {
-    const currency = String(row.currency || row.code || row.hex || "").toUpperCase();
+    const currency = ledgerCurrencyCode(row.currency || row.code || row.hex);
     const issuer = row.issuer || row.account || row.counterparty || null;
     if (!issuer || currency === "XRP" || currency === "XDX" || currency.startsWith("584458")) continue;
-    if (/^03[A-F0-9]{38}$/i.test(currency)) continue;
+    if (isLpCurrency(currency)) continue;
     const known = QUOTE_ASSETS.find(
       (item) =>
         item.issuer &&
-        item.issuer === issuer &&
-        (item.hex?.toUpperCase() === currency ||
-          item.id === currency ||
-          item.id === String(row.ticker || "").toUpperCase())
+        String(item.issuer).toUpperCase() === String(issuer).toUpperCase() &&
+        (sameLedgerCurrency(item.hex, currency) ||
+          sameLedgerCurrency(item.id, currency) ||
+          sameLedgerCurrency(item.id, row.ticker))
     );
     const ticker =
       known?.id ||
       String(row.ticker || "").toUpperCase() ||
-      (/^[A-Z0-9]{3}$/.test(currency) ? currency : hexCurrencyLabel(currency));
+      (/^[A-Z0-9]{3,20}$/.test(currency) ? currency : hexCurrencyLabel(currency));
+    if (!ticker || ticker === "XDX" || ticker === "LP") continue;
     extra.push({
       id: ticker,
       ticker,
-      currency: known?.currency || (/^[A-Z0-9]{3}$/.test(currency) ? currency : ticker),
+      currency: known?.currency || (/^[A-Z0-9]{3,20}$/.test(currency) ? currency : ticker),
       issuer: known?.issuer || issuer,
       hex: known?.hex || (/^[A-F0-9]{40}$/.test(currency) ? currency : row.hex || null),
       label: known?.label || ticker,
@@ -128,7 +132,7 @@ function optionKey(ticker, issuer) {
   return issuer ? `${ticker}:${String(issuer).toUpperCase()}` : ticker;
 }
 
-export function createQuoteOptions(pools = [], raw = null) {
+export function createQuoteOptions(pools = [], raw = null, extraLines = null) {
   const collected = [];
   function add(row) {
     const ticker = String(row.ticker || row.id || row.currency || "").toUpperCase();
@@ -146,6 +150,11 @@ export function createQuoteOptions(pools = [], raw = null) {
   }
   add({ id: "XRP", ticker: "XRP", currency: "XRP" });
   for (const row of quotesFromWalletLines(raw)) add(row);
+  if (extraLines) {
+    for (const row of quotesFromWalletLines(Array.isArray(extraLines) ? { lines: extraLines } : extraLines)) {
+      add(row);
+    }
+  }
   const counts = new Map();
   for (const row of collected) counts.set(row.ticker, (counts.get(row.ticker) || 0) + 1);
   return collected.map((row) => {
@@ -162,8 +171,8 @@ export function createQuoteOptions(pools = [], raw = null) {
   });
 }
 
-export function defaultCreateQuoteId(pools, raw) {
-  const options = createQuoteOptions(pools, raw);
+export function defaultCreateQuoteId(pools, raw, extraLines) {
+  const options = createQuoteOptions(pools, raw, extraLines);
   return options.find((row) => !row.exists)?.id || options[0]?.id || "XRP";
 }
 
@@ -198,20 +207,16 @@ export function estimatedPoolValueXrp({ xdxAmount, quoteAmount, xdxXrp, quoteXrp
 
 export function issuedBalance(raw, quote) {
   if (!quote || quote.currency === "XRP" || !quote.issuer) return null;
-  const names = [quote.currency, quote.hex, quote.id]
+  const names = [quote.currency, quote.hex, quote.id, quote.label]
     .filter(Boolean)
-    .map((name) => String(name).toUpperCase());
+    .map((name) => ledgerCurrencyCode(name));
   const issuer = String(quote.issuer).toUpperCase();
-  const list = Array.isArray(raw?.balances)
-    ? raw.balances
-    : Array.isArray(raw?.lines)
-      ? raw.lines
-      : [];
+  const list = walletLineRows(raw);
   for (const row of list) {
-    const currency = String(row.currency || row.code || row.ticker || "").toUpperCase();
-    const who = String(row.issuer || row.account || "").toUpperCase();
+    const currency = ledgerCurrencyCode(row.currency || row.code || row.ticker || row.hex);
+    const who = String(row.issuer || row.account || row.counterparty || "").toUpperCase();
     if (who && who !== issuer) continue;
-    if (names.some((name) => currency === name || currency.includes(name))) {
+    if (names.some((name) => sameLedgerCurrency(currency, name))) {
       const n = Number(row.value ?? row.balance ?? row.amount);
       if (Number.isFinite(n)) return n;
     }
