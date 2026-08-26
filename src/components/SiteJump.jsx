@@ -8,10 +8,6 @@ import {
   siteJumpItems,
 } from "../siteJump";
 
-function prefersReducedMotion() {
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-}
-
 function lockOffset() {
   const chrome = document.querySelector(".site-chrome");
   const header = document.querySelector(".dashboard-header");
@@ -32,20 +28,15 @@ function lockOffset() {
   return offset;
 }
 
-function snapDeck(id) {
-  const node = document.getElementById(id);
-  if (!node) return;
-  const delta = node.getBoundingClientRect().top - lockOffset();
-  if (Math.abs(delta) <= 2) return;
-  window.scrollTo({ top: Math.max(0, window.scrollY + delta), behavior: "auto" });
-}
-
 function scrollToDeck(id) {
   const node = document.getElementById(id);
   if (!node) return;
-  const top = window.scrollY + node.getBoundingClientRect().top - lockOffset();
-  window.scrollTo({ top: Math.max(0, top), behavior: prefersReducedMotion() ? "auto" : "smooth" });
-  window.setTimeout(() => snapDeck(id), prefersReducedMotion() ? 0 : 450);
+  function go() {
+    const top = window.scrollY + node.getBoundingClientRect().top - lockOffset();
+    window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+  }
+  go();
+  window.requestAnimationFrame(go);
 }
 
 export default function SiteJump() {
