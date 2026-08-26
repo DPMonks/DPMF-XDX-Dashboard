@@ -240,12 +240,14 @@ export default function XdxSwapPanel() {
   useEffect(() => {
     let cancelled = false;
     async function loadGovPools() {
-      const lives = await Promise.all(
-        SWAP_LP_GOVERNANCE_PAIRS.map((nextPair) =>
+      const [nextPrices, ...lives] = await Promise.all([
+        getPrices().catch(() => ({})),
+        ...SWAP_LP_GOVERNANCE_PAIRS.map((nextPair) =>
           getLiveLpReserves({ pair: nextPair, fresh: true }).catch(() => null)
-        )
-      );
+        ),
+      ]);
       if (cancelled) return;
+      if (nextPrices && typeof nextPrices === "object") setPrices(nextPrices);
       setLiveByPair(Object.fromEntries(SWAP_LP_GOVERNANCE_PAIRS.map((nextPair, index) => [nextPair, lives[index]])));
     }
     loadGovPools();
