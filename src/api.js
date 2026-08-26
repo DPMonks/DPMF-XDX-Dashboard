@@ -501,7 +501,7 @@ export const api = {
     }),
   walletLpIncome: (address, extra = {}) => {
     const search = new URLSearchParams();
-    if (extra.pair) search.set("pair", extra.pair);
+    if (extra.pair && String(extra.pair).toUpperCase() !== "ALL") search.set("pair", extra.pair);
     if (extra.marker) search.set("marker", JSON.stringify(extra.marker));
     if (extra.fresh) search.set("fresh", "1");
     const query = search.toString();

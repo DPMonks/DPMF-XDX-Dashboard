@@ -55,6 +55,8 @@ export function xrplToMd5ForLpPool(pool) {
 }
 
 export const XIO_ISSUER = "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU";
+export const XDX_XIO_AMM = "rDJXzsZGACeHGJQYfaudsYshaC5zJxqsHr";
+export const XDX_XIO_LP_HEX = "03E7A465A6E95CDA21E1110056AA51A71FA55CB9";
 export const XSQUAD_ISSUER = "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg";
 
 // 1% XDX platform fee for swaps where neither side is XDX.
@@ -94,6 +96,14 @@ export const POOLS = [
     quoteIssuer: RLUSD_ISSUER,
     quoteHex: RLUSD_HEX,
   },
+  {
+    pair: "XDX/XIO",
+    amm: XDX_XIO_AMM,
+    lpHex: XDX_XIO_LP_HEX,
+    asset: "XDX",
+    quote: "XIO",
+    quoteIssuer: XIO_ISSUER,
+  },
 ];
 
 export function pairFromRow(row = {}) {
@@ -129,6 +139,9 @@ export function pairFromRow(row = {}) {
   if (look.includes(XDX_XRP_AMM.toUpperCase()) || look.includes(XDX_XRP_LP_HEX)) {
     return "XDX/XRP";
   }
+  if (look.includes(XDX_XIO_AMM.toUpperCase()) || look.includes(XDX_XIO_LP_HEX)) {
+    return "XDX/XIO";
+  }
   if (look.includes(XSQUAD_ISSUER.toUpperCase()) || look.includes(XSQUAD_HEX) || look.includes("XSQUAD")) {
     return "XDX/XSQUAD";
   }
@@ -145,7 +158,12 @@ export function pairFromRow(row = {}) {
     return `XDX/${text.slice(0, 4)}…${text.slice(-4)}`;
   }
   const lpHex = String(row.lp_currency || row.lp_currency_hex || "").replace(/^0x/i, "").toUpperCase();
-  if (/^03[A-F0-9]{38}$/.test(lpHex) && lpHex !== XDX_XRP_LP_HEX && lpHex !== XDX_RLUSD_LP_HEX) {
+  if (
+    /^03[A-F0-9]{38}$/.test(lpHex) &&
+    lpHex !== XDX_XRP_LP_HEX &&
+    lpHex !== XDX_RLUSD_LP_HEX &&
+    lpHex !== XDX_XIO_LP_HEX
+  ) {
     return "";
   }
   return "XDX/XRP";

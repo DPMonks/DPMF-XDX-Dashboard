@@ -68,7 +68,32 @@ export function isXdxAmmPair(value) {
       ? value.pool || value.pool_name || value.pair
       : value
   );
-  return /^XDX\/[A-Z0-9]{2,20}$/.test(pair);
+  return /^XDX\/[A-Z0-9.$]{2,20}$/.test(pair);
+}
+
+export function remapIncomeActivity(activity = [], positions = [], pools = []) {
+  const catalog = [...(Array.isArray(positions) ? positions : []), ...(Array.isArray(pools) ? pools : [])];
+  return (Array.isArray(activity) ? activity : [])
+    .map((row) => {
+      if (!row) return null;
+      const named = normalizeWalletPair(row.pair || row.pool);
+      if (isXdxAmmPair(named) && !looksLikeXrplAddress(named.split("/")[1])) {
+        return { ...row, pair: named, pool: named };
+      }
+      const amm = String(row.amm || row.amm_account || "").toLowerCase();
+      const hex = String(row.lpCurrency || row.lp_currency || "").toUpperCase();
+      const match = catalog.find((item) => {
+        const itemAmm = String(item?.amm_account || item?.amm || "").toLowerCase();
+        const itemHex = String(item?.lp_currency || item?.lp_currency_hex || "").toUpperCase();
+        return (amm && itemAmm === amm) || (hex && itemHex === hex);
+      });
+      const remapped = normalizeWalletPair(
+        match?.pool || match?.pool_name || match?.pair || named
+      );
+      if (!isXdxAmmPair(remapped) || looksLikeXrplAddress(remapped.split("/")[1])) return null;
+      return { ...row, pair: remapped, pool: remapped };
+    })
+    .filter(Boolean);
 }
 
 export function utcDayKey(value) {
@@ -626,16 +651,20 @@ export function incomeRowsForPair({
   xrpUsd = 0,
   rlusdUsd = 1,
   now = Date.now(),
+  historyComplete = false,
 } = {}) {
   const want = incomePairName(pair);
   const snapshot = filterIncomeByPair(snapshotRows, want);
-  const position = incomePositionForPair(want, positions, pools, historyActivity || []);
-  const heldFrom = earliestHeldDay(want, historyActivity, position?.lp_balance) || netHeldLp(want, historyActivity || [], position?.lp_balance).first;
+  const activity = remapIncomeActivity(historyActivity, positions, pools);
+  const position = incomePositionForPair(want, positions, pools, activity);
+  const reconciled = earliestHeldDay(want, activity, position?.lp_balance);
+  const firstSeen = netHeldLp(want, activity, position?.lp_balance).first;
+  const heldFrom = reconciled || (historyComplete ? firstSeen : "");
   const rebuilt = lpFeeIncomeRows({
     positions: position ? [position] : [],
     flows: [],
     volumeDays: [...filterIncomeByPair(historyDays, want), ...volumeDaysFromPools(position ? [position] : [], now)],
-    activity: historyActivity || [],
+    activity,
     xdxUsd,
     xrpUsd,
     rlusdUsd,

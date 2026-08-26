@@ -6,6 +6,8 @@ import {
   activityFromOfferTx,
   activityFromPaymentTx,
   activityFromTrustSetTx,
+  lpBalanceEventsFromMeta,
+  lpHistoryFromAccountTx,
   mergeWalletActivity,
   mergeWalletOrders,
   orderFromTxjson,
@@ -15,7 +17,7 @@ import {
   rememberPending,
   rippleIso,
 } from "../src/wallet/ledgerOrders.js";
-import { XDX_ISSUER } from "../src/constants/ledger.js";
+import { XDX_ISSUER, XDX_XIO_AMM, XDX_XIO_LP_HEX, XDX_XRP_AMM, XDX_XRP_LP_HEX } from "../src/constants/ledger.js";
 
 const BUY = {
   TransactionType: "OfferCreate",
@@ -139,6 +141,114 @@ test("pendingFromExecution paints the buy immediately and skips IOC as an open o
   assert.equal(swap.order, null);
   assert.equal(swap.activity.side, "buy");
   assert.equal(swap.activity.status, "filled");
+});
+
+test("lp history counts Payment and CheckCash LP credits, not TrustSet limit changes", () => {
+  const payment = {
+    hash: "P".repeat(64),
+    close_time_iso: "2026-08-11T16:46:11.000Z",
+    tx: {
+      TransactionType: "Payment",
+      Account: "rSender",
+      Destination: "rLp",
+    },
+    meta: {
+      TransactionResult: "tesSUCCESS",
+      AffectedNodes: [
+        {
+          ModifiedNode: {
+            LedgerEntryType: "RippleState",
+            FinalFields: {
+              Balance: { currency: XDX_XRP_LP_HEX, value: "-3829530.36240651" },
+              HighLimit: { issuer: "rLp", currency: XDX_XRP_LP_HEX },
+              LowLimit: { issuer: XDX_XRP_AMM, currency: XDX_XRP_LP_HEX },
+            },
+            PreviousFields: {
+              Balance: { currency: XDX_XRP_LP_HEX, value: "0" },
+            },
+          },
+        },
+        {
+          ModifiedNode: {
+            LedgerEntryType: "RippleState",
+            FinalFields: {
+              Balance: { currency: XDX_XRP_LP_HEX, value: "0" },
+              HighLimit: { issuer: "rSender", currency: XDX_XRP_LP_HEX },
+              LowLimit: { issuer: XDX_XRP_AMM, currency: XDX_XRP_LP_HEX },
+            },
+            PreviousFields: {
+              Balance: { currency: XDX_XRP_LP_HEX, value: "-3829530.36240651" },
+            },
+          },
+        },
+      ],
+    },
+  };
+  const checkCash = {
+    hash: "C".repeat(64),
+    close_time_iso: "2026-08-22T14:11:52.000Z",
+    tx: { TransactionType: "CheckCash", Account: "rLp" },
+    meta: {
+      TransactionResult: "tesSUCCESS",
+      AffectedNodes: [
+        {
+          DeletedNode: {
+            LedgerEntryType: "RippleState",
+            FinalFields: {
+              Balance: { currency: XDX_XIO_LP_HEX, value: "0" },
+              HighLimit: { issuer: XDX_XIO_AMM, currency: XDX_XIO_LP_HEX },
+              LowLimit: { issuer: "rSender", currency: XDX_XIO_LP_HEX },
+            },
+            PreviousFields: {
+              Balance: { currency: XDX_XIO_LP_HEX, value: "25311.06041561472" },
+            },
+          },
+        },
+        {
+          CreatedNode: {
+            LedgerEntryType: "RippleState",
+            NewFields: {
+              Balance: { currency: XDX_XIO_LP_HEX, value: "-25311.06041561472" },
+              HighLimit: { issuer: "rLp", currency: XDX_XIO_LP_HEX },
+              LowLimit: { issuer: XDX_XIO_AMM, currency: XDX_XIO_LP_HEX },
+            },
+          },
+        },
+      ],
+    },
+  };
+  const trustSet = {
+    hash: "T".repeat(64),
+    close_time_iso: "2026-08-25T15:19:50.000Z",
+    tx: { TransactionType: "TrustSet", Account: "rLp" },
+    meta: {
+      TransactionResult: "tesSUCCESS",
+      AffectedNodes: [
+        {
+          ModifiedNode: {
+            LedgerEntryType: "RippleState",
+            FinalFields: {
+              Balance: { currency: XDX_XIO_LP_HEX, value: "-32085.97786351955" },
+              HighLimit: { issuer: "rLp", currency: XDX_XIO_LP_HEX, value: "1000000000000000e-4" },
+              LowLimit: { issuer: XDX_XIO_AMM, currency: XDX_XIO_LP_HEX },
+            },
+            PreviousFields: {},
+          },
+        },
+      ],
+    },
+  };
+
+  assert.equal(lpBalanceEventsFromMeta(trustSet.meta, "rLp").length, 0);
+  const history = lpHistoryFromAccountTx([payment, checkCash, trustSet], "rLp");
+  assert.equal(history.length, 2);
+  assert.equal(history[0].pair, "XDX/XIO");
+  assert.equal(history[0].side, "addLp");
+  assert.ok(Math.abs(history[0].lp - 25311.06041561472) < 1e-6);
+  assert.equal(history[1].pair, "XDX/XRP");
+  assert.equal(history[1].side, "addLp");
+  assert.ok(Math.abs(history[1].lp - 3829530.36240651) < 1e-6);
+  assert.equal(history[1].timestamp.slice(0, 10), "2026-08-11");
 });
 
 test("activityFromAmmLpTx reads LP tokens received from ledger metadata", () => {

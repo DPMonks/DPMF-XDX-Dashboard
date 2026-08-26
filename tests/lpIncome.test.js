@@ -29,6 +29,7 @@ import { XDX_XRP_AMM, XDX_XRP_LP_HEX } from "../src/constants/ledger.js";
 test("only XDX AMM pairs count as earn pools", () => {
   assert.equal(isXdxAmmPair("XDX/XRP"), true);
   assert.equal(isXdxAmmPair("XDX/RLUSD"), true);
+  assert.equal(isXdxAmmPair("XDX/$CAMEL"), true);
   assert.equal(isXdxAmmPair({ pool: "XDX/XIO" }), true);
   assert.equal(isXdxAmmPair("SOLO/USD"), false);
   assert.equal(isXdxAmmPair({ pool_name: "RLUSD/XRP" }), false);
@@ -427,6 +428,57 @@ test("XDX/XIO income uses pool volume and add-LP history even without a share fi
   const older = rows.find((row) => row.date === "2026-08-11");
   const today = rows.find((row) => row.date === "2026-08-25");
   assert.ok(older.usd < today.usd);
+});
+
+test("incomplete deposit pages do not clip recorded history to the first found add", () => {
+  const rows = incomeRowsForPair({
+    pair: "XDX/XRP",
+    snapshotRows: [
+      { date: "2026-08-12", pair: "XDX/XRP", lpTokens: 1, usd: 0.01, kind: "fee" },
+      { date: "2026-08-24", pair: "XDX/XRP", lpTokens: 2, usd: 0.02, kind: "fee" },
+    ],
+    recordedRows: [{ date: "2026-08-11", pair: "XDX/XRP", lpTokens: 0.5, usd: 0.005, kind: "fee" }],
+    historyActivity: [
+      { side: "addLp", pair: "XDX/XRP", lp: 100, timestamp: "2026-08-24T01:57:30.000Z" },
+    ],
+    positions: [{ pool: "XDX/XRP", lp_balance: 900, reserve_asset: 1000, reserve_currency: 1, lp_supply: 1000 }],
+    historyComplete: false,
+    xdxUsd: 0.00004,
+    xrpUsd: 2,
+  });
+  assert.ok(rows.some((row) => row.date === "2026-08-11"));
+  assert.ok(rows.some((row) => row.date === "2026-08-12"));
+});
+
+test("completed Payment plus deposit history starts fee days on the first LP credit", () => {
+  const now = Date.parse("2026-08-26T18:00:00.000Z");
+  const rows = incomeRowsForPair({
+    now,
+    pair: "XDX/XRP",
+    historyActivity: [
+      { side: "addLp", pair: "XDX/XRP", lp: 3_829_530.36240651, timestamp: "2026-08-11T16:46:11.000Z", kind: "Payment" },
+      { side: "addLp", pair: "XDX/XRP", lp: 5_654_599.2309205, timestamp: "2026-08-24T01:57:30.000Z", kind: "AMMDeposit" },
+    ],
+    positions: [
+      {
+        pool: "XDX/XRP",
+        lp_balance: 9_484_129.59332701,
+        lp_supply: 230_346_571,
+        reserve_asset: 64_000_000,
+        reserve_currency: 230,
+        trading_fee: 1000,
+        volume24hXdx: 8_000_000,
+        volume7dXdx: 20_000_000,
+      },
+    ],
+    historyComplete: true,
+    xdxUsd: 0.00004,
+    xrpUsd: 2,
+  });
+  const days = rows.map((row) => row.date);
+  assert.ok(days.includes("2026-08-26"));
+  assert.ok(days.includes("2026-08-11"));
+  assert.equal(days.includes("2026-08-10"), false);
 });
 
 test("signed-in LP lines still produce daily income when wallet/lp is empty", () => {

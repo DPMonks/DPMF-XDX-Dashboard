@@ -1,4 +1,5 @@
 import {
+  pairFromRow,
   RLUSD_HEX,
   RLUSD_ISSUER,
   XDX_HEX,
@@ -193,33 +194,109 @@ export function isLpCurrencyHex(value) {
   return /^03[A-Fa-f0-9]{38}$/.test(String(value || "").trim());
 }
 
+function rippleStateFields(wrap) {
+  const created = wrap?.CreatedNode;
+  const deleted = wrap?.DeletedNode;
+  const modified = wrap?.ModifiedNode;
+  const node = modified || created || deleted;
+  if (!node || node.LedgerEntryType !== "RippleState") return null;
+  return {
+    created: Boolean(created),
+    deleted: Boolean(deleted),
+    node,
+    final: node.FinalFields || node.NewFields || {},
+    prev: node.PreviousFields || {},
+  };
+}
+
+function lpNodeDelta(wrap, account) {
+  const fields = rippleStateFields(wrap);
+  if (!fields) return null;
+  const { created, deleted, final, prev } = fields;
+  const currency = String(final.Balance?.currency || prev.Balance?.currency || "");
+  if (!isLpCurrencyHex(currency)) return null;
+  const high = final.HighLimit || prev.HighLimit || {};
+  const low = final.LowLimit || prev.LowLimit || {};
+  if (
+    account &&
+    !sameWallet(high.issuer, account) &&
+    !sameWallet(low.issuer, account) &&
+    !sameWallet(final.Account, account)
+  ) {
+    return null;
+  }
+  const after = deleted ? 0 : Math.abs(Number(final.Balance?.value));
+  if (!Number.isFinite(after)) return null;
+  const prevHasBalance = prev.Balance != null;
+  const before = created ? 0 : prevHasBalance ? Math.abs(Number(prev.Balance?.value || 0)) : after;
+  const delta = after - (Number.isFinite(before) ? before : after);
+  const amm = sameWallet(high.issuer, account) ? low.issuer : high.issuer;
+  return { currency, amm, delta, after, before };
+}
+
 export function lpDeltaFromMeta(meta, account) {
   const nodes = Array.isArray(meta?.AffectedNodes) ? meta.AffectedNodes : meta?.meta?.AffectedNodes;
   let best = 0;
   for (const wrap of Array.isArray(nodes) ? nodes : []) {
-    const node = wrap.ModifiedNode || wrap.CreatedNode;
-    if (!node || node.LedgerEntryType !== "RippleState") continue;
-    const final = node.FinalFields || node.NewFields || {};
-    const prev = node.PreviousFields || {};
-    const currency = String(final.Balance?.currency || "");
-    if (!isLpCurrencyHex(currency)) continue;
-    const high = final.HighLimit || {};
-    const low = final.LowLimit || {};
-    if (
-      account &&
-      !sameWallet(high.issuer, account) &&
-      !sameWallet(low.issuer, account) &&
-      !sameWallet(final.Account, account)
-    ) {
-      continue;
-    }
-    const after = Math.abs(Number(final.Balance?.value));
-    const before = Math.abs(Number(prev.Balance?.value || 0));
-    if (!Number.isFinite(after)) continue;
-    const delta = after - (Number.isFinite(before) ? before : 0);
-    if (delta > best) best = delta;
+    const row = lpNodeDelta(wrap, account);
+    if (row && row.delta > best) best = row.delta;
   }
   return best > 0 ? best : 0;
+}
+
+export function lpBalanceEventsFromMeta(meta, account) {
+  const nodes = Array.isArray(meta?.AffectedNodes) ? meta.AffectedNodes : meta?.meta?.AffectedNodes;
+  const byHex = new Map();
+  for (const wrap of Array.isArray(nodes) ? nodes : []) {
+    const row = lpNodeDelta(wrap, account);
+    if (!row) continue;
+    const current = byHex.get(row.currency) || { currency: row.currency, amm: row.amm, delta: 0 };
+    current.delta += row.delta;
+    current.amm = current.amm || row.amm;
+    byHex.set(row.currency, current);
+  }
+  return [...byHex.values()].filter((row) => Number.isFinite(row.delta) && Math.abs(row.delta) > 1e-8);
+}
+
+function pairFromLpEvent(tx, event) {
+  if (tx?.TransactionType === "AMMCreate") {
+    return pairFromVoteAssets(amountAsIssue(tx.Amount), amountAsIssue(tx.Amount2));
+  }
+  if (tx?.Asset || tx?.Asset2) return pairFromVoteAssets(tx.Asset, tx.Asset2);
+  return pairFromRow({
+    amm_account: event.amm,
+    lp_currency: event.currency,
+  });
+}
+
+export function lpHistoryFromAccountTx(transactions, address, extra = {}) {
+  const resolvePair = typeof extra.resolvePair === "function" ? extra.resolvePair : pairFromLpEvent;
+  const out = [];
+  for (const row of Array.isArray(transactions) ? transactions : []) {
+    const { tx, meta, hash, timestamp } = unwrapAccountTx(row);
+    const result = meta.TransactionResult || row.TransactionResult || "";
+    if (result && result !== "tesSUCCESS") continue;
+    const events = lpBalanceEventsFromMeta(meta, address || tx?.Account);
+    for (const event of events) {
+      const pair = resolvePair(tx, event) || pairFromLpEvent(tx, event);
+      const side =
+        event.delta < 0 ? "removeLp" : tx?.TransactionType === "AMMCreate" ? "createPool" : "addLp";
+      out.push({
+        account: address || tx?.Account || null,
+        side,
+        pair,
+        pool: pair,
+        lp: Math.abs(event.delta),
+        amm: event.amm || null,
+        lpCurrency: event.currency,
+        timestamp: timestamp || new Date().toISOString(),
+        txid: hash,
+        status: "filled",
+        kind: tx?.TransactionType || "lp",
+      });
+    }
+  }
+  return out.sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
 }
 
 export function lpTokensFromAmmTx(tx, meta, address) {

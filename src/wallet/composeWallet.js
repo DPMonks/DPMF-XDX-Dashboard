@@ -3,6 +3,8 @@ import {
   XDX_RLUSD_AMM,
   XDX_RLUSD_LP_HEX,
   XDX_TOTAL_SUPPLY,
+  XDX_XIO_AMM,
+  XDX_XIO_LP_HEX,
   XDX_XRP_AMM,
   XDX_XRP_LP_HEX,
 } from "../constants/ledger.js";
@@ -232,6 +234,7 @@ export function resolveLpPairName(pool = {}, pairHint = "") {
   const amm = String(pool.amm_account || pool.amm || "").trim();
   if (hex === XDX_RLUSD_LP_HEX || amm === XDX_RLUSD_AMM) return "XDX/RLUSD";
   if (hex === XDX_XRP_LP_HEX || amm === XDX_XRP_AMM) return "XDX/XRP";
+  if (hex === XDX_XIO_LP_HEX || amm === XDX_XIO_AMM) return "XDX/XIO";
 
   const quote = String(pool.quote || "").trim().toUpperCase().replace(/^XDX\//, "");
   if (quote && quote !== "XRP") return normalizeWalletPair(`XDX/${quote}`);

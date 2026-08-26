@@ -2312,7 +2312,7 @@ function walletLedgerResult(suffix, search = "") {
     }
     return loadWalletLpIncome(decodeURIComponent(lpIncome[1]), {
       fresh: walletFresh(search),
-      pair: params.get("pair") || "XDX/XRP",
+      pair: params.get("pair") || "ALL",
       marker,
     }).then((body) => ok(body));
   }

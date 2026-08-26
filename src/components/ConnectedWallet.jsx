@@ -38,6 +38,7 @@ import {
   mergeRecordedLpIncome,
   pageLpIncome,
   readRecordedLpIncome,
+  remapIncomeActivity,
   writeRecordedLpIncome,
 } from "../wallet/lpIncome";
 
@@ -238,14 +239,15 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
   const [epoch, setEpoch] = useState(0);
   const cacheRef = useRef(new Map());
   const sentinelRef = useRef(null);
+  const historyRows = remapIncomeActivity(historyActivity, positions, pools);
   const pairs = incomePairChoices({
     positions,
-    activity: [...(Array.isArray(snapshotRows) ? snapshotRows : []), ...(historyActivity || [])],
+    activity: [...(Array.isArray(snapshotRows) ? snapshotRows : []), ...historyRows],
   });
   const all = incomeRowsForPair({
     pair: incomePair,
     snapshotRows,
-    historyActivity,
+    historyActivity: historyRows,
     historyDays,
     recordedRows,
     positions,
@@ -254,27 +256,37 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
     xdxUsd: priceBook?.xdxUsd,
     xrpUsd: priceBook?.xrpUsd,
     rlusdUsd: priceBook?.RLUSD,
+    historyComplete,
   });
   const dayCount = incomeDayKeys(all).length;
   const visible = pageLpIncome(all, daysShown);
   const pagedOut = empty || dayCount === 0 || daysShown >= dayCount;
-  const done = pagedOut && !loading && (empty || historyComplete || historyActivity != null);
+  const done = pagedOut && !loading && (empty || historyComplete);
 
   useEffect(() => {
     if (!address || empty) return undefined;
-    const key = `${address}:${incomePair}`;
+    const key = address;
     const cached = cacheRef.current.get(key);
     if (cached) {
       setHistoryActivity(cached.activity);
       setHistoryDays(Array.isArray(cached.days) ? cached.days : []);
       setHistoryComplete(cached.complete);
-      setLoading(false);
-      return undefined;
+      setLoading(!cached.complete);
+      if (cached.complete) return undefined;
     }
     let cancelled = false;
     setLoading(true);
     setHistoryComplete(false);
-    loadWalletLpIncomeHistory(address, { pair: incomePair, fresh: epoch > 0 })
+    loadWalletLpIncomeHistory(address, {
+      fresh: epoch > 0,
+      onPage: (partial) => {
+        if (cancelled) return;
+        cacheRef.current.set(key, partial);
+        setHistoryActivity(partial.activity);
+        setHistoryDays(Array.isArray(partial.days) ? partial.days : []);
+        setHistoryComplete(false);
+      },
+    })
       .then((result) => {
         if (cancelled) return;
         cacheRef.current.set(key, result);
@@ -290,7 +302,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
     return () => {
       cancelled = true;
     };
-  }, [address, incomePair, empty, epoch]);
+  }, [address, empty, epoch]);
 
   useEffect(() => {
     if (!address) return undefined;
@@ -328,18 +340,6 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
   function onPairChange(next) {
     setIncomePair(next);
     setDaysShown(INCOME_PAGE_DAYS);
-    const cached = address ? cacheRef.current.get(`${address}:${next}`) : null;
-    if (cached) {
-      setHistoryActivity(cached.activity);
-      setHistoryDays(Array.isArray(cached.days) ? cached.days : []);
-      setHistoryComplete(cached.complete);
-      setLoading(false);
-      return;
-    }
-    setHistoryActivity(null);
-    setHistoryDays([]);
-    setHistoryComplete(false);
-    setLoading(true);
   }
 
   useEffect(() => {
