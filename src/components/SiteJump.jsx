@@ -33,10 +33,15 @@ function scrollToDeck(id) {
   if (!node) return;
   function go() {
     const top = window.scrollY + node.getBoundingClientRect().top - lockOffset();
+    if (Math.abs(node.getBoundingClientRect().top - lockOffset()) <= 1) return;
     window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
   }
   go();
   window.requestAnimationFrame(go);
+  if (typeof ResizeObserver !== "function") return;
+  const obs = new ResizeObserver(go);
+  obs.observe(document.documentElement);
+  window.setTimeout(() => obs.disconnect(), 1200);
 }
 
 export default function SiteJump() {
