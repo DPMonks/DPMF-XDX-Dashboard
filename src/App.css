@@ -4363,7 +4363,7 @@ body {
 }
 
 .governance-history h3 {
-  margin: 8px 0 10px;
+  margin: 0 0 8px;
   font-size: 13px;
   color: var(--dpmf-text-main);
 }
@@ -4413,7 +4413,7 @@ body {
 
 @media (max-width: 1180px) {
   .governance-history h3 {
-    margin: 12px 0 14px;
+    margin: 16px 0 18px;
   }
 }
 
