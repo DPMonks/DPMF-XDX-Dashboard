@@ -3,7 +3,6 @@ import { getOrderbook, getOrderbooks } from "../api/indexer";
 import {
   bookFromMarketPayload,
   bookHeader,
-  emptyOrderbook,
   FEATURED_ORDERBOOK_PAIRS,
   filterBookTape,
   filterOrderbookPairs,
