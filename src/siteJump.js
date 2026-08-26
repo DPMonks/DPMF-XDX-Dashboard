@@ -42,8 +42,15 @@ export function pageTravelPercent(scrollY, maxScroll) {
   return Math.min(100, Math.max(0, (top / max) * 100));
 }
 
+export function jumpLockOffset({ barH = 0, safeTop = 0, gap = 0 } = {}) {
+  return Math.round(
+    Math.max(0, Number(barH) || 0) + Math.max(0, Number(safeTop) || 0) + Math.max(0, Number(gap) || 0)
+  );
+}
+
 export function trailChromeOffset({ headerH = 0, barH = 0, padTop = 0 } = {}) {
-  return Math.round(Math.max(0, Number(padTop) || 0) + Math.max(0, Number(headerH) || 0) + Math.max(0, Number(barH) || 0));
+  void headerH;
+  return jumpLockOffset({ barH, safeTop: padTop, gap: 0 });
 }
 
 export function sectionAtLockLine(ids = SITE_JUMP_IDS, offset = 72, lookup = globalThis.document?.getElementById?.bind(globalThis.document)) {

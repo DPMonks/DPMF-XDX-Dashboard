@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "../i18n/useI18n";
 import {
   SITE_JUMP_IDS,
+  jumpLockOffset,
   pageTravelPercent,
   readJumpHash,
   sectionAtLockLine,
@@ -9,22 +10,16 @@ import {
 } from "../siteJump";
 
 function lockOffset() {
-  const chrome = document.querySelector(".site-chrome");
-  const header = document.querySelector(".dashboard-header");
-  const panel = document.querySelector(".site-jump-panel");
-  if (!chrome) return 72;
-  let height = chrome.getBoundingClientRect().height;
-  if (panel && !panel.hasAttribute("hidden")) {
-    const style = getComputedStyle(panel);
-    height -= panel.getBoundingClientRect().height + (Number.parseFloat(style.marginTop) || 0);
-  }
-  const offset = Math.round(Math.max(0, height));
-  const padTop = Number.parseFloat(getComputedStyle(chrome).paddingTop) || 0;
+  const jump = document.querySelector(".site-jump");
+  const bar = jump?.querySelector(".site-jump-bar");
+  if (!bar) return 64;
+  const style = getComputedStyle(jump);
+  const offset = jumpLockOffset({
+    barH: bar.getBoundingClientRect().height,
+    safeTop: Number.parseFloat(style.top) || 0,
+    gap: (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0),
+  });
   document.documentElement.style.setProperty("--jump-sticky", `${offset}px`);
-  document.documentElement.style.setProperty(
-    "--site-header-h",
-    `${Math.round((header?.getBoundingClientRect().height || 0) + padTop)}px`
-  );
   return offset;
 }
 
@@ -38,10 +33,13 @@ function scrollToDeck(id) {
   }
   go();
   window.requestAnimationFrame(go);
+  window.setTimeout(go, 300);
+  window.setTimeout(go, 900);
+  window.setTimeout(go, 1800);
   if (typeof ResizeObserver !== "function") return;
   const obs = new ResizeObserver(go);
   obs.observe(document.documentElement);
-  window.setTimeout(() => obs.disconnect(), 1200);
+  window.setTimeout(() => obs.disconnect(), 2500);
 }
 
 export default function SiteJump() {

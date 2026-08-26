@@ -321,9 +321,9 @@ export default function App() {
             </div>
           </div>
         </header>
-
-        <SiteJump />
       </div>
+
+      <SiteJump />
 
       <p className={`indexer-source is-${linkState.tone}`} title={INDEXER_ORIGIN}>
         <span className="handshake-dot" aria-hidden="true" />
