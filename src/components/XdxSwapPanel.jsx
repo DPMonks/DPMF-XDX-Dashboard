@@ -567,15 +567,21 @@ export default function XdxSwapPanel() {
               </div>
             </div>
 
-            <input
-              type="text"
-              inputMode="decimal"
-              className="xdx-swap-input is-amount"
-              value={amount}
-              placeholder="0"
-              aria-label={t.swapAmount}
-              onChange={(event) => setAmount(sanitizeQtyInput(event.target.value))}
-            />
+            <div className="xdx-swap-amount">
+              <span>{t.swapPay || t.swapAmount || "Amount"}</span>
+              <label className="xdx-swap-amount-field">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="xdx-swap-input is-amount"
+                  value={amount}
+                  placeholder="0.00"
+                  aria-label={t.swapAmount || t.swapPay || "Amount"}
+                  onChange={(event) => setAmount(sanitizeQtyInput(event.target.value))}
+                />
+                {fromTicker ? <em className="xdx-swap-amount-asset">{fromTicker}</em> : null}
+              </label>
+            </div>
             <div className="xdx-swap-tools">
               <div className="xdx-swap-pcts" role="group" aria-label={t.swapPercents}>
                 {SWAP_PCTS.map((pct) => {
