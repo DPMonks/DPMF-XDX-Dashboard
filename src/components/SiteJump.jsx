@@ -6,7 +6,6 @@ import {
   readJumpHash,
   sectionAtLockLine,
   siteJumpItems,
-  trailChromeOffset,
 } from "../siteJump";
 
 function prefersReducedMotion() {
@@ -16,16 +15,29 @@ function prefersReducedMotion() {
 function lockOffset() {
   const chrome = document.querySelector(".site-chrome");
   const header = document.querySelector(".dashboard-header");
-  const bar = document.querySelector(".site-jump-bar");
-  const padTop = chrome ? Number.parseFloat(getComputedStyle(chrome).paddingTop) || 0 : 0;
-  const offset = trailChromeOffset({
-    headerH: header?.getBoundingClientRect().height || 0,
-    barH: bar?.getBoundingClientRect().height || 56,
-    padTop,
-  });
+  const panel = document.querySelector(".site-jump-panel");
+  if (!chrome) return 72;
+  let height = chrome.getBoundingClientRect().height;
+  if (panel && !panel.hasAttribute("hidden")) {
+    const style = getComputedStyle(panel);
+    height -= panel.getBoundingClientRect().height + (Number.parseFloat(style.marginTop) || 0);
+  }
+  const offset = Math.round(Math.max(0, height));
+  const padTop = Number.parseFloat(getComputedStyle(chrome).paddingTop) || 0;
   document.documentElement.style.setProperty("--jump-sticky", `${offset}px`);
-  document.documentElement.style.setProperty("--site-header-h", `${Math.round((header?.getBoundingClientRect().height || 0) + padTop)}px`);
+  document.documentElement.style.setProperty(
+    "--site-header-h",
+    `${Math.round((header?.getBoundingClientRect().height || 0) + padTop)}px`
+  );
   return offset;
+}
+
+function snapDeck(id) {
+  const node = document.getElementById(id);
+  if (!node) return;
+  const delta = node.getBoundingClientRect().top - lockOffset();
+  if (Math.abs(delta) <= 2) return;
+  window.scrollTo({ top: Math.max(0, window.scrollY + delta), behavior: "auto" });
 }
 
 function scrollToDeck(id) {
@@ -33,6 +45,7 @@ function scrollToDeck(id) {
   if (!node) return;
   const top = window.scrollY + node.getBoundingClientRect().top - lockOffset();
   window.scrollTo({ top: Math.max(0, top), behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  window.setTimeout(() => snapDeck(id), prefersReducedMotion() ? 0 : 450);
 }
 
 export default function SiteJump() {
