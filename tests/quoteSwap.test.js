@@ -4,7 +4,9 @@ import {
   ammSwapOut,
   expectedFromMid,
   quoteBridgeSwap,
+  poolReducePercent,
   quoteSwap,
+  quoteUsesPool,
   resolveVenueMid,
   saferSwapAlternatives,
   walkBook,
@@ -120,7 +122,7 @@ test("unwrapped catalog bids fill a book-only sell quote", () => {
   assert.ok(quote.bookOutput > 0);
 });
 
-test("saferSwapAlternatives offers a smaller size when impact is high", () => {
+test("pool fills report reserve share and do not recommend cutting in half", () => {
   const extras = {
     sellingXdx: true,
     mid: 0.03,
@@ -131,7 +133,31 @@ test("saferSwapAlternatives offers a smaller size when impact is high", () => {
     asks: [],
   };
   const quote = quoteSwap({ ...extras, amountIn: 2_000, routingMode: "smart" });
+  assert.ok(quoteUsesPool(quote));
+  assert.ok(quote.poolReducePercent > 1);
+  assert.ok(
+    Math.abs(quote.poolReducePercent - poolReducePercent({ ammOutput: quote.ammOutput, sellingXdx: true, reserveBase: 8_000, reserveQuote: 80 })) < 1e-9
+  );
   const rows = saferSwapAlternatives(2_000, quote, extras);
+  assert.equal(rows.some((row) => row.id === "half"), false);
+});
+
+test("saferSwapAlternatives can still shrink a book-only walk", () => {
+  const extras = {
+    sellingXdx: true,
+    mid: 0.02,
+    reserveBase: 0,
+    reserveQuote: 0,
+    tradingFee: 1000,
+    bids: [
+      { price: 0.02, base_size: 80, source: "dex" },
+      { price: 0.01, base_size: 400, source: "dex" },
+    ],
+    asks: [],
+  };
+  const quote = quoteSwap({ ...extras, amountIn: 400, routingMode: "book" });
+  assert.equal(quoteUsesPool(quote), false);
+  const rows = saferSwapAlternatives(400, quote, extras);
   assert.ok(rows.some((row) => row.id === "half"));
 });
 

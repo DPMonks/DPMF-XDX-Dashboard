@@ -16,7 +16,7 @@ import { useI18n } from "../i18n/useI18n";
 import { ammSpot } from "../ammCurve";
 import { bookFromMarketPayload, bookHeader, emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
 import { quoteSelectedPair, venueFromDirectMarket } from "../swap/directPair";
-import { IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
+import { IMPACT_WARN_PCT, quoteSwap, quoteUsesPool, saferSwapAlternatives } from "../swap/quoteSwap";
 import { normalizeSwapMode, swapModeById } from "../swap/swapModes";
 import {
   buildSwapHops,
@@ -347,8 +347,11 @@ export default function XdxSwapPanel() {
     ammQuote,
     qty,
   });
-  const impactHot =
-    quote && (Math.abs(quote.priceImpactPercent) >= IMPACT_WARN_PCT || quote.isNegativeSlippage);
+  const poolShare = Number(quote?.poolReducePercent);
+  const showPoolShare = Boolean(quote && quoteUsesPool(quote) && poolShare > 0);
+  const impactHot = showPoolShare
+    ? poolShare >= IMPACT_WARN_PCT
+    : Boolean(quote && (Math.abs(quote.priceImpactPercent) >= IMPACT_WARN_PCT || quote.isNegativeSlippage));
   const quoteExtras = sellingXdx
     ? { ...toVenue, sellingXdx: true, routingMode }
     : buyingXdx
@@ -649,7 +652,11 @@ export default function XdxSwapPanel() {
           {gotFill ? (
             <p className={`xdx-swap-result${impactHot ? " is-warn" : ""}`}>
               {routeLabel}
-              {quote.slippagePercent != null ? ` · ${formatPercent(quote.slippagePercent, locale)}` : ""}
+              {showPoolShare
+                ? ` · ${(t.swapPoolTaken || "{share} of pool").replace("{share}", formatPercent(poolShare, locale))}`
+                : quote.slippagePercent != null
+                  ? ` · ${formatPercent(quote.slippagePercent, locale)}`
+                  : ""}
             </p>
           ) : noRoute ? (
             <p className="xdx-swap-warn">

@@ -217,6 +217,7 @@ const en = {
   swapRouteHybrid: "AMM + order book",
   swapRouteAmm: "AMM only",
   swapRoutePool: "Pool",
+  swapPoolTaken: "{share} of pool",
   swapRouteBook: "Order book only",
   swapBook: "Book",
   swapRouteNone: "No route",

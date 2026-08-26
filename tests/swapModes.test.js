@@ -56,6 +56,34 @@ test("rippling stays locked unless both assets share an issuer", () => {
   assert.equal(rec.reason, "noripple");
 });
 
+test("no route does not recommend cutting the order in half", () => {
+  const rec = recommendSwapMode({
+    qty: 25_000,
+    routingMode: "smart",
+    alternatives: [],
+    noRoute: true,
+    quote: { actualOutput: 0, routeUsed: "none" },
+    fromTicker: "XRP",
+    toTicker: "XDX",
+  });
+  assert.equal(rec, null);
+});
+
+test("pool fills do not recommend cutting the order in half", () => {
+  const rec = recommendSwapMode({
+    qty: 2000,
+    routingMode: "smart",
+    alternatives: [{ id: "half", amountIn: 1000 }],
+    noRoute: false,
+    quote: { actualOutput: 16, routeUsed: "amm", ammOutput: 16, poolReducePercent: 19.8 },
+    bookQuote: { actualOutput: 0 },
+    ammQuote: { actualOutput: 16 },
+    fromTicker: "XDX",
+    toTicker: "XRP",
+  });
+  assert.equal(rec?.id === "half", false);
+});
+
 test("supply and demand chat recommends the deeper venue", () => {
   const rec = recommendSwapMode({
     qty: 10,
@@ -79,9 +107,12 @@ test("smart chat reports a split fill and hop path", () => {
     via: "direct",
     bookOutput: 8,
     ammOutput: 19,
+    poolReducePercent: 1.72,
   };
   const rows = smartChatMessages({ quote, routingMode: "smart", toTicker: "RLUSD" });
   assert.ok(rows.some((row) => row.includes("split the trade")));
+  assert.ok(rows.some((row) => row.includes("1.72%") && row.includes("pool reserve")));
+  assert.equal(rows.some((row) => row.includes("cut") || row.includes("half")), false);
   assert.deepEqual(buildSwapHops({ quote, fromTicker: "XRP", toTicker: "RLUSD" }), [
     { from: "XRP", to: "RLUSD", venue: "hybrid" },
   ]);

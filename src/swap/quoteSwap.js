@@ -188,6 +188,22 @@ export function walkHybrid({
   return { out, leftover: left > 0 ? left : 0, route, usedAmm, usedDex, bookOut, ammOut: ammOutTotal };
 }
 
+export function poolReducePercent({
+  ammOutput = 0,
+  sellingXdx,
+  reserveBase,
+  reserveQuote,
+} = {}) {
+  const out = num(ammOutput);
+  const reserveOut = sellingXdx ? num(reserveQuote) : num(reserveBase);
+  if (!(out > 0) || !(reserveOut > 0)) return null;
+  return (out / reserveOut) * 100;
+}
+
+export function quoteUsesPool(quote) {
+  return num(quote?.ammOutput) > 0 || quote?.routeUsed === "amm" || quote?.routeUsed === "hybrid";
+}
+
 export function expectedFromMid(amountIn, mid, sellingXdx) {
   const qty = num(amountIn);
   const px = num(mid);
@@ -276,6 +292,12 @@ export function quoteSwap({
     mid: venueMid,
     partialFill: hasFill && leftover > 0,
     xdxNotional: sellingXdx ? filledIn : actual,
+    poolReducePercent: poolReducePercent({
+      ammOutput: walk.ammOut,
+      sellingXdx,
+      reserveBase,
+      reserveQuote,
+    }),
   };
 }
 
@@ -330,6 +352,7 @@ export function quoteBridgeSwap({ amountIn, fromVenue = {}, toVenue = {}, routin
     partialFill: Boolean(hop1.partialFill || hop2.partialFill),
     xdxNotional: hop1.actualOutput,
     hops: [hop1, hop2],
+    poolReducePercent: Math.max(num(hop1.poolReducePercent), num(hop2.poolReducePercent)) || null,
   };
 }
 
@@ -342,7 +365,13 @@ export function saferSwapAlternatives(input, quote, extras = {}) {
   const book = quoteSwap({ ...extras, amountIn: input, routingMode: "book" });
 
   const impactHigh = Math.abs(num(quote.priceImpactPercent)) >= IMPACT_WARN_PCT || quote.isNegativeSlippage;
-  if (impactHigh && half.actualOutput > 0 && Math.abs(half.priceImpactPercent) < Math.abs(quote.priceImpactPercent)) {
+  const poolFill = quoteUsesPool(quote);
+  if (
+    impactHigh &&
+    !poolFill &&
+    half.actualOutput > 0 &&
+    Math.abs(half.priceImpactPercent) < Math.abs(quote.priceImpactPercent)
+  ) {
     rows.push({ id: "half", amountIn: halfIn, quote: half });
   }
   if (amm.actualOutput > quote.actualOutput + 1e-9) rows.push({ id: "amm", amountIn: input, quote: amm });
