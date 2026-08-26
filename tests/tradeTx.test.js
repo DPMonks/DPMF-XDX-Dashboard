@@ -28,6 +28,7 @@ import {
   executionBelongsToOpenTrade,
   executionClosesTradeAction,
   gateUnsignedTrade,
+  hasLpRow,
   hasLpTrustline,
   hasQuoteTrustline,
   lpTrustSetTxjson,
@@ -35,6 +36,7 @@ import {
   offerCreateBuyXdx,
   offerCreateSellXdx,
   poolForQuote,
+  quoteHintsFromLines,
   quoteAsset,
   quoteIdFromPair,
   quoteTrustSetTxjson,
@@ -384,6 +386,60 @@ test("hasLpTrustline matches the pool LP line, not a quote IOU", () => {
     shouldAskQuoteTrustline({ loaded: true, haveLine: false, haveLp: false, quote: rlusd }),
     true
   );
+});
+
+test("non-XRP pools keep their own LP identity and read hex trustlines", () => {
+  const usdc = resolveQuote("USDC");
+  assert.equal(usdc.issuer, null);
+  assert.notEqual(poolForQuote(usdc).amm, XDX_XRP_AMM);
+  const usdcPool = {
+    pool: "XDX/USDC",
+    quote: "USDC",
+    amm_account: "rUsdcAmm11111111111111111111111111",
+    lp_currency: "03CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+  };
+  const usdcSpec = poolForQuote(usdc, [usdcPool]);
+  assert.equal(usdcSpec.amm, usdcPool.amm_account);
+  assert.equal(usdcSpec.lpCurrency, usdcPool.lp_currency);
+  const usdcHex = "5553444300000000000000000000000000000000";
+  assert.equal(
+    hasLpTrustline(
+      [{ currency: `0x${usdcPool.lp_currency.toLowerCase()}`, issuer: usdcPool.amm_account }],
+      usdcSpec
+    ),
+    true
+  );
+  assert.equal(
+    hasQuoteTrustline([{ currency: usdcHex, issuer: "rUsdcIssuer", ticker: "USDC" }], {
+      ...usdc,
+      issuer: "rUsdcIssuer",
+    }),
+    true
+  );
+  const hinted = quoteHintsFromLines(
+    [{ currency: usdcHex, issuer: "rUsdcIssuer", ticker: "USDC", balance: "40" }],
+    usdc
+  );
+  assert.equal(hinted.issuer, "rUsdcIssuer");
+  assert.equal(hinted.hex, usdcHex);
+
+  const rlusdSpec = poolForQuote(quoteAsset("RLUSD"));
+  assert.equal(
+    hasLpTrustline(
+      [{ currency: `0x${XDX_RLUSD_LP_HEX.toLowerCase()}`, account: XDX_RLUSD_AMM }],
+      rlusdSpec
+    ),
+    true
+  );
+  assert.equal(
+    hasLpTrustline([{ currency: "03DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", issuer: XDX_RLUSD_AMM }], rlusdSpec),
+    true
+  );
+  assert.equal(hasLpRow([{ pool: "XDX/RLUSD", lp_balance: 0 }], "XDX/RLUSD", "RLUSD", rlusdSpec), true);
+
+  const bitx = resolveQuote("BITX", { quote: "Bitx", amm: "rBitxAmm", lp_currency: "03BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" });
+  assert.equal(poolForQuote(bitx).amm, "rBitxAmm");
+  assert.equal(normalizeTradeRequest({ action: "addLp", pair: "XDX/USDC", amm: "rAmm", lp_currency: "03AA" }).amm, "rAmm");
 });
 
 test("totals and LP hints stay simple numbers", () => {

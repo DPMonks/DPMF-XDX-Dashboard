@@ -13,6 +13,7 @@ import {
   XSQUAD_ISSUER,
   asciiCurrencyHex,
 } from "../constants/ledger.js";
+import { decodeCurrency, isNativeXrpQuote, lineCounterparty, lineCurrencyCodes, sameIssuedCurrency } from "../utils/currency.js";
 import { detectQuoteUsd } from "../utils/poolSplit.js";
 import { pendingFromExecution, rememberPending } from "../wallet/ledgerOrders.js";
 import { rememberTradeNotice } from "../wallet/tradeNotice.js";
@@ -197,6 +198,8 @@ export function normalizeTradeRequest(detail) {
     quote: quoteIdFromPair(detail.quote || detail.pair || detail.pool || detail.toId || "XRP"),
     quoteIssuer: detail.quoteIssuer || detail.quote_issuer || null,
     quoteHex: detail.quoteHex || detail.quote_hex || null,
+    amm: detail.amm || detail.amm_account || null,
+    lpCurrency: detail.lpCurrency || detail.lp_currency || null,
     amount: optionalAmount(detail.amount),
     fromId: optionalText(detail.fromId),
     toId: optionalText(detail.toId),
@@ -220,15 +223,45 @@ export function gateUnsignedTrade(detail, walletAddress) {
 export function resolveQuote(id, extra = {}) {
   const key = quoteIdFromPair(id || extra.quote);
   const known = QUOTE_ASSETS.find((row) => row.id === key);
-  if (known) return { ...known, pair: `XDX/${known.id}` };
+  const rawQuote = extra.currency || (extra.quote && !String(extra.quote).includes("/") ? extra.quote : null);
+  if (known) {
+    return {
+      ...known,
+      pair: `XDX/${known.id}`,
+      issuer: extra.quoteIssuer || extra.quote_issuer || extra.issuer || known.issuer || null,
+      hex: extra.quoteHex || extra.quote_hex || extra.hex || known.hex || null,
+      amm: extra.amm || extra.amm_account || null,
+      lpCurrency: extra.lpCurrency || extra.lp_currency || null,
+    };
+  }
   return {
     id: key,
-    currency: key === "XRP" ? "XRP" : key,
+    currency: key === "XRP" ? "XRP" : rawQuote || key,
     issuer: extra.quoteIssuer || extra.quote_issuer || extra.issuer || null,
     hex: extra.quoteHex || extra.quote_hex || extra.hex || null,
     label: key,
     pair: `XDX/${key}`,
+    amm: extra.amm || extra.amm_account || null,
+    lpCurrency: extra.lpCurrency || extra.lp_currency || null,
   };
+}
+
+export function quoteHintsFromLines(lines, quote = {}) {
+  const want = decodeCurrency(quote?.id || quote?.currency || quote?.label || "");
+  if (!want || want === "XRP" || want === "XDX") return {};
+  for (const row of Array.isArray(lines) ? lines : []) {
+    const codes = lineCurrencyCodes(row);
+    if (codes.some((code) => isLpCurrency(code))) continue;
+    const ticker = codes.some((code) => decodeCurrency(code) === want || sameIssuedCurrency(code, want));
+    if (!ticker) continue;
+    const issuer = row.issuer || row.account || row.counterparty;
+    if (!issuer) continue;
+    const hex = codes
+      .map((code) => String(code || "").replace(/^0x/i, "").toUpperCase())
+      .find((code) => /^[A-F0-9]{40}$/.test(code) && !isLpCurrency(code));
+    return { issuer, hex: hex || null };
+  }
+  return {};
 }
 
 export function quoteChoices(pools = []) {
@@ -241,8 +274,8 @@ export function quoteChoices(pools = []) {
 }
 
 export function quoteLedgerCurrency(quote) {
-  if (!quote || quote.currency === "XRP" || !quote.issuer) return "XRP";
-  const code = String(quote.currency || quote.hex || "");
+  if (isNativeXrpQuote(quote)) return "XRP";
+  const code = String(quote.currency || quote.hex || quote.id || "");
   if (/^[A-Z0-9]{3}$/i.test(code)) return code.toUpperCase();
   if (/^[A-Fa-f0-9]{40}$/.test(code)) return code.toUpperCase();
   const hex = String(quote.hex || "");
@@ -284,7 +317,7 @@ export function issuedAmount(currency, issuer, value) {
 }
 
 export function quoteAmount(quote, value) {
-  if (!quote || quote.currency === "XRP" || !quote.issuer) return xrpDrops(value);
+  if (isNativeXrpQuote(quote)) return xrpDrops(value);
   return issuedAmount(quoteLedgerCurrency(quote), quote.issuer, value);
 }
 
@@ -373,10 +406,9 @@ export function ammDepositTx({ account, quote, xdx, quoteQty, mode = "double", s
   const txjson = {
     TransactionType: "AMMDeposit",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
-    Asset2:
-      quote?.currency === "XRP" || !quote?.issuer
-        ? { currency: "XRP" }
-        : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
+    Asset2: isNativeXrpQuote(quote)
+      ? { currency: "XRP" }
+      : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
   };
   if (mode === "single") {
     txjson.Flags = TF_SINGLE_ASSET;
@@ -411,30 +443,37 @@ export function sameLedgerCurrency(left, right) {
   return false;
 }
 
+function asLpHex(value) {
+  const hex = ledgerCurrencyCode(value);
+  return isLpCurrency(hex) ? hex : null;
+}
+
 export function poolForQuote(quote, pools = [], live = null) {
   const pair = String(quote?.pair || `XDX/${quote?.id || quote?.currency || "XRP"}`)
     .replace(/\s+/g, "")
     .toUpperCase();
-  const liveAmm = live?.amm_account || live?.amm || null;
-  const liveLp = isLpCurrency(live?.lp_currency || live?.lp_currency_hex)
-    ? String(live.lp_currency || live.lp_currency_hex).trim().toUpperCase()
-    : null;
+  const liveAmm = live?.amm_account || live?.amm || quote?.amm || quote?.amm_account || null;
+  const liveLp =
+    asLpHex(live?.lp_currency || live?.lp_currency_hex) || asLpHex(quote?.lpCurrency || quote?.lp_currency);
   if (liveAmm && liveLp) return { amm: liveAmm, lpCurrency: liveLp, pair };
+  const quoteTicker = pair.split("/")[1] || "";
   const row = (Array.isArray(pools) ? pools : []).find((item) => {
     const name = String(item?.pool || item?.pool_name || item?.pair || "")
       .replace(/\s+/g, "")
       .toUpperCase();
-    return name === pair || name.endsWith(`/${pair.split("/")[1] || ""}`);
+    const itemQuote = String(item?.quote || "")
+      .replace(/^XDX\//i, "")
+      .toUpperCase();
+    return name === pair || (quoteTicker && (name.endsWith(`/${quoteTicker}`) || itemQuote === quoteTicker));
   });
   const amm = row?.amm_account || row?.amm || liveAmm || null;
-  const rawLp = row?.lp_currency || row?.lp_currency_hex || liveLp || null;
-  const lpCurrency = isLpCurrency(rawLp) ? ledgerCurrencyCode(rawLp) : null;
+  const lpCurrency = asLpHex(row?.lp_currency || row?.lp_currency_hex || liveLp);
   if (amm && lpCurrency) return { amm, lpCurrency, pair };
-  if (quote?.currency === "RLUSD" || pair === "XDX/RLUSD") {
-    return { amm: amm || XDX_RLUSD_AMM, lpCurrency: XDX_RLUSD_LP_HEX, pair: "XDX/RLUSD" };
+  if (quote?.currency === "RLUSD" || quote?.id === "RLUSD" || pair === "XDX/RLUSD") {
+    return { amm: amm || XDX_RLUSD_AMM, lpCurrency: lpCurrency || XDX_RLUSD_LP_HEX, pair: "XDX/RLUSD" };
   }
-  if (quote?.currency === "XRP" || pair === "XDX/XRP") {
-    return { amm: amm || XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX, pair: "XDX/XRP" };
+  if (isNativeXrpQuote(quote) || pair === "XDX/XRP") {
+    return { amm: amm || XDX_XRP_AMM, lpCurrency: lpCurrency || XDX_XRP_LP_HEX, pair: "XDX/XRP" };
   }
   if (amm) return { amm, lpCurrency, pair };
   return { amm: null, lpCurrency: null, pair };
@@ -460,17 +499,24 @@ export function lpTrustSetTxjson(account, spec = {}) {
 }
 
 export function hasLpTrustline(lines, spec = {}) {
-  const currency = ledgerCurrencyCode(spec.lpCurrency || spec.currency || spec.lp_currency);
+  const currency = asLpHex(spec.lpCurrency || spec.currency || spec.lp_currency) || "";
   const issuer = String(spec.amm || spec.issuer || spec.amm_account || "").toUpperCase();
   if (!currency && !issuer) return false;
   return (Array.isArray(lines) ? lines : []).some((row) => {
-    const who = String(row?.issuer || row?.account || row?.counterparty || "").toUpperCase();
-    if (issuer && who && who !== issuer) return false;
-    const code = ledgerCurrencyCode(row?.currency || row?.hex || row?.lp_currency);
-    if (currency && sameLedgerCurrency(code, currency)) return true;
-    const isLp = Boolean(row?.lp) || isLpCurrency(code);
-    return Boolean(issuer) && who === issuer && isLp;
+    const who = lineCounterparty(row);
+    const codes = lineCurrencyCodes(row);
+    const lpLine = Boolean(row?.lp) || codes.some((code) => isLpCurrency(code));
+    if (issuer && who && who === issuer && lpLine) return true;
+    if (currency && codes.some((code) => sameIssuedCurrency(code, currency))) {
+      if (issuer && who && who !== issuer) return false;
+      return true;
+    }
+    return false;
   });
+}
+
+export function hasLpRow(rows, pair, quoteId, spec = {}) {
+  return (Array.isArray(rows) ? rows : []).some((item) => lpRowMatchesPair(item, pair, quoteId, spec));
 }
 
 export function ammWithdrawTx({
@@ -486,10 +532,9 @@ export function ammWithdrawTx({
   const txjson = {
     TransactionType: "AMMWithdraw",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
-    Asset2:
-      quote?.currency === "XRP" || !quote?.issuer
-        ? { currency: "XRP" }
-        : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
+    Asset2: isNativeXrpQuote(quote)
+      ? { currency: "XRP" }
+      : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
     LPTokenIn: {
       currency: pool.lpCurrency,
       issuer: pool.amm,
@@ -525,18 +570,15 @@ export function quoteTrustSetTxjson(account, quote) {
 }
 
 export function hasQuoteTrustline(lines, quote = {}) {
+  if (isNativeXrpQuote(quote)) return true;
   if (!quote?.issuer) return false;
   const issuer = String(quote.issuer || "").toUpperCase();
-  const codes = new Set(
-    [quote.currency, quote.hex, quote.id, quote.label, quoteLedgerCurrency(quote)]
-      .map((value) => ledgerCurrencyCode(value))
-      .filter(Boolean)
-  );
+  const wants = [quote.currency, quote.hex, quote.id, quote.label, quoteLedgerCurrency(quote)].filter(Boolean);
   return (Array.isArray(lines) ? lines : []).some((row) => {
-    if (String(row?.issuer || row?.account || row?.counterparty || "").toUpperCase() !== issuer) return false;
-    const code = ledgerCurrencyCode(row?.currency || row?.hex || row?.ticker);
-    if (codes.has(code)) return true;
-    return [...codes].some((want) => sameLedgerCurrency(code, want));
+    const who = lineCounterparty(row);
+    if (issuer && who && who !== issuer) return false;
+    if (lineCurrencyCodes(row).some((code) => isLpCurrency(code))) return false;
+    return wants.some((want) => lineCurrencyCodes(row).some((code) => sameIssuedCurrency(code, want)));
   });
 }
 
