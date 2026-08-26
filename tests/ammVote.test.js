@@ -8,6 +8,7 @@ import {
   governanceFromAmmInfo,
   medianVotedFee,
   assetVoteRowsFromSlots,
+  displayVotePair,
   formatVoteWeight,
   mergeAssetVoteRows,
   voteHistoryFromActivity,
@@ -28,6 +29,14 @@ test("pairFromVoteAssets tags XDX/XIO from the XIO hex or issuer", () => {
     pairFromVoteAssets({ currency: XDX_CURRENCY, issuer: XDX_ISSUER }, { currency: "XIO", issuer: XIO_ISSUER }),
     "XDX/XIO"
   );
+  assert.equal(
+    pairFromVoteAssets(
+      { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
+      { currency: "5553444300000000000000000000000000000000", issuer: "rUsdc" }
+    ),
+    "XDX/USDC"
+  );
+  assert.equal(displayVotePair("XDX/5553444300000000000000000000000000000000"), "XDX/USDC");
 });
 
 test("fee units map 0.25% to 250 and back", () => {
