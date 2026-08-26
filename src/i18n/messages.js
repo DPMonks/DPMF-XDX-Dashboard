@@ -458,6 +458,7 @@ const en = {
   feeVoted: "Fee voted",
   voteStatus: "Status",
   voteActive: "Active",
+  voteInactive: "Not Active",
   voteReplaced: "Replaced",
   noVoteHistory: "No AMMVote history for this wallet yet.",
   noAssetVoteHistory: "No wallets have voted on these pools yet.",

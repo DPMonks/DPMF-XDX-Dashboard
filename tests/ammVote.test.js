@@ -9,6 +9,7 @@ import {
   medianVotedFee,
   attachVoteTimestamps,
   assetVoteRowsFromSlots,
+  assetVoteStatus,
   displayVotePair,
   formatVoteWeight,
   mergeAssetVoteRows,
@@ -146,6 +147,20 @@ test("asset vote rows list every wallet that holds a live AMM vote slot", () => 
   const merged = mergeAssetVoteRows(rows, assetVoteRowsFromSlots(gov.voteSlots, "xdx / xah"));
   assert.equal(merged.length, 2);
   assert.equal(merged[0].account, "rWhale");
+  assert.equal(rows[0].status, "active");
+});
+
+test("zero-weight asset votes are not active", () => {
+  const rows = assetVoteRowsFromSlots(
+    [
+      { account: "rLive", pair: "XDX/XRP", feePercent: 1, voteWeight: 50000, weightPct: 50 },
+      { account: "rGone", pair: "XDX/XRP", feePercent: 0.25, voteWeight: 0, weightPct: 0 },
+    ],
+    "XDX/XRP"
+  );
+  assert.equal(assetVoteStatus(rows[0]), "active");
+  assert.equal(assetVoteStatus(rows[1]), "inactive");
+  assert.equal(rows[1].status, "inactive");
 });
 
 test("attachVoteTimestamps uses the latest AMMVote date for each wallet and pair", () => {

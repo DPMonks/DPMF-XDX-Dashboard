@@ -228,20 +228,33 @@ export function formatVoteWeight(weightPct, locale = "en") {
   })}%`;
 }
 
+export function assetVoteStatus(row = {}) {
+  if (row.status === "replaced" || row.status === "inactive") return "inactive";
+  const weight = Number(row.voteWeight);
+  const pct = Number(row.weightPct);
+  if (Number.isFinite(weight)) return weight > 0 ? "active" : "inactive";
+  if (Number.isFinite(pct)) return pct > 0 ? "active" : "inactive";
+  return row.status === "active" ? "active" : "inactive";
+}
+
 export function assetVoteRowsFromSlots(slots = [], pair = "") {
   const name = displayVotePair(pair || "XDX/XRP");
   return (Array.isArray(slots) ? slots : [])
     .filter((row) => row?.account)
-    .map((row) => ({
-      account: row.account,
-      pair: displayVotePair(row.pair || name),
-      feePercent: row.feePercent,
-      voteWeight: Number(row.voteWeight) || 0,
-      weightPct: Number(row.weightPct) || 0,
-      timestamp: row.timestamp || null,
-      txid: row.txid || null,
-      status: "active",
-    }));
+    .map((row) => {
+      const voteWeight = Number(row.voteWeight) || 0;
+      const weightPct = Number(row.weightPct) || 0;
+      return {
+        account: row.account,
+        pair: displayVotePair(row.pair || name),
+        feePercent: row.feePercent,
+        voteWeight,
+        weightPct,
+        timestamp: row.timestamp || null,
+        txid: row.txid || null,
+        status: assetVoteStatus({ voteWeight, weightPct }),
+      };
+    });
 }
 
 export function mergeAssetVoteRows(...lists) {

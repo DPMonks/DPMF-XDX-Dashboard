@@ -4402,6 +4402,15 @@ body {
   color: var(--dpmf-neon-lime);
 }
 
+.governance-history .is-vote-on {
+  color: var(--dpmf-neon-lime);
+}
+
+.governance-history .is-vote-off,
+.governance-history tr.is-you td.is-vote-off {
+  color: #ff5d73;
+}
+
 @media (max-width: 700px) {
   .governance-head {
     flex-direction: column;

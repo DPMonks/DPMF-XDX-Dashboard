@@ -1,4 +1,4 @@
-import { formatFeePercent, formatVoteWeight } from "../../wallet/ammVote";
+import { assetVoteStatus, formatFeePercent, formatVoteWeight } from "../../wallet/ammVote";
 import { formatDay, shortAddress } from "../../utils/format";
 
 function HistoryTable({ title, empty, children }) {
@@ -34,6 +34,7 @@ export default function VoteHistory({ rows, assetRows, walletAddress, locale, t 
               <tbody>
                 {assets.map((row, index) => {
                   const mine = you && String(row.account || "").toLowerCase() === you;
+                  const live = assetVoteStatus(row) === "active";
                   return (
                     <tr
                       key={`${row.account}-${row.pair}-${index}`}
@@ -44,7 +45,9 @@ export default function VoteHistory({ rows, assetRows, walletAddress, locale, t 
                       <td>{row.pair}</td>
                       <td>{formatFeePercent(row.feePercent, locale)}</td>
                       <td>{formatVoteWeight(row.weightPct, locale)}</td>
-                      <td>{t.voteActive}</td>
+                      <td className={live ? "is-vote-on" : "is-vote-off"}>
+                        {live ? t.voteActive : t.voteInactive || "Not Active"}
+                      </td>
                     </tr>
                   );
                 })}
