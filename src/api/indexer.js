@@ -1000,6 +1000,11 @@ export async function getLiveLpReserves(query = {}) {
   return body && typeof body === "object" ? body : null;
 }
 
+export async function getSwapMarket(query = {}) {
+  const body = await api.swapMarket(query);
+  return body && typeof body === "object" ? body : null;
+}
+
 export async function getWalletActivity(address, extra = {}) {
   const name = String(address || "").trim();
   if (!name) return [];

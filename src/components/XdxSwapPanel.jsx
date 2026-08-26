@@ -5,6 +5,7 @@ import {
   getOrderbook,
   getOrderbooks,
   getPrices,
+  getSwapMarket,
   getWalletAccount,
   getWalletBalances,
   getWalletLines,
@@ -14,7 +15,8 @@ import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { ammSpot } from "../ammCurve";
 import { bookFromMarketPayload, bookHeader, emptyOrderbook, normalizeOrderbookPair } from "../orderbook";
-import { IMPACT_HIGH_PCT, IMPACT_WARN_PCT, quoteBridgeSwap, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
+import { quoteSelectedPair, venueFromDirectMarket } from "../swap/directPair";
+import { IMPACT_HIGH_PCT, IMPACT_WARN_PCT, quoteSwap, saferSwapAlternatives } from "../swap/quoteSwap";
 import {
   SWAP_LP_GOVERNANCE_PAIRS,
   needsSwapLpGovernance,
@@ -135,6 +137,7 @@ export default function XdxSwapPanel() {
   const [walletAccount, setWalletAccount] = useState({});
   const [pools, setPools] = useState([]);
   const [markets, setMarkets] = useState({});
+  const [directMarket, setDirectMarket] = useState(null);
   const [prices, setPrices] = useState({});
   const [positions, setPositions] = useState([]);
   const [liveByPair, setLiveByPair] = useState({});
@@ -166,6 +169,12 @@ export default function XdxSwapPanel() {
   const toPair = toTicker === "XDX" ? null : normalizeOrderbookPair(`XDX/${toTicker}`);
   const pair = needsGate ? `${fromTicker} → ${toTicker}` : `XDX/${sellingXdx ? toTicker : fromTicker}`;
   const marketKey = [fromPair, toPair].filter(Boolean).join("|");
+  const wantsDirect = Boolean(
+    needsGate && (fromTicker === "XRP" || fromAsset?.issuer) && (toTicker === "XRP" || toAsset?.issuer)
+  );
+  const directKey = wantsDirect
+    ? [effectiveFrom, fromAsset?.issuer || "", fromAsset?.hex || "", effectiveTo, toAsset?.issuer || "", toAsset?.hex || ""].join("|")
+    : "";
   const gate = swapLpGovernance({
     positions,
     lines,
@@ -208,10 +217,21 @@ export default function XdxSwapPanel() {
     let cancelled = false;
     async function loadMarket() {
       const pairs = marketKey ? marketKey.split("|") : [];
-      const [nextPools, nextPrices, catalog] = await Promise.all([
+      const [nextPools, nextPrices, catalog, nextDirect] = await Promise.all([
         getAmm().catch(() => []),
         getPrices().catch(() => ({})),
         getOrderbooks().catch(() => null),
+        wantsDirect
+          ? getSwapMarket({
+              from: fromTicker,
+              to: toTicker,
+              fromIssuer: fromAsset?.issuer,
+              toIssuer: toAsset?.issuer,
+              fromHex: fromAsset?.hex,
+              toHex: toAsset?.hex,
+              fresh: true,
+            }).catch(() => null)
+          : Promise.resolve(null),
       ]);
       const pairRows = await Promise.all(
         pairs.map(async (nextPair) => {
@@ -228,6 +248,7 @@ export default function XdxSwapPanel() {
       setPools(Array.isArray(nextPools) ? nextPools : nextPools?.pools || []);
       setPrices(nextPrices || {});
       setMarkets(Object.fromEntries(pairRows));
+      setDirectMarket(wantsDirect ? nextDirect : null);
     }
     loadMarket();
     const id = setInterval(loadMarket, 30000);
@@ -235,7 +256,7 @@ export default function XdxSwapPanel() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [marketKey]);
+  }, [directKey, fromTicker, marketKey, toTicker, wantsDirect]);
 
   useEffect(() => {
     let cancelled = false;
@@ -271,11 +292,12 @@ export default function XdxSwapPanel() {
   const qty = Number(amount) || 0;
   const fromVenue = venueFrom(markets[fromPair]?.book, markets[fromPair]?.live);
   const toVenue = venueFrom(markets[toPair]?.book, markets[toPair]?.live);
+  const directVenue = venueFromDirectMarket(directMarket);
   function quoteForMode(mode) {
     if (!(qty > 0)) return null;
     if (sellingXdx) return quoteSwap({ ...toVenue, amountIn: qty, sellingXdx: true, routingMode: mode });
     if (buyingXdx) return quoteSwap({ ...fromVenue, amountIn: qty, sellingXdx: false, routingMode: mode });
-    return quoteBridgeSwap({ amountIn: qty, fromVenue, toVenue, routingMode: mode });
+    return quoteSelectedPair({ amountIn: qty, routingMode: mode, directVenue, fromVenue, toVenue });
   }
   const quote = quoteForMode(routingMode);
   const bookQuote = quoteForMode("book");
@@ -287,7 +309,9 @@ export default function XdxSwapPanel() {
     ? { ...toVenue, sellingXdx: true, routingMode }
     : buyingXdx
       ? { ...fromVenue, sellingXdx: false, routingMode }
-      : null;
+      : directVenue
+        ? { ...directVenue, sellingXdx: true, routingMode }
+        : null;
   const alternatives = impactHigh && quoteExtras ? saferSwapAlternatives(qty, quote, quoteExtras) : [];
   const noRoute = Boolean(qty > 0 && (!quote || quote.routeUsed === "none" || !(quote.actualOutput > 0)));
   const gatedOut = Boolean(needsGate && (!account || !gate.ok));
