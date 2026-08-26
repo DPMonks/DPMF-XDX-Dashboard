@@ -268,7 +268,9 @@ function hasRows(value) {
     (Array.isArray(value.pools) && value.pools.length > 0) ||
     (Array.isArray(value.price_history) && value.price_history.length > 0) ||
     (Array.isArray(value.amm_pool_history) && value.amm_pool_history.length > 0) ||
-    (value.books && typeof value.books === "object" && Object.keys(value.books).some((key) => value.books[key]))
+    (value.books && typeof value.books === "object" && Object.keys(value.books).some((key) => value.books[key])) ||
+    (Array.isArray(value.bids) && value.bids.length > 0) ||
+    (Array.isArray(value.asks) && value.asks.length > 0)
   );
 }
 

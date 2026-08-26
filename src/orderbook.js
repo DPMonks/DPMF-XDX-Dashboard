@@ -149,17 +149,17 @@ export function emptyOrderbook(pair = "XDX/XRP") {
   };
 }
 
-function nativeBest(rows, side) {
+function tapeBest(rows, side) {
   const prices = (Array.isArray(rows) ? rows : [])
-    .filter((row) => Number(row?.price) > 0 && !isSyntheticSource(row.source || "dex"))
+    .filter((row) => Number(row?.price) > 0 && !row.placeholder)
     .map((row) => Number(row.price));
   if (!prices.length) return null;
   return side === "ask" ? Math.min(...prices) : Math.max(...prices);
 }
 
 export function bookHeader(book = {}) {
-  const best_bid = Number(book.best_bid) > 0 ? Number(book.best_bid) : nativeBest(book.bids, "bid");
-  const best_ask = Number(book.best_ask) > 0 ? Number(book.best_ask) : nativeBest(book.asks, "ask");
+  const best_bid = Number(book.best_bid) > 0 ? Number(book.best_bid) : tapeBest(book.bids, "bid");
+  const best_ask = Number(book.best_ask) > 0 ? Number(book.best_ask) : tapeBest(book.asks, "ask");
   const mid =
     Number(book.mid) > 0
       ? Number(book.mid)
@@ -488,19 +488,35 @@ function priceKey(row) {
   return Number(row?.price).toPrecision(12);
 }
 
-function fillBookSide(dexRows, fillRows, reserveMeta, side) {
-  const native = takeSideLevels(dexRows, side, ORDERBOOK_VISIBLE_LEVELS);
-  if (native.length >= ORDERBOOK_VISIBLE_LEVELS) {
-    return withCumulative(measureAmmAgainstDex(native, reserveMeta, side), side);
-  }
+function extractBridgeSides(body = {}) {
+  const root = body && typeof body === "object" ? body : {};
+  const book = root.book && typeof root.book === "object" ? root.book : root;
+  const keep = (row) => String(row?.source || "").toLowerCase() === "bridge";
+  return {
+    bids: (Array.isArray(book.bids) ? book.bids : []).filter(keep),
+    asks: (Array.isArray(book.asks) ? book.asks : []).filter(keep),
+  };
+}
+
+function mergeDexTape(nativeRows, bridgeRows, reserveMeta, side) {
+  const native = takeSideLevels(nativeRows, side, ORDERBOOK_VISIBLE_LEVELS);
   const seen = new Set(native.map(priceKey));
-  const fillers = takeSideLevels(fillRows, side, ORDERBOOK_VISIBLE_LEVELS)
-    .filter((row) => !seen.has(priceKey(row)))
-    .slice(0, ORDERBOOK_VISIBLE_LEVELS - native.length);
-  return withCumulative(
-    measureAmmAgainstDex(takeSideLevels([...native, ...fillers], side, ORDERBOOK_VISIBLE_LEVELS), reserveMeta, side),
-    side
+  const bridged = takeSideLevels(bridgeRows, side, ORDERBOOK_VISIBLE_LEVELS).filter(
+    (row) => !seen.has(priceKey(row))
   );
+  const merged = [
+    ...native,
+    ...bridged.slice(0, Math.max(0, ORDERBOOK_VISIBLE_LEVELS - native.length)),
+  ];
+  return withCumulative(measureAmmAgainstDex(takeSideLevels(merged, side, merged.length), reserveMeta, side), side);
+}
+
+function ammTape(impliedRows, side) {
+  const rows = takeSideLevels(impliedRows, side, ORDERBOOK_VISIBLE_LEVELS).map((row) => ({
+    ...row,
+    source: row.source || "amm",
+  }));
+  return withCumulative(rows, side);
 }
 
 export function quotePerXrpFromSpots(quoteSpot, xrpSpot) {
@@ -580,20 +596,32 @@ export function composeAmmBook(stored, reserves = {}, pair = "XDX/XRP", extras =
     0;
   const quotePerXrp =
     Number(extras.quotePerXrp) || quotePerXrpFromSpots(spot, xrpSpot);
+  const fromStored = extractBridgeSides(stored);
+  const fromBase = extractBridgeSides(base);
+  const storedBridge =
+    fromStored.bids.length || fromStored.asks.length ? fromStored : fromBase;
   const bridged =
     extras.bridgeBook ||
     (name !== "XDX/XRP"
-      ? projectDexThroughXrp(extras.xrpBook, quotePerXrp)
+      ? extras.xrpBook
+        ? projectDexThroughXrp(extras.xrpBook, quotePerXrp)
+        : storedBridge
       : { bids: [], asks: [] });
 
-  const fillBids = combineOrderbookSide(implied.bids, bridged.bids || [], "bid");
-  const fillAsks = combineOrderbookSide(implied.asks, bridged.asks || [], "ask");
-  const bids = fillBookSide(dexBids, fillBids, reserveMeta, "bid");
-  const asks = fillBookSide(dexAsks, fillAsks, reserveMeta, "ask");
-  const filled = bids.length > dexBids.length || asks.length > dexAsks.length;
+  const dexBidTape = mergeDexTape(dexBids, bridged.bids || [], reserveMeta, "bid");
+  const dexAskTape = mergeDexTape(dexAsks, bridged.asks || [], reserveMeta, "ask");
+  const ammBidTape = ammTape(implied.bids, "bid");
+  const ammAskTape = ammTape(implied.asks, "ask");
+  const bids = [...dexBidTape, ...ammBidTape];
+  const asks = [...dexAskTape, ...ammAskTape];
+  const filled =
+    ammBidTape.length > 0 ||
+    ammAskTape.length > 0 ||
+    dexBidTape.some((row) => row.source === "bridge") ||
+    dexAskTape.some((row) => row.source === "bridge");
   const present = bids.length > 0 || asks.length > 0;
-  const best_bid = bids[0] && Number(bids[0].price) > 0 ? Number(bids[0].price) : null;
-  const best_ask = asks[0] && Number(asks[0].price) > 0 ? Number(asks[0].price) : null;
+  const best_bid = tapeBest(bids, "bid");
+  const best_ask = tapeBest(asks, "ask");
   const mid =
     best_bid > 0 && best_ask > 0
       ? (best_bid + best_ask) / 2
