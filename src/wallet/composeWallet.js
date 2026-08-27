@@ -48,7 +48,7 @@ export function xrpReserveBreakdown({
   const drops = dropsOrNull(balanceDrops);
   const fromAccount = drops != null && drops > 0 ? drops / DROPS : null;
   const fromBalances = num(balance);
-  const total = fromAccount != null ? fromAccount : fromBalances;
+  const total = fromAccount != null ? fromAccount : fromBalances > 0 ? fromBalances : null;
   if (total == null) {
     return {
       balance: null,
@@ -80,7 +80,7 @@ export function xrpReserveBreakdown({
 export function xrpBarPercents({ reserved, spendable, total } = {}, filled = true) {
   if (!filled) return { reservePct: 0, spendPct: 0, totalPct: 0 };
   const hold = Math.max(0, Number(total) || 0);
-  if (!(hold > 0)) return { reservePct: 0, spendPct: 0, totalPct: 100 };
+  if (!(hold > 0)) return { reservePct: 0, spendPct: 0, totalPct: 0 };
   return {
     reservePct: (Math.max(0, Number(reserved) || 0) / hold) * 100,
     spendPct: (Math.max(0, Number(spendable) || 0) / hold) * 100,

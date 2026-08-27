@@ -57,16 +57,17 @@ function XrpColumn({ label, tone, percent, value, locale, empty }) {
 }
 
 function XrpBalanceBars({ xrp, locale, t, empty }) {
-  const spendable = useMorph(empty ? 0 : xrp.spendable);
-  const reserved = useMorph(empty ? 0 : xrp.reserved);
-  const total = useMorph(empty ? 0 : xrp.balance);
+  const unknown = empty || xrp?.balance == null;
+  const spendable = useMorph(unknown ? 0 : xrp.spendable);
+  const reserved = useMorph(unknown ? 0 : xrp.reserved);
+  const total = useMorph(unknown ? 0 : xrp.balance);
   const bars = xrpBarPercents(
     { reserved, spendable, total },
-    !empty
+    !unknown
   );
 
   return (
-    <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
+    <div className={`wallet-panel${unknown ? " is-empty" : " is-filled"}`}>
       <p className="wallet-panel-title is-center">{t.xrpBalance}</p>
       <div className="wallet-xrp-bars">
         <XrpColumn
@@ -75,7 +76,7 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
           percent={bars.reservePct}
           value={reserved}
           locale={locale}
-          empty={empty}
+          empty={unknown}
         />
         <XrpColumn
           label={t.spendableXrp}
@@ -83,7 +84,7 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
           percent={bars.spendPct}
           value={spendable}
           locale={locale}
-          empty={empty}
+          empty={unknown}
         />
         <XrpColumn
           label={t.totalXrp}
@@ -91,7 +92,7 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
           percent={bars.totalPct}
           value={total}
           locale={locale}
-          empty={empty}
+          empty={unknown}
         />
       </div>
     </div>
