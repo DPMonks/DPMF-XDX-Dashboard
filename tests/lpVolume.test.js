@@ -17,6 +17,8 @@ import {
   xdxVolumeFromTokenCard,
   dailyPricesFromOhlc,
   dailyXdxFlowsFromOhlc,
+  projectXdxMarketDaysToPair,
+  volumeDaysForHeldPairs,
   overlayPoolFlowVolumes,
   xrpVolumeFromOhlc,
 } from "../src/utils/lpVolume.js";
@@ -95,6 +97,26 @@ test("token card, OHLC, and Dexscreener convert into XDX, never USD", () => {
   assert.equal(marks["2026-08-21"].xdxUsd, 0.00008);
   assert.equal(marks["2026-08-20"].xrpUsd, 2);
   assert.ok(Math.abs(daily.find((row) => row.timestamp.startsWith("2026-08-21")).xdx - 100_000) < 1e-6);
+  const projected = projectXdxMarketDaysToPair(
+    [
+      { pair: "XDX/XRP", xdx: 2_000_000, timestamp: "2026-08-16T00:00:00.000Z" },
+      { pair: "XDX/XRP", xdx: 1_000_000, timestamp: "2026-08-27T00:00:00.000Z" },
+    ],
+    "XDX/XAH",
+    50_000,
+    Date.parse("2026-08-27T18:00:00.000Z")
+  );
+  assert.equal(projected.length, 2);
+  assert.equal(projected.every((row) => row.pair === "XDX/XAH"), true);
+  assert.ok(Math.abs(projected.find((row) => row.date === "2026-08-27").xdx - 50_000) < 1e-6);
+  assert.ok(Math.abs(projected.find((row) => row.date === "2026-08-16").xdx - 100_000) < 1e-6);
+  const held = volumeDaysForHeldPairs(
+    [{ pair: "XDX/XRP", xdx: 1_000_000, timestamp: "2026-08-27T00:00:00.000Z" }],
+    [{ pool: "XDX/XAH", volume24hXdx: 20_000 }, { pool: "XDX/XRP", volume24hXdx: 1_000_000 }],
+    Date.parse("2026-08-27T18:00:00.000Z")
+  );
+  assert.ok(held.some((row) => row.pair === "XDX/XRP"));
+  assert.ok(held.some((row) => row.pair === "XDX/XAH" && Math.abs(row.xdx - 20_000) < 1e-6));
   const dex = xdxVolumeFromDexscreenerPair(
     { volume: { h24: 183.33 }, priceUsd: 0.00004734 },
     0.00004734

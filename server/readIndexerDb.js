@@ -70,7 +70,7 @@ import {
   loadWalletNetworthFromLedger,
   loadWalletOffers,
 } from "./walletLedger.js";
-import { knownLivePoolSpecs, liveCatalogPayload } from "./liveCatalog.js";
+import { knownLivePoolSpecs, liveCatalogPayload, loadLiveMarket } from "./liveCatalog.js";
 import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
 import { catalogHealth } from "./sourceControl.js";
 import { FREE_API_HEADERS } from "./xrplToCatalog.js";
@@ -2350,11 +2350,17 @@ function walletLedgerResult(suffix, search = "") {
         marker = null;
       }
     }
-    return loadWalletLpIncome(decodeURIComponent(lpIncome[1]), {
-      fresh: walletFresh(search),
-      pair: params.get("pair") || "ALL",
-      marker,
-    }).then((body) => ok(body));
+    return loadLiveMarket({ fresh: walletFresh(search) })
+      .catch(() => null)
+      .then((market) =>
+        loadWalletLpIncome(decodeURIComponent(lpIncome[1]), {
+          fresh: walletFresh(search),
+          pair: params.get("pair") || "ALL",
+          marker,
+          pools: market?.pools || [],
+        })
+      )
+      .then((body) => ok(body));
   }
   const votes = String(suffix || "").match(/^wallet\/votes\/([^/]+)$/);
   if (votes) {
