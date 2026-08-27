@@ -5174,6 +5174,15 @@ body {
     width: 0;
   }
 
+  .rich-list .rich-table col.col-copy,
+  .rich-list .rich-table th.col-copy,
+  .rich-list .rich-table td.col-copy,
+  .rich-list .rich-table th:last-child,
+  .rich-list .rich-table td:last-child {
+    display: table-cell;
+    width: 44px;
+  }
+
   .tab,
   .range,
   .pair-chip {
