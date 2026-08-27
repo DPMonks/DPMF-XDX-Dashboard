@@ -909,12 +909,13 @@ export async function getWalletBalances(address) {
     return fallback ?? null;
   }
   const xdxFromLines = amountFromBalances(payload, ["XDX", "5844580000000000000000000000000000000000"]);
+  const xrpHeld = held(
+    payload?.xrp,
+    drops != null && drops > 0 ? drops / 1_000_000 : amountFromBalances(payload, ["XRP"])
+  );
   return {
     raw: payload,
-    xrp:
-      numberOrNull(payload?.xrp) ??
-      (drops != null ? drops / 1_000_000 : null) ??
-      amountFromBalances(payload, ["XRP"]),
+    xrp: xrpHeld > 0 ? xrpHeld : null,
     xdx: held(payload?.xdx, xdxFromLines),
     lp:
       numberOrNull(payload?.lp) ??

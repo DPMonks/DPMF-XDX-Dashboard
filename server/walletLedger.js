@@ -4,7 +4,7 @@ import { activityFromAccountTx, lpHistoryFromAccountTx, ordersFromAccountOffers 
 import { POOLS, RLUSD_ISSUER, XDX_ISSUER } from "../src/constants/ledger.js";
 import { lpPositionFromPool, resolveLpPairName } from "../src/wallet/composeWallet.js";
 import { DEFAULT_INCOME_PAIR, incomePairName, isXdxAmmPair } from "../src/wallet/lpIncome.js";
-import { loadLiveAmmReserves } from "./liveAmmReserves.js";
+import { loadLiveAmmReserves, withXrplRetry } from "./liveAmmReserves.js";
 import { loadLiveMarket } from "./liveCatalog.js";
 
 const CACHE_MS = 8_000;
@@ -24,6 +24,18 @@ function cached(key, loader) {
     if (body && body.source !== "empty") cache.set(key, { at: Date.now(), body });
     return body;
   });
+}
+
+export function accountDataFromRpc(info) {
+  if (!info || typeof info !== "object") return null;
+  return info.account_data || info.result?.account_data || null;
+}
+
+export function xrpDropsFromAccountInfo(info) {
+  const data = accountDataFromRpc(info);
+  if (!data || data.Balance == null || data.Balance === "") return null;
+  const drops = Number(data.Balance);
+  return Number.isFinite(drops) && drops > 0 ? drops : null;
 }
 
 export function preferPositiveAmount(live, catalog) {
@@ -242,7 +254,10 @@ export async function loadWalletBalancesFromLedger(address, options = {}) {
   if (options.fresh) cache.delete(`balances:${name}`);
   return cached(`balances:${name}`, async () => {
     const [infoResult, raw] = await Promise.all([
-      xrplRpc("account_info", { account: name, ledger_index: "validated" }, options).catch(() => null),
+      withXrplRetry(
+        () => xrplRpc("account_info", { account: name, ledger_index: "validated" }, options),
+        { retries: 3, waitMs: 280 }
+      ).catch(() => null),
       loadRawAccountLines(name, options),
     ]);
     let xdx = xdxBalanceFromLines(raw.lines);
@@ -265,18 +280,17 @@ export async function loadWalletBalancesFromLedger(address, options = {}) {
       }
     }
     const lpRows = lpHoldingsFromLines(raw.lines);
-    const drops = Number(infoResult?.account_data?.Balance);
-    const xrp = Number.isFinite(drops) ? drops / 1_000_000 : null;
-    const source = infoResult || raw.source === "xrpl" ? "xrpl" : "empty";
+    const drops = xrpDropsFromAccountInfo(infoResult);
+    const source = drops != null || raw.source === "xrpl" ? "xrpl" : "empty";
     return {
       account: name,
-      xrp,
+      xrp: drops != null ? drops / 1_000_000 : null,
       xdx,
       rlusd,
       lp: lpRows.reduce((sum, row) => sum + Number(row.lp_balance || 0), 0),
       lines: linesFromAccountLines(raw.lines),
       source,
-      balance_drops: Number.isFinite(drops) ? drops : null,
+      balance_drops: drops,
     };
   });
 }
