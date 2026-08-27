@@ -1,4 +1,4 @@
-import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
+import { catalogXdxVolume24h, catalogXdxVolume7d, projectXdxMarketDaysToPair } from "../utils/lpVolume.js";
 import { detectQuoteUsd, normalizePriceBook } from "../utils/poolSplit.js";
 
 export const DEFAULT_INCOME_PAIR = "XDX/XRP";
@@ -444,9 +444,11 @@ function lpEquivalent(feeXdx, row) {
 }
 
 export function earliestHeldDay(pair, activity = [], currentBalance = 0) {
-  const want = incomePairName(pair);
+  const want = normalizeWalletPair(pair);
+  if (!want) return "";
   const events = (Array.isArray(activity) ? activity : []).filter((item) => {
-    if (!item || incomePairName(item.pair || item.pool) !== want) return false;
+    const named = normalizeWalletPair(item?.pair || item?.pool);
+    if (!item || !named || named !== want) return false;
     return item.side === "addLp" || item.side === "createPool" || item.side === "removeLp";
   });
   if (!events.length) return "";
@@ -627,6 +629,14 @@ export function lpFeeIncomeRows({
   overlayVolumeDays(buckets, volumeDays);
   fillCatalogVolumeDays(buckets, held, now);
   const today = utcDayKey(now);
+  const marketDays = [...buckets.values()].filter((row) => row.pair === DEFAULT_INCOME_PAIR && row.xdx > 0);
+  for (const position of held) {
+    const pair = normalizeWalletPair(position.pool || position.pool_name);
+    if (!pair || pair === DEFAULT_INCOME_PAIR) continue;
+    const pairVol = catalogXdxVolume24h(position);
+    const projected = projectXdxMarketDaysToPair(marketDays, pair, pairVol, now);
+    if (projected.length) overlayVolumeDays(buckets, projected);
+  }
   for (const position of held) {
     const pair = normalizeWalletPair(position.pool || position.pool_name);
     const heldFrom = earliestHeldDay(pair, activity, position.lp_balance);
@@ -889,10 +899,19 @@ export function incomeRowsForPair({
   if (!held.has(want)) return [];
   const activity = remapIncomeActivity(historyActivity, positions, pools);
   const position = incomePositionForPair(want, positions, pools, activity);
+  const marketDays = Array.isArray(prices?.xdxVolumeDays) ? prices.xdxVolumeDays : [];
+  const projected =
+    want === DEFAULT_INCOME_PAIR
+      ? filterIncomeByPair(marketDays, DEFAULT_INCOME_PAIR)
+      : projectXdxMarketDaysToPair(marketDays, want, catalogXdxVolume24h(position || {}), now);
   const rebuilt = lpFeeIncomeRows({
     positions: position ? [position] : [],
     flows: [],
-    volumeDays: [...filterIncomeByPair(historyDays, want), ...volumeDaysFromPools(position ? [position] : [], now)],
+    volumeDays: [
+      ...filterIncomeByPair(historyDays, want),
+      ...volumeDaysFromPools(position ? [position] : [], now),
+      ...projected,
+    ],
     activity,
     xdxUsd,
     xrpUsd,

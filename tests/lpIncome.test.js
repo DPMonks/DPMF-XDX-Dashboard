@@ -6,6 +6,7 @@ import {
   HISTORICAL_INCOME_DAYS,
   dailyHeldLpBalances,
   dailyLpIncomeTotals,
+  earliestHeldDay,
   fillContinuousVolumeDays,
   incomePairBalance,
   incomePairChoices,
@@ -542,6 +543,94 @@ test("pair fee days start on the first LP hold and skip deposit-sized rows", () 
   });
   assert.equal(totals.lp, 9_484_129.59332701);
   assert.ok(totals.usd > 0);
+});
+
+test("unlabeled LP events do not count as an XDX/XAH hold day", () => {
+  assert.equal(
+    earliestHeldDay("XDX/XAH", [{ side: "addLp", pair: "", lp: 10, timestamp: "2026-08-01T10:00:00.000Z" }], 10),
+    ""
+  );
+  assert.equal(
+    earliestHeldDay("XDX/XAH", [{ side: "addLp", pair: "XDX/XAH", lp: 10, timestamp: "2026-08-01T10:00:00.000Z" }], 10),
+    "2026-08-01"
+  );
+});
+
+test("XDX/XAH fee days follow XDX market history, not only today", () => {
+  const now = Date.parse("2026-08-27T18:00:00.000Z");
+  const marketDays = [
+    { pair: "XDX/XRP", xdx: 2_000_000, timestamp: "2026-08-16T00:00:00.000Z" },
+    { pair: "XDX/XRP", xdx: 2_000_000, timestamp: "2026-08-26T00:00:00.000Z" },
+    { pair: "XDX/XRP", xdx: 1_000_000, timestamp: "2026-08-27T00:00:00.000Z" },
+  ];
+  const rows = incomeRowsForPair({
+    pair: "XDX/XAH",
+    now,
+    historyActivity: [{ side: "addLp", pair: "XDX/XAH", lp: 37.4, timestamp: "2026-08-16T10:00:00.000Z" }],
+    positions: [
+      {
+        pool: "XDX/XAH",
+        quote: "XAH",
+        lp_balance: 37.4,
+        lp_supply: 14_776,
+        reserve_asset: 100_000,
+        reserve_currency: 50,
+        trading_fee: 1000,
+        volume24hXdx: 500_000,
+      },
+    ],
+    prices: { xdxUsd: 0.00004, xdxVolumeDays: marketDays },
+  });
+  const days = rows.map((row) => row.date);
+  assert.ok(days.includes("2026-08-27"));
+  assert.ok(days.includes("2026-08-16"));
+  assert.ok(days.length >= 12);
+  assert.ok(rows.every((row) => row.pair === "XDX/XAH" && row.kind === "fee"));
+  const today = rows.find((row) => row.date === "2026-08-27");
+  const older = rows.find((row) => row.date === "2026-08-16");
+  assert.ok(today.lpTokens > 0);
+  assert.ok(older.lpTokens > 0);
+  assert.ok(Math.abs(older.lpTokens / today.lpTokens - 2) < 0.05);
+});
+
+test("lpFeeIncomeRows paints every held pair from the XDX market series", () => {
+  const now = Date.parse("2026-08-27T18:00:00.000Z");
+  const rows = lpFeeIncomeRows({
+    now,
+    positions: [
+      {
+        pool: "XDX/XRP",
+        quote: "XRP",
+        lp_share_percent: 4,
+        trading_fee: 1000,
+        reserve_asset: 50_000,
+        reserve_currency: 2,
+        lp_supply: 1000,
+        volume24hXdx: 1_000_000,
+      },
+      {
+        pool: "XDX/XAH",
+        quote: "XAH",
+        lp_share_percent: 0.25,
+        trading_fee: 1000,
+        reserve_asset: 100_000,
+        reserve_currency: 50,
+        lp_supply: 14_776,
+        volume24hXdx: 80_000,
+      },
+    ],
+    volumeDays: [
+      { pair: "XDX/XRP", xdx: 1_200_000, timestamp: "2026-08-16T00:00:00.000Z" },
+      { pair: "XDX/XRP", xdx: 1_000_000, timestamp: "2026-08-27T00:00:00.000Z" },
+    ],
+    xdxUsd: 0.00004,
+  });
+  const xrp = rows.filter((row) => row.pair === "XDX/XRP");
+  const xah = rows.filter((row) => row.pair === "XDX/XAH");
+  assert.ok(xrp.length >= 12);
+  assert.ok(xah.length >= 12);
+  assert.equal(xah[0].date, "2026-08-27");
+  assert.ok(xah.some((row) => row.date === "2026-08-16"));
 });
 
 test("signed-in LP lines still produce daily income when wallet/lp is empty", () => {
