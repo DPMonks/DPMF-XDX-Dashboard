@@ -81,6 +81,7 @@ const en = {
   incomeDate: "Date",
   incomeLpTokens: "LP",
   incomeLpBalance: "LP Balance",
+  incomeLpAdded: "LP",
   incomePair: "Pair",
   incomePairSelect: "LP earnings pair",
   incomeAllPairs: "All pairs",

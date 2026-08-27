@@ -149,6 +149,60 @@ function preferLargest(...values) {
   return values.reduce((best, value) => (value > best ? value : best), 0);
 }
 
+export function dailyHeldLpBalances({
+  pair,
+  activity = [],
+  currentBalance = 0,
+  fromDay = "",
+  toDay = Date.now(),
+} = {}) {
+  const want = incomePairName(pair);
+  const end = utcDayKey(toDay);
+  const events = new Map();
+  let first = "";
+  for (const item of Array.isArray(activity) ? activity : []) {
+    if (!item || incomePairName(item.pair || item.pool) !== want) continue;
+    const day = utcDayKey(item.timestamp);
+    if (!day) continue;
+    const current = events.get(day) || { added: 0, removed: 0 };
+    const tokens = num(item.lp);
+    if (item.side === "addLp" || item.side === "createPool") {
+      current.added += tokens;
+      if (!first || day < first) first = day;
+    }
+    if (item.side === "removeLp") current.removed += tokens;
+    events.set(day, current);
+  }
+  const start = utcDayKey(fromDay) || first || end;
+  if (!want || !start || !end || start > end) return [];
+
+  const dates = [];
+  for (let ts = Date.parse(`${end}T00:00:00.000Z`); ts >= Date.parse(`${start}T00:00:00.000Z`); ts -= DAY_MS) {
+    const date = utcDayKey(ts);
+    if (date) dates.push(date);
+  }
+
+  let held = num(currentBalance);
+  if (!(held > 0)) {
+    let added = 0;
+    let removed = 0;
+    for (const event of events.values()) {
+      added += event.added;
+      removed += event.removed;
+    }
+    held = Math.max(0, added - removed);
+  }
+
+  return dates.map((date) => {
+    const event = events.get(date) || { added: 0, removed: 0 };
+    const lpBalance = held;
+    const before = Math.max(0, held - event.added + event.removed);
+    const lpAdded = event.added > 0 ? event.added : Math.max(0, lpBalance - before);
+    held = before;
+    return { date, pair: want, lpBalance, lpAdded, lpTokens: lpBalance };
+  });
+}
+
 export function netHeldLp(pair, activity = [], currentBalance = 0) {
   const want = incomePairName(pair);
   let added = 0;
@@ -204,18 +258,6 @@ export function incomePositionForPair(pair, positions = [], pools = [], activity
     volume7d: preferPositive(num(existing.volume7d), num(catalog.volume7d), num(existing.volume7dXdx), num(catalog.volume7dXdx)),
     volume7dXdx: preferPositive(num(existing.volume7dXdx), num(catalog.volume7dXdx), num(existing.volume7d), num(catalog.volume7d)),
   };
-}
-
-function volumeDaysFromPools(pools = [], now = Date.now()) {
-  const today = utcDayKey(now);
-  return (Array.isArray(pools) ? pools : [])
-    .map((pool) => {
-      const pair = incomePairName(pool?.pool || pool?.pool_name || pool?.pair);
-      const xdx = num(pool?.volume24hXdx ?? pool?.volume24h);
-      if (!pair || !(xdx > 0) || !today) return null;
-      return { pair, pool: pair, xdx, timestamp: `${today}T12:00:00.000Z` };
-    })
-    .filter(Boolean);
 }
 
 export function poolForIncomePair(pair, positions = [], pools = []) {
@@ -689,32 +731,27 @@ export function incomeRowsForPair({
     );
   }
   const want = incomePairName(pair);
-  const snapshot = filterIncomeByPair(snapshotRows, want);
   const activity = remapIncomeActivity(historyActivity, positions, pools);
   const position = incomePositionForPair(want, positions, pools, activity);
-  const reconciled = earliestHeldDay(want, activity, position?.lp_balance);
-  const firstSeen = netHeldLp(want, activity, position?.lp_balance).first;
-  const heldFrom = reconciled || (historyComplete ? firstSeen : "");
-  const rebuilt = lpFeeIncomeRows({
-    positions: position ? [position] : [],
-    flows: [],
-    volumeDays: [...filterIncomeByPair(historyDays, want), ...volumeDaysFromPools(position ? [position] : [], now)],
+  const held = netHeldLp(want, activity, position?.lp_balance);
+  const liveBalance = preferPositive(num(position?.lp_balance), held.held, held.added);
+  const heldFrom = earliestHeldDay(want, activity, liveBalance) || held.first;
+  const series = dailyHeldLpBalances({
+    pair: want,
     activity,
-    xdxUsd,
-    xrpUsd,
-    rlusdUsd,
-    prices,
-    dailyPrices: prices?.dailyPrices,
-    now,
+    currentBalance: liveBalance,
+    fromDay: historyComplete || heldFrom ? heldFrom : held.first,
+    toDay: now,
   });
-  return dailyLpIncomeTotals(
-    mergeRecordedLpIncome(
-      snapshot.filter((row) => !row.kind || row.kind === "fee"),
-      filterIncomeByPair(historyDays, want),
-      filterIncomeByPair(recordedRows, want),
-      rebuilt
-    )
-  ).filter((row) => !heldFrom || row.date >= heldFrom);
+  const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
+  const dayBooks =
+    (prices?.dailyPrices && typeof prices.dailyPrices === "object" && prices.dailyPrices) || {};
+  const pool = poolForIncomePair(want, positions, pools);
+  return series.map((row) => ({
+    ...row,
+    usd: row.lpAdded > 0 ? lpTokenUsd(row.lpAdded, pool, priceBookOnDay(row.date, dayBooks, book)) : 0,
+    kind: "hold",
+  }));
 }
 
 export function incomeDayKeys(rows = []) {
@@ -728,10 +765,10 @@ export function pageLpIncome(rows = [], daysShown = INCOME_PAGE_DAYS) {
 }
 
 export function lpIncomeCsv(rows = []) {
-  const lines = ["Date,LP Balance,Trading pair,USD"];
+  const lines = ["Date,LP Balance,LP added,USD,Trading pair"];
   for (const row of Array.isArray(rows) ? rows : []) {
     lines.push(
-      [row.date, row.lpTokens, row.pair, row.usd]
+      [row.date, row.lpBalance ?? row.lpTokens, row.lpAdded, row.usd, row.pair]
         .map((value) => {
           const text = value == null ? "" : String(value);
           return text.includes(",") ? `"${text.replaceAll('"', '""')}"` : text;

@@ -4189,6 +4189,30 @@ body {
   font-weight: 700;
 }
 
+.wallet-income-table td.is-lp-add {
+  font-weight: 700;
+}
+
+.wallet-income-table .is-plus {
+  color: var(--dpmf-text-main);
+  margin-right: 2px;
+}
+
+.wallet-income-table .is-add {
+  color: var(--dpmf-neon-violet);
+}
+
+.wallet-income-day,
+.wallet-income-pair {
+  display: block;
+}
+
+.wallet-income-pair {
+  margin-top: 2px;
+  color: var(--dpmf-text-muted);
+  font-size: 10px;
+}
+
 .wallet-income-table td.is-earn {
   color: #39ff14;
   font-weight: 700;
