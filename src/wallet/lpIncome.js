@@ -4,7 +4,8 @@ import { detectQuoteUsd, normalizePriceBook } from "../utils/poolSplit.js";
 export const DEFAULT_INCOME_PAIR = "XDX/XRP";
 export const INCOME_ALL_PAIRS = "ALL";
 export const INCOME_FEATURED_PAIRS = ["XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"];
-export const LP_INCOME_STORE_PREFIX = "dpmf-lp-income-v1:";
+export const LP_INCOME_STORE_PREFIX = "dpmf-lp-ledger-v1:";
+const CREDIT_KINDS = new Set(["deposit", "create", "credit"]);
 export const HISTORICAL_INCOME_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CATALOG_FILL_DAYS = 7;
@@ -39,20 +40,24 @@ export function isAllIncomePairs(value) {
   return String(value || "").trim().toUpperCase() === INCOME_ALL_PAIRS;
 }
 
-export function incomePairChoices({ positions = [], activity = [], featured = INCOME_FEATURED_PAIRS } = {}) {
-  const names = [DEFAULT_INCOME_PAIR, ...(Array.isArray(featured) ? featured : INCOME_FEATURED_PAIRS)];
-  for (const row of Array.isArray(positions) ? positions : []) {
-    names.push(normalizeWalletPair(row?.pool || row?.pool_name || row?.pair || row));
-  }
-  for (const row of Array.isArray(activity) ? activity : []) {
-    names.push(normalizeWalletPair(row?.pair || row?.pool || row?.pool_name));
-  }
-  const pairs = [...new Set(names.filter((name) => isXdxAmmPair(name)))].sort((left, right) => {
+export function heldIncomePairs(positions = []) {
+  const names = (Array.isArray(positions) ? positions : [])
+    .filter((row) => num(row?.lp_balance) > 0)
+    .map((row) => normalizeWalletPair(row?.pool || row?.pool_name || row?.pair || row))
+    .filter((name) => isXdxAmmPair(name));
+  return [...new Set(names)].sort((left, right) => {
     if (left === DEFAULT_INCOME_PAIR) return -1;
     if (right === DEFAULT_INCOME_PAIR) return 1;
     return left.localeCompare(right);
   });
-  return [INCOME_ALL_PAIRS, ...pairs];
+}
+
+export function incomePairChoices({ positions = [] } = {}) {
+  return [INCOME_ALL_PAIRS, ...heldIncomePairs(positions)];
+}
+
+function isCreditKind(kind) {
+  return !kind || CREDIT_KINDS.has(kind);
 }
 
 export function filterIncomeByPair(rows = [], pair = DEFAULT_INCOME_PAIR) {
@@ -260,33 +265,12 @@ export function incomePositionForPair(pair, positions = [], pools = [], activity
   };
 }
 
-function volumeDaysFromPools(pools = [], now = Date.now()) {
-  const today = utcDayKey(now);
-  return (Array.isArray(pools) ? pools : [])
-    .map((pool) => {
-      const pair = incomePairName(pool?.pool || pool?.pool_name || pool?.pair);
-      const xdx = num(pool?.volume24hXdx ?? pool?.volume24h);
-      if (!pair || !(xdx > 0) || !today) return null;
-      return { pair, pool: pair, xdx, timestamp: `${today}T12:00:00.000Z` };
-    })
-    .filter(Boolean);
-}
-
 export function incomePairBalance({
   pair = INCOME_ALL_PAIRS,
   positions = [],
   activity = [],
 } = {}) {
-  const heldPairs = [
-    ...new Set(
-      (Array.isArray(positions) ? positions : [])
-        .map((row) => normalizeWalletPair(row?.pool || row?.pool_name || row?.pair))
-        .filter((name) => isXdxAmmPair(name))
-    ),
-  ];
-  const names = isAllIncomePairs(pair)
-    ? heldPairs
-    : [incomePairName(pair)];
+  const names = isAllIncomePairs(pair) ? heldIncomePairs(positions) : [incomePairName(pair)];
   return names.reduce((sum, name) => {
     const existing =
       (Array.isArray(positions) ? positions : []).find(
@@ -295,6 +279,58 @@ export function incomePairBalance({
     const held = netHeldLp(name, activity, existing.lp_balance);
     return sum + preferPositive(num(existing.lp_balance), held.held, held.added);
   }, 0);
+}
+
+export function incomeHeldPoolRows({
+  positions = [],
+  pools = [],
+  prices,
+  xdxUsd = 0,
+  xrpUsd = 0,
+  rlusdUsd = 1,
+} = {}) {
+  const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
+  return heldIncomePairs(positions)
+    .map((pair) => {
+      const pool = poolForIncomePair(pair, positions, pools);
+      const lp = num(pool.lp_balance);
+      return {
+        pair,
+        date: "",
+        lpBalance: lp,
+        lpTokens: lp,
+        usd: lpTokenUsd(lp, pool, book),
+        kind: "hold",
+      };
+    })
+    .filter((row) => row.lpTokens > 0);
+}
+
+export function incomePairTotals({
+  pair = INCOME_ALL_PAIRS,
+  positions = [],
+  pools = [],
+  activity = [],
+  prices,
+  xdxUsd = 0,
+  xrpUsd = 0,
+  rlusdUsd = 1,
+} = {}) {
+  const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
+  if (isAllIncomePairs(pair)) {
+    const rows = incomeHeldPoolRows({ positions, pools, prices, xdxUsd, xrpUsd, rlusdUsd });
+    return {
+      lp: 0,
+      usd: rows.reduce((sum, row) => sum + (Number(row.usd) || 0), 0),
+      pools: rows.length,
+    };
+  }
+  const lp = incomePairBalance({ pair, positions, activity });
+  return {
+    lp,
+    usd: lpTokenUsd(lp, poolForIncomePair(pair, positions, pools), book),
+    pools: lp > 0 ? 1 : 0,
+  };
 }
 
 export function poolForIncomePair(pair, positions = [], pools = []) {
@@ -393,19 +429,6 @@ function lpEquivalent(feeXdx, row) {
   const supply = num(row?.lp_supply);
   if (!(reserveXdx > 0) || !(supply > 0) || !(feeXdx > 0)) return 0;
   return (feeXdx / reserveXdx) * supply;
-}
-
-function repriceFeeUsd(row, position, dayBook) {
-  const tokens = num(row?.lpTokens);
-  const reserveXdx = num(position?.reserve_asset ?? position?.reserve_xdx);
-  const supply = num(position?.lp_supply);
-  if (!(tokens > 0)) return 0;
-  if (reserveXdx > 0 && supply > 0) {
-    const usd = feeIncomeUsd((tokens / supply) * reserveXdx, position, dayBook);
-    if (usd > 0) return usd;
-  }
-  const stored = Number(row?.usd);
-  return Number.isFinite(stored) && stored > 0 ? stored : 0;
 }
 
 export function earliestHeldDay(pair, activity = [], currentBalance = 0) {
@@ -644,6 +667,8 @@ export function lpDepositIncomeRows({
   prices,
 } = {}) {
   const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
+  const dayBooks =
+    (prices?.dailyPrices && typeof prices.dailyPrices === "object" && prices.dailyPrices) || {};
   const rows = [];
   for (const item of Array.isArray(activity) ? activity : []) {
     if (item?.side !== "addLp" && item?.side !== "createPool") continue;
@@ -651,16 +676,92 @@ export function lpDepositIncomeRows({
     const pair = normalizeWalletPair(item.pair || item.pool);
     const lpTokens = num(item.lp);
     if (!date || !isXdxAmmPair(pair) || !(lpTokens > 0)) continue;
+    const pool = poolForIncomePair(pair, positions, pools);
     rows.push({
       date,
       lpTokens,
       pair,
-      usd: lpTokenUsd(lpTokens, poolForIncomePair(pair, positions, pools), book),
+      usd: lpTokenUsd(lpTokens, pool, priceBookOnDay(date, dayBooks, book)),
       kind: item.side === "createPool" ? "create" : "deposit",
       txid: item.txid || null,
     });
   }
   return rows;
+}
+
+function creditEventKey(row) {
+  if (row?.txid) return `tx:${row.txid}`;
+  return `${utcDayKey(row?.date) || row?.date}|${incomePairName(row?.pair)}|${Number(row?.lpTokens || 0).toFixed(8)}`;
+}
+
+export function dailyCreditTotals(rows = []) {
+  const map = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const date = utcDayKey(row?.date) || String(row?.date || "");
+    const pair = incomePairName(row?.pair);
+    if (!date || !isXdxAmmPair(pair)) continue;
+    if (row.kind === "fee" || row.kind === "hold") continue;
+    if (row.kind && !isCreditKind(row.kind)) continue;
+    const tokens = num(row.lpTokens ?? row.lpEarned);
+    if (!(tokens > 0)) continue;
+    const key = `${date}|${pair}`;
+    const current = map.get(key) || { date, pair, lpTokens: 0, usd: 0, kind: "credit" };
+    current.lpTokens += tokens;
+    current.usd += Number(row.usd) || 0;
+    map.set(key, current);
+  }
+  return mergeLpIncomeRows([...map.values()]).map((row) => ({
+    ...row,
+    lpEarned: row.lpTokens,
+    kind: "credit",
+  }));
+}
+
+function findFrozenCreditKey(map, row) {
+  if (row.txid && map.has(`tx:${row.txid}`)) return `tx:${row.txid}`;
+  const amountKey = `${row.date}|${row.pair}|${Number(row.lpTokens).toFixed(6)}`;
+  if (map.has(amountKey)) return amountKey;
+  for (const [key, value] of map) {
+    if (value.date === row.date && value.pair === row.pair && Math.abs(value.lpTokens - row.lpTokens) < 1e-6) {
+      return key;
+    }
+  }
+  return "";
+}
+
+export function mergeFrozenCredits(...lists) {
+  const map = new Map();
+  for (const row of lists.flat()) {
+    if (!row || row.kind === "fee" || row.kind === "hold") continue;
+    const date = utcDayKey(row.date) || String(row.date || "");
+    const pair = incomePairName(row.pair);
+    const tokens = num(row.lpTokens ?? row.lpEarned);
+    if (!date || !isXdxAmmPair(pair) || !(tokens > 0)) continue;
+    const next = {
+      date,
+      pair,
+      lpTokens: tokens,
+      usd: Number(row.usd) || 0,
+      kind: CREDIT_KINDS.has(row.kind) ? row.kind : "deposit",
+      txid: row.txid || null,
+    };
+    const found = findFrozenCreditKey(map, next);
+    const key = next.txid ? `tx:${next.txid}` : creditEventKey(next);
+    if (found) {
+      const current = map.get(found);
+      map.delete(found);
+      map.set(key, {
+        ...current,
+        ...next,
+        lpTokens: Math.max(current.lpTokens, next.lpTokens),
+        usd: current.usd > 0 ? current.usd : next.usd,
+        txid: current.txid || next.txid,
+      });
+      continue;
+    }
+    map.set(key, next);
+  }
+  return [...map.values()];
 }
 
 export function mergeLpIncomeRows(...lists) {
@@ -698,7 +799,7 @@ export function readRecordedLpIncome(address, storage = globalThis.localStorage)
   if (!name || !storage?.getItem) return [];
   try {
     const parsed = JSON.parse(storage.getItem(recordedIncomeKey(name)) || "[]");
-    return dailyLpIncomeTotals(Array.isArray(parsed) ? parsed : []);
+    return mergeFrozenCredits(Array.isArray(parsed) ? parsed : []);
   } catch {
     return [];
   }
@@ -707,7 +808,7 @@ export function readRecordedLpIncome(address, storage = globalThis.localStorage)
 export function writeRecordedLpIncome(address, rows, storage = globalThis.localStorage) {
   const name = String(address || "").trim();
   if (!name || !storage?.setItem) return [];
-  const next = dailyLpIncomeTotals(rows).slice(0, 400);
+  const next = mergeFrozenCredits(rows).slice(0, 400);
   try {
     storage.setItem(recordedIncomeKey(name), JSON.stringify(next));
   } catch {
@@ -740,7 +841,6 @@ export function incomeRowsForPair({
   pair = INCOME_ALL_PAIRS,
   snapshotRows = [],
   historyActivity = null,
-  historyDays = [],
   recordedRows = [],
   positions = [],
   pools = [],
@@ -748,80 +848,41 @@ export function incomeRowsForPair({
   xdxUsd = 0,
   xrpUsd = 0,
   rlusdUsd = 1,
-  now = Date.now(),
-  historyComplete = false,
 } = {}) {
   if (isAllIncomePairs(pair)) {
-    const listed = incomePairChoices({
+    return incomeHeldPoolRows({
       positions,
-      activity: [
-        ...(Array.isArray(snapshotRows) ? snapshotRows : []),
-        ...(Array.isArray(historyActivity) ? historyActivity : []),
-        ...(Array.isArray(recordedRows) ? recordedRows : []),
-      ],
-    }).filter((name) => !isAllIncomePairs(name));
-    return mergeLpIncomeRows(
-      ...(listed.length ? listed : [DEFAULT_INCOME_PAIR]).map((name) =>
-        incomeRowsForPair({
-          pair: name,
-          snapshotRows,
-          historyActivity,
-          historyDays,
-          recordedRows,
-          positions,
-          pools,
-          prices,
-          xdxUsd,
-          xrpUsd,
-          rlusdUsd,
-          now,
-          historyComplete,
-        })
-      )
-    );
+      pools,
+      prices,
+      xdxUsd,
+      xrpUsd,
+      rlusdUsd,
+    });
   }
   const want = incomePairName(pair);
-  const snapshot = filterIncomeByPair(snapshotRows, want);
+  const held = new Set(heldIncomePairs(positions));
+  if (!held.has(want)) return [];
   const activity = remapIncomeActivity(historyActivity, positions, pools);
-  const position = incomePositionForPair(want, positions, pools, activity);
-  const pool = position || poolForIncomePair(want, positions, pools);
-  const reconciled = earliestHeldDay(want, activity, position?.lp_balance);
-  const firstSeen = netHeldLp(want, activity, position?.lp_balance).first;
-  const heldFrom = reconciled || (historyComplete ? firstSeen : "");
-  const book = priceBookFromArgs({ xdxUsd, xrpUsd, rlusdUsd, prices });
-  const dayBooks =
-    (prices?.dailyPrices && typeof prices.dailyPrices === "object" && prices.dailyPrices) || {};
-  const rebuilt = lpFeeIncomeRows({
-    positions: position ? [position] : [],
-    flows: [],
-    volumeDays: [...filterIncomeByPair(historyDays, want), ...volumeDaysFromPools(position ? [position] : [], now)],
+  const credits = lpDepositIncomeRows({
     activity,
+    positions,
+    pools,
     xdxUsd,
     xrpUsd,
     rlusdUsd,
     prices,
-    dailyPrices: dayBooks,
-    now,
   });
-  return dailyLpIncomeTotals(
-    mergeRecordedLpIncome(
-      snapshot.filter((row) => !row.kind || row.kind === "fee"),
-      filterIncomeByPair(historyDays, want),
-      filterIncomeByPair(recordedRows, want),
-      rebuilt
-    )
-  )
-    .filter((row) => !heldFrom || row.date >= heldFrom)
-    .map((row) => {
-      const usd = repriceFeeUsd(row, pool, priceBookOnDay(row.date, dayBooks, book));
-      return {
-        ...row,
-        lpEarned: row.lpTokens,
-        usd,
-        kind: "fee",
-      };
-    })
-    .filter((row) => num(row.lpTokens) > 0);
+  const recorded = filterIncomeByPair(
+    (Array.isArray(recordedRows) ? recordedRows : []).filter((row) => row?.kind !== "fee" && row?.kind !== "hold"),
+    want
+  );
+  const snapshotCredits = filterIncomeByPair(
+    (Array.isArray(snapshotRows) ? snapshotRows : []).filter((row) => CREDIT_KINDS.has(row?.kind)),
+    want
+  );
+  return dailyCreditTotals(mergeFrozenCredits(recorded, snapshotCredits, credits)).filter(
+    (row) => row.pair === want && num(row.lpTokens) > 0
+  );
 }
 
 export function incomeDayKeys(rows = []) {
@@ -835,10 +896,13 @@ export function pageLpIncome(rows = [], daysShown = INCOME_PAGE_DAYS) {
 }
 
 export function lpIncomeCsv(rows = []) {
-  const lines = ["Date,LP earned,USD,Trading pair"];
+  const holds = (Array.isArray(rows) ? rows : []).every((row) => row?.kind === "hold");
+  const lines = holds ? ["Pair,LP Balance,USD"] : ["Date,LP earned,USD,Trading pair"];
   for (const row of Array.isArray(rows) ? rows : []) {
     lines.push(
-      [row.date, row.lpEarned ?? row.lpTokens, row.usd, row.pair]
+      (holds
+        ? [row.pair, row.lpBalance ?? row.lpTokens, row.usd]
+        : [row.date, row.lpEarned ?? row.lpTokens, row.usd, row.pair])
         .map((value) => {
           const text = value == null ? "" : String(value);
           return text.includes(",") ? `"${text.replaceAll('"', '""')}"` : text;
