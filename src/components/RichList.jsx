@@ -138,6 +138,8 @@ export default function RichList({
   emptyLabel,
   showPair = false,
   defaultPair = "XDX/XRP",
+  focusPair = null,
+  focusAt = 0,
   pairOptions = [],
   unit = "XDX",
   searchPlaceholder,
@@ -151,6 +153,13 @@ export default function RichList({
   const [pairFilter, setPairFilter] = useState(showPair ? defaultPair : "all");
   const [page, setPage] = useState(1);
   const [copied, setCopied] = useState(null);
+  const focusKey = showPair && focusPair ? `${normalizeOrderbookPair(focusPair)}@${focusAt || 0}` : "";
+  const [appliedFocus, setAppliedFocus] = useState("");
+  if (focusKey && focusKey !== appliedFocus) {
+    setAppliedFocus(focusKey);
+    setPairFilter(normalizeOrderbookPair(focusPair));
+    setPage(1);
+  }
 
   function goToPage(next) {
     setPage(next);

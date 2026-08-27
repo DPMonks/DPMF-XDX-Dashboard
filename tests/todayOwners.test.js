@@ -6,6 +6,7 @@ import {
   keepLastGoodOwners,
   pickLastOwnerScan,
   pickTodayOwnerSource,
+  preferLiveOwnerRows,
   utcDay,
   wantsTodaySnapshot,
 } from "../src/todayOwners.js";
@@ -133,4 +134,44 @@ test("keepLastGoodOwners does not blank a painted list while catching up", () =>
   });
   assert.equal(replaced.rows[0].account, "rNew");
   assert.equal(replaced.freshness.catching_up, false);
+});
+
+test("keepLastGoodOwners keeps a just-signed LP row above a stale snapshot", () => {
+  const previous = {
+    rows: [
+      { account: "rWhale", pair: "XDX/XAH", lp_balance: 100, rank: 1 },
+      {
+        account: "rDPMFBANKMexTKkC7e4Add",
+        pair: "XDX/XAH",
+        lp_balance: 37.41657387,
+        live: true,
+        rank: 2,
+      },
+    ],
+    freshness: { catching_up: false, present: true, count: 2 },
+  };
+  const kept = keepLastGoodOwners(previous, {
+    rows: [
+      { account: "rWhale", pair: "XDX/XAH", lp_balance: 100, rank: 1 },
+      { account: "rDPMFBANKMexTKkC7e4Add", pair: "XDX/XAH", lp_balance: 20, rank: 2 },
+    ],
+    freshness: { catching_up: false, present: true, count: 2 },
+  });
+  const live = kept.rows.find((row) => row.account === "rDPMFBANKMexTKkC7e4Add");
+  assert.equal(live.lp_balance, 37.41657387);
+  assert.equal(live.live, true);
+
+  const missing = preferLiveOwnerRows(
+    [
+      {
+        account: "rDPMFBANKMexTKkC7e4Add",
+        pair: "XDX/XAH",
+        lp_balance: 12.5,
+        live: true,
+      },
+    ],
+    [{ account: "rWhale", pair: "XDX/XAH", lp_balance: 100 }]
+  );
+  assert.equal(missing.some((row) => row.account === "rDPMFBANKMexTKkC7e4Add"), true);
+  assert.equal(missing.find((row) => row.account === "rDPMFBANKMexTKkC7e4Add").lp_balance, 12.5);
 });

@@ -1633,6 +1633,7 @@ body {
   color: var(--dpmf-text-main);
   border-radius: 10px;
   padding: 8px 10px;
+  font-size: 16px;
 }
 
 .rich-meta {
@@ -1808,6 +1809,44 @@ body {
   padding: 5px 10px;
   color: var(--dpmf-neon-cyan);
   border-color: rgba(0, 234, 255, 0.35);
+}
+
+@media (max-width: 1180px) {
+  .rich-list-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .rich-list.is-lp-holders .pair-select {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .rich-list.is-lp-holders .rich-search,
+  .rich-list.is-lp-holders .rich-meta {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .rich-list .pair-select-control,
+  .rich-list .pair-select-list button,
+  .rich-list .rich-search,
+  .rich-list .copy-btn {
+    min-height: 44px;
+  }
+
+  .rich-list .pair-select-list button {
+    display: flex;
+    align-items: center;
+    padding: 12px 10px;
+    font-size: 16px;
+  }
+
+  .rich-list .copy-btn {
+    min-width: 44px;
+    padding: 10px 12px;
+  }
 }
 
 .pagination {
@@ -4811,9 +4850,16 @@ body {
     width: 44px;
   }
 
-  .copy-btn {
+  .copy-btn:not(.wallet-income-copy) {
     padding: 4px 6px;
     font-size: 11px;
+  }
+
+  .rich-list .copy-btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 8px;
+    font-size: 12px;
   }
 }
 
@@ -5107,6 +5153,14 @@ body {
     display: none;
   }
 
+  .rich-list .copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
   .wallet-income-copy {
     display: inline-flex;
     align-items: center;
@@ -5178,6 +5232,15 @@ body {
   .rich-table td:last-child {
     display: none;
     width: 0;
+  }
+
+  .rich-list .rich-table col.col-copy,
+  .rich-list .rich-table th.col-copy,
+  .rich-list .rich-table td.col-copy,
+  .rich-list .rich-table th:last-child,
+  .rich-list .rich-table td:last-child {
+    display: table-cell;
+    width: 44px;
   }
 
   .tab,
@@ -5324,6 +5387,8 @@ body {
   .trade-field select,
   .trade-panel .pair-select-control,
   .pair-select-control,
+  .pair-select-list button,
+  .rich-search,
   .brand-select-list button,
   .wallet-lp-select select,
   .wallet-income-select select,
