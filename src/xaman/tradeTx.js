@@ -909,8 +909,15 @@ export function notifyFunctionConfirmed(detail = {}) {
 
 export function notifyTradeFailed(detail = {}) {
   if (typeof window === "undefined") return;
-  rememberTradeNotice({ ...detail, kind: "failed" });
-  window.dispatchEvent(new CustomEvent("dpmf-trade-failed", { detail }));
+  const pending = peekPendingPayload();
+  const notice = {
+    ...detail,
+    kind: "failed",
+    txjson: detail.txjson || pending?.txjson || null,
+    trade: detail.trade || pending?.trade || null,
+  };
+  rememberTradeNotice(notice);
+  window.dispatchEvent(new CustomEvent("dpmf-trade-failed", { detail: notice }));
 }
 
 export function notifyTradeUnconfirmed(detail = {}) {

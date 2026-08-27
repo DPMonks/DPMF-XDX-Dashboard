@@ -49,7 +49,7 @@ export async function claimExecutedTrade(
     const detection = detectTradeExecution({ payload: result });
     if (detection.failed) {
       const account = extractSignedAccount(result) || detection.account || null;
-      notifyTradeFailed({ ...detection, uuid: id, account, txjson, txType });
+      notifyTradeFailed({ ...detection, uuid: id, account, txjson, txType, trade: pending?.trade || null });
       return { ...detection, executed: false, account, result, txType };
     }
     if (detection.rejected) return null;
