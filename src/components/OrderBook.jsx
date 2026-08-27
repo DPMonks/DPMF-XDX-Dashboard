@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getOrderbook, getOrderbooks } from "../api/indexer";
 import {
   bookFromMarketPayload,
+  bookHasTape,
   bookHeader,
   FEATURED_ORDERBOOK_PAIRS,
   filterBookTape,
@@ -112,12 +113,10 @@ export default function OrderBook() {
         getOrderbooks(),
       ]);
       if (cancelled) return;
+      const catalog = all.status === "fulfilled" ? all.value : null;
+      const single = one.status === "fulfilled" ? one.value : null;
       const next =
-        all.status === "fulfilled"
-          ? all.value
-          : one.status === "fulfilled"
-            ? one.value
-            : null;
+        catalog && single ? mergeOrderbookPayloads(catalog, single) : catalog || single;
       if (next) {
         setBooks((current) => mergeOrderbookPayloads(current, next));
         setError(null);
@@ -152,6 +151,7 @@ export default function OrderBook() {
   const askRows = useMemo(() => padOrderbookLevels(dexBook.asks || []), [dexBook]);
   const ammBidRows = useMemo(() => padOrderbookLevels(ammBook.bids || []), [ammBook]);
   const ammAskRows = useMemo(() => padOrderbookLevels(ammBook.asks || []), [ammBook]);
+  const showAmmFirst = !bookHasTape(dexBook) && bookHasTape(ammBook);
 
   if (!books && !error) {
     return (
@@ -241,20 +241,24 @@ export default function OrderBook() {
       </dl>
 
       <div className="orderbook-boards">
-        <section className="orderbook-panel" aria-label={t.orderbookTapeDex || "XDX book"}>
-          <h3 className="orderbook-panel-title">{t.orderbookTapeDex || "XDX book"}</h3>
-          <div className="orderbook-board">
-            <BookSide title={t.bids} rows={bidRows} side="bid" locale={locale} t={t} />
-            <BookSide title={t.asks} rows={askRows} side="ask" locale={locale} t={t} />
-          </div>
-        </section>
-        <section className="orderbook-panel" aria-label={t.orderbookTapeAmm || "AMM"}>
-          <h3 className="orderbook-panel-title">{t.orderbookTapeAmm || "AMM"}</h3>
-          <div className="orderbook-board">
-            <BookSide title={t.bids} rows={ammBidRows} side="bid" locale={locale} t={t} />
-            <BookSide title={t.asks} rows={ammAskRows} side="ask" locale={locale} t={t} />
-          </div>
-        </section>
+        {(showAmmFirst
+          ? [
+              ["amm", t.orderbookTapeAmm || "AMM", ammBidRows, ammAskRows],
+              ["dex", t.orderbookTapeDex || "XDX book", bidRows, askRows],
+            ]
+          : [
+              ["dex", t.orderbookTapeDex || "XDX book", bidRows, askRows],
+              ["amm", t.orderbookTapeAmm || "AMM", ammBidRows, ammAskRows],
+            ]
+        ).map(([key, title, bids, asks]) => (
+          <section key={key} className="orderbook-panel" aria-label={title}>
+            <h3 className="orderbook-panel-title">{title}</h3>
+            <div className="orderbook-board">
+              <BookSide title={t.bids} rows={bids} side="bid" locale={locale} t={t} />
+              <BookSide title={t.asks} rows={asks} side="ask" locale={locale} t={t} />
+            </div>
+          </section>
+        ))}
       </div>
 
       {book.amm_implied ? (

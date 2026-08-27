@@ -10,6 +10,8 @@ import {
   XDX_RLUSD_LP_HEX,
   XDX_XRP_AMM,
   XDX_XRP_LP_HEX,
+  XDX_XSQUAD_AMM,
+  XDX_XSQUAD_LP_HEX,
 } from "../src/constants/ledger.js";
 import {
   MARKET_SLIPPAGE,
@@ -481,8 +483,8 @@ test("opening add LP from a pool card keeps that pair", () => {
 });
 
 test("remove LP held tokens stay on the selected pair, not another LP line", () => {
-  const xsquadHex = "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-  const xsquadAmm = "rXsquadAmm11111111111111111111111";
+  const xsquadHex = XDX_XSQUAD_LP_HEX;
+  const xsquadAmm = XDX_XSQUAD_AMM;
   const mixed = [
     {
       pool: "XDX/XRP",
@@ -507,7 +509,7 @@ test("remove LP held tokens stay on the selected pair, not another LP line", () 
   assert.equal(pairFromRow({ lp_currency: xsquadHex, amm_account: xsquadAmm }), "XDX/XSQUAD");
   const otherAmm = "rOtherAmm1111111111111111111111111";
   assert.equal(
-    pairFromRow({ lp_currency: xsquadHex, amm_account: otherAmm }),
+    pairFromRow({ lp_currency: "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", amm_account: otherAmm }),
     `XDX/${otherAmm.slice(0, 4)}…${otherAmm.slice(-4)}`
   );
 });

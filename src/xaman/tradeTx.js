@@ -8,6 +8,10 @@ import {
   XDX_RLUSD_LP_HEX,
   XDX_XRP_AMM,
   XDX_XRP_LP_HEX,
+  XDX_XIO_AMM,
+  XDX_XIO_LP_HEX,
+  XDX_XSQUAD_AMM,
+  XDX_XSQUAD_LP_HEX,
   XIO_ISSUER,
   XSQUAD_HEX,
   XSQUAD_ISSUER,
@@ -127,8 +131,31 @@ export function knownLpIdentity(pair, quoteId) {
   if (want === "XDX/XRP" || String(quoteId || "").toUpperCase() === "XRP") {
     return { pair: "XDX/XRP", amm: XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX };
   }
+  if (want === "XDX/XIO" || String(quoteId || "").toUpperCase() === "XIO") {
+    return { pair: "XDX/XIO", amm: XDX_XIO_AMM, lpCurrency: XDX_XIO_LP_HEX };
+  }
+  if (want === "XDX/XSQUAD" || String(quoteId || "").toUpperCase() === "XSQUAD") {
+    return { pair: "XDX/XSQUAD", amm: XDX_XSQUAD_AMM, lpCurrency: XDX_XSQUAD_LP_HEX };
+  }
   return { pair: want, amm: "", lpCurrency: "" };
 }
+
+const KNOWN_LP_BY_AMM = new Map(
+  [
+    [XDX_XRP_AMM, "XDX/XRP"],
+    [XDX_RLUSD_AMM, "XDX/RLUSD"],
+    [XDX_XIO_AMM, "XDX/XIO"],
+    [XDX_XSQUAD_AMM, "XDX/XSQUAD"],
+  ].map(([amm, pair]) => [String(amm).toLowerCase(), pair])
+);
+const KNOWN_LP_BY_HEX = new Map(
+  [
+    [XDX_XRP_LP_HEX, "XDX/XRP"],
+    [XDX_RLUSD_LP_HEX, "XDX/RLUSD"],
+    [XDX_XIO_LP_HEX, "XDX/XIO"],
+    [XDX_XSQUAD_LP_HEX, "XDX/XSQUAD"],
+  ].map(([hex, pair]) => [String(hex).toUpperCase(), pair])
+);
 
 export function lpRowMatchesPair(item, pair, quoteId, spec = {}) {
   const want = String(pair || (quoteId ? `XDX/${quoteId}` : ""))
@@ -146,9 +173,9 @@ export function lpRowMatchesPair(item, pair, quoteId, spec = {}) {
   const hex = String(item?.lp_currency || item?.lp_currency_hex || "")
     .replace(/^0x/i, "")
     .toUpperCase();
+  const rowKnownPair = KNOWN_LP_BY_AMM.get(amm) || (isLpCurrency(hex) ? KNOWN_LP_BY_HEX.get(hex) : "");
 
-  if (wantAmm && amm && amm !== wantAmm) return false;
-  if (wantLp && isLpCurrency(hex) && hex !== wantLp) return false;
+  if (rowKnownPair && rowKnownPair !== want) return false;
   if (wantAmm && amm && amm === wantAmm) return true;
   if (wantLp && isLpCurrency(hex) && hex === wantLp) return true;
   if (quote && rowQuote && rowQuote === quote) return true;

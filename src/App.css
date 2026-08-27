@@ -3030,6 +3030,10 @@ body {
   flex: 1 1 auto;
 }
 
+.orderbook-pairs .pair-chip {
+  flex: 0 0 auto;
+}
+
 .orderbook-search-wrap {
   position: relative;
   flex: 0 0 auto;
@@ -4492,6 +4496,40 @@ body {
 }
 
 @media (max-width: 1180px) {
+  .orderbook-toolbar {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .orderbook-pairs {
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .orderbook-pairs .pair-chip {
+    width: 100%;
+    min-height: 44px;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .orderbook-unit {
+    flex: 1 1 100%;
+    white-space: normal;
+  }
+
+  .orderbook-search-wrap {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    margin-left: 0;
+  }
+
   .governance-history h3 {
     margin: 16px 0 18px;
   }
@@ -5010,6 +5048,28 @@ body {
 
   .orderbook-toolbar {
     flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .orderbook-pairs {
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .orderbook-pairs .pair-chip {
+    width: 100%;
+    min-height: 44px;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .orderbook-unit {
+    flex: 1 1 100%;
+    white-space: normal;
   }
 
   .orderbook-search-wrap {

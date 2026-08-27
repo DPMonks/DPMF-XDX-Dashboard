@@ -416,10 +416,30 @@ export function bookHasNativeDex(book) {
   return bids.some(isNativeDexRow) || asks.some(isNativeDexRow);
 }
 
+function tapeRowFilled(row) {
+  return Boolean(row) && !row.placeholder && Number(row.price) > 0 && Number(row.base_size) > 0;
+}
+
+export function bookHasTape(book) {
+  if (!book || typeof book !== "object") return false;
+  const bids = Array.isArray(book.bids) ? book.bids : [];
+  const asks = Array.isArray(book.asks) ? book.asks : [];
+  return bids.some(tapeRowFilled) || asks.some(tapeRowFilled);
+}
+
 export function keepLastGoodBook(previous, next, pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(pair || next?.pair || previous?.pair);
   if (bookHasNativeDex(next)) return next;
   if (bookHasNativeDex(previous)) {
+    return {
+      ...previous,
+      pair: name,
+      catching_up: true,
+      stale: true,
+    };
+  }
+  if (bookHasTape(next)) return next;
+  if (bookHasTape(previous)) {
     return {
       ...previous,
       pair: name,

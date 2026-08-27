@@ -1,5 +1,6 @@
 import { preferRailwayXdxVolume } from "../src/utils/lpVolume.js";
 import { mergeTradePrints } from "../src/xdxTrades.js";
+import { bookHasTape, mergeOrderbookPayloads } from "../src/orderbook.js";
 import { payloadUsable, preferUsable, recallCatalog, rememberCatalog } from "./sourceControl.js";
 
 function asObject(value) {
@@ -283,6 +284,35 @@ function hasRows(value) {
   );
 }
 
+export function mergeOrderbookCatalogs(db, live) {
+  const stored = asObject(db);
+  const fresh = asObject(live);
+  if (!stored) return live;
+  if (!fresh) return db;
+
+  if (stored.books || fresh.books) {
+    const merged = mergeOrderbookPayloads(
+      stored.books ? stored : { ...stored, books: {} },
+      fresh.books ? fresh : { ...fresh, books: {} }
+    );
+    const source =
+      stored.source && fresh.source && stored.source !== fresh.source
+        ? "hybrid"
+        : fresh.source || stored.source;
+    return {
+      ...stored,
+      ...fresh,
+      ...merged,
+      featured: stored.featured || fresh.featured,
+      source,
+    };
+  }
+
+  if (bookHasTape(stored)) return stored;
+  if (bookHasTape(fresh)) return { ...stored, ...fresh, source: fresh.source || stored.source };
+  return stored;
+}
+
 export function mergeCatalogPayload(suffix, db, live) {
   const path = String(suffix || "").split("?")[0];
   if (live == null) return db;
@@ -306,7 +336,7 @@ export function mergeCatalogPayload(suffix, db, live) {
     return hasRows(db) ? db : live;
   }
   if (path === "orderbook" || path === "orderbooks") {
-    return hasRows(db) ? db : live;
+    return mergeOrderbookCatalogs(db, live);
   }
   if (path === "wallet/rank" || /^wallet\/rank\//.test(path)) {
     if (!isBlankAmount(db?.rank)) return { ...db, source: db.source || "db" };
