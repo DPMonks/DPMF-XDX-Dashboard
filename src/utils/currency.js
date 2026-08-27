@@ -62,3 +62,45 @@ export function pairParts(pair) {
   const [asset = "XDX", quote = "XRP"] = String(pair || "XDX/XRP").split("/");
   return { asset, quote };
 }
+
+export function ledgerCurrencyKey(value) {
+  return String(value || "")
+    .replace(/^0x/i, "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+}
+
+export function sameIssuedCurrency(a, b) {
+  const left = String(a || "")
+    .replace(/^0x/i, "")
+    .trim();
+  const right = String(b || "")
+    .replace(/^0x/i, "")
+    .trim();
+  if (!left || !right) return false;
+  if (ledgerCurrencyKey(left) === ledgerCurrencyKey(right)) return true;
+  const decL = decodeCurrency(left);
+  const decR = decodeCurrency(right);
+  return Boolean(decL && decR && decL === decR);
+}
+
+export function isNativeXrpQuote(quote) {
+  if (!quote) return true;
+  if (quote.issuer) return false;
+  const id = String(quote.id || quote.currency || "")
+    .replace(/^XDX\//i, "")
+    .toUpperCase();
+  const pair = String(quote.pair || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  if (pair && pair !== "XDX/XRP") return false;
+  return id === "XRP" || id === "" || pair === "XDX/XRP";
+}
+
+export function lineCounterparty(row) {
+  return String(row?.issuer || row?.account || row?.counterparty || row?.amm || "").toUpperCase();
+}
+
+export function lineCurrencyCodes(row) {
+  return [row?.currency, row?.hex, row?.ticker, row?.code, row?.lp_currency, row?.lp_currency_hex].filter(Boolean);
+}

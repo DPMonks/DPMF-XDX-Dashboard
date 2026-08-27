@@ -1,4 +1,5 @@
 import { XDX_HEX, XDX_ISSUER } from "../constants/ledger.js";
+import { pairFromVoteAssets } from "../wallet/ammVote.js";
 
 const XDX_PREFIX = "584458";
 
@@ -48,6 +49,8 @@ export function overlayLiveAmmReserves(row = {}, live = null) {
     trading_fee: live.trading_fee ?? row.trading_fee,
     amm_account: live.amm_account || row.amm_account || row.amm || null,
     lp_currency: live.lp_currency || row.lp_currency || row.lp_currency_hex || null,
+    quote_issuer: live.quote_issuer || live.issuer || row.quote_issuer || null,
+    quote_hex: live.quote_hex || live.hex || row.quote_hex || null,
     reserve_source: "amm_info",
   };
 }
@@ -108,6 +111,18 @@ export function lpShareAmounts(lpAmount, reserveBase, reserveQuote, lpSupply) {
   };
 }
 
+function ammAssetFromAmount(amount) {
+  if (amount == null) return null;
+  if (typeof amount !== "object") return { currency: "XRP" };
+  return { currency: amount.currency, issuer: amount.issuer };
+}
+
+export function pairFromAmmInfo(result) {
+  const amm = result?.amm || result;
+  if (!amm) return "";
+  return pairFromVoteAssets(ammAssetFromAmount(amm.amount), ammAssetFromAmount(amm.amount2));
+}
+
 export function poolReservesFromAmmInfo(result) {
   const amm = result?.amm || result;
   if (!amm || (amm.amount == null && amm.amount2 == null && !amm.lp_token)) return null;
@@ -126,6 +141,9 @@ export function poolReservesFromAmmInfo(result) {
       ? issuedAmountValue(first)
       : issuedAmountValue(second);
   const lpSupply = issuedAmountValue(amm.lp_token);
+  const pair = pairFromAmmInfo(amm);
+  const quoteAmt = firstIsXdx ? second : secondIsXdx ? first : second;
+  const quoteCurrency = quoteAmt && typeof quoteAmt === "object" ? String(quoteAmt.currency || "") : "";
   return {
     amm_account: amm.account || null,
     lp_supply: lpSupply,
@@ -135,5 +153,9 @@ export function poolReservesFromAmmInfo(result) {
     reserve_quote: reserveQuote,
     lp_currency: amm.lp_token?.currency || null,
     trading_fee: amm.trading_fee ?? null,
+    pair,
+    quote: pair.includes("/") ? pair.split("/")[1] : "",
+    quote_issuer: quoteAmt && typeof quoteAmt === "object" ? quoteAmt.issuer || null : null,
+    quote_hex: /^[A-Fa-f0-9]{40}$/.test(quoteCurrency) ? quoteCurrency.toUpperCase() : null,
   };
 }

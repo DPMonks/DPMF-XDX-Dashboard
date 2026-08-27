@@ -468,10 +468,15 @@ export const api = {
     getJson(endpoint("walletAccount", { address }) || `/wallet/account/${encodeURIComponent(address)}`, {
       retries: 1,
     }),
-  walletLp: (address) =>
-    getJson(endpoint("walletLp", { address }) || `/wallet/lp/${encodeURIComponent(address)}`, {
-      retries: 1,
-    }),
+  walletLp: (address, extra = {}) =>
+    getJson(
+      `${endpoint("walletLp", { address }) || `/wallet/lp/${encodeURIComponent(address)}`}${extra.fresh ? "?fresh=1" : ""}`,
+      {
+        retries: 1,
+        queue: false,
+        cache: extra.fresh === false ? true : extra.fresh ? false : true,
+      }
+    ),
   walletRank: (address) =>
     getJson(endpoint("walletRank", { address }) || `/wallet/rank/${encodeURIComponent(address)}`, {
       retries: 1,
@@ -494,16 +499,45 @@ export const api = {
       queue: false,
       cache: false,
     }),
+  walletLpIncome: (address, extra = {}) => {
+    const search = new URLSearchParams();
+    if (extra.pair && String(extra.pair).toUpperCase() !== "ALL") search.set("pair", extra.pair);
+    if (extra.marker) search.set("marker", JSON.stringify(extra.marker));
+    if (extra.fresh) search.set("fresh", "1");
+    const query = search.toString();
+    return getJson(`/wallet/lp-income/${encodeURIComponent(address)}${query ? `?${query}` : ""}`, {
+      retries: 1,
+      queue: false,
+      cache: false,
+    });
+  },
   walletVotes: (address) =>
     getJson(`/wallet/votes/${encodeURIComponent(address)}`, {
       retries: 1,
       queue: false,
       cache: false,
     }),
-  ammGovernance: (pair, account) => {
+  ammGovernance: (pair, account, extra = {}) => {
     const search = new URLSearchParams({ pair: pair || "XDX/XRP" });
     if (account) search.set("account", account);
+    if (extra.issuer || extra.quote_issuer) search.set("issuer", extra.issuer || extra.quote_issuer);
+    if (extra.hex || extra.quote_hex) search.set("hex", extra.hex || extra.quote_hex);
+    if (extra.ammAccount || extra.amm || extra.amm_account) {
+      search.set("amm", extra.ammAccount || extra.amm || extra.amm_account);
+    }
+    if (extra.lpBalance != null || extra.lp != null) search.set("lp", String(extra.lpBalance ?? extra.lp));
     return getJson(`/amm/governance?${search}`, { retries: 1, queue: false, cache: false });
+  },
+  swapMarket: (query = {}) => {
+    const search = new URLSearchParams();
+    if (query.from || query.fromId) search.set("from", query.from || query.fromId);
+    if (query.to || query.toId) search.set("to", query.to || query.toId);
+    if (query.fromIssuer || query.from_issuer) search.set("fromIssuer", query.fromIssuer || query.from_issuer);
+    if (query.toIssuer || query.to_issuer) search.set("toIssuer", query.toIssuer || query.to_issuer);
+    if (query.fromHex || query.from_hex) search.set("fromHex", query.fromHex || query.from_hex);
+    if (query.toHex || query.to_hex) search.set("toHex", query.toHex || query.to_hex);
+    if (query.fresh) search.set("fresh", "1");
+    return getJson(`/swap-market?${search}`, { retries: 1, queue: false, cache: false });
   },
   lpPoolsLive: (query = {}) => {
     const search = new URLSearchParams();
@@ -512,11 +546,13 @@ export const api = {
     if (query.quote) search.set("quote", query.quote);
     if (query.issuer || query.quote_issuer) search.set("issuer", query.issuer || query.quote_issuer);
     if (query.hex || query.quote_hex) search.set("hex", query.hex || query.quote_hex);
+    if (query.fresh) search.set("fresh", "1");
     return getJson(`/lp-pools/live?${search}`, { retries: 1, queue: false, cache: false });
   },
   prices: () => getJson(endpoint("prices"), { queue: false }),
   change24h: () => getJson(endpoint("change24h"), { queue: false }),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),
+  candles: () => getJson(endpoint("candles") || "/charts/candles"),
   issuerLocked: () => getJson(endpoint("issuerLocked")),
   orderbook: (pair = "XDX/XRP") => {
     const path = endpoint("orderbook") || "/orderbook";

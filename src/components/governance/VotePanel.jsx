@@ -5,6 +5,7 @@ export default function VotePanel({
   fee,
   onFee,
   eligible,
+  needLp = false,
   signedIn,
   confirming,
   onAskConfirm,
@@ -18,7 +19,7 @@ export default function VotePanel({
   const units = feeUnitsFromPercent(fee);
 
   return (
-    <section className="governance-vote">
+    <section className={`governance-vote${eligible ? " is-eligible" : ""}`}>
       <div className="governance-vote-head">
         <label htmlFor="governance-fee">
           {t.proposedFee}
@@ -41,10 +42,10 @@ export default function VotePanel({
         max="1"
         step="0.001"
         value={fee}
-        disabled={!eligible}
         onChange={(event) => onFee(Number(event.target.value))}
       />
       <p className="governance-units">{units} / 1000</p>
+      {needLp ? <p className="governance-empty">{t.needLpToVote || "Hold LP tokens for this pool to vote."}</p> : null}
       {confirming ? (
         <div className="governance-confirm">
           <p>
@@ -66,7 +67,6 @@ export default function VotePanel({
           <button
             type="button"
             className="connect-wallet-btn"
-            disabled={!signedIn ? false : !eligible}
             onClick={onAskConfirm}
           >
             {signedIn ? t.confirmVote : t.connectWallet}

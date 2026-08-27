@@ -6,6 +6,7 @@ import {
   sumFlowXdx,
   volumeCoverage,
   xdxFromXrpVolume,
+  xdxPairKey,
   xdxVolumeFromDexscreenerPair,
   xdxVolumeFromGeckoPool,
   xdxVolumeFromTokenCard,
@@ -192,15 +193,82 @@ export async function loadPoolXdxVolumes(args = {}) {
       source: rlusd24.source,
     },
   };
+
+  const extraPairs = collectVolumePairs(args.pairs, dex, gecko, flows);
+  for (const pair of extraPairs) {
+    if (byPair[pair]) continue;
+    const quote = pair.split("/")[1];
+    const hist = sumFlowXdx(flows, { now, windowMs: DAY_MS, pair });
+    const hist7 = sumFlowXdx(flows, { now, windowMs: DAY_MS * 7, pair });
+    const picked = pickBestXdxVolume([
+      {
+        value: xdxVolumeFromDexscreenerPair(dexscreenerPairForQuote(dex, quote), xdxUsd || num(dexscreenerPairForQuote(dex, quote)?.priceUsd)),
+        complete: true,
+        source: "dexscreener",
+      },
+      { value: xdxVolumeFromGeckoPool(geckoPoolForQuote(gecko, quote), xdxUsd), complete: true, source: "geckoterminal" },
+      { value: hist, complete: tape24.complete, source: "xrpl.to-history" },
+    ]);
+    byPair[pair] = {
+      volume24hXdx: picked.value || 0,
+      volume7dXdx: hist7 || (picked.value ? picked.value * 7 : 0),
+      volume24hXrp: 0,
+      volume24hUsd: xdxUsd && picked.value ? picked.value * xdxUsd : 0,
+      source: picked.source || "recorded",
+    };
+  }
   volumeCache = { at: now, byPair };
   return byPair;
 }
 
+function pairFromDexRow(row) {
+  const base = String(row?.baseToken?.symbol || "").toUpperCase();
+  const quote = String(row?.quoteToken?.symbol || "").toUpperCase();
+  if (base === "XDX" && quote) return xdxPairKey(`XDX/${quote}`);
+  if (quote === "XDX" && base) return xdxPairKey(`XDX/${base}`);
+  return "";
+}
+
+function pairFromGeckoRow(row) {
+  const name = String(row?.attributes?.name || row?.name || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  const match = name.match(/XDX\/([A-Z0-9]{2,12})/);
+  return match ? `XDX/${match[1]}` : "";
+}
+
+function collectVolumePairs(requested = [], dex = {}, gecko = {}, flows = []) {
+  const pairs = new Set();
+  for (const value of Array.isArray(requested) ? requested : []) {
+    const pair = xdxPairKey(value);
+    if (/^XDX\/[A-Z0-9$]{2,24}$/.test(pair)) pairs.add(pair);
+  }
+  for (const row of Array.isArray(dex?.pairs) ? dex.pairs : []) {
+    const pair = pairFromDexRow(row);
+    if (pair) pairs.add(pair);
+  }
+  for (const row of Array.isArray(gecko?.data) ? gecko.data : []) {
+    const pair = pairFromGeckoRow(row);
+    if (pair) pairs.add(pair);
+  }
+  for (const row of Array.isArray(flows) ? flows : []) {
+    const pair = xdxPairKey(row.pool || row.pool_name || row.pair);
+    if (/^XDX\/[A-Z0-9$]{2,24}$/.test(pair)) pairs.add(pair);
+  }
+  return [...pairs];
+}
+
 export function applyPoolVolumes(pools = [], byPair = {}) {
   return (Array.isArray(pools) ? pools : []).map((pool) => {
-    const key = String(pool.pool || pool.pool_name || pool.pair || "").replace(/\s+/g, "").toUpperCase();
+    const key = xdxPairKey(pool.pool || pool.pool_name || pool.pair);
     const vol = byPair[key];
-    return vol ? attachPoolVolumes(pool, vol) : pool;
+    if (!vol) {
+      return attachPoolVolumes(pool, {
+        volume24hXdx: Number(pool.volume24hXdx ?? pool.volume24h) || 0,
+        source: pool.volumeSource || "recorded",
+      });
+    }
+    return attachPoolVolumes(pool, vol);
   });
 }
 

@@ -1,17 +1,62 @@
+import { useEffect, useRef, useState } from "react";
 import { pairParts } from "../utils/currency";
 import { displayPoolSplit, formatPoolPct } from "../utils/poolSplit";
-import { formatNumber, formatToken, formatUsd, formatUsdPrice, formatWhen, shortAddress } from "../utils/format";
+import { formatToken, formatWhen, shortAddress } from "../utils/format";
 import { formatAmmFee } from "../wallet/composeWallet";
+import {
+  ammPoolName,
+  applyLivePoolReserves,
+  applyTradePoolReserves,
+  applyTradePoolVolume,
+  compactPoolAmount,
+  looksLikeLpAsQuote,
+  filterAmmPools,
+  isLpPoolTrade,
+  mergeAmmPoolLists,
+  poolAssetTrustlineId,
+  poolKey,
+  poolQuoteTicker,
+  poolSplitMeta,
+  rememberPoolVolume,
+  searchAmmAccount,
+  searchPairHint,
+  tradePoolHint,
+  tradeXdxVolume,
+} from "../ammPools";
+import { discoverLiveAmmPool, getLiveLpReserves, getWalletBalances, getWalletLines } from "../api/indexer";
+import { issuedBalance } from "../wallet/ammCreate";
+import { assetTrustTxjson, lpTrustTxjson, poolQuote } from "../ammTrustActions";
+import { useWallet } from "../context/useWallet";
+import { QUOTE_ASSETS, notifyWalletRefresh } from "../xaman/tradeTx";
+import { useXamanPayload } from "../xaman/useXamanPayload";
+import { liveWalletAddress } from "../wallet/walletStorage";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 import WalletButton from "./WalletButton";
+import WalletModal from "./WalletModal";
 
-function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
+function SplitBar({ asset, quote, xdxPct, quotePct, lead, reserveXdx, reserveQuote, lpSupply, t }) {
   const split = displayPoolSplit(xdxPct, quotePct);
+  const meta = poolSplitMeta({
+    reserve_asset: reserveXdx,
+    reserve_currency: reserveQuote,
+    lp_supply: lpSupply,
+  });
   const ready = split.measured;
   const xdxLead = lead === "xdx" || split.xdxPct >= split.quotePct;
   const xdxShare = Math.max(split.xdxPct, 0);
   const quoteShare = Math.max(split.quotePct, 0);
+  const lpLine =
+    meta.xdxPerLp != null && meta.quotePerLp != null && meta.lpSupply != null
+      ? (t.poolLpLine || "1 LP · {xdx} {asset} + {quote} {quoteAsset} · {lp} LP")
+          .replace("{xdx}", compactPoolAmount(meta.xdxPerLp))
+          .replace("{asset}", asset)
+          .replace("{quote}", compactPoolAmount(meta.quotePerLp))
+          .replace("{quoteAsset}", quote)
+          .replace("{lp}", compactPoolAmount(meta.lpSupply))
+      : meta.lpSupply != null
+        ? `LP ${compactPoolAmount(meta.lpSupply)}`
+        : "";
 
   return (
     <div className={`pool-split ${ready ? (xdxLead ? "is-xdx-lead" : "is-quote-lead") : "is-pending"}`}>
@@ -20,11 +65,19 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
           <i className="pool-split-swatch is-xdx" aria-hidden="true" />
           <span className="pool-split-pct">{formatPoolPct(split.xdxPct)}%</span>
           <span className="pool-split-asset">{asset}</span>
+          {meta.reserveXdx != null ? (
+            <span className="pool-split-amt">{compactPoolAmount(meta.reserveXdx)}</span>
+          ) : null}
         </span>
         <span className="pool-split-ratio">
-          {`${formatPoolPct(split.xdxPct)} / ${formatPoolPct(split.quotePct)}`}
+          {meta.lpSupply != null
+            ? `LP ${compactPoolAmount(meta.lpSupply)}`
+            : `${formatPoolPct(split.xdxPct)} / ${formatPoolPct(split.quotePct)}`}
         </span>
         <span className={`pool-split-quote ${!xdxLead ? "is-lead" : ""}`}>
+          {meta.reserveQuote != null ? (
+            <span className="pool-split-amt">{compactPoolAmount(meta.reserveQuote)}</span>
+          ) : null}
           <span className="pool-split-pct">{formatPoolPct(split.quotePct)}%</span>
           <span className="pool-split-asset">{quote}</span>
           <i className="pool-split-swatch is-quote" aria-hidden="true" />
@@ -33,7 +86,7 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
       <div
         className={`pool-split-bar ${ready ? (xdxLead ? "is-xdx-lead" : "is-quote-lead") : "is-pending"}`}
         role="img"
-        aria-label={`${formatPoolPct(split.xdxPct)} percent ${asset}, ${formatPoolPct(split.quotePct)} percent ${quote}`}
+        aria-label={`${formatPoolPct(split.xdxPct)} percent ${asset} ${compactPoolAmount(meta.reserveXdx)}, ${formatPoolPct(split.quotePct)} percent ${quote} ${compactPoolAmount(meta.reserveQuote)}, LP ${compactPoolAmount(meta.lpSupply)}`}
       >
         <span
           className="pool-split-bar-xdx"
@@ -43,36 +96,272 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead }) {
           className="pool-split-bar-quote"
           style={{ flexGrow: quoteShare, flexShrink: 0, flexBasis: 0 }}
         />
-        <i className="pool-split-mid" aria-hidden="true" />
+        <i className="pool-split-mid" style={{ left: `${xdxShare}%` }} aria-hidden="true" />
       </div>
+      <p className="pool-split-lp">{lpLine || "\u00a0"}</p>
     </div>
   );
 }
 
 export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemoveLiquidity }) {
   const { t, locale } = useI18n();
+  const { walletAddress, connectWallet } = useWallet();
+  const { qr, mobileUrl, uuid, status, error: signError, start, reset } = useXamanPayload();
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState([]);
+  const [looking, setLooking] = useState(false);
+  const [signKind, setSignKind] = useState("quote");
+  const [signAsset, setSignAsset] = useState("XDX");
+  const [lineError, setLineError] = useState("");
+  const [liveByKey, setLiveByKey] = useState({});
+  const [volumeByKey, setVolumeByKey] = useState({});
+  const [walletHold, setWalletHold] = useState({ xdx: 0, xrp: 0, raw: {} });
+  const lookupGen = useRef(0);
+  const lookupTimer = useRef(0);
+  const liveTimer = useRef(0);
+  const catalog = mergeAmmPoolLists(pools, found);
+  const filtered = filterAmmPools(catalog, query);
+  const visible = filtered.map((row) => {
+    const key = poolKey(row);
+    const live = applyLivePoolReserves(row, liveByKey[key]);
+    const volume24h = rememberPoolVolume(key, live.volume24h ?? live.volume24hXdx, volumeByKey[key]);
+    return { ...live, volume24h, volume24hXdx: volume24h, volumeUnit: "xdx" };
+  });
 
-  if (loading && !pools.length) {
+  function pullLive(pool, extra = {}) {
+    if (!pool) return;
+    getLiveLpReserves({
+      pair: pool.pool || pool.pool_name,
+      quote: poolQuoteTicker(pool),
+      issuer: pool.quote_issuer,
+      hex: pool.quote_hex,
+      ammAccount: pool.amm_account,
+      fresh: extra.fresh,
+    })
+      .then((live) => {
+        if (!live || live.empty || live.reserve_source === "empty") return;
+        if (
+          looksLikeLpAsQuote({
+            reserveXdx: live.reserve_xdx ?? live.reserve_asset,
+            reserveQuote: live.reserve_currency ?? live.reserve_quote,
+            lpSupply: live.lp_supply,
+            quote: live.quote || live.pair || pool.quote || pool.pool,
+          })
+        ) {
+          return;
+        }
+        setLiveByKey((current) => ({ ...current, [poolKey(pool)]: live }));
+      })
+      .catch(() => {});
+  }
+
+  function refreshLive(targets, extra = {}) {
+    const rows = (Array.isArray(targets) ? targets : []).filter(Boolean).slice(0, 8);
+    window.clearTimeout(liveTimer.current);
+    liveTimer.current = window.setTimeout(() => {
+      rows.forEach((pool) => pullLive(pool, extra));
+    }, extra.fresh ? 220 : 40);
+  }
+
+  function applyTradeThenLive(detail) {
+    const pair = tradePoolHint(detail);
+    const rows = filterAmmPools(mergeAmmPoolLists(pools, found), query);
+    const targets = pair ? rows.filter((row) => ammPoolName(row) === pair) : rows.slice(0, 6);
+    const nextTargets = targets.length ? targets : rows.slice(0, 6);
+    setLiveByKey((current) => {
+      const next = { ...current };
+      for (const row of nextTargets) {
+        const shown = applyLivePoolReserves(row, current[poolKey(row)]);
+        const traded = applyTradePoolReserves(shown, detail);
+        next[poolKey(row)] = {
+          reserve_xdx: traded.reserve_asset ?? traded.reserve_xdx,
+          reserve_asset: traded.reserve_asset ?? traded.reserve_xdx,
+          reserve_currency: traded.reserve_currency,
+          reserve_quote: traded.reserve_currency,
+          lp_supply: traded.lp_supply,
+          reserve_source: traded.reserve_source || "trade",
+        };
+      }
+      return next;
+    });
+    refreshLive(nextTargets, { fresh: true });
+  }
+
+  function recordTradeVolume(detail) {
+    const add = tradeXdxVolume(detail);
+    if (!(add > 0)) return;
+    const pair = tradePoolHint(detail);
+    const rows = filterAmmPools(mergeAmmPoolLists(pools, found), query);
+    const targets = pair ? rows.filter((row) => ammPoolName(row) === pair) : rows.slice(0, 6);
+    setVolumeByKey((current) => {
+      const next = { ...current };
+      for (const row of targets) {
+        const key = poolKey(row);
+        const shown = applyTradePoolVolume(
+          { ...row, volume24h: current[key] ?? row.volume24h ?? 0 },
+          detail
+        );
+        next[key] = Number(shown.volume24h) || 0;
+      }
+      return next;
+    });
+  }
+  const signing = status === "loading" || status === "waiting";
+  const account = liveWalletAddress(walletAddress);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLines() {
+      if (!account) {
+        setWalletHold({ xdx: 0, xrp: 0, raw: {} });
+        return;
+      }
+      const [next, bals] = await Promise.all([
+        getWalletLines(account, { fresh: true }).catch(() => []),
+        getWalletBalances(account).catch(() => ({})),
+      ]);
+      if (cancelled) return;
+      setWalletHold({
+        xdx: Number(bals?.xdx) || 0,
+        xrp: Number(bals?.xrp) || 0,
+        raw: { ...(bals?.raw || {}), lines: Array.isArray(next) ? next : bals?.raw?.lines || [] },
+      });
+    }
+    loadLines();
+    window.addEventListener("dpmf-wallet-refresh", loadLines);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("dpmf-wallet-refresh", loadLines);
+    };
+  }, [account]);
+
+  function poolHaveCopy(pool) {
+    if (!account) return "";
+    const quote = poolQuote(pool);
+    const quoteId = poolQuoteTicker(pool);
+    const quoteAmt =
+      quoteId === "XRP" ? Number(walletHold.xrp) || 0 : issuedBalance(walletHold.raw, quote);
+    const xdxAmt = Number(walletHold.xdx) || 0;
+    const have = t.poolHave || "Have {amount} {asset}";
+    const parts = [
+      have.replace("{amount}", formatToken(xdxAmt, locale, 2)).replace("{asset}", "XDX"),
+    ];
+    if (quoteId && quoteId !== "XDX") {
+      parts.push(
+        have
+          .replace("{amount}", formatToken(Number(quoteAmt) || 0, locale, quoteId === "XRP" ? 4 : 2))
+          .replace("{asset}", quoteId)
+      );
+    }
+    return parts.join(" · ");
+  }
+
+  function signTrustline(pool, kind) {
+    const txjson = kind === "lp" ? lpTrustTxjson(pool, account) : assetTrustTxjson(pool, account);
+    if (!txjson) {
+      setLineError(kind === "lp" ? t.lpTrustlineError : t.trustlineError);
+      return;
+    }
+    setLineError("");
+    setSignKind(kind);
+    setSignAsset(kind === "lp" ? "LP" : poolAssetTrustlineId(pool));
+    start({
+      body: { txjson },
+      onSigned: (signedAccount) => {
+        if (signedAccount) connectWallet(signedAccount);
+        notifyWalletRefresh();
+      },
+      errorMessage: kind === "lp" ? t.lpTrustlineError : t.trustlineError,
+    });
+  }
+
+  async function lookup(nextQuery) {
+    const ammAccount = searchAmmAccount(nextQuery);
+    const pair = searchPairHint(nextQuery);
+    const quote = pair.split("/")[1] || "";
+    if ((!pair && !ammAccount) || filterAmmPools(catalog, nextQuery).length) return;
+    const known = QUOTE_ASSETS.find((row) => row.id === quote);
+    const gen = (lookupGen.current += 1);
+    setLooking(true);
+    const hit = await discoverLiveAmmPool(pair, {
+      quote,
+      issuer: known?.issuer,
+      hex: known?.hex,
+      ammAccount,
+    }).catch(() => null);
+    if (gen !== lookupGen.current) return;
+    setLooking(false);
+    if (!hit) return;
+    setFound((current) => mergeAmmPoolLists(current, [hit]));
+  }
+
+  function onSearch(value) {
+    setQuery(value);
+    window.clearTimeout(lookupTimer.current);
+    if (!value.trim() || filterAmmPools(catalog, value).length) {
+      lookupGen.current += 1;
+      setLooking(false);
+      return;
+    }
+    lookupTimer.current = window.setTimeout(() => lookup(value), 320);
+  }
+
+  useEffect(() => {
+    refreshLive(filterAmmPools(mergeAmmPoolLists(pools, found), query).slice(0, 8));
+    // refreshLive reads the latest pullLive closure; pool identity is the dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalog rows
+  }, [pools, found, query]);
+
+  useEffect(() => {
+    function onTrade(event) {
+      const detail = event?.detail || {};
+      if (isLpPoolTrade(detail)) applyTradeThenLive(detail);
+      recordTradeVolume(detail);
+    }
+    window.addEventListener("dpmf-trade-executed", onTrade);
+    return () => {
+      window.removeEventListener("dpmf-trade-executed", onTrade);
+      window.clearTimeout(liveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- signed LP amounts
+  }, [found, pools, query]);
+
+  if (loading && !pools.length && !found.length) {
     return (
       <div className="pool-grid">
         {Array.from({ length: 6 }, (_, i) => (
-          <Skeleton key={i} height={260} />
+          <Skeleton key={i} height={420} />
         ))}
       </div>
     );
   }
 
-  if (error && !pools.length) {
+  if (error && !pools.length && !found.length) {
     return <p className="error-message">{error}</p>;
   }
 
-  if (!pools.length) {
-    return <p className="empty-message">{t.emptyPools}</p>;
-  }
-
   return (
-    <div className="pool-grid">
-      {pools.map((pool, index) => {
+    <div className="amm-pools">
+      <label className="amm-pools-search">
+        <span className="sr-only">{t.searchPair || "Search XDX / asset"}</span>
+        <input
+          type="search"
+          className="orderbook-search"
+          value={query}
+          placeholder={t.searchPair || "Search XDX / asset"}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => onSearch(event.target.value)}
+        />
+      </label>
+      {looking ? <p className="amm-pools-looking">{t.lookingForPool || "Looking up that XDX pool on the ledger…"}</p> : null}
+      {!catalog.length && !query.trim() ? (
+        <p className="empty-message">{t.emptyPools}</p>
+      ) : !visible.length ? (
+        <p className="empty-message">{t.noMatchingPools || "No live XDX pools match that search."}</p>
+      ) : (
+        <div className="pool-grid">
+          {visible.map((pool, index) => {
         const { asset, quote } = pairParts(pool.pool);
         const quoteName = pool.quote || quote;
         return (
@@ -84,11 +373,9 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
           >
             <header className="pool-card-head">
               <span className="pair-badge">{pool.pool}</span>
-              {pool.updated && (
-                <span className="pool-updated">
-                  {t.updated} {formatWhen(pool.updated, locale)}
-                </span>
-              )}
+              <span className="pool-updated">
+                {pool.updated ? `${t.updated} ${formatWhen(pool.updated, locale)}` : "\u00a0"}
+              </span>
             </header>
             <SplitBar
               asset={asset}
@@ -96,96 +383,114 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
               xdxPct={pool.xdx_pct}
               quotePct={pool.quote_pct}
               lead={pool.lead}
+              reserveXdx={pool.reserve_asset ?? pool.reserve_xdx}
+              reserveQuote={pool.reserve_currency}
+              lpSupply={pool.lp_supply}
+              t={t}
             />
             <dl className="pool-stats">
-              {pool.amm_account ? (
-                <div>
-                  <dt>{t.ammAccount}</dt>
-                  <dd title={pool.amm_account}>{shortAddress(pool.amm_account)}</dd>
-                </div>
-              ) : null}
-              {pool.tvl != null ? (
-                <div>
-                  <dt>{t.tvl}</dt>
-                  <dd>{formatUsd(pool.tvl, locale)}</dd>
-                </div>
-              ) : null}
-              {pool.price != null ? (
-                <div>
-                  <dt>{t.price}</dt>
-                  <dd>{formatUsdPrice(pool.price, locale)}</dd>
-                </div>
-              ) : null}
+              <div>
+                <dt>{t.ammAccount}</dt>
+                <dd title={pool.amm_account || ""}>{pool.amm_account ? shortAddress(pool.amm_account) : "—"}</dd>
+              </div>
               <div>
                 <dt>
                   {t.reserve} {asset}
                 </dt>
-                <dd>{formatToken(pool.reserve_asset, locale)}</dd>
+                <dd title={formatToken(pool.reserve_asset, locale)}>{compactPoolAmount(pool.reserve_asset)}</dd>
               </div>
-              {pool.reserve_currency != null ? (
-                <div>
-                  <dt>
-                    {t.reserve} {quoteName}
-                  </dt>
-                  <dd>{formatToken(pool.reserve_currency, locale)}</dd>
-                </div>
-              ) : (
-                <div>
-                  <dt>{t.pair}</dt>
-                  <dd>{quoteName}</dd>
-                </div>
-              )}
-              {pool.lp_currency ? (
-                <div>
-                  <dt>{t.lp}</dt>
-                  <dd title={pool.lp_currency}>{shortAddress(pool.lp_currency)}</dd>
-                </div>
-              ) : null}
-              {pool.lp_supply != null ? (
-                <div>
-                  <dt>{t.lpSupply}</dt>
-                  <dd>{formatToken(pool.lp_supply, locale)}</dd>
-                </div>
-              ) : null}
+              <div>
+                <dt>
+                  {t.reserve} {quoteName}
+                </dt>
+                <dd title={formatToken(pool.reserve_currency, locale)}>
+                  {pool.reserve_currency != null ? compactPoolAmount(pool.reserve_currency) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt>{t.lp}</dt>
+                <dd title={pool.lp_currency || ""}>{pool.lp_currency ? shortAddress(pool.lp_currency) : "—"}</dd>
+              </div>
+              <div>
+                <dt>{t.lpSupply}</dt>
+                <dd title={formatToken(pool.lp_supply, locale)}>
+                  {pool.lp_supply != null ? compactPoolAmount(pool.lp_supply) : "—"}
+                </dd>
+              </div>
               <div>
                 <dt>{t.fee}</dt>
                 <dd>{formatAmmFee(pool.trading_fee, locale)}</dd>
               </div>
-              {pool.apr != null ? (
-                <div>
-                  <dt>{t.apr}</dt>
-                  <dd>{`${formatNumber(pool.apr, locale)}%`}</dd>
-                </div>
-              ) : null}
-              {pool.volume24h != null ? (
-                <div>
-                  <dt>{t.volume24h}</dt>
-                  <dd>{formatToken(pool.volume24h, locale)}</dd>
-                </div>
-              ) : null}
-            </dl>
-            {onAddLiquidity || onRemoveLiquidity ? (
-              <div className="pool-card-actions">
-                {onAddLiquidity ? (
-                  <WalletButton
-                    label={t.addLiquidity}
-                    title={`${t.addLiquidity} ${pool.pool}`}
-                    onClick={() => onAddLiquidity(pool)}
-                  />
-                ) : null}
-                {onRemoveLiquidity ? (
-                  <WalletButton
-                    className="is-remove-lp"
-                    label={t.removeLiquidity}
-                    title={`${t.removeLiquidity} ${pool.pool}`}
-                    onClick={() => onRemoveLiquidity(pool)}
-                  />
-                ) : null}
+              <div className="is-volume-stat">
+                <dt>{t.volume24h}</dt>
+                <dd title={formatToken(pool.volume24h ?? 0, locale)}>
+                  <span className="is-volume">{compactPoolAmount(pool.volume24h ?? 0)}</span>{" "}
+                  <span className="pool-volume-unit">{t.xdx}</span>
+                </dd>
               </div>
-            ) : null}
+            </dl>
+            <div className="pool-card-actions">
+              {account ? <p className="pool-have">{poolHaveCopy(pool)}</p> : null}
+              {onAddLiquidity ? (
+                <WalletButton
+                  label={t.addLiquidity}
+                  title={`${t.addLiquidity} ${pool.pool}`}
+                  onClick={() => onAddLiquidity(pool)}
+                />
+              ) : null}
+              {onRemoveLiquidity ? (
+                <WalletButton
+                  className="is-remove-lp"
+                  label={t.removeLiquidity}
+                  title={`${t.removeLiquidity} ${pool.pool}`}
+                  onClick={() => onRemoveLiquidity(pool)}
+                />
+              ) : null}
+              <WalletButton
+                className="is-trustline"
+                label={(t.quoteTrustline || "{asset} Trustline").replace("{asset}", poolAssetTrustlineId(pool))}
+                title={(t.quoteTrustline || "{asset} Trustline").replace("{asset}", poolAssetTrustlineId(pool))}
+                disabled={signing}
+                onClick={() => signTrustline(pool, "quote")}
+              />
+              <WalletButton
+                className="is-lp-trustline"
+                label={t.lpTrustline}
+                title={`${t.lpTrustline} ${pool.pool}`}
+                disabled={signing}
+                onClick={() => signTrustline(pool, "lp")}
+              />
+            </div>
           </article>
         );
-      })}
+          })}
+        </div>
+      )}
+      {lineError || signError ? <p className="wallet-error">{lineError || signError}</p> : null}
+      <WalletModal
+        visible={signing}
+        qrUrl={qr}
+        mobileUrl={mobileUrl}
+        uuid={uuid}
+        status={status}
+        preparingLabel={
+          signKind === "lp"
+            ? t.preparingLpTrustline
+            : (t.preparingAssetTrustline || t.preparingTrustline || "Preparing {asset} trustline…").replace(
+                "{asset}",
+                signAsset
+              )
+        }
+        scanLabel={
+          signKind === "lp"
+            ? t.scanLpTrustline
+            : (t.scanAssetTrustline || t.scanTrustline || "Scan to add the {asset} trustline").replace(
+                "{asset}",
+                signAsset
+              )
+        }
+        onClose={reset}
+      />
     </div>
   );
 }

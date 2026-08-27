@@ -11,13 +11,16 @@ import {
   expectedLpTokens,
   expectedSingleLpTokens,
   expectedSingleWithdraw,
+  hasLpRow,
   hasLpTrustline,
   hasQuoteTrustline,
   lpTrustSetTxjson,
   notifyWalletRefresh,
+  crossAssetSwapTxjson,
   offerCreateBuyXdx,
   offerCreateSellXdx,
   poolForQuote,
+  quoteHintsFromLines,
   quoteChoices,
   quoteIdFromPair,
   quoteTrustSetTxjson,
@@ -44,6 +47,7 @@ import { formatToken, formatUsd } from "../utils/format";
 import { shortAddress } from "../utils/format";
 import { isConsumedUuid, isPayloadUuid, peekPendingPayload } from "../xaman/payloadResume";
 import { liveWalletAddress } from "../wallet/walletStorage";
+import { xdxPlatformFeeTxjson } from "../swap/platformFee";
 import BrandSelect from "./BrandSelect";
 import WalletModal from "./WalletModal";
 
@@ -73,7 +77,8 @@ function poolReserves(pools, quote, live = null) {
 export default function TradePanel({
   action,
   initialQuote = "XRP",
-  quoteExtra,
+  initialAmount = "",
+  quoteExtra = {},
   initialPools = [],
   spotPrice = 0,
   resumeUuid = "",
@@ -88,7 +93,12 @@ export default function TradePanel({
   const [orderType, setOrderType] = useState("market");
   const [lpMode, setLpMode] = useState("double");
   const [singleAsset, setSingleAsset] = useState("xdx");
-  const [amount, setAmount] = useState(() => (action === "addLp" || action === "removeLp" ? "" : "100000"));
+  const [amount, setAmount] = useState(() => {
+    if (action === "addLp" || action === "removeLp") return "";
+    if (initialAmount && Number(initialAmount) > 0) return String(initialAmount);
+    if (action === "xdxPlatformFee" || action === "crossSwap") return "";
+    return "100000";
+  });
   const [quoteQty, setQuoteQty] = useState("");
   const [editedSide, setEditedSide] = useState("xdx");
   const [price, setPrice] = useState(spotPrice > 0 ? String(spotPrice) : "");
@@ -107,28 +117,46 @@ export default function TradePanel({
   const [loadedFor, setLoadedFor] = useState("");
   const startRef = useRef(start);
   const resumeOnceRef = useRef(false);
+  const filledPairRef = useRef("");
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
-  const quote = useMemo(
-    () =>
-      resolveQuote(quoteId, {
-        ...quoteExtra,
-        quote_issuer: quoteExtra?.quoteIssuer || matched?.quote_issuer,
-        quote_hex: quoteExtra?.quoteHex || matched?.quote_hex,
-      }),
-    [quoteId, quoteExtra, matched]
-  );
+  const quote = useMemo(() => {
+    const resolved = resolveQuote(quoteId, {
+      ...quoteExtra,
+      quote_issuer: quoteExtra?.quoteIssuer || matched?.quote_issuer,
+      quote_hex: quoteExtra?.quoteHex || matched?.quote_hex,
+      currency: matched?.quote && !String(matched.quote).includes("/") ? matched.quote : quoteExtra?.quote,
+      amm: quoteExtra?.amm || matched?.amm_account,
+      lp_currency: quoteExtra?.lpCurrency || matched?.lp_currency,
+    });
+    if (resolved.issuer) return resolved;
+    const hinted = quoteHintsFromLines(walletLines, resolved);
+    if (!hinted.issuer) return resolved;
+    return { ...resolved, issuer: hinted.issuer, hex: hinted.hex || resolved.hex };
+  }, [quoteId, quoteExtra, matched, walletLines]);
   const quoteIssuer = quote.issuer || "";
   const quoteHex = quote.hex || "";
   const quotePair = quote.pair || "";
   const isLp = action === "addLp" || action === "removeLp";
+  const isPlatformFee = action === "xdxPlatformFee";
+  const isCrossSwap = action === "crossSwap";
+  const isAutoSign = isPlatformFee || isCrossSwap;
   const account = liveWalletAddress(walletAddress);
   const signedIn = Boolean(account);
-  const lpSpec = useMemo(() => poolForQuote(quote, pools, liveReserves), [quote, pools, liveReserves]);
+  const lpSpec = useMemo(
+    () =>
+      poolForQuote(quote, pools, {
+        ...liveReserves,
+        amm_account: liveReserves?.amm_account || quote.amm || matched?.amm_account,
+        lp_currency: liveReserves?.lp_currency || quote.lpCurrency || matched?.lp_currency,
+      }),
+    [quote, pools, liveReserves, matched]
+  );
   const haveLpLine =
     lpLineReady ||
     hasLpTrustline(walletLines, lpSpec) ||
-    lpHeldForPair(walletLp, quotePair, quoteId) > 0;
+    hasLpRow(walletLp, quotePair, quoteId, lpSpec) ||
+    lpHeldForPair(walletLp, quotePair, quoteId, lpSpec) > 0;
   const walletReady = !signedIn || loadedFor === `${account || ""}:${action || ""}:${quoteId}`;
   const haveQuoteLine =
     quoteLineReady ||
@@ -143,12 +171,14 @@ export default function TradePanel({
   const isSingleLp = isLp && lpMode === "single";
   const isSingleRemove = action === "removeLp" && lpMode === "single";
   const needQuoteTrust =
+    !isPlatformFee &&
     shouldAskQuoteTrustline({
       loaded: walletReady,
       haveLine: haveQuoteLine,
       haveLp: isLp && haveLpLine,
       quote,
-    }) && !(isSingleLp && singleAsset === "xdx");
+    }) &&
+    !(isSingleLp && singleAsset === "xdx");
   const reserves = useMemo(() => poolReserves(pools, quote, liveReserves), [pools, quote, liveReserves]);
   const implied = poolPrice(reserves.base, reserves.quote);
   const markerPx = xdxQuoteSpot({ quoteId, prices, pool: reserves });
@@ -225,7 +255,7 @@ export default function TradePanel({
         quoteUsd,
       });
   const splitReady = Boolean(deposit.measured);
-  const lpHeld = lpHeldForPair(walletLp, quotePair, quoteId);
+  const lpHeld = lpHeldForPair(walletLp, quotePair, quoteId, lpSpec);
   const available = walletAvailableAmounts({
     balances: walletHold,
     account: walletAccount,
@@ -234,9 +264,11 @@ export default function TradePanel({
   });
   const sides = tradeSides({
     action,
-    amount: action === "addLp" ? addXdx : linked.xdx || amount,
-    quoteQty: action === "addLp" ? addQuote : linked.quote || shownQuoteQty || quoteHint,
+    amount: isPlatformFee || isCrossSwap ? amount : action === "addLp" ? addXdx : linked.xdx || amount,
+    quoteQty: isCrossSwap ? quoteExtra?.receive : action === "addLp" ? addQuote : linked.quote || shownQuoteQty || quoteHint,
     quoteLabel: quote.label,
+    fromLabel: quoteExtra?.fromId || quote.label,
+    toLabel: quoteExtra?.toId || quote.label,
     total,
     lpAmount: lpAmount || amount,
     lpOut: lpHint,
@@ -248,7 +280,17 @@ export default function TradePanel({
     sell: t.sellXdx,
     addLp: t.addLiquidity,
     removeLp: t.removeLiquidity,
+    xdxPlatformFee: t.xdxPlatformFee || "1% XDX fee",
+    crossSwap: t.crossSwapTitle || "Swap",
   };
+  const fromQuote = resolveQuote(quoteExtra?.fromId || quoteId, {
+    quoteIssuer: quoteExtra?.fromIssuer,
+    quoteHex: quoteExtra?.fromHex,
+  });
+  const toQuote = resolveQuote(quoteExtra?.toId || quoteId, {
+    quoteIssuer: quoteExtra?.toIssuer || quote.issuer,
+    quoteHex: quoteExtra?.toHex || quote.hex,
+  });
 
   useEffect(() => {
     startRef.current = start;
@@ -283,8 +325,15 @@ export default function TradePanel({
       setLineHint(JSON.stringify(nextHold?.raw || {}).toUpperCase());
       setLoadedFor(`${account || ""}:${action || ""}:${quoteId}`);
       if (action === "removeLp") {
-        const have = lpHeldForPair(rows, quotePair, quoteId);
-        if (have > 0) setLpAmount((current) => current || String(have));
+        const spec = poolForQuote(
+          resolveQuote(quoteId, { quote_issuer: quoteIssuer, quote_hex: quoteHex }),
+          nextPools
+        );
+        const have = lpHeldForPair(rows, quotePair, quoteId, spec);
+        const switched = filledPairRef.current !== quotePair;
+        filledPairRef.current = quotePair;
+        if (switched) setLpAmount(have > 0 ? String(have) : "");
+        else if (have > 0) setLpAmount((current) => current || String(have));
       }
     });
     return () => {
@@ -299,7 +348,10 @@ export default function TradePanel({
     function pull() {
       getLiveLpReserves({
         pair,
-        ammAccount: lpSpec.amm || matched?.amm_account,
+        ammAccount:
+          quoteId === "XRP" || pair === "XDX/XRP"
+            ? lpSpec.amm || matched?.amm_account
+            : matched?.amm_account || quote.amm || lpSpec.amm,
         quote: quoteId,
         issuer: quoteIssuer,
         hex: quoteHex,
@@ -319,7 +371,7 @@ export default function TradePanel({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [action, quotePair, quoteId, quoteIssuer, quoteHex, lpSpec.amm, matched?.amm_account]);
+  }, [action, quotePair, quoteId, quoteIssuer, quoteHex, quote.amm, lpSpec.amm, matched?.amm_account]);
 
   function close() {
     reset();
@@ -334,6 +386,19 @@ export default function TradePanel({
   }
 
   function buildTx() {
+    if (action === "xdxPlatformFee") {
+      return xdxPlatformFeeTxjson({ account, xdx: amount });
+    }
+    if (action === "crossSwap") {
+      return crossAssetSwapTxjson({
+        account,
+        fromQuote,
+        toQuote,
+        sendMax: amount,
+        deliver: quoteExtra?.receive,
+        routingMode: quoteExtra?.routingMode,
+      });
+    }
     if (action === "buy") {
       return offerCreateBuyXdx({
         account,
@@ -341,6 +406,7 @@ export default function TradePanel({
         xdx: linked.xdx || amount,
         cost: linked.quote || shownQuoteQty || total,
         market: orderType === "market",
+        routingMode: quoteExtra?.routingMode,
       });
     }
     if (action === "sell") {
@@ -350,6 +416,7 @@ export default function TradePanel({
         xdx: linked.xdx || amount,
         proceeds: linked.quote || shownQuoteQty || total,
         market: orderType === "market",
+        routingMode: quoteExtra?.routingMode,
       });
     }
     if (action === "addLp") {
@@ -381,6 +448,27 @@ export default function TradePanel({
       quoteHex: quote.hex || null,
       pair: quote.pair || `XDX/${quoteId}`,
       ...(isLp ? { lpMode, singleAsset: isSingleLp ? singleAsset : undefined } : {}),
+      ...(!isLp ? { amount: Number((isAutoSign ? amount : linked.xdx) || amount) || 0 } : {}),
+      ...(action === "addLp"
+        ? { amount: addXdx, quoteQty: addQuote, lpOut: Number(lpHint) || 0 }
+        : {}),
+      ...(action === "removeLp"
+        ? { lpAmount: Number(withdrawLp) || 0, withdraw }
+        : {}),
+      ...(isPlatformFee
+        ? { amount: Number(amount) || 0, feeUsd: quoteExtra?.feeUsd || null, nextTrade: quoteExtra?.nextTrade || null }
+        : {}),
+      ...(isCrossSwap
+        ? {
+            fromId: quoteExtra?.fromId || null,
+            toId: quoteExtra?.toId || quoteId,
+            fromIssuer: quoteExtra?.fromIssuer || null,
+            fromHex: quoteExtra?.fromHex || null,
+            toIssuer: quoteExtra?.toIssuer || quote.issuer || null,
+            toHex: quoteExtra?.toHex || quote.hex || null,
+            receive: Number(quoteExtra?.receive) || 0,
+          }
+        : {}),
     };
   }
 
@@ -463,7 +551,7 @@ export default function TradePanel({
         setFormError(t.tradeNeedAmount);
         return;
       }
-    } else if (action !== "removeLp" && !(tradeQty > 0)) {
+    } else if (action !== "removeLp" && !(Number(isAutoSign ? amount : tradeQty) > 0)) {
       setFormError(t.tradeNeedAmount);
       return;
     }
@@ -471,9 +559,17 @@ export default function TradePanel({
       setFormError(t.tradeNeedTrustline);
       return;
     }
-    if (!isLp && !(px > 0)) {
+    if (!isLp && !isAutoSign && !(px > 0)) {
       setFormError(t.tradeNeedPrice);
       return;
+    }
+    if (isPlatformFee) {
+      const feeTx = xdxPlatformFeeTxjson({ account, xdx: amount });
+      if (!feeTx) {
+        if (quoteExtra?.nextTrade) onClose(quoteExtra.nextTrade);
+        else setFormError(t.tradeNeedAmount);
+        return;
+      }
     }
     start({
       body: { txjson: buildTx() },
@@ -484,6 +580,10 @@ export default function TradePanel({
       onExecuted: () => {
         notifyWalletRefresh();
         onSigned?.();
+        if (isPlatformFee && quoteExtra?.nextTrade) {
+          onClose(quoteExtra.nextTrade);
+          return;
+        }
         onClose();
       },
       onFailed: (detection) => {
@@ -527,6 +627,10 @@ export default function TradePanel({
         onExecuted: () => {
           notifyWalletRefresh();
           onSigned?.();
+          if (action === "xdxPlatformFee" && quoteExtra?.nextTrade) {
+            onClose(quoteExtra.nextTrade);
+            return;
+          }
           onClose();
         },
         onFailed: (detection) => {
@@ -574,7 +678,20 @@ export default function TradePanel({
           <p className="trade-panel-hint">{t.signInToTrade}</p>
         )}
         {needLpLine ? <p className="trade-panel-hint">{t.needLpTrustline}</p> : null}
+        {isPlatformFee ? (
+          <>
+            <p className="trade-panel-hint">{t.swapPlatformFeeHint}</p>
+            <p className="trade-panel-account">{formatToken(amount, locale, 6)} XDX</p>
+          </>
+        ) : null}
+        {isCrossSwap ? (
+          <p className="trade-panel-hint">
+            {`${quoteExtra?.fromId || ""} → ${quoteExtra?.toId || quoteId}`}
+          </p>
+        ) : null}
 
+        {isAutoSign ? null : (
+        <>
         <label className="trade-field">
           {t.tradePair}
           <BrandSelect
@@ -860,6 +977,8 @@ export default function TradePanel({
             <dd>~{LEDGER_FEE_XRP} XRP</dd>
           </div>
         </dl>
+        </>
+        )}
         </>
         )}
 

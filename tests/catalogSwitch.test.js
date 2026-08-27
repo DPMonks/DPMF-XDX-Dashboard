@@ -73,6 +73,24 @@ test("mergeCatalogPayload routes prices, overview, and lists", () => {
   assert.equal(catalogSource(true, true), "hybrid");
 });
 
+test("mergeCatalogPayload keeps a single pair book instead of swapping in XDX/XRP", () => {
+  const db = {
+    pair: "XDX/XIO",
+    bids: [{ price: 0.0000012, base_size: 4000, source: "bridge" }],
+    asks: [{ price: 0.00000128, base_size: 100, source: "amm" }],
+    source: "db",
+  };
+  const live = {
+    pair: "XDX/XRP",
+    bids: [{ price: 0.00003, base_size: 1000, source: "dex" }],
+    asks: [],
+    source: "xrpl",
+  };
+  const merged = mergeCatalogPayload("orderbook", db, live);
+  assert.equal(merged.pair, "XDX/XIO");
+  assert.equal(merged.bids[0].source, "bridge");
+});
+
 test("overlayDbResultWithLive rewrites an empty 200 from Postgres", async () => {
   resetCatalogMemory();
   const overlaid = await overlayDbResultWithLive(
@@ -129,11 +147,12 @@ test("wallet rank keeps a Railway rank and fills a blank one", () => {
   assert.equal(filled.source, "xrpl");
 });
 
-test("populated Railway history wins over the free tape", () => {
+test("Railway trade history merges with the live tape instead of hiding it", () => {
   const db = [{ timestamp: "2026-01-01T00:00:00.000Z", xdx: 10, side: "buy" }];
   const live = [{ timestamp: "2026-08-24T00:00:00.000Z", xdx: 99, side: "sell", source: "xrpl.to" }];
   const kept = mergeCatalogPayload("xdx-flows", db, live);
-  assert.equal(kept[0].xdx, 10);
+  assert.equal(kept[0].xdx, 99);
+  assert.equal(kept[1].xdx, 10);
   const empty = mergeCatalogPayload("xdx-flows", [], live);
   assert.equal(empty[0].xdx, 99);
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { RLUSD_HEX, XDX_HEX } from "../src/constants/ledger.js";
+import { RLUSD_HEX, XDX_HEX, XIO_HEX, XIO_ISSUER } from "../src/constants/ledger.js";
 import {
   attachPoolVolumes,
   catalogXdxVolume24h,
@@ -15,6 +15,9 @@ import {
   xdxVolumeFromDexscreenerPair,
   xdxVolumeFromGeckoPool,
   xdxVolumeFromTokenCard,
+  dailyPricesFromOhlc,
+  dailyXdxFlowsFromOhlc,
+  overlayPoolFlowVolumes,
   xrpVolumeFromOhlc,
 } from "../src/utils/lpVolume.js";
 import { composeWalletSnapshot, lpFeeEarnings, tradingFeeRate } from "../src/wallet/composeWallet.js";
@@ -26,6 +29,10 @@ test("history legs tag XDX/XRP, XDX/RLUSD, and other XDX pairs", () => {
   assert.equal(tickerFromCurrency({ currency: "XRP" }), "XRP");
   assert.equal(tickerFromCurrency({ currency: XDX_HEX }), "XDX");
   assert.equal(tickerFromCurrency({ currency: RLUSD_HEX }), "RLUSD");
+  assert.equal(tickerFromCurrency({ currency: "XIO" }), "XIO");
+  assert.equal(tickerFromCurrency({ currency: XIO_HEX }), "XIO");
+  assert.equal(tickerFromCurrency({ currency: XIO_HEX, issuer: XIO_ISSUER }), "XIO");
+  assert.equal(pairFromTradeLegs({ currency: XDX_HEX }, { currency: XIO_HEX, issuer: XIO_ISSUER }), "XDX/XIO");
   assert.equal(tickerFromCurrency({ currency: "504C580000000000000000000000000000000000" }), "PLX");
   assert.equal(pairFromTradeLegs({ currency: "XRP" }, { currency: "XDX" }), "XDX/XRP");
   assert.equal(pairFromTradeLegs({ currency: XDX_HEX }, { currency: RLUSD_HEX }), "XDX/RLUSD");
@@ -67,6 +74,27 @@ test("token card, OHLC, and Dexscreener convert into XDX, never USD", () => {
     { now, windowMs: 24 * 60 * 60 * 1000 }
   );
   assert.ok(Math.abs(xrpVol - 126.7) < 1e-9);
+  const daily = dailyXdxFlowsFromOhlc(
+    [
+      [Date.parse("2026-07-01T00:00:00.000Z"), 0.00004, 0.00004, 0.00004, 0.00004, 2],
+      [Date.parse("2026-08-20T00:00:00.000Z"), 0.00004, 0.00004, 0.00004, 0.00004, 3],
+      [Date.parse("2026-08-21T00:00:00.000Z"), 0.00004, 0.00004, 0.00004, 0.00004, 4],
+    ],
+    { xrpPerXdx: 0.00004, now: Date.parse("2026-08-25T00:00:00.000Z"), maxDays: 365 }
+  );
+  assert.equal(daily.length, 3);
+  assert.equal(daily[0].pair, "XDX/XRP");
+  const marks = dailyPricesFromOhlc(
+    [
+      [Date.parse("2026-08-20T00:00:00.000Z"), 0.00003, 0.00004, 0.00003, 0.00004, 3],
+      [Date.parse("2026-08-21T00:00:00.000Z"), 0.00004, 0.00005, 0.00004, 0.00008, 4],
+    ],
+    { xrpUsd: 2, now: Date.parse("2026-08-25T00:00:00.000Z") }
+  );
+  assert.equal(marks["2026-08-20"].xdxUsd, 0.00004);
+  assert.equal(marks["2026-08-21"].xdxUsd, 0.00008);
+  assert.equal(marks["2026-08-20"].xrpUsd, 2);
+  assert.ok(Math.abs(daily.find((row) => row.timestamp.startsWith("2026-08-21")).xdx - 100_000) < 1e-6);
   const dex = xdxVolumeFromDexscreenerPair(
     { volume: { h24: 183.33 }, priceUsd: 0.00004734 },
     0.00004734
@@ -325,4 +353,35 @@ test("free volume cascade prefers complete pair APIs and scales 7d from OHLC", a
   assert.ok(dexscreenerPairForQuote({ pairs: [{ chainId: "xrpl", baseToken: { symbol: "XDX" }, quoteToken: { symbol: "RLUSD" } }] }, "RLUSD"));
   assert.ok(geckoPoolForQuote({ data: [{ attributes: { name: "XDX / RLUSD" } }] }, "RLUSD"));
   assert.ok(attachPoolVolumes({}, xrp).volume24hXdx > 0);
+});
+
+test("every pool records 24h XDX volume, including new pairs with no tape", () => {
+  const now = Date.parse("2026-08-25T18:00:00.000Z");
+  const overlaid = overlayPoolFlowVolumes(
+    [
+      { pool: "XDX/XIO", volume24h: null },
+      { pool: "XDX/NEWS" },
+      { pool: "XDX/XRP", volume24h: 8_000_000 },
+    ],
+    [
+      { pool: "XDX/XIO", xdx: 1200, timestamp: "2026-08-25T10:00:00.000Z" },
+      { pool: "XDX/XIO", xdx: 800, timestamp: "2026-08-25T12:00:00.000Z" },
+    ],
+    now
+  );
+  assert.equal(overlaid[0].volume24h, 2000);
+  assert.equal(overlaid[1].volume24h, 0);
+  assert.equal(overlaid[1].volumeUnit, "xdx");
+  assert.equal(overlaid[2].volume24h, 8_000_000);
+  const applied = applyPoolVolumes(
+    [{ pool: "XDX/XSQUAD" }, { pool: "XDX/XIO" }],
+    { "XDX/XIO": { volume24hXdx: 2000, source: "xrpl.to-history" } }
+  );
+  assert.equal(applied[0].volume24h, 0);
+  assert.equal(applied[0].volumeUnit, "xdx");
+  assert.equal(applied[1].volume24h, 2000);
+  const kept = applyPoolVolumes([{ pool: "XDX/XRP", volume24h: 8_000_000 }], {});
+  assert.equal(kept[0].volume24h, 8_000_000);
+  const flicker = attachPoolVolumes({ pool: "XDX/XRP", volume24h: 8_000_000 }, { volume24hXdx: 0, source: "empty" });
+  assert.equal(flicker.volume24h, 8_000_000);
 });

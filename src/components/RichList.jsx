@@ -13,7 +13,7 @@ import {
   shareOf,
   shortAddress,
 } from "../utils/format";
-import { LIST_PAGE_SIZE, pageSlice } from "../utils/pagination";
+import { LIST_PAGE_SIZE, pageSlice, resetScrollTop } from "../utils/pagination";
 import { useI18n } from "../i18n/useI18n";
 import PaginationBar from "./PaginationBar";
 import Skeleton from "./Skeleton";
@@ -146,10 +146,16 @@ export default function RichList({
   className,
 }) {
   const { t, locale } = useI18n();
+  const tableWrapRef = useRef(null);
   const [query, setQuery] = useState("");
   const [pairFilter, setPairFilter] = useState(showPair ? defaultPair : "all");
   const [page, setPage] = useState(1);
   const [copied, setCopied] = useState(null);
+
+  function goToPage(next) {
+    setPage(next);
+    resetScrollTop(tableWrapRef.current);
+  }
 
   const pairs = useMemo(() => {
     const fromRows = rows.map((row) => row.pair).filter(Boolean);
@@ -258,7 +264,8 @@ export default function RichList({
                 </td>
               )}
               <td className="col-num col-balance">
-                {formatToken(row[valueKey], locale, 8)} {unit}
+                <span className="rich-balance-qty">{formatToken(row[valueKey], locale, 8)}</span>
+                {unit ? <span className="rich-balance-unit">{unit}</span> : null}
               </td>
               <td className="col-num col-share">
                 {formatPercent(shareOf(row[valueKey], total), locale)}
@@ -288,7 +295,7 @@ export default function RichList({
             value={pairFilter}
             onChange={(next) => {
               setPairFilter(next === "all" ? "all" : normalizeOrderbookPair(next));
-              setPage(1);
+              goToPage(1);
             }}
             t={t}
           />
@@ -299,7 +306,7 @@ export default function RichList({
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
-            setPage(1);
+            goToPage(1);
           }}
           placeholder={searchPlaceholder}
         />
@@ -309,12 +316,14 @@ export default function RichList({
       </div>
       {freshnessLine}
 
-      <div className="rich-table-wrap">{body}</div>
+      <div className="rich-table-wrap" ref={tableWrapRef}>
+        {body}
+      </div>
 
       <PaginationBar
         page={currentPage}
         totalPages={totalPages}
-        onPage={setPage}
+        onPage={goToPage}
         disabled={loading && !rows.length}
       />
     </div>

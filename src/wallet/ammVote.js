@@ -3,11 +3,13 @@ import {
   RLUSD_ISSUER,
   XDX_CURRENCY,
   XDX_ISSUER,
+  XIO_HEX,
   XIO_ISSUER,
   XSQUAD_HEX,
   XSQUAD_ISSUER,
   asciiCurrencyHex,
 } from "../constants/ledger.js";
+import { hexToAscii } from "../xaman/signMarker.js";
 
 export const AMM_FEE_UNITS = 100_000;
 export const AMM_FEE_MAX_UNITS = 1000;
@@ -52,6 +54,8 @@ export function voteSlotsFromAmm(amm = {}) {
         feePercent: feePercentFromUnits(units),
         voteWeight: Number.isFinite(weight) ? weight : 0,
         weightPct: Number.isFinite(weight) ? weight / 1000 : 0,
+        timestamp: entry.timestamp || entry.close_time_iso || null,
+        txid: entry.txid || entry.hash || null,
       };
     })
     .filter(Boolean)
@@ -108,16 +112,35 @@ export function xdxIssue() {
   return { currency: XDX_CURRENCY, issuer: XDX_ISSUER };
 }
 
+export function quoteTickerFromCurrency(code, issuer = "") {
+  const raw = String(code || "")
+    .trim()
+    .toUpperCase()
+    .replace(/^0X/, "");
+  const who = String(issuer || "");
+  if (!raw || raw === "XRP") return "XRP";
+  if (raw === "XDX" || raw.startsWith("584458")) return "XDX";
+  if (raw === RLUSD_HEX || raw === "RLUSD") return "RLUSD";
+  if (raw === "XIO" || raw === XIO_HEX || who === XIO_ISSUER) return "XIO";
+  if (raw === XSQUAD_HEX || raw === "XSQUAD" || who === XSQUAD_ISSUER) return "XSQUAD";
+  if (/^[A-Z0-9.$]{2,12}$/.test(raw)) return raw;
+  if (/^[A-F0-9]{40}$/.test(raw)) {
+    const ascii = hexToAscii(raw).replace(/\0+$/g, "").trim();
+    if (/^[A-Za-z0-9.$]{2,20}$/.test(ascii)) return ascii.toUpperCase();
+  }
+  return "";
+}
+
+export function displayVotePair(pair) {
+  const name = normalizeVotePair(pair);
+  const quote = quoteTickerFromCurrency(name.includes("/") ? name.split("/")[1] : name) || "XRP";
+  return `XDX/${quote}`;
+}
+
 export function pairFromVoteAssets(asset, asset2) {
   const codes = [asset, asset2].map((row) => {
     if (!row || row.currency === "XRP") return "XRP";
-    const code = String(row.currency || "").toUpperCase();
-    if (code === "XDX" || code.startsWith("584458")) return "XDX";
-    if (code === RLUSD_HEX || code === "RLUSD") return "RLUSD";
-    if (code === "XIO" || (row.issuer === XIO_ISSUER)) return "XIO";
-    if (code === XSQUAD_HEX || code === "XSQUAD" || row.issuer === XSQUAD_ISSUER) return "XSQUAD";
-    if (/^[A-Z0-9]{3}$/.test(code)) return code;
-    return quoteIdFromName(code) || "XRP";
+    return quoteTickerFromCurrency(row.currency, row.issuer) || "XRP";
   });
   const quote = codes.find((code) => code !== "XDX") || "XRP";
   return `XDX/${quote}`;
@@ -156,7 +179,7 @@ export function governanceFromAmmInfo(result = {}, { address = "", pair = "XDX/X
     weightedFeePct: weightedVotedFee(slots) ?? feePercentFromUnits(amm.trading_fee),
     medianFeePct: medianVotedFee(slots),
     voteCount: slots.length,
-    voteSlots: slots,
+    voteSlots: slots.map((row) => ({ ...row, pair })),
     yourVote: yours,
     lpSupply: Number.isFinite(lpSupply) ? lpSupply : null,
     lpBalance: held,
@@ -181,7 +204,7 @@ export function activityFromAmmVoteTx(row, address) {
     (Number.isFinite(Number(row.date ?? tx.date))
       ? new Date((Number(row.date ?? tx.date) + 946684800) * 1000).toISOString()
       : row.timestamp) ||
-    new Date().toISOString();
+    null;
   return {
     kind: "vote",
     account: tx.Account || address || null,
@@ -194,6 +217,91 @@ export function activityFromAmmVoteTx(row, address) {
     txid: String(row.hash || tx.hash || "").toUpperCase() || null,
     status: "active",
   };
+}
+
+export function formatVoteWeight(weightPct, locale = "en") {
+  const n = Number(weightPct);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toLocaleString(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: n < 1 ? 3 : 2,
+  })}%`;
+}
+
+export function assetVoteStatus(row = {}) {
+  if (row.status === "replaced" || row.status === "inactive") return "inactive";
+  const weight = Number(row.voteWeight);
+  const pct = Number(row.weightPct);
+  if (Number.isFinite(weight)) return weight > 0 ? "active" : "inactive";
+  if (Number.isFinite(pct)) return pct > 0 ? "active" : "inactive";
+  return row.status === "active" ? "active" : "inactive";
+}
+
+export function assetVoteRowsFromSlots(slots = [], pair = "") {
+  const name = displayVotePair(pair || "XDX/XRP");
+  return (Array.isArray(slots) ? slots : [])
+    .filter((row) => row?.account)
+    .map((row) => {
+      const voteWeight = Number(row.voteWeight) || 0;
+      const weightPct = Number(row.weightPct) || 0;
+      return {
+        account: row.account,
+        pair: displayVotePair(row.pair || name),
+        feePercent: row.feePercent,
+        voteWeight,
+        weightPct,
+        timestamp: row.timestamp || null,
+        txid: row.txid || null,
+        status: assetVoteStatus({ voteWeight, weightPct }),
+      };
+    });
+}
+
+export function mergeAssetVoteRows(...lists) {
+  const seen = new Set();
+  const out = [];
+  for (const list of lists) {
+    for (const row of Array.isArray(list) ? list : []) {
+      const account = String(row?.account || "").trim();
+      const pair = normalizeVotePair(row?.pair);
+      const key = `${account.toLowerCase()}|${pair}`;
+      if (!account || !pair || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ ...row, account, pair });
+    }
+  }
+  return out.sort((left, right) => {
+    const weight = (Number(right.voteWeight) || 0) - (Number(left.voteWeight) || 0);
+    if (weight) return weight;
+    return String(left.pair).localeCompare(String(right.pair)) || String(left.account).localeCompare(String(right.account));
+  });
+}
+
+export function voteDateKey(account, pair) {
+  return `${String(account || "").trim().toLowerCase()}|${normalizeVotePair(pair)}`;
+}
+
+export function attachVoteTimestamps(slots = [], activity = []) {
+  const latest = new Map();
+  for (const row of Array.isArray(activity) ? activity : []) {
+    if (!row?.account || String(row.kind || "vote") !== "vote") continue;
+    const ts = Date.parse(row.timestamp);
+    if (!Number.isFinite(ts)) continue;
+    const key = voteDateKey(row.account, row.pair || row.pool);
+    const prev = latest.get(key);
+    if (!prev || ts > prev.ts) {
+      latest.set(key, { timestamp: row.timestamp, txid: row.txid || null, ts });
+    }
+  }
+  return (Array.isArray(slots) ? slots : []).map((row) => {
+    const hit = latest.get(voteDateKey(row.account, row.pair));
+    if (!hit) return row;
+    return {
+      ...row,
+      timestamp: row.timestamp || hit.timestamp,
+      txid: row.txid || hit.txid,
+    };
+  });
 }
 
 export function voteHistoryFromActivity(rows = [], slots = []) {
@@ -239,11 +347,26 @@ export function pendingVoteFromExecution(detail = {}, address = "") {
   };
 }
 
-export function knownGovernancePairs(pools = []) {
+export function normalizeVotePair(value) {
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+}
+
+export function knownGovernancePairs(pools = [], extra = []) {
   const ids = ["XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"];
-  for (const row of Array.isArray(pools) ? pools : []) {
-    const name = String(row.pool || row.pool_name || row.pair || "").replace(/\s+/g, "").toUpperCase();
+  for (const row of [...(Array.isArray(pools) ? pools : []), ...(Array.isArray(extra) ? extra : [])]) {
+    const name = normalizeVotePair(row?.pool || row?.pool_name || row?.pair || row);
     if (name.startsWith("XDX/") && !ids.includes(name)) ids.push(name);
   }
   return ids;
+}
+
+export function poolForVotePair(pools = [], extra = [], pair = "XDX/XRP") {
+  const name = normalizeVotePair(pair);
+  return (
+    [...(Array.isArray(pools) ? pools : []), ...(Array.isArray(extra) ? extra : [])].find(
+      (row) => normalizeVotePair(row?.pool || row?.pool_name || row?.pair) === name
+    ) || null
+  );
 }

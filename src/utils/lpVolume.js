@@ -1,4 +1,4 @@
-import { RLUSD_HEX, XDX_HEX } from "../constants/ledger.js";
+import { RLUSD_HEX, XDX_HEX, XIO_HEX, XIO_ISSUER } from "../constants/ledger.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Token 24h XDX volume is millions. A raw card number under this is XRP or USD, not XDX.
@@ -26,6 +26,7 @@ export function tickerFromCurrency(leg = {}) {
   if (!upper || upper === "XRP") return "XRP";
   if (upper === "XDX" || upper === XDX_HEX) return "XDX";
   if (upper === "RLUSD" || upper === RLUSD_HEX) return "RLUSD";
+  if (upper === "XIO" || upper === XIO_HEX || leg.issuer === XIO_ISSUER) return "XIO";
   if (/^[A-Z0-9]{3}$/.test(upper)) return upper;
   if (/^[A-F0-9]{40}$/i.test(currency)) {
     const label = hexCurrencyLabel(currency);
@@ -89,6 +90,44 @@ export function xrpVolumeFromOhlc(rows = [], { now = Date.now(), windowMs = DAY_
     sum += vol;
   }
   return sum;
+}
+
+export function dailyPricesFromOhlc(rows = [], { xrpUsd, now = Date.now(), maxDays = 365 } = {}) {
+  const cutoff = Number(now) - Math.max(1, Number(maxDays) || 365) * DAY_MS;
+  const byDay = {};
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const time = Number(Array.isArray(row) ? row[0] : Date.parse(row?.timestamp || row?.time || row?.day || 0));
+    const close = Number(Array.isArray(row) ? row[4] : row?.close ?? row?.price ?? row?.xdxUsd);
+    const ts = time > 1e12 ? time : time * 1000;
+    if (!Number.isFinite(ts) || ts < cutoff || !(close > 0)) continue;
+    const day = new Date(ts).toISOString().slice(0, 10);
+    byDay[day] = { xdxUsd: close, xrpUsd: numPos(xrpUsd) || numPos(byDay[day]?.xrpUsd) || 0 };
+  }
+  return byDay;
+}
+
+export function dailyXdxFlowsFromOhlc(
+  rows = [],
+  { xrpPerXdx, pair = "XDX/XRP", now = Date.now(), maxDays = 365 } = {}
+) {
+  const px = numPos(xrpPerXdx);
+  const cutoff = Number(now) - Math.max(1, Number(maxDays) || 365) * DAY_MS;
+  const byDay = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const time = Number(Array.isArray(row) ? row[0] : Date.parse(row?.timestamp || row?.time || row?.day || 0));
+    const vol = Number(Array.isArray(row) ? row[5] : row?.volume ?? row?.vol);
+    const ts = time > 1e12 ? time : time * 1000;
+    if (!Number.isFinite(ts) || ts < cutoff || !(vol > 0)) continue;
+    const xdx = xdxFromXrpVolume(vol, px);
+    if (!(xdx > 0)) continue;
+    const timestamp = new Date(ts).toISOString();
+    const day = timestamp.slice(0, 10);
+    const current = byDay.get(day);
+    if (!current || xdx > current.xdx) {
+      byDay.set(day, { timestamp, pool: pair, pair, xdx, source: "ohlc" });
+    }
+  }
+  return [...byDay.values()].sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
 }
 
 export function xdxVolumeFromDexscreenerPair(pair = {}, xdxUsd) {
@@ -235,21 +274,66 @@ export function sumFlowXdx(rows = [], { now = Date.now(), windowMs = DAY_MS, pai
   return sum;
 }
 
+export function xdxPairKey(value) {
+  const raw = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "/");
+  if (!raw) return "";
+  if (raw.startsWith("XDX/")) return raw;
+  if (/^[A-Z0-9]{2,12}$/.test(raw)) return `XDX/${raw}`;
+  return raw;
+}
+
+export function volumesFromFlows(flows = [], { now = Date.now(), windowMs = DAY_MS } = {}) {
+  const cutoff = now - Number(windowMs || DAY_MS);
+  const byPair = {};
+  for (const row of Array.isArray(flows) ? flows : []) {
+    const ts = new Date(row.timestamp || row.time).getTime();
+    if (!Number.isFinite(ts) || ts < cutoff) continue;
+    const pair = xdxPairKey(row.pool || row.pool_name || row.pair);
+    if (!/^XDX\/[A-Z0-9$]{2,24}$/.test(pair)) continue;
+    byPair[pair] = (byPair[pair] || 0) + Math.abs(Number(row.xdx) || 0);
+  }
+  return byPair;
+}
+
+export function overlayPoolFlowVolumes(pools = [], flows = [], now = Date.now()) {
+  const byPair = volumesFromFlows(flows, { now });
+  return (Array.isArray(pools) ? pools : []).map((pool) => {
+    const pair = xdxPairKey(pool.pool || pool.pool_name || pool.pair);
+    const fromFlow = byPair[pair] || 0;
+    const current = Number(pool.volume24h ?? pool.volume24hXdx);
+    const next = Number.isFinite(current) && current > 0 ? Math.max(current, fromFlow) : fromFlow;
+    return {
+      ...pool,
+      volume24h: next,
+      volume24hXdx: next,
+      volumeUnit: "xdx",
+      volumeSource: fromFlow > 0 && !(current > fromFlow) ? "xdx-flows" : pool.volumeSource || "recorded",
+    };
+  });
+}
+
 export function attachPoolVolumes(pool = {}, volumes = {}) {
-  const volume24hXdx = numPos(volumes.volume24hXdx);
+  const incoming = Number(volumes.volume24hXdx);
+  const existing = numPos(pool.volume24hXdx) || numPos(pool.volume24h);
+  const volume24hXdx = incoming > 0 ? incoming : existing || (Number.isFinite(incoming) && incoming >= 0 ? incoming : 0);
   const volume7dXdx = numPos(volumes.volume7dXdx);
   const volume24hXrp = numPos(volumes.volume24hXrp);
   const volume24hUsd = numPos(volumes.volume24hUsd);
+  const recorded = Number.isFinite(volume24hXdx) ? volume24hXdx : 0;
   return {
     ...pool,
-    volume24h: volume24hXdx || numPos(pool.volume24h) || null,
-    volume24hXdx: volume24hXdx || null,
+    volume24h: recorded,
+    volume24hXdx: recorded,
     volume24hXrp: volume24hXrp || null,
     volume24hUsd: volume24hUsd || null,
     volume7d: volume7dXdx || null,
     volume7dXdx: volume7dXdx || null,
     volumeUnit: "xdx",
-    volumeSource: volumes.source || pool.volumeSource || null,
+    volumeSource: volumes.source || pool.volumeSource || "recorded",
   };
 }
 
@@ -258,10 +342,12 @@ export function preferRailwayXdxVolume(dbRow = {}, liveRow = {}) {
   const liveXdx = catalogXdxVolume24h(liveRow);
   const db7d = catalogXdxVolume7d(dbRow);
   const live7d = catalogXdxVolume7d(liveRow);
-  if (looksLikeXdxVolume(dbXdx)) {
+  const dbTagged = numPos(dbRow.volume24hXdx ?? dbRow.volume_24h_xdx);
+  const dbUsable = dbTagged || (looksLikeXdxVolume(dbXdx) ? dbXdx : 0);
+  if (dbUsable && dbUsable >= liveXdx) {
     return {
-      volume24h: dbXdx,
-      volume24hXdx: numPos(dbRow.volume24hXdx) || dbXdx,
+      volume24h: dbUsable,
+      volume24hXdx: dbUsable,
       volume24hXrp: numPos(dbRow.volume24hXrp) || numPos(liveRow.volume24hXrp) || null,
       volume24hUsd: numPos(dbRow.volume24hUsd) || numPos(liveRow.volume24hUsd) || null,
       volume7d: db7d || live7d || null,

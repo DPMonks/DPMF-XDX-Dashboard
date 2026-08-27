@@ -1,13 +1,17 @@
 import { xrplRpc } from "./xrplBookOffers.js";
 import { hexCurrencyLabel } from "../src/wallet/ammCreate.js";
-import { activityFromAccountTx, ordersFromAccountOffers } from "../src/wallet/ledgerOrders.js";
+import { activityFromAccountTx, lpHistoryFromAccountTx, ordersFromAccountOffers } from "../src/wallet/ledgerOrders.js";
 import { POOLS, RLUSD_ISSUER, XDX_ISSUER } from "../src/constants/ledger.js";
-import { lpPositionFromPool } from "../src/wallet/composeWallet.js";
+import { lpPositionFromPool, resolveLpPairName } from "../src/wallet/composeWallet.js";
+import { DEFAULT_INCOME_PAIR, incomePairName, isXdxAmmPair } from "../src/wallet/lpIncome.js";
 import { loadLiveAmmReserves } from "./liveAmmReserves.js";
 import { loadLiveMarket } from "./liveCatalog.js";
 
 const CACHE_MS = 8_000;
+const LP_INCOME_CACHE_MS = 90_000;
 const LINE_PAGE_LIMIT = 8;
+export const LP_INCOME_TX_LIMIT = 200;
+export const LP_INCOME_PAGES_PER_REQUEST = 4;
 const LP_CURRENCY_RE = /^03[A-F0-9]{38}$/i;
 const XDX_CURRENCY_RE = /^(XDX|5844580000000000000000000000000000000000)$/i;
 const RLUSD_CURRENCY_RE = /^(RLUSD|524C555344000000000000000000000000000000)$/i;
@@ -17,9 +21,18 @@ function cached(key, loader) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.body;
   return loader().then((body) => {
-    cache.set(key, { at: Date.now(), body });
+    if (body && body.source !== "empty") cache.set(key, { at: Date.now(), body });
     return body;
   });
+}
+
+export function preferPositiveAmount(live, catalog) {
+  if (Number(live) > 0) return Number(live);
+  if (Number(catalog) > 0) return Number(catalog);
+  if (live == null && catalog == null) return null;
+  if (Number.isFinite(Number(live))) return Number(live);
+  if (Number.isFinite(Number(catalog))) return Number(catalog);
+  return null;
 }
 
 export function invalidateWalletLedger(address) {
@@ -31,6 +44,9 @@ export function invalidateWalletLedger(address) {
   cache.delete(`raw-lines:${name}`);
   cache.delete(`balances:${name}`);
   cache.delete(`lp:${name}`);
+  for (const key of [...cache.keys()]) {
+    if (key.startsWith(`lp-income:${name}:`)) cache.delete(key);
+  }
 }
 
 function iouBalanceFromLines(rows = [], issuer, currencyRe) {
@@ -92,16 +108,29 @@ export function lpHoldingsFromLines(rows = []) {
   return out;
 }
 
-function knownPoolForLp(holding) {
+function knownPoolForLp(holding, catalogPools = []) {
   const hex = String(holding?.lp_currency || "").toUpperCase();
   const amm = String(holding?.amm_account || "");
-  return (
-    POOLS.find(
-      (pool) =>
-        String(pool.lpHex || "").toUpperCase() === hex ||
-        (amm && pool.amm === amm)
-    ) || null
+  const fromKnown = POOLS.find(
+    (pool) =>
+      String(pool.lpHex || "").toUpperCase() === hex ||
+      (amm && pool.amm === amm)
   );
+  if (fromKnown) return fromKnown;
+  const row = (Array.isArray(catalogPools) ? catalogPools : []).find((pool) => {
+    const poolHex = String(pool.lp_currency || pool.lp_currency_hex || "").toUpperCase();
+    const poolAmm = String(pool.amm_account || pool.amm || "");
+    return (hex && poolHex === hex) || (amm && poolAmm === amm);
+  });
+  if (!row) return null;
+  return {
+    pair: row.pool || row.pool_name || row.pair,
+    amm: row.amm_account || row.amm,
+    lpHex: row.lp_currency || row.lp_currency_hex,
+    quote: row.quote,
+    quoteIssuer: row.quote_issuer,
+    quoteHex: row.quote_hex,
+  };
 }
 
 export async function loadWalletOffers(address, options = {}) {
@@ -218,14 +247,18 @@ export async function loadWalletBalancesFromLedger(address, options = {}) {
     ]);
     let xdx = xdxBalanceFromLines(raw.lines);
     let rlusd = rlusdBalanceFromLines(raw.lines);
-    if (xdx == null || rlusd == null) {
+    if (xdx == null) xdx = xdxBalanceFromLines(raw.lines, "");
+    if (!(xdx > 0) || rlusd == null) {
       try {
         const gateway = await xrplRpc(
           "gateway_balances",
           { account: name, ledger_index: "validated", hotwallet: [] },
           options
         );
-        if (xdx == null) xdx = iouFromGatewayBalances(gateway, XDX_ISSUER, XDX_CURRENCY_RE);
+        if (!(xdx > 0)) {
+          const fromGateway = iouFromGatewayBalances(gateway, XDX_ISSUER, XDX_CURRENCY_RE);
+          xdx = preferPositiveAmount(xdx, fromGateway);
+        }
         if (rlusd == null) rlusd = iouFromGatewayBalances(gateway, RLUSD_ISSUER, RLUSD_CURRENCY_RE);
       } catch {
         // keep line totals
@@ -241,6 +274,7 @@ export async function loadWalletBalancesFromLedger(address, options = {}) {
       xdx,
       rlusd,
       lp: lpRows.reduce((sum, row) => sum + Number(row.lp_balance || 0), 0),
+      lines: linesFromAccountLines(raw.lines),
       source,
       balance_drops: Number.isFinite(drops) ? drops : null,
     };
@@ -283,11 +317,14 @@ export async function loadWalletLpFromLedger(address, options = {}) {
     const market = held.length ? await loadLiveMarket(options).catch(() => null) : null;
     const positions = [];
     for (const holding of held) {
-      const known = knownPoolForLp(holding);
+      const known = knownPoolForLp(holding, market?.pools);
       const catalog = (market?.pools || []).find((row) => {
         const pair = String(row.pool || row.pool_name || "").toUpperCase();
         const amm = String(row.amm_account || "").toLowerCase();
-        return pair === String(known?.pair || "").toUpperCase() || amm === String(holding.amm_account || "").toLowerCase();
+        const hex = String(row.lp_currency || row.lp_currency_hex || "").toUpperCase();
+        if (holding.amm_account && amm === String(holding.amm_account).toLowerCase()) return true;
+        if (holding.lp_currency && hex === String(holding.lp_currency).toUpperCase()) return true;
+        return Boolean(known?.pair) && pair === String(known.pair).toUpperCase();
       });
       const live = await loadLiveAmmReserves(
         {
@@ -298,19 +335,20 @@ export async function loadWalletLpFromLedger(address, options = {}) {
           hex: known?.quoteHex,
         },
         options
-      );
+      ).catch(() => null);
+      const pair = known?.pair || live?.pair || catalog?.pool || catalog?.pool_name || "";
       const position = lpPositionFromPool(
         holding.lp_balance,
         {
-          pool: known?.pair || live?.pair,
-          pool_name: known?.pair || live?.pair,
-          quote: known?.quote || live?.quote,
+          pool: pair,
+          pool_name: pair,
+          quote: known?.quote || live?.quote || catalog?.quote,
           amm_account: live?.amm_account || known?.amm || holding.amm_account,
           lp_currency: live?.lp_currency || holding.lp_currency,
-          reserve_asset: live?.reserve_xdx ?? live?.reserve_asset,
-          reserve_currency: live?.reserve_currency ?? live?.reserve_quote,
-          lp_supply: live?.lp_supply,
-          trading_fee: live?.trading_fee,
+          reserve_asset: live?.reserve_xdx ?? live?.reserve_asset ?? catalog?.reserve_asset ?? catalog?.reserve_xdx,
+          reserve_currency: live?.reserve_currency ?? live?.reserve_quote ?? catalog?.reserve_currency ?? catalog?.reserve_quote,
+          lp_supply: live?.lp_supply ?? catalog?.lp_supply,
+          trading_fee: live?.trading_fee ?? catalog?.trading_fee ?? 1000,
           volume24h: catalog?.volume24h,
           volume24hXdx: catalog?.volume24hXdx,
           volume24hXrp: catalog?.volume24hXrp,
@@ -322,7 +360,7 @@ export async function loadWalletLpFromLedger(address, options = {}) {
           xrpUsd: catalog?.xrpUsd ?? market?.prices?.xrpUsd,
           xdxPerXrp: catalog?.xdxPerXrp ?? market?.overview?.xdxPerXrp,
         },
-        known?.pair || live?.pair
+        pair
       );
       if (position) positions.push(position);
     }
@@ -336,14 +374,18 @@ export async function loadWalletActivity(address, options = {}) {
   if (options.fresh) cache.delete(`activity:${name}`);
   return cached(`activity:${name}`, async () => {
     try {
-      const result = await xrplRpc("account_tx", {
-        account: name,
-        ledger_index_min: -1,
-        ledger_index_max: -1,
-        limit: 30,
-        binary: false,
-        forward: false,
-      });
+      const result = await xrplRpc(
+        "account_tx",
+        {
+          account: name,
+          ledger_index_min: -1,
+          ledger_index_max: -1,
+          limit: 30,
+          binary: false,
+          forward: false,
+        },
+        { fetchImpl: options.fetchImpl, rpcUrl: options.rpcUrl }
+      );
       return {
         account: name,
         activity: activityFromAccountTx(result.transactions || [], name),
@@ -353,4 +395,110 @@ export async function loadWalletActivity(address, options = {}) {
       return { account: name, activity: [], source: "empty" };
     }
   });
+}
+
+function lpIncomeCacheKey(address, pair, marker) {
+  return `lp-income:${address}:${pair || "all"}:${marker ? JSON.stringify(marker) : "start"}`;
+}
+
+function requestedIncomePair(value) {
+  const raw = String(value || "").trim();
+  if (!raw || raw.toUpperCase() === "ALL") return "";
+  const pair = incomePairName(raw);
+  return isXdxAmmPair(pair) ? pair : "";
+}
+
+function isLpHistoryRow(row, pair) {
+  if (!row || (row.side !== "addLp" && row.side !== "createPool" && row.side !== "removeLp")) return false;
+  if (!(Number(row.lp) > 0)) return false;
+  const name = incomePairName(row.pair || row.pool);
+  if (pair) return name === pair;
+  return isXdxAmmPair(name) || Boolean(row.amm || row.lpCurrency);
+}
+
+export async function loadWalletLpIncome(address, options = {}) {
+  const name = String(address || "").trim();
+  const pair = requestedIncomePair(options.pair);
+  const marker = options.marker && typeof options.marker === "object" ? options.marker : null;
+  const maxPages = Math.max(1, Number(options.maxPages) || LP_INCOME_PAGES_PER_REQUEST);
+  if (!name) {
+    return { account: null, pair: pair || DEFAULT_INCOME_PAIR, activity: [], complete: true, marker: null, source: "empty" };
+  }
+  if (options.pair && String(options.pair).trim() && String(options.pair).toUpperCase() !== "ALL" && !pair) {
+    return { account: name, pair: incomePairName(options.pair), activity: [], complete: true, marker: null, source: "empty" };
+  }
+  const key = lpIncomeCacheKey(name, pair, marker);
+  if (options.fresh) cache.delete(key);
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < LP_INCOME_CACHE_MS && !options.fresh) return hit.body;
+
+  const catalogs = Array.isArray(options.pools) ? options.pools : [];
+  const resolvePair = (_tx, event) => {
+    const catalog = catalogs.find((item) => {
+      const amm = String(item?.amm_account || item?.amm || "").toLowerCase();
+      const hex = String(item?.lp_currency || item?.lp_currency_hex || item?.lpHex || "").toUpperCase();
+      return (
+        (event.amm && amm === String(event.amm).toLowerCase()) ||
+        (event.currency && hex === String(event.currency).toUpperCase())
+      );
+    });
+    if (!catalog) return "";
+    return (
+      resolveLpPairName(
+        {
+          ...catalog,
+          amm_account: event.amm,
+          lp_currency: event.currency,
+        },
+        catalog.pool || catalog.pool_name || catalog.pair
+      ) || ""
+    );
+  };
+
+  const rpc = { fetchImpl: options.fetchImpl, rpcUrl: options.rpcUrl };
+  const activity = [];
+  let nextMarker = marker;
+  let complete = false;
+  let source = "xrpl";
+  try {
+    for (let page = 0; page < maxPages; page += 1) {
+      const result = await xrplRpc(
+        "account_tx",
+        {
+          account: name,
+          ledger_index_min: -1,
+          ledger_index_max: -1,
+          limit: Number(options.limit) || LP_INCOME_TX_LIMIT,
+          binary: false,
+          forward: false,
+          ...(nextMarker ? { marker: nextMarker } : {}),
+        },
+        rpc
+      );
+      const batch = lpHistoryFromAccountTx(result.transactions || [], name, { resolvePair }).filter((row) =>
+        isLpHistoryRow(row, pair)
+      );
+      activity.push(...batch);
+      nextMarker = result.marker || null;
+      if (!nextMarker || !(result.transactions || []).length) {
+        complete = true;
+        nextMarker = null;
+        break;
+      }
+    }
+  } catch {
+    source = "empty";
+    complete = !activity.length;
+  }
+
+  const body = {
+    account: name,
+    pair: pair || "ALL",
+    activity,
+    complete,
+    marker: complete ? null : nextMarker,
+    source,
+  };
+  cache.set(key, { at: Date.now(), body });
+  return body;
 }

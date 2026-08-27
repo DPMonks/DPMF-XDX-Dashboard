@@ -1,13 +1,21 @@
-import { XDX_TOTAL_SUPPLY } from "../constants/ledger.js";
-import { fillMissingXdxFiat } from "../utils/fiatFx.js";
-import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
-import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
 import {
-  isXdxAmmPair,
-  lpDepositIncomeRows,
-  lpFeeIncomeRows,
-  mergeLpIncomeRows,
-} from "./lpIncome.js";
+  pairFromRow,
+  XDX_RLUSD_AMM,
+  XDX_RLUSD_LP_HEX,
+  XDX_TOTAL_SUPPLY,
+  XDX_XIO_AMM,
+  XDX_XIO_LP_HEX,
+  XDX_XRP_AMM,
+  XDX_XRP_LP_HEX,
+} from "../constants/ledger.js";
+import { fillMissingXdxFiat } from "../utils/fiatFx.js";
+import { catalogXdxVolume24h, catalogXdxVolume7d, dailyPricesFromOhlc, dailyXdxFlowsFromOhlc } from "../utils/lpVolume.js";
+import { looksLikeXrpPerXdx, saneXrpUsd } from "../utils/recordedPrice.js";
+import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
+import { isNativeXrpQuote, lineCounterparty, lineCurrencyCodes, sameIssuedCurrency } from "../utils/currency.js";
+import { isXdxAmmPair, lpFeeIncomeRows } from "./lpIncome.js";
+
+const LP_CURRENCY_RE = /^03[A-F0-9]{38}$/i;
 
 export const DROPS = 1_000_000;
 export const DEFAULT_RESERVE_BASE_DROPS = 1_000_000;
@@ -38,7 +46,7 @@ export function xrpReserveBreakdown({
   reserveIncDrops = DEFAULT_RESERVE_INC_DROPS,
 } = {}) {
   const drops = dropsOrNull(balanceDrops);
-  const fromAccount = drops != null ? drops / DROPS : null;
+  const fromAccount = drops != null && drops > 0 ? drops / DROPS : null;
   const fromBalances = num(balance);
   const total = fromAccount != null ? fromAccount : fromBalances;
   if (total == null) {
@@ -152,14 +160,21 @@ export function xdxFiatValues(xdx, prices = {}) {
   }
   const usdValue = usd != null && usd > 0 ? bal * usd : null;
   const rlusdUsd = num(filled.rlusdUsd ?? filled.RLUSD) || 1;
+  const xrpUsd = num(filled.xrpUsd);
   const viaUsd = (rate) => (usdValue != null && Number(rate) > 0 ? usdValue * Number(rate) : null);
+  const xrpWorth =
+    xrp != null && xrp > 0
+      ? bal * xrp
+      : usdValue != null && xrpUsd != null && xrpUsd > 0
+        ? usdValue / xrpUsd
+        : null;
   return {
     xdx: bal,
     usd: usdValue,
     gbp: fiatAmount(bal, filled.xdxGbp, usd, filled.xrpUsd, filled.xrpGbp) ?? viaUsd(filled.usdGbp),
     eur: fiatAmount(bal, filled.xdxEur, usd, filled.xrpUsd, filled.xrpEur) ?? viaUsd(filled.usdEur),
     jpy: fiatAmount(bal, filled.xdxJpy, usd, filled.xrpUsd, filled.xrpJpy) ?? viaUsd(filled.usdJpy),
-    xrp: xrp != null ? bal * xrp : null,
+    xrp: xrpWorth,
     rlusd: usdValue != null ? usdValue / rlusdUsd : null,
   };
 }
@@ -212,11 +227,96 @@ export function lookupLpPool(row, poolsByPair) {
   return null;
 }
 
+export function resolveLpPairName(pool = {}, pairHint = "") {
+  const hex = String(pool.lp_currency || pool.lp_currency_hex || "")
+    .replace(/^0x/i, "")
+    .toUpperCase();
+  const amm = String(pool.amm_account || pool.amm || "").trim();
+  if (hex === XDX_RLUSD_LP_HEX || amm === XDX_RLUSD_AMM) return "XDX/RLUSD";
+  if (hex === XDX_XRP_LP_HEX || amm === XDX_XRP_AMM) return "XDX/XRP";
+  if (hex === XDX_XIO_LP_HEX || amm === XDX_XIO_AMM) return "XDX/XIO";
+
+  const quote = String(pool.quote || "").trim().toUpperCase().replace(/^XDX\//, "");
+  if (quote && quote !== "XRP") return normalizeWalletPair(`XDX/${quote}`);
+
+  const named = normalizeWalletPair(pairHint || pool.pool_name || pool.pool || pool.pair);
+  if (named && named !== "XDX/XRP") return named;
+
+  const unknownLp = /^03[A-F0-9]{38}$/.test(hex) || (amm && amm !== XDX_XRP_AMM);
+  if (unknownLp) {
+    const decoded = pairFromRow({
+      amm_account: amm,
+      lp_currency: hex,
+      quote: pool.quote,
+      quote_issuer: pool.quote_issuer,
+      quote_hex: pool.quote_hex,
+    });
+    if (decoded && decoded !== "XDX/XRP") return decoded;
+    return "";
+  }
+  return named || "XDX/XRP";
+}
+
+export function lpHoldingsFromLines(rows = []) {
+  const out = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const currency = String(row?.currency || row?.lp_currency || "").toUpperCase();
+    if (!LP_CURRENCY_RE.test(currency)) continue;
+    const tokens = num(row?.balance ?? row?.lp_balance);
+    if (!(tokens > 0)) continue;
+    out.push({
+      lp_currency: currency,
+      amm_account: String(row?.account || row?.issuer || row?.amm_account || "").trim(),
+      lp_balance: tokens,
+    });
+  }
+  return out;
+}
+
+export function positionsFromLines(lines = [], pools = []) {
+  const holdings = lpHoldingsFromLines(lines);
+  if (!holdings.length) return [];
+  const byAccount = new Map();
+  const byHex = new Map();
+  for (const pool of Array.isArray(pools) ? pools : []) {
+    const amm = String(pool?.amm_account || pool?.amm || "").toLowerCase();
+    const hex = String(pool?.lp_currency || pool?.lp_currency_hex || "").toUpperCase();
+    if (amm) byAccount.set(amm, pool);
+    if (hex) byHex.set(hex, pool);
+  }
+  const out = [];
+  for (const holding of holdings) {
+    const catalog =
+      byAccount.get(String(holding.amm_account || "").toLowerCase()) ||
+      byHex.get(holding.lp_currency) ||
+      null;
+    const pair =
+      resolveLpPairName(
+        {
+          ...(catalog || {}),
+          amm_account: holding.amm_account,
+          lp_currency: holding.lp_currency,
+        },
+        catalog?.pool || catalog?.pool_name || catalog?.pair
+      ) || "";
+    if (!pair) continue;
+    const position = lpPositionFromPool(
+      holding.lp_balance,
+      mergeLpPoolSource(
+        { ...holding, pool: pair, pool_name: pair, pair },
+        catalog
+      ),
+      pair
+    );
+    if (position) out.push(position);
+  }
+  return out;
+}
+
 export function lpPositionFromPool(lpBalance, pool = {}, pairHint = "") {
   const tokens = num(lpBalance);
   if (tokens == null || tokens <= 0) return null;
-  const pair =
-    normalizeWalletPair(pairHint || pool.pool_name || pool.pool || pool.pair) || "XDX/XRP";
+  const pair = resolveLpPairName(pool, pairHint) || "XDX/UNKNOWN";
   const supply = num(pool.lp_supply);
   const knownShare = num(pool.lp_share_percent);
   const share = supply > 0 ? tokens / supply : knownShare != null ? knownShare / 100 : 0;
@@ -344,8 +444,16 @@ function quoteIsRlusd(row) {
 function quotePerXdx(row, fallback) {
   const reserveXdx = num(row?.reserve_asset ?? row?.reserve_xdx);
   const reserveQuote = num(row?.reserve_currency ?? row?.reserve_quote);
-  if (reserveXdx > 0 && reserveQuote > 0) return reserveQuote / reserveXdx;
-  return num(fallback);
+  if (reserveXdx > 0 && reserveQuote > 0) {
+    const ratio = reserveQuote / reserveXdx;
+    if ((quoteIsXrp(row) || quoteIsRlusd(row)) && ratio > 1) return reserveXdx / reserveQuote;
+    return ratio;
+  }
+  const fb = num(fallback);
+  if (fb != null && (quoteIsXrp(row) || quoteIsRlusd(row)) && !looksLikeXrpPerXdx(fb) && fb > 1) {
+    return 1 / fb;
+  }
+  return fb;
 }
 
 function volumeForWindow(row, flowVol, windowMs) {
@@ -487,7 +595,7 @@ export function lpFeeEarnings(
   }
   const prices = {
     xdxUsd,
-    xrpUsd: num(xrpUsd) ?? (num(xdxUsd) > 0 && num(xdxXrp) > 0 ? Number(xdxUsd) / Number(xdxXrp) : null),
+    xrpUsd: saneXrpUsd(xrpUsd, xdxUsd, xdxXrp),
     rlusdUsd: num(rlusdUsd) ?? 1,
     xdxXrp,
   };
@@ -527,20 +635,17 @@ export function walletAvailableAmounts({ balances = {}, account = {}, lines = []
     reserveIncDrops: account.reserve_inc_drops,
   });
   const xdx = num(balances.xdx);
-  const quoteIsXrp = !quote?.issuer || quote?.currency === "XRP";
+  const quoteIsXrp = isNativeXrpQuote(quote);
   const lineRows = Array.isArray(lines) && lines.length ? lines : balances.raw?.lines || [];
+  const names = [quote?.currency, quote?.hex, quote?.id, quote?.label].filter(Boolean);
   const quoteAmt = quoteIsXrp
     ? xrp.spendable ?? xrp.balance
     : num(
         lineRows.find((row) => {
-          const currency = String(row.currency || row.ticker || "").toUpperCase();
-          const issuer = String(row.issuer || row.account || "").toUpperCase();
+          const issuer = lineCounterparty(row);
           const wantIss = String(quote?.issuer || "").toUpperCase();
-          const names = [quote?.currency, quote?.hex, quote?.id, quote?.label]
-            .filter(Boolean)
-            .map((name) => String(name).toUpperCase());
           if (wantIss && issuer && issuer !== wantIss) return false;
-          return names.some((name) => currency === name || currency.includes(name));
+          return names.some((name) => lineCurrencyCodes(row).some((code) => sameIssuedCurrency(code, name)));
         })?.balance
       );
   return {
@@ -551,7 +656,28 @@ export function walletAvailableAmounts({ balances = {}, account = {}, lines = []
 }
 
 function keepAmount(next, current) {
-  return next != null ? next : current;
+  if (next != null && Number(next) > 0) return Number(next);
+  if (current != null && Number(current) > 0) return Number(current);
+  return next != null && Number.isFinite(Number(next)) ? Number(next) : current ?? next;
+}
+
+function feeEarningsFilled(fees) {
+  const earn = fees?.earnings || {};
+  return [earn.usd24h, earn.usd7d, earn.xdx24h, earn.xrp24h, earn.rlusd24h].some((value) => Number(value) > 0);
+}
+
+function mergeKeptLp(current = [], next = []) {
+  if (!Array.isArray(next) || !next.length) return current || [];
+  const map = new Map();
+  for (const row of Array.isArray(current) ? current : []) {
+    const name = normalizeWalletPair(row.pool || row.pool_name);
+    if (isXdxAmmPair(name)) map.set(name, row);
+  }
+  for (const row of next) {
+    const name = normalizeWalletPair(row.pool || row.pool_name);
+    if (isXdxAmmPair(name)) map.set(name, row);
+  }
+  return [...map.values()];
 }
 
 export function preferFilledWalletSnapshot(current, next) {
@@ -559,26 +685,35 @@ export function preferFilledWalletSnapshot(current, next) {
   if (!current?.filled || !current.address || current.address !== next.address) return next;
   if (!next.filled) return current;
 
+  const holdings = {
+    xdx: keepAmount(next.holdings?.xdx, current.holdings?.xdx),
+    xrp: keepAmount(next.holdings?.xrp, current.holdings?.xrp),
+    rlusd: keepAmount(next.holdings?.rlusd, current.holdings?.rlusd),
+  };
+  const keptXdx = !(Number(next.holdings?.xdx) > 0) && Number(current.holdings?.xdx) > 0;
   const nextXdx = next.xdx && typeof next.xdx === "object" ? next.xdx : {};
-  const xdx = { ...(current.xdx || {}) };
-  for (const [key, value] of Object.entries(nextXdx)) {
-    if (value != null) xdx[key] = value;
+  const xdx = keptXdx ? { ...(current.xdx || {}) } : { ...(current.xdx || {}) };
+  if (!keptXdx) {
+    for (const [key, value] of Object.entries(nextXdx)) {
+      if (value != null) xdx[key] = value;
+    }
   }
-  const nextFees = next.fees || {};
-  const keepFees = nextFees.xdx != null || nextFees.usd != null || nextFees.earnings?.usd24h != null;
+  const nextHasEarn = feeEarningsFilled(next.fees);
+  const currentHasEarn = feeEarningsFilled(current.fees);
+  const nextShare = Number(next.supply?.supplyPct) || Number(next.supply?.circulatingPct);
+  const keepSupply = nextShare > 0 || !(Number(current.supply?.supplyPct) > 0 || Number(current.supply?.circulatingPct) > 0);
+
   return {
     ...next,
     filled: true,
-    holdings: {
-      xdx: keepAmount(next.holdings?.xdx, current.holdings?.xdx),
-      xrp: keepAmount(next.holdings?.xrp, current.holdings?.xrp),
-      rlusd: keepAmount(next.holdings?.rlusd, current.holdings?.rlusd),
-    },
+    holdings,
     xdx,
-    xrp: next.xrp?.balance != null ? next.xrp : current.xrp,
-    fees: keepFees ? next.fees : current.fees,
-    lp: Array.isArray(next.lp) && next.lp.length ? next.lp : current.lp,
+    xrp: next.xrp?.balance > 0 ? next.xrp : current.xrp?.balance > 0 ? current.xrp : next.xrp,
+    supply: keepSupply ? next.supply : current.supply,
+    fees: nextHasEarn || !currentHasEarn ? next.fees : current.fees,
+    lp: mergeKeptLp(current.lp, next.lp),
     income: Array.isArray(next.income) && next.income.length ? next.income : current.income,
+    rank: next.rank != null ? next.rank : current.rank,
   };
 }
 
@@ -618,6 +753,8 @@ export function emptyWalletSnapshot(address = null) {
     },
     lp: [],
     income: [],
+    pools: [],
+    priceBook: {},
     rank: null,
     book: null,
     orders: [],
@@ -639,6 +776,8 @@ export function composeWalletSnapshot({
   flows = [],
   offers = [],
   ledgerActivity = [],
+  lines = [],
+  ohlcRows = [],
 } = {}) {
   if (!address) return emptyWalletSnapshot(null);
 
@@ -690,6 +829,19 @@ export function composeWalletSnapshot({
       lpByPair.set(position.pool, position);
     }
   }
+  const lineRows = Array.isArray(lines) && lines.length
+    ? lines
+    : Array.isArray(balances.lines) && balances.lines.length
+      ? balances.lines
+      : Array.isArray(balances.raw?.lines)
+        ? balances.raw.lines
+        : [];
+  for (const position of positionsFromLines(lineRows, pools)) {
+    const previous = lpByPair.get(position.pool);
+    if (!previous || position.lp_balance > previous.lp_balance) {
+      lpByPair.set(position.pool, position);
+    }
+  }
   const lp = [...lpByPair.values()];
 
   const xrpBook = books?.books?.["XDX/XRP"] || null;
@@ -701,32 +853,28 @@ export function composeWalletSnapshot({
     pending.activity
   ).slice(0, 3);
   const xdxUsd = num(prices.xdxUsd ?? prices.recorded_price ?? token.xdxUsd);
-  const xrpUsd = num(prices.xrpUsd);
+  const xrpUsd = saneXrpUsd(prices.xrpUsd, xdxUsd, xdxPerXrp);
   const rlusdUsd = num(prices.RLUSD ?? prices.quotes?.RLUSD) ?? 1;
+  const dailyPrices = dailyPricesFromOhlc(ohlcRows, { xrpUsd });
   const priceBook = {
     ...prices,
     xdxUsd,
     xrpUsd,
     RLUSD: rlusdUsd,
+    dailyPrices,
   };
-  const income = mergeLpIncomeRows(
-    lpFeeIncomeRows({
-      positions: lp,
-      flows,
-      xdxUsd,
-      xrpUsd,
-      rlusdUsd,
-      prices: priceBook,
-    }),
-    lpDepositIncomeRows({
-      activity: mergeWalletActivity(ledgerActivity, pending.activity),
-      positions: lp,
-      xdxUsd,
-      xrpUsd,
-      rlusdUsd,
-      prices: priceBook,
-    })
-  );
+  const ledgerRows = mergeWalletActivity(ledgerActivity, pending.activity);
+  const income = lpFeeIncomeRows({
+    positions: lp,
+    flows,
+    volumeDays: dailyXdxFlowsFromOhlc(ohlcRows, { xrpPerXdx: xdxPerXrp }),
+    activity: ledgerRows,
+    xdxUsd,
+    xrpUsd,
+    rlusdUsd,
+    prices: priceBook,
+    dailyPrices,
+  });
   return {
     address,
     signedIn: true,
@@ -752,6 +900,8 @@ export function composeWalletSnapshot({
     }),
     lp,
     income,
+    pools,
+    priceBook,
     rank: num(rank ?? token.rank ?? balances.rank),
     book: xrpBook
       ? {

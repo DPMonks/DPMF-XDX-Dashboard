@@ -33,6 +33,9 @@ function pairName(left, right) {
 }
 
 export function poolFromTradeContext(txjson = {}, trade = {}) {
+  if (trade.fromId && trade.toId) {
+    return `${String(trade.fromId).toUpperCase()}/${String(trade.toId).toUpperCase()}`;
+  }
   const fromTrade = String(trade.pair || trade.pool || "").replace(/\s+/g, "").toUpperCase();
   if (fromTrade.includes("/")) return fromTrade;
   if (trade.quote) return `XDX/${String(trade.quote).replace(/\s+/g, "").toUpperCase()}`;
@@ -81,7 +84,10 @@ export function exchangeMemoText({ txjson = {}, trade = {} } = {}) {
     const token = currencyLabel(txjson.LimitAmount);
     return memoLine(`${token} trustline opened`);
   }
-  if (type === "Payment" || type === "OfferCreate" || action === "buy" || action === "sell") {
+  if (action === "xdxPlatformFee") {
+    return memoLine(`1% XDX platform fee`);
+  }
+  if (type === "Payment" || type === "OfferCreate" || action === "buy" || action === "sell" || action === "crossSwap") {
     return memoLine(`Swap executed in ${pool} | v${EXCHANGE_MEMO_VERSION}`);
   }
   return memoLine(`Transaction submitted in ${pool}`);

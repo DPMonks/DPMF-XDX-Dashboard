@@ -11,9 +11,26 @@ export function isXrpMicroFallback(xdxUsd, xrpUsd) {
   return Math.abs(xdx - xrp * XRP_MICRO) < 1e-12;
 }
 
+export const XRP_USD_MIN = 0.05;
+export const XRP_USD_MAX = 25;
+
 export function looksLikeXrpUsd(value) {
   const num = Number(value);
-  return Number.isFinite(num) && num >= 0.05;
+  return Number.isFinite(num) && num >= XRP_USD_MIN && num <= XRP_USD_MAX;
+}
+
+export function looksLikeXrpPerXdx(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 && num < 0.01;
+}
+
+export function saneXrpUsd(xrpUsd, xdxUsd, xrpPerXdx) {
+  if (looksLikeXrpUsd(xrpUsd)) return Number(xrpUsd);
+  if (Number(xdxUsd) > 0 && looksLikeXrpPerXdx(xrpPerXdx)) {
+    const implied = Number(xdxUsd) / Number(xrpPerXdx);
+    if (looksLikeXrpUsd(implied)) return implied;
+  }
+  return null;
 }
 
 export function recordedXdxUsdFromPrices(prices = {}, fallbackXrpUsd) {

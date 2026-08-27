@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   isXrpMicroFallback,
   looksLikeXrpUsd,
+  saneXrpUsd,
   pickTrustlineCount,
   recordedXdxUsdFromPrices,
   xrpPerXdx,
@@ -41,5 +42,13 @@ test("keeps Worker 2 XDX USD and does not treat it as XRP", () => {
   assert.equal(price, 0.0000416);
   assert.equal(looksLikeXrpUsd(0.0000416), false);
   assert.equal(looksLikeXrpUsd(1.4), true);
+  assert.equal(looksLikeXrpUsd(1 / 0.00003147), false);
   assert.equal(isXrpMicroFallback(0.0000416, 1.4), false);
+});
+
+test("saneXrpUsd rejects XDX-per-XRP used as dollars", () => {
+  const inverted = 1 / 0.00003147;
+  assert.equal(saneXrpUsd(inverted, 0.00004658, 0.00003147), 0.00004658 / 0.00003147);
+  assert.equal(saneXrpUsd(1.48, 0.00004658, 0.00003147), 1.48);
+  assert.equal(saneXrpUsd(0, 0, 0), null);
 });
