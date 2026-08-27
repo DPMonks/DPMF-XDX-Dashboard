@@ -1521,26 +1521,6 @@ body {
   flex: 0 0 auto;
 }
 
-@media (max-width: 834px) {
-  .rich-list-toolbar {
-    flex-wrap: wrap;
-  }
-
-  .rich-list.is-lp-holders .pair-select {
-    flex: 1 1 100%;
-    min-width: 0;
-    max-width: none;
-  }
-
-  .rich-search {
-    flex: 1 1 140px;
-  }
-
-  .rich-meta {
-    flex: 0 0 auto;
-  }
-}
-
 .pair-select {
   position: relative;
   flex: 0 1 188px;
@@ -1653,6 +1633,7 @@ body {
   color: var(--dpmf-text-main);
   border-radius: 10px;
   padding: 8px 10px;
+  font-size: 16px;
 }
 
 .rich-meta {
@@ -1828,6 +1809,44 @@ body {
   padding: 5px 10px;
   color: var(--dpmf-neon-cyan);
   border-color: rgba(0, 234, 255, 0.35);
+}
+
+@media (max-width: 1180px) {
+  .rich-list-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .rich-list.is-lp-holders .pair-select {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .rich-list.is-lp-holders .rich-search,
+  .rich-list.is-lp-holders .rich-meta {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .rich-list .pair-select-control,
+  .rich-list .pair-select-list button,
+  .rich-list .rich-search,
+  .rich-list .copy-btn {
+    min-height: 44px;
+  }
+
+  .rich-list .pair-select-list button {
+    display: flex;
+    align-items: center;
+    padding: 12px 10px;
+    font-size: 16px;
+  }
+
+  .rich-list .copy-btn {
+    min-width: 44px;
+    padding: 10px 12px;
+  }
 }
 
 .pagination {
@@ -4793,9 +4812,16 @@ body {
     width: 44px;
   }
 
-  .copy-btn {
+  .copy-btn:not(.wallet-income-copy) {
     padding: 4px 6px;
     font-size: 11px;
+  }
+
+  .rich-list .copy-btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 8px;
+    font-size: 12px;
   }
 }
 
@@ -5065,6 +5091,14 @@ body {
 
   .copy-btn:not(.wallet-income-copy) {
     display: none;
+  }
+
+  .rich-list .copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
   }
 
   .wallet-income-copy {
