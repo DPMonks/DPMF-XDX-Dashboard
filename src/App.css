@@ -2007,7 +2007,7 @@ body {
 }
 
 .pool-split-xdx {
-  color: var(--dpmf-neon-cyan);
+  color: var(--dpmf-neon-lime);
   justify-content: flex-start;
 }
 
@@ -2033,8 +2033,8 @@ body {
 }
 
 .pool-split-swatch.is-xdx {
-  background: #00eaff;
-  box-shadow: 0 0 8px rgba(0, 234, 255, 0.7);
+  background: var(--dpmf-neon-lime);
+  box-shadow: 0 0 8px var(--dpmf-neon-lime-soft);
 }
 
 .pool-split-swatch.is-quote {
@@ -2056,7 +2056,7 @@ body {
   background: #101018;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 0 12px rgba(0, 234, 255, 0.45),
+    0 0 12px var(--dpmf-neon-lime-soft),
     0 0 16px rgba(199, 112, 255, 0.4);
 }
 
@@ -2068,8 +2068,8 @@ body {
 }
 
 .pool-split-bar-xdx {
-  background: linear-gradient(90deg, #005f6d 0%, #00eaff 100%);
-  box-shadow: inset 0 0 12px rgba(0, 234, 255, 0.55);
+  background: linear-gradient(90deg, #2f7a14 0%, var(--dpmf-neon-lime) 100%);
+  box-shadow: inset 0 0 12px var(--dpmf-neon-lime-soft);
 }
 
 .pool-split-bar-quote {
@@ -4049,7 +4049,7 @@ body {
 }
 
 .wallet-lp-comp .is-xdx {
-  background: var(--dpmf-neon-cyan);
+  background: var(--dpmf-neon-lime);
 }
 
 .wallet-lp-comp .is-quote {
