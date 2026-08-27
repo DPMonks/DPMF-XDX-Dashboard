@@ -30,6 +30,7 @@ import { displayTrustlinePair, mergeWalletActivity, mergeWalletOrders, pendingFr
 import {
   INCOME_ALL_PAIRS,
   INCOME_PAGE_DAYS,
+  isAllIncomePairs,
   downloadTextFile,
   incomeDayKeys,
   incomePairChoices,
@@ -259,8 +260,9 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
     historyComplete,
   });
   const dayCount = incomeDayKeys(all).length;
-  const visible = pageLpIncome(all, daysShown);
-  const pagedOut = empty || dayCount === 0 || daysShown >= dayCount;
+  const showAllDays = !isAllIncomePairs(incomePair);
+  const visible = showAllDays ? all : pageLpIncome(all, daysShown);
+  const pagedOut = empty || dayCount === 0 || showAllDays || daysShown >= dayCount;
   const done = pagedOut && !loading && (empty || historyComplete);
 
   useEffect(() => {
@@ -393,7 +395,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
             <tr>
               <th>{t.incomeDate || "Date"}</th>
               <th>{t.incomeLpBalance || "LP Balance"}</th>
-              <th>{t.incomePair || "Pair"}</th>
+              <th>{t.incomeLpAdded || "LP"}</th>
               <th>{t.incomeUsd || "USD"}</th>
             </tr>
           </thead>
@@ -404,11 +406,27 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
               </tr>
             ) : (
               visible.map((row) => (
-                <tr key={`${row.txid || row.date}-${row.pair}-${row.kind || "fee"}-${row.lpTokens}`}>
-                  <td>{row.date}</td>
-                  <td className="is-lp">{formatToken(row.lpTokens, locale, 4)}</td>
-                  <td>{row.pair}</td>
-                  <td className="is-earn">{formatUsd(row.usd, locale)}</td>
+                <tr key={`${row.date}-${row.pair}-${row.lpBalance}-${row.lpAdded}`}>
+                  <td>
+                    <span className="wallet-income-day">{row.date}</span>
+                    {isAllIncomePairs(incomePair) ? (
+                      <span className="wallet-income-pair">{row.pair}</span>
+                    ) : null}
+                  </td>
+                  <td className="is-lp">{formatToken(row.lpBalance ?? row.lpTokens, locale, 4)}</td>
+                  <td className="is-lp-add">
+                    {Number(row.lpAdded) > 0 ? (
+                      <>
+                        <span className="is-plus">+</span>
+                        <span className="is-add">{formatToken(row.lpAdded, locale, 4)}</span>
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="is-earn">
+                    {Number(row.lpAdded) > 0 ? formatUsd(row.usd, locale) : "—"}
+                  </td>
                 </tr>
               ))
             )}
