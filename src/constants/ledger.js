@@ -58,6 +58,8 @@ export const XIO_ISSUER = "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU";
 export const XDX_XIO_AMM = "rDJXzsZGACeHGJQYfaudsYshaC5zJxqsHr";
 export const XDX_XIO_LP_HEX = "03E7A465A6E95CDA21E1110056AA51A71FA55CB9";
 export const XSQUAD_ISSUER = "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg";
+export const XDX_XSQUAD_AMM = "rwpht3XDGMhzYmT5V6ZyMyg6Uc37XFLSwv";
+export const XDX_XSQUAD_LP_HEX = "03BA7FDC0F32F83750869CBA241B93F1C66A8EEB";
 
 // 1% XDX platform fee for swaps where neither side is XDX.
 export const XDX_FEE_TREASURY = "rDPMFBANKMexTKkC7e4n3ekD9HfhmWHva8";
@@ -104,6 +106,15 @@ export const POOLS = [
     quote: "XIO",
     quoteIssuer: XIO_ISSUER,
   },
+  {
+    pair: "XDX/XSQUAD",
+    amm: XDX_XSQUAD_AMM,
+    lpHex: XDX_XSQUAD_LP_HEX,
+    asset: "XDX",
+    quote: "XSQUAD",
+    quoteIssuer: XSQUAD_ISSUER,
+    quoteHex: XSQUAD_HEX,
+  },
 ];
 
 export function pairFromRow(row = {}) {
@@ -141,6 +152,9 @@ export function pairFromRow(row = {}) {
   }
   if (look.includes(XDX_XIO_AMM.toUpperCase()) || look.includes(XDX_XIO_LP_HEX)) {
     return "XDX/XIO";
+  }
+  if (look.includes(XDX_XSQUAD_AMM.toUpperCase()) || look.includes(XDX_XSQUAD_LP_HEX)) {
+    return "XDX/XSQUAD";
   }
   if (look.includes(XSQUAD_ISSUER.toUpperCase()) || look.includes(XSQUAD_HEX) || look.includes("XSQUAD")) {
     return "XDX/XSQUAD";

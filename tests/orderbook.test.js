@@ -4,6 +4,7 @@ import {
   asOrderbookPayload,
   bookFromMarketPayload,
   bookHasNativeDex,
+  bookHasTape,
   bookHeader,
   collectPairOptions,
   combineOrderbookSide,
@@ -235,6 +236,19 @@ test("pickNativeBookRow does not keep an empty latest snapshot", () => {
     ),
     null
   );
+});
+
+test("bookHasTape counts AMM rows so an empty catalog cannot wipe XSQUAD", () => {
+  const amm = {
+    pair: "XDX/XSQUAD",
+    bids: [{ price: 0.00019, base_size: 1200, source: "amm" }],
+    asks: [],
+  };
+  assert.equal(bookHasTape(amm), true);
+  assert.equal(bookHasTape(emptyOrderbook("XDX/XSQUAD")), false);
+  const held = keepLastGoodBook(amm, emptyOrderbook("XDX/XSQUAD"), "XDX/XSQUAD");
+  assert.equal(held.bids[0].base_size, 1200);
+  assert.equal(held.stale, true);
 });
 
 test("keepLastGoodBook holds the previous tape until a new native book arrives", () => {

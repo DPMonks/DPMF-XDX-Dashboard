@@ -8,6 +8,10 @@ import {
   XDX_RLUSD_LP_HEX,
   XDX_XRP_AMM,
   XDX_XRP_LP_HEX,
+  XDX_XIO_AMM,
+  XDX_XIO_LP_HEX,
+  XDX_XSQUAD_AMM,
+  XDX_XSQUAD_LP_HEX,
   XIO_ISSUER,
   XSQUAD_HEX,
   XSQUAD_ISSUER,
@@ -126,6 +130,12 @@ export function knownLpIdentity(pair, quoteId) {
   }
   if (want === "XDX/XRP" || String(quoteId || "").toUpperCase() === "XRP") {
     return { pair: "XDX/XRP", amm: XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX };
+  }
+  if (want === "XDX/XIO" || String(quoteId || "").toUpperCase() === "XIO") {
+    return { pair: "XDX/XIO", amm: XDX_XIO_AMM, lpCurrency: XDX_XIO_LP_HEX };
+  }
+  if (want === "XDX/XSQUAD" || String(quoteId || "").toUpperCase() === "XSQUAD") {
+    return { pair: "XDX/XSQUAD", amm: XDX_XSQUAD_AMM, lpCurrency: XDX_XSQUAD_LP_HEX };
   }
   return { pair: want, amm: "", lpCurrency: "" };
 }

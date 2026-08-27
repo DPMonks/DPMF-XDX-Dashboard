@@ -8,6 +8,7 @@ import {
   mergeIssuerLocked,
   mergeLiveOverview,
   mergeLivePrices,
+  mergeOrderbookCatalogs,
   overlayDbResultWithLive,
   serveCatalogFallback,
 } from "../server/catalogSwitch.js";
@@ -89,6 +90,44 @@ test("mergeCatalogPayload keeps a single pair book instead of swapping in XDX/XR
   const merged = mergeCatalogPayload("orderbook", db, live);
   assert.equal(merged.pair, "XDX/XIO");
   assert.equal(merged.bids[0].source, "bridge");
+});
+
+test("empty featured pair books take the live tape instead of staying blank", () => {
+  const db = {
+    pairs: ["XDX/XRP", "XDX/XSQUAD"],
+    books: {
+      "XDX/XRP": {
+        pair: "XDX/XRP",
+        bids: [{ price: 0.00003, base_size: 1000, source: "amm" }],
+        asks: [{ price: 0.000031, base_size: 900, source: "amm" }],
+      },
+      "XDX/XSQUAD": {
+        pair: "XDX/XSQUAD",
+        present: false,
+        catching_up: true,
+        bids: [],
+        asks: [],
+      },
+    },
+    source: "db",
+  };
+  const live = {
+    pairs: ["XDX/XRP", "XDX/XSQUAD"],
+    books: {
+      "XDX/XSQUAD": {
+        pair: "XDX/XSQUAD",
+        present: true,
+        amm_implied: true,
+        bids: [{ price: 0.00019, base_size: 5000, source: "amm" }],
+        asks: [{ price: 0.0002, base_size: 4800, source: "amm" }],
+      },
+    },
+    source: "xrpl",
+  };
+  const merged = mergeOrderbookCatalogs(db, live);
+  assert.equal(merged.books["XDX/XRP"].bids[0].base_size, 1000);
+  assert.equal(merged.books["XDX/XSQUAD"].bids[0].base_size, 5000);
+  assert.equal(mergeCatalogPayload("orderbooks", db, live).books["XDX/XSQUAD"].asks[0].source, "amm");
 });
 
 test("overlayDbResultWithLive rewrites an empty 200 from Postgres", async () => {

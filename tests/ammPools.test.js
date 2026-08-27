@@ -220,4 +220,6 @@ test("known live pool specs include featured XDX quotes, not only XRP and RLUSD"
   assert.ok(pairs.includes("XDX/RLUSD"));
   assert.ok(pairs.includes("XDX/XIO"));
   assert.ok(pairs.includes("XDX/XSQUAD"));
+  const squad = knownLivePoolSpecs().find((row) => row.pair === "XDX/XSQUAD");
+  assert.equal(squad.ammAccount || squad.amm, "rwpht3XDGMhzYmT5V6ZyMyg6Uc37XFLSwv");
 });

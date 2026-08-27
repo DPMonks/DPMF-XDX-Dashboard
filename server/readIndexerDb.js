@@ -70,7 +70,7 @@ import {
   loadWalletNetworthFromLedger,
   loadWalletOffers,
 } from "./walletLedger.js";
-import { liveCatalogPayload } from "./liveCatalog.js";
+import { knownLivePoolSpecs, liveCatalogPayload } from "./liveCatalog.js";
 import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
 import { catalogHealth } from "./sourceControl.js";
 import { FREE_API_HEADERS } from "./xrplToCatalog.js";
@@ -1163,23 +1163,40 @@ async function loadOrderbooks(db) {
 
   const poolNames = (lp.pools || []).map((row) => row.pool_name || row.pool);
   const pairs = sortOrderbookPairs([...FEATURED_ORDERBOOK_PAIRS, ...poolNames]);
+  const liveSpecs = knownLivePoolSpecs(lp.pools || []);
+  const lives = await loadLiveAmmReservesMany(
+    liveSpecs.map((spec) => ({
+      ammAccount: spec.ammAccount || spec.amm,
+      pair: spec.pair,
+      quote: spec.quote,
+      issuer: spec.issuer,
+      hex: spec.hex,
+    })),
+    { concurrency: 3, retries: 1, waitMs: 200, deadlineMs: 4500 }
+  );
+  const liveByPair = new Map();
+  liveSpecs.forEach((spec, index) => {
+    liveByPair.set(String(spec.pair || "").toUpperCase(), lives[index]);
+  });
+  const poolFor = (pair) => {
+    const row = (lp.pools || []).find(
+      (item) => normalizeOrderbookPair(item.pool_name || item.pool) === pair
+    );
+    return overlayLiveAmmReserves(row || { pool_name: pair, pool: pair }, liveByPair.get(pair.toUpperCase()));
+  };
   const books = {};
   for (const pair of pairs) {
     const stored = storedByPair.get(pair.toUpperCase()) || emptyOrderbook(pair);
-    const pool = (lp.pools || []).find(
-      (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
-    );
+    const pool = poolFor(pair);
     const composed = await composeStoredBook(stored, pair, reserveIndex, xrpPool, pool);
     books[pair] = {
       ...composed,
       as_of: storedByPair.has(pair.toUpperCase()) ? stored.as_of : null,
-      source: "db",
+      source: pool.reserve_source === "amm_info" ? "hybrid" : "db",
     };
   }
 
-  const xrpPoolRow = (lp.pools || []).find(
-    (row) => normalizeOrderbookPair(row.pool_name || row.pool) === "XDX/XRP"
-  );
+  const xrpPoolRow = poolFor("XDX/XRP");
   const xrpFilled = await withLiveTape(books["XDX/XRP"], "XDX/XRP", xrpPoolRow);
   books["XDX/XRP"] = {
     ...xrpFilled,
@@ -1188,9 +1205,7 @@ async function loadOrderbooks(db) {
 
   await Promise.all(
     FEATURED_ORDERBOOK_PAIRS.filter((pair) => pair !== "XDX/XRP").map(async (pair) => {
-      const pool = (lp.pools || []).find(
-        (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
-      );
+      const pool = poolFor(pair);
       const extras = {
         xrpBook: books["XDX/XRP"],
         quotePerXrp: quotePerXrpFromSpots(
@@ -1210,9 +1225,7 @@ async function loadOrderbooks(db) {
   const xrpSpot = xrpBook?.amm?.price;
   for (const pair of pairs) {
     if (pair === "XDX/XRP") continue;
-    const pool = (lp.pools || []).find(
-      (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
-    );
+    const pool = poolFor(pair);
     const reserves = loadPairReserves(pair, reserveIndex, xrpPool, pool);
     const extras = {
       xrpBook,
