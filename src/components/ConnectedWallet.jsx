@@ -26,9 +26,9 @@ import {
 } from "../wallet/composeWallet";
 import { formatFeePercent } from "../wallet/ammVote";
 import { useMorph } from "../wallet/useMorph";
-import { mergeWalletActivity, mergeWalletOrders, pendingFromExecution } from "../wallet/ledgerOrders";
+import { displayTrustlinePair, mergeWalletActivity, mergeWalletOrders, pendingFromExecution } from "../wallet/ledgerOrders";
 import {
-  DEFAULT_INCOME_PAIR,
+  INCOME_ALL_PAIRS,
   INCOME_PAGE_DAYS,
   downloadTextFile,
   incomeDayKeys,
@@ -229,7 +229,7 @@ function LpInfographic({ position, earn, locale, t, empty }) {
 }
 
 function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook, locale, t, empty }) {
-  const [incomePair, setIncomePair] = useState(DEFAULT_INCOME_PAIR);
+  const [incomePair, setIncomePair] = useState(INCOME_ALL_PAIRS);
   const [historyActivity, setHistoryActivity] = useState(null);
   const [historyDays, setHistoryDays] = useState([]);
   const [recordedRows] = useState(() => readRecordedLpIncome(address));
@@ -362,7 +362,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
             >
               {pairs.map((name) => (
                 <option key={name} value={name}>
-                  {name}
+                  {name === INCOME_ALL_PAIRS ? t.incomeAllPairs || "All pairs" : name}
                 </option>
               ))}
             </select>
@@ -392,7 +392,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
           <thead>
             <tr>
               <th>{t.incomeDate || "Date"}</th>
-              <th>{t.incomeLpTokens || "LP"}</th>
+              <th>{t.incomeLpBalance || "LP Balance"}</th>
               <th>{t.incomePair || "Pair"}</th>
               <th>{t.incomeUsd || "USD"}</th>
             </tr>
@@ -723,7 +723,7 @@ export default function ConnectedWallet() {
                         : row.side === "trustline"
                           ? (t.trustlineActivity || "Added {asset} trustline").replace(
                               "{asset}",
-                              row.currency || t.xdx
+                              displayTrustlinePair(row, view.pools) || row.pair || t.xdx
                             )
                           : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
                               row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""

@@ -9,7 +9,7 @@ import {
   XSQUAD_HEX,
   XSQUAD_ISSUER,
 } from "../constants/ledger.js";
-import { activityFromAmmVoteTx, pairFromVoteAssets } from "./ammVote.js";
+import { activityFromAmmVoteTx, pairFromVoteAssets, quoteTickerFromCurrency } from "./ammVote.js";
 
 export function amountAsIssue(amount) {
   if (amount == null || typeof amount === "string") return { currency: "XRP" };
@@ -41,6 +41,11 @@ export function rippleIso(seconds, fallback) {
   return null;
 }
 
+export function printableTicker(value) {
+  const text = String(value || "").trim();
+  return /^[A-Z0-9.$]{2,20}$/i.test(text) ? text.toUpperCase() : "";
+}
+
 export function currencyCode(value) {
   const raw = String(value || "").trim();
   if (!raw || raw.toUpperCase() === "XRP") return "XRP";
@@ -48,6 +53,8 @@ export function currencyCode(value) {
   if (/^[A-Z0-9]{3}$/.test(upper)) return upper;
   const known = KNOWN.find((row) => row.hex === upper || row.code === upper);
   if (known) return known.code;
+  const fromQuote = printableTicker(quoteTickerFromCurrency(raw));
+  if (fromQuote) return fromQuote;
   if (/^[A-F0-9]{40}$/.test(upper)) {
     const chars = [];
     for (let i = 0; i < 40; i += 2) {
@@ -55,9 +62,48 @@ export function currencyCode(value) {
       if (!code) break;
       chars.push(String.fromCharCode(code));
     }
-    return chars.join("") || upper;
+    return printableTicker(chars.join("")) || upper;
   }
-  return upper;
+  return printableTicker(upper) || upper;
+}
+
+export function displayTrustlinePair(row = {}, pools = []) {
+  const hex = String(row.currency || row.lp_currency || "")
+    .replace(/^0x/i, "")
+    .toUpperCase();
+  const issuer = String(row.issuer || "").trim();
+  const ticker = printableTicker(quoteTickerFromCurrency(row.currency, row.issuer) || row.currency);
+  if (ticker === "XDX") return "XDX";
+  if (ticker && ticker !== "XRP" && !/^[A-F0-9]{40}$/.test(ticker)) return `XDX/${ticker}`;
+
+  const named = String(row.pair || "").trim().toUpperCase().replace(/\s+/g, "");
+  if (named === "XDX") return "XDX";
+  if (/^XDX\/[A-Z0-9.$]{2,20}$/.test(named)) return named;
+
+  const fromKnown = pairFromRow({
+    currency: hex,
+    lp_currency: hex,
+    issuer,
+    amm_account: issuer,
+    quote_issuer: issuer,
+  });
+  if (/^XDX\/[A-Z0-9.$]{2,20}$/.test(fromKnown)) return fromKnown;
+
+  for (const pool of Array.isArray(pools) ? pools : []) {
+    const poolHex = String(pool.lp_currency || pool.lp_currency_hex || "")
+      .replace(/^0x/i, "")
+      .toUpperCase();
+    const amm = String(pool.amm_account || pool.amm || "").trim();
+    if ((hex && poolHex === hex) || (issuer && amm && issuer.toLowerCase() === amm.toLowerCase())) {
+      const pair = String(pool.pool || pool.pair || pool.pool_name || "")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "")
+        .replace(/-/g, "/");
+      if (/^XDX\/[A-Z0-9.$]{2,20}$/.test(pair)) return pair;
+    }
+  }
+  return "";
 }
 
 export function readAmount(value) {
@@ -349,14 +395,19 @@ export function activityFromTrustSetTx(row, address) {
   const result = meta.TransactionResult || row.TransactionResult || "";
   if (result && result !== "tesSUCCESS") return null;
   const limit = tx.LimitAmount || {};
-  const currency = currencyCode(limit.currency);
-  if (!currency || currency === "XRP") return null;
+  const pair = displayTrustlinePair({
+    currency: limit.currency,
+    issuer: limit.issuer,
+  });
+  const currency = pair === "XDX" ? "XDX" : pair.includes("/") ? pair.split("/")[1] : printableTicker(currencyCode(limit.currency));
+  if (!pair && !currency) return null;
+  if (currency === "XRP") return null;
   return {
     account: tx.Account || address,
     side: "trustline",
     kind: "trustline",
-    pair: currency === "XDX" ? "XDX" : `XDX/${currency}`,
-    currency,
+    pair: pair || (currency === "XDX" ? "XDX" : `XDX/${currency}`),
+    currency: currency || pair,
     issuer: limit.issuer || null,
     timestamp: timestamp || new Date().toISOString(),
     txid: hash,
