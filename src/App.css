@@ -4080,10 +4080,14 @@ body {
 }
 
 .wallet-income-select select {
+  box-sizing: border-box;
   width: 100%;
   max-width: none;
-  min-height: 44px;
-  font-size: 16px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px 8px;
+  line-height: 1;
+  font-size: 13px;
 }
 
 .wallet-income-totals {
@@ -4094,7 +4098,7 @@ body {
   gap: 8px 12px;
   flex: 1 1 auto;
   min-width: min-content;
-  min-height: 44px;
+  min-height: 28px;
 }
 
 .wallet-income-total {
@@ -4123,7 +4127,11 @@ body {
 }
 
 .wallet-income-copy {
+  box-sizing: border-box;
   flex-shrink: 0;
+  height: 28px;
+  min-height: 28px;
+  padding: 5px 10px;
 }
 
 .wallet-income-load {
@@ -4491,8 +4499,20 @@ body {
   .wallet-income-copy {
     display: inline-flex;
     align-items: center;
+    height: 44px;
     min-height: 44px;
     padding: 8px 12px;
+  }
+
+  .wallet-income-select select {
+    height: 44px;
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 16px;
+  }
+
+  .wallet-income-totals {
+    min-height: 44px;
   }
 }
 
@@ -5030,6 +5050,7 @@ body {
   .wallet-income-copy {
     display: inline-flex;
     align-items: center;
+    height: 44px;
     min-height: 44px;
     padding: 8px 12px;
   }
@@ -5252,6 +5273,11 @@ body {
   .orderbook-search,
   .amm-pools-search .orderbook-search {
     min-height: 44px;
+  }
+
+  .wallet-income-select select,
+  .wallet-income-copy {
+    height: 44px;
   }
 
   .tab,
