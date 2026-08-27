@@ -3697,10 +3697,12 @@ body {
 
 @container wallet (max-width: 560px) {
   .wallet-earn-beam {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     grid-template-areas:
-      "xrp xdx"
-      "rlusd total";
+      "total"
+      "xrp"
+      "xdx"
+      "rlusd";
   }
 
   .wallet-earn-row {
@@ -3709,12 +3711,20 @@ body {
   }
 
   .wallet-earn-cell.is-usd-only .wallet-earn-row {
-    grid-template-columns: 2.2em minmax(0, 1fr);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px 12px;
   }
 
   .wallet-earn-lp,
   .wallet-earn-usd {
     font-size: 11px;
+  }
+
+  .wallet-earn-cell.is-usd-only .wallet-earn-usd {
+    overflow: visible;
+    text-overflow: unset;
   }
 }
 
@@ -4939,9 +4949,22 @@ body {
     padding: 8px 12px;
   }
 
+  .wallet-income-table {
+    table-layout: fixed;
+  }
+
   .wallet-income-table th,
   .wallet-income-table td {
     white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .wallet-income-table td.is-earn,
+  .wallet-income-table td.is-lp {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
   }
 
   .wallet-lp-head,

@@ -2,6 +2,7 @@ import { catalogXdxVolume24h, catalogXdxVolume7d } from "../utils/lpVolume.js";
 import { detectQuoteUsd, normalizePriceBook } from "../utils/poolSplit.js";
 
 export const DEFAULT_INCOME_PAIR = "XDX/XRP";
+export const INCOME_ALL_PAIRS = "ALL";
 export const INCOME_FEATURED_PAIRS = ["XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"];
 export const LP_INCOME_STORE_PREFIX = "dpmf-lp-income-v1:";
 export const HISTORICAL_INCOME_DAYS = 365;
@@ -34,6 +35,10 @@ export function incomePairName(value) {
   return normalizeWalletPair(value) || DEFAULT_INCOME_PAIR;
 }
 
+export function isAllIncomePairs(value) {
+  return String(value || "").trim().toUpperCase() === INCOME_ALL_PAIRS;
+}
+
 export function incomePairChoices({ positions = [], activity = [], featured = INCOME_FEATURED_PAIRS } = {}) {
   const names = [DEFAULT_INCOME_PAIR, ...(Array.isArray(featured) ? featured : INCOME_FEATURED_PAIRS)];
   for (const row of Array.isArray(positions) ? positions : []) {
@@ -42,11 +47,12 @@ export function incomePairChoices({ positions = [], activity = [], featured = IN
   for (const row of Array.isArray(activity) ? activity : []) {
     names.push(normalizeWalletPair(row?.pair || row?.pool || row?.pool_name));
   }
-  return [...new Set(names.filter((name) => isXdxAmmPair(name)))].sort((left, right) => {
+  const pairs = [...new Set(names.filter((name) => isXdxAmmPair(name)))].sort((left, right) => {
     if (left === DEFAULT_INCOME_PAIR) return -1;
     if (right === DEFAULT_INCOME_PAIR) return 1;
     return left.localeCompare(right);
   });
+  return [INCOME_ALL_PAIRS, ...pairs];
 }
 
 export function filterIncomeByPair(rows = [], pair = DEFAULT_INCOME_PAIR) {
@@ -639,7 +645,7 @@ export function mergeRecordedLpIncome(...lists) {
 }
 
 export function incomeRowsForPair({
-  pair = DEFAULT_INCOME_PAIR,
+  pair = INCOME_ALL_PAIRS,
   snapshotRows = [],
   historyActivity = null,
   historyDays = [],
@@ -653,6 +659,35 @@ export function incomeRowsForPair({
   now = Date.now(),
   historyComplete = false,
 } = {}) {
+  if (isAllIncomePairs(pair)) {
+    const listed = incomePairChoices({
+      positions,
+      activity: [
+        ...(Array.isArray(snapshotRows) ? snapshotRows : []),
+        ...(Array.isArray(historyActivity) ? historyActivity : []),
+        ...(Array.isArray(recordedRows) ? recordedRows : []),
+      ],
+    }).filter((name) => !isAllIncomePairs(name));
+    return mergeLpIncomeRows(
+      ...(listed.length ? listed : [DEFAULT_INCOME_PAIR]).map((name) =>
+        incomeRowsForPair({
+          pair: name,
+          snapshotRows,
+          historyActivity,
+          historyDays,
+          recordedRows,
+          positions,
+          pools,
+          prices,
+          xdxUsd,
+          xrpUsd,
+          rlusdUsd,
+          now,
+          historyComplete,
+        })
+      )
+    );
+  }
   const want = incomePairName(pair);
   const snapshot = filterIncomeByPair(snapshotRows, want);
   const activity = remapIncomeActivity(historyActivity, positions, pools);
@@ -693,7 +728,7 @@ export function pageLpIncome(rows = [], daysShown = INCOME_PAGE_DAYS) {
 }
 
 export function lpIncomeCsv(rows = []) {
-  const lines = ["Date,LP tokens received,Trading pair,USD"];
+  const lines = ["Date,LP Balance,Trading pair,USD"];
   for (const row of Array.isArray(rows) ? rows : []) {
     lines.push(
       [row.date, row.lpTokens, row.pair, row.usd]

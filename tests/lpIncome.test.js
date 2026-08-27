@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { lpFeeEarnings } from "../src/wallet/composeWallet.js";
 import {
   DEFAULT_INCOME_PAIR,
+  INCOME_ALL_PAIRS,
   HISTORICAL_INCOME_DAYS,
   dailyLpIncomeTotals,
   fillContinuousVolumeDays,
@@ -116,7 +117,7 @@ test("income list is newest XDX pair days first and pages by 10 days", () => {
     10
   );
   assert.equal(new Set(paged.map((row) => row.date)).size, 10);
-  assert.match(lpIncomeCsv(rows), /^Date,LP tokens received,Trading pair,USD\n/);
+  assert.match(lpIncomeCsv(rows), /^Date,LP Balance,Trading pair,USD\n/);
 });
 
 test("lpTokenUsd does not mark LP tokens at the XRP price when quote reserve is LP supply", () => {
@@ -161,13 +162,43 @@ test("lpTokenUsd prices both pool reserves at the quote mark, not 2x XDX", () =>
   assert.ok(Math.abs(deposited[0].usd - usd) < 1e-9);
 });
 
-test("income pair list defaults to XDX/XRP and keeps live plus featured pairs", () => {
+test("income pair list starts with All pairs then XDX/XRP and live plus featured pairs", () => {
   const pairs = incomePairChoices({
     positions: [{ pool: "XDX/XIO" }, { pool: "XDX/RLUSD" }],
     activity: [{ pair: "XDX/XSQUAD" }],
   });
-  assert.equal(pairs[0], DEFAULT_INCOME_PAIR);
-  assert.deepEqual(pairs, ["XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"]);
+  assert.equal(pairs[0], INCOME_ALL_PAIRS);
+  assert.equal(pairs[1], DEFAULT_INCOME_PAIR);
+  assert.deepEqual(pairs, ["ALL", "XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"]);
+});
+
+test("All pairs income keeps every XDX pool instead of one dropdown filter", () => {
+  const rows = incomeRowsForPair({
+    pair: INCOME_ALL_PAIRS,
+    snapshotRows: [
+      { date: "2026-08-23", pair: "XDX/XRP", lpTokens: 10, usd: 0.01, kind: "fee" },
+      { date: "2026-08-23", pair: "XDX/XIO", lpTokens: 4, usd: 0.02, kind: "fee" },
+    ],
+    recordedRows: [{ date: "2026-08-22", pair: "XDX/RLUSD", lpTokens: 2, usd: 0.03, kind: "fee" }],
+    historyActivity: [
+      { side: "addLp", pair: "XDX/XRP", lp: 10, timestamp: "2026-08-20T10:00:00.000Z" },
+      { side: "addLp", pair: "XDX/XIO", lp: 4, timestamp: "2026-08-20T10:00:00.000Z" },
+      { side: "addLp", pair: "XDX/RLUSD", lp: 2, timestamp: "2026-08-20T10:00:00.000Z" },
+    ],
+    positions: [
+      { pool: "XDX/XRP", lp_balance: 10, reserve_asset: 1000, reserve_currency: 1, lp_supply: 100 },
+      { pool: "XDX/XIO", lp_balance: 4, reserve_asset: 1000, reserve_currency: 1, lp_supply: 100 },
+      { pool: "XDX/RLUSD", lp_balance: 2, reserve_asset: 1000, reserve_currency: 1, lp_supply: 100 },
+    ],
+    historyComplete: true,
+    xdxUsd: 0.00004,
+    xrpUsd: 2,
+  });
+  const pairs = [...new Set(rows.map((row) => row.pair))];
+  assert.ok(pairs.includes("XDX/XRP"));
+  assert.ok(pairs.includes("XDX/XIO"));
+  assert.ok(pairs.includes("XDX/RLUSD"));
+  assert.equal(lpIncomeCsv(rows).startsWith("Date,LP Balance,Trading pair,USD"), true);
 });
 
 test("income rows keep one selected pair and replace snapshot deposits with wallet history", () => {

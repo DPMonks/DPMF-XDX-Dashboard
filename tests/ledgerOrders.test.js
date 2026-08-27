@@ -6,6 +6,8 @@ import {
   activityFromOfferTx,
   activityFromPaymentTx,
   activityFromTrustSetTx,
+  currencyCode,
+  displayTrustlinePair,
   lpBalanceEventsFromMeta,
   lpHistoryFromAccountTx,
   mergeWalletActivity,
@@ -368,6 +370,7 @@ test("activityFromTrustSetTx records a confirmed XDX line", () => {
   );
   assert.equal(row.side, "trustline");
   assert.equal(row.currency, "XDX");
+  assert.equal(row.pair, "XDX");
   const pending = pendingFromExecution(
     {
       txjson: {
@@ -397,6 +400,32 @@ test("activityFromTrustSetTx records a confirmed XDX line", () => {
     "rBuyer"
   );
   assert.equal(history[0].side, "buy");
+});
+
+test("trustline activity shows a pair, never a hex dump", () => {
+  assert.equal(currencyCode(XDX_XIO_LP_HEX), XDX_XIO_LP_HEX);
+  assert.equal(displayTrustlinePair({ currency: XDX_XIO_LP_HEX, issuer: XDX_XIO_AMM }), "XDX/XIO");
+  const lpLine = activityFromTrustSetTx(
+    {
+      hash: "5".repeat(64),
+      tx: {
+        TransactionType: "TrustSet",
+        Account: "rBuyer",
+        LimitAmount: { currency: XDX_XIO_LP_HEX, issuer: XDX_XIO_AMM, value: "10000000000" },
+      },
+      meta: { TransactionResult: "tesSUCCESS" },
+    },
+    "rBuyer"
+  );
+  assert.equal(lpLine.pair, "XDX/XIO");
+  assert.equal(lpLine.currency, "XIO");
+  const hex = "03ABCDEF0123456789ABCDEF0123456789ABCDEF";
+  const fromCatalog = displayTrustlinePair(
+    { currency: hex, issuer: "rUnknownAmmAccountxxxx" },
+    [{ pair: "XDX/XSQUAD", lp_currency: hex, amm_account: "rUnknownAmmAccountxxxx" }]
+  );
+  assert.equal(fromCatalog, "XDX/XSQUAD");
+  assert.equal(currencyCode(hex), hex);
 });
 
 test("rememberPending keeps a just-signed limit until the ledger fetch catches up", () => {
