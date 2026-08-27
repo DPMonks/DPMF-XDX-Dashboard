@@ -8,6 +8,7 @@ import {
   dailyHeldLpBalances,
   dailyLpIncomeTotals,
   fillContinuousVolumeDays,
+  incomePairBalance,
   incomePairChoices,
   incomePositionForPair,
   incomeRowsForPair,
@@ -117,7 +118,7 @@ test("income list is newest XDX pair days first and pages by 10 days", () => {
     10
   );
   assert.equal(new Set(paged.map((row) => row.date)).size, 10);
-  assert.match(lpIncomeCsv(rows), /^Date,LP Balance,LP added,USD,Trading pair\n/);
+  assert.match(lpIncomeCsv(rows), /^Date,LP earned,USD,Trading pair\n/);
 });
 
 test("lpTokenUsd does not mark LP tokens at the XRP price when quote reserve is LP supply", () => {
@@ -198,8 +199,8 @@ test("All pairs income keeps every XDX pool instead of one dropdown filter", () 
   assert.ok(pairs.includes("XDX/XRP"));
   assert.ok(pairs.includes("XDX/XIO"));
   assert.ok(pairs.includes("XDX/RLUSD"));
-  assert.ok(rows.some((row) => row.pair === "XDX/XRP" && row.lpAdded === 10 && row.lpBalance === 10));
-  assert.equal(lpIncomeCsv(rows).startsWith("Date,LP Balance,LP added,USD,Trading pair"), true);
+  assert.ok(rows.some((row) => row.pair === "XDX/XRP" && row.kind === "fee" && row.lpEarned === 10));
+  assert.equal(lpIncomeCsv(rows).startsWith("Date,LP earned,USD,Trading pair"), true);
 });
 
 test("wallet LP history is the holder's balance and the day's increase, not pool owners", () => {
@@ -224,13 +225,35 @@ test("wallet LP history is the holder's balance and the day's increase, not pool
   assert.equal(series[2].lpAdded, 1000);
 });
 
-test("income rows keep one selected pair and price the day's LP increase on that date", () => {
+test("selected pair header is the wallet LP total, not pool supply", () => {
+  assert.equal(
+    incomePairBalance({
+      pair: "XDX/XRP",
+      positions: [{ pool: "XDX/XRP", lp_balance: 9_484_129.5933, lp_supply: 230_000_000 }],
+    }),
+    9_484_129.5933
+  );
+  assert.equal(
+    incomePairBalance({
+      pair: INCOME_ALL_PAIRS,
+      positions: [
+        { pool: "XDX/XRP", lp_balance: 100 },
+        { pool: "XDX/XIO", lp_balance: 50 },
+      ],
+    }),
+    150
+  );
+});
+
+test("income rows keep one selected pair and price that day's LP earnings", () => {
   const pool = {
     pool: "XDX/XRP",
-    reserve_asset: 1000,
-    reserve_currency: 1,
-    lp_supply: 100,
+    quote: "XRP",
+    reserve_asset: 50_000,
+    reserve_currency: 2,
+    lp_supply: 1000,
     lp_balance: 100,
+    trading_fee: 1000,
   };
   const history = incomeRowsForPair({
     pair: "XDX/XRP",
@@ -239,28 +262,35 @@ test("income rows keep one selected pair and price the day's LP increase on that
       { side: "addLp", pair: "XDX/XRP", lp: 100, timestamp: "2026-08-21T10:00:00.000Z", txid: "A" },
       { side: "addLp", pair: "XDX/RLUSD", lp: 40, timestamp: "2026-08-21T10:00:00.000Z", txid: "C" },
     ],
+    historyDays: [
+      { pair: "XDX/XRP", xdx: 1_000_000, timestamp: "2026-08-21T00:00:00.000Z" },
+      { pair: "XDX/XRP", xdx: 1_000_000, timestamp: "2026-08-22T00:00:00.000Z" },
+    ],
     positions: [pool],
     prices: {
       xdxUsd: 0.00008,
       xrpUsd: 2,
-      dailyPrices: { "2026-08-21": { xdxUsd: 0.00004, xrpUsd: 2 } },
+      dailyPrices: {
+        "2026-08-21": { xdxUsd: 0.00004, xrpUsd: 2 },
+        "2026-08-22": { xdxUsd: 0.00008, xrpUsd: 2 },
+      },
     },
     historyComplete: true,
   });
-  assert.ok(history.every((row) => row.pair === "XDX/XRP" && row.kind === "hold"));
-  assert.deepEqual(
-    history.map((row) => row.date),
-    ["2026-08-22", "2026-08-21"]
-  );
-  const added = history.find((row) => row.date === "2026-08-21");
-  const quiet = history.find((row) => row.date === "2026-08-22");
-  assert.equal(added.lpBalance, 100);
-  assert.equal(added.lpAdded, 100);
-  assert.equal(quiet.lpBalance, 100);
-  assert.equal(quiet.lpAdded, 0);
-  const expected = lpTokenUsd(100, pool, { xdxUsd: 0.00004, xrpUsd: 2 });
-  assert.ok(Math.abs(added.usd - expected) < 1e-9);
-  assert.equal(quiet.usd, 0);
+  assert.ok(history.length >= 2);
+  assert.ok(history.every((row) => row.pair === "XDX/XRP" && row.kind === "fee" && row.lpEarned > 0));
+  const older = history.find((row) => row.date === "2026-08-21");
+  const today = history.find((row) => row.date === "2026-08-22");
+  assert.ok(older);
+  assert.ok(today);
+  const feeXdx = 1_000_000 * 0.01 * 0.1;
+  const expectedLp = (feeXdx / 50_000) * 1000;
+  const half = feeXdx / 2;
+  const quotePx = 2 / 50_000;
+  assert.ok(Math.abs(older.lpEarned - expectedLp) < 1e-9);
+  assert.ok(Math.abs(today.lpEarned - expectedLp) < 1e-9);
+  assert.ok(Math.abs(older.usd - (half * 0.00004 + half * quotePx * 2)) < 1e-12);
+  assert.ok(Math.abs(today.usd - (half * 0.00008 + half * quotePx * 2)) < 1e-12);
 });
 
 test("continuous volume days fill every 24h UTC date newest-ready", () => {
@@ -437,6 +467,39 @@ test("fee USD uses the XDX mark on that UTC day, not today's live price", () => 
   assert.equal(book.xdxUsd, 0.00004);
 });
 
+test("recorded fee rows remarry LP earned to that UTC day's USD, not today's mark", () => {
+  const rows = incomeRowsForPair({
+    pair: "XDX/XIO",
+    now: Date.parse("2026-08-25T18:00:00.000Z"),
+    recordedRows: [{ date: "2026-08-20", pair: "XDX/XIO", lpTokens: 2, usd: 99, kind: "fee" }],
+    historyActivity: [{ side: "addLp", pair: "XDX/XIO", lp: 50, timestamp: "2026-08-11T10:00:00.000Z" }],
+    positions: [
+      {
+        pool: "XDX/XIO",
+        quote: "XIO",
+        lp_share_percent: 10,
+        trading_fee: 1000,
+        reserve_asset: 50_000,
+        reserve_currency: 60,
+        lp_supply: 1_000,
+        lp_balance: 100,
+      },
+    ],
+    xdxUsd: 0.00008,
+    prices: {
+      xdxUsd: 0.00008,
+      dailyPrices: { "2026-08-20": { xdxUsd: 0.00004 } },
+    },
+    historyComplete: true,
+  });
+  const older = rows.find((row) => row.date === "2026-08-20");
+  assert.ok(older);
+  assert.equal(older.lpEarned, 2);
+  const feeXdx = (2 / 1_000) * 50_000;
+  assert.ok(Math.abs(older.usd - feeXdx * 0.00004) < 1e-12);
+  assert.ok(Math.abs(older.usd - feeXdx * 0.00008) > 1e-6);
+});
+
 test("XDX/XIO income uses pool volume and add-LP history even without a share field", () => {
   const now = Date.parse("2026-08-25T18:00:00.000Z");
   const position = incomePositionForPair(
@@ -475,6 +538,10 @@ test("XDX/XIO income uses pool volume and add-LP history even without a share fi
       },
     ],
     historyActivity: [{ side: "addLp", pair: "XDX/XIO", lp: 50, timestamp: "2026-08-11T10:00:00.000Z" }],
+    historyDays: [
+      { pair: "XDX/XIO", xdx: 1_000_000, timestamp: "2026-08-11T00:00:00.000Z" },
+      { pair: "XDX/XIO", xdx: 1_000_000, timestamp: "2026-08-25T00:00:00.000Z" },
+    ],
     prices: {
       xdxUsd: 0.00008,
       dailyPrices: {
@@ -486,25 +553,35 @@ test("XDX/XIO income uses pool volume and add-LP history even without a share fi
   const days = rows.map((row) => row.date);
   assert.ok(days.includes("2026-08-25"));
   assert.ok(days.includes("2026-08-11"));
-  assert.ok(rows.every((row) => row.pair === "XDX/XIO" && row.kind === "hold"));
+  assert.ok(rows.every((row) => row.pair === "XDX/XIO" && row.kind === "fee" && row.lpEarned > 0));
   const older = rows.find((row) => row.date === "2026-08-11");
   const today = rows.find((row) => row.date === "2026-08-25");
-  assert.equal(older.lpAdded, 50);
-  assert.equal(older.lpBalance, 50);
-  assert.equal(today.lpAdded, 0);
-  assert.equal(today.lpBalance, 50);
   assert.ok(older.usd > 0);
-  assert.equal(today.usd, 0);
+  assert.ok(today.usd > 0);
+  assert.ok(Math.abs(today.usd / older.usd - 0.00008 / 0.00003) < 1e-9);
 });
 
-test("pair history starts on the first LP credit and keeps every day through today", () => {
+test("pair history starts on the first LP credit and keeps every earning day through today", () => {
   const rows = incomeRowsForPair({
     pair: "XDX/XRP",
     now: Date.parse("2026-08-26T18:00:00.000Z"),
     historyActivity: [
       { side: "addLp", pair: "XDX/XRP", lp: 100, timestamp: "2026-08-24T01:57:30.000Z" },
     ],
-    positions: [{ pool: "XDX/XRP", lp_balance: 100, reserve_asset: 1000, reserve_currency: 1, lp_supply: 1000 }],
+    historyDays: [
+      { pair: "XDX/XRP", xdx: 100_000, timestamp: "2026-08-24T00:00:00.000Z" },
+      { pair: "XDX/XRP", xdx: 100_000, timestamp: "2026-08-26T00:00:00.000Z" },
+    ],
+    positions: [
+      {
+        pool: "XDX/XRP",
+        lp_balance: 100,
+        reserve_asset: 1000,
+        reserve_currency: 1,
+        lp_supply: 1000,
+        trading_fee: 1000,
+      },
+    ],
     historyComplete: true,
     xdxUsd: 0.00004,
     xrpUsd: 2,
@@ -513,7 +590,7 @@ test("pair history starts on the first LP credit and keeps every day through tod
     rows.map((row) => row.date),
     ["2026-08-26", "2026-08-25", "2026-08-24"]
   );
-  assert.equal(rows.find((row) => row.date === "2026-08-24").lpAdded, 100);
+  assert.ok(rows.every((row) => row.kind === "fee" && row.lpEarned > 0 && row.usd > 0));
 });
 
 test("completed Payment plus deposit history starts fee days on the first LP credit", () => {
@@ -545,6 +622,7 @@ test("completed Payment plus deposit history starts fee days on the first LP cre
   assert.ok(days.includes("2026-08-26"));
   assert.ok(days.includes("2026-08-11"));
   assert.equal(days.includes("2026-08-10"), false);
+  assert.ok(rows.every((row) => row.kind === "fee" && row.lpEarned > 0));
 });
 
 test("signed-in LP lines still produce daily income when wallet/lp is empty", () => {
