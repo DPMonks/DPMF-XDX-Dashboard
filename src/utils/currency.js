@@ -86,15 +86,21 @@ export function sameIssuedCurrency(a, b) {
 
 export function isNativeXrpQuote(quote) {
   if (!quote) return true;
-  if (quote.issuer) return false;
   const id = String(quote.id || quote.currency || "")
     .replace(/^XDX\//i, "")
     .toUpperCase();
   const pair = String(quote.pair || "")
     .replace(/\s+/g, "")
     .toUpperCase();
-  if (pair && pair !== "XDX/XRP") return false;
-  return id === "XRP" || id === "" || pair === "XDX/XRP";
+  const quoteName = String(quote.quote || quote.label || "")
+    .replace(/^XDX\//i, "")
+    .toUpperCase();
+  // Native XRP cannot carry an issuer. Catalog leftovers used to make
+  // XDX/XRP single- and double-sided deposits look like IOU errors.
+  if (id === "XRP" || quoteName === "XRP" || pair === "XDX/XRP" || pair === "XRP") return true;
+  if (quote.issuer) return false;
+  if (pair && !pair.endsWith("/XRP")) return false;
+  return id === "" && (!pair || pair.endsWith("/XRP"));
 }
 
 export function lineCounterparty(row) {

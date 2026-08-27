@@ -1,5 +1,5 @@
 import { detectTradeExecution } from "./detectExecution.js";
-import { extractSignedAccount, getPayloadResult } from "./xamanClient.js";
+import { extractSignedAccount, getLedgerTx, getPayloadResult } from "./xamanClient.js";
 import {
   canClaimExecutedTrade,
   isConsumedUuid,
@@ -31,7 +31,7 @@ export async function claimSignedWallet(
 
 export async function claimExecutedTrade(
   uuid,
-  { fetchResult = getPayloadResult, tries = 10, waitMs = 500 } = {}
+  { fetchResult = getPayloadResult, fetchLedger = getLedgerTx, tries = 10, waitMs = 500 } = {}
 ) {
   const id = String(uuid || "").trim();
   if (!isPayloadUuid(id) || isConsumedUuid(id)) return null;
@@ -46,10 +46,14 @@ export async function claimExecutedTrade(
     const txType = payloadTxType(result) || txjson?.TransactionType || "";
     if (txType === "SignIn" || txType === "TrustSet") return null;
     if (pending && result && !payloadMatchesPendingTrade(pending, result)) return null;
-    const detection = detectTradeExecution({ payload: result });
+    let detection = detectTradeExecution({ payload: result });
+    if (detection.txid && !detection.executed && !detection.rejected) {
+      const ledger = await fetchLedger(detection.txid).catch(() => null);
+      if (ledger) detection = detectTradeExecution({ payload: result, ledger });
+    }
     if (detection.failed) {
       const account = extractSignedAccount(result) || detection.account || null;
-      notifyTradeFailed({ ...detection, uuid: id, account, txjson, txType });
+      notifyTradeFailed({ ...detection, uuid: id, account, txjson, txType, trade: pending?.trade || null });
       return { ...detection, executed: false, account, result, txType };
     }
     if (detection.rejected) return null;

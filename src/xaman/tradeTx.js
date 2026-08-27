@@ -228,7 +228,7 @@ export function resolveQuote(id, extra = {}) {
     return {
       ...known,
       pair: `XDX/${known.id}`,
-      issuer: extra.quoteIssuer || extra.quote_issuer || extra.issuer || known.issuer || null,
+      issuer: known.id === "XRP" ? null : extra.quoteIssuer || extra.quote_issuer || extra.issuer || known.issuer || null,
       hex: extra.quoteHex || extra.quote_hex || extra.hex || known.hex || null,
       amm: extra.amm || extra.amm_account || null,
       lpCurrency: extra.lpCurrency || extra.lp_currency || null,
@@ -237,7 +237,7 @@ export function resolveQuote(id, extra = {}) {
   return {
     id: key,
     currency: key === "XRP" ? "XRP" : rawQuote || key,
-    issuer: extra.quoteIssuer || extra.quote_issuer || extra.issuer || null,
+    issuer: key === "XRP" ? null : extra.quoteIssuer || extra.quote_issuer || extra.issuer || null,
     hex: extra.quoteHex || extra.quote_hex || extra.hex || null,
     label: key,
     pair: `XDX/${key}`,
@@ -318,7 +318,16 @@ export function issuedAmount(currency, issuer, value) {
 
 export function quoteAmount(quote, value) {
   if (isNativeXrpQuote(quote)) return xrpDrops(value);
-  return issuedAmount(quoteLedgerCurrency(quote), quote.issuer, value);
+  const currency = quoteLedgerCurrency(quote);
+  if (!currency || currency === "XRP") return xrpDrops(value);
+  return issuedAmount(currency, quote.issuer, value);
+}
+
+export function ammQuoteAsset(quote) {
+  if (isNativeXrpQuote(quote)) return { currency: "XRP" };
+  const currency = quoteLedgerCurrency(quote);
+  if (!currency || currency === "XRP") return { currency: "XRP" };
+  return { currency, issuer: quote.issuer };
 }
 
 export function xdxAmount(value) {
@@ -406,9 +415,7 @@ export function ammDepositTx({ account, quote, xdx, quoteQty, mode = "double", s
   const txjson = {
     TransactionType: "AMMDeposit",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
-    Asset2: isNativeXrpQuote(quote)
-      ? { currency: "XRP" }
-      : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
+    Asset2: ammQuoteAsset(quote),
   };
   if (mode === "single") {
     txjson.Flags = TF_SINGLE_ASSET;
@@ -532,9 +539,7 @@ export function ammWithdrawTx({
   const txjson = {
     TransactionType: "AMMWithdraw",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
-    Asset2: isNativeXrpQuote(quote)
-      ? { currency: "XRP" }
-      : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
+    Asset2: ammQuoteAsset(quote),
     LPTokenIn: {
       currency: pool.lpCurrency,
       issuer: pool.amm,

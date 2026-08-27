@@ -87,7 +87,7 @@ test("a signed payload is not executed until the ledger returns tesSUCCESS", () 
   assert.equal(detectTradeExecution({ payload: { meta: { signed: true } } }).executed, false);
 });
 
-test("a tec result after signing is a failed trade, not executed", () => {
+test("a signed Xaman tec without a ledger result is still pending", () => {
   const detection = detectTradeExecution({
     payload: {
       meta: { signed: true, submitted: true },
@@ -95,8 +95,46 @@ test("a tec result after signing is a failed trade, not executed", () => {
     },
   });
   assert.equal(detection.executed, false);
-  assert.equal(detection.failed, true);
+  assert.equal(detection.failed, false);
+  assert.equal(detection.pending, true);
   assert.equal(detection.engineResult, "tecUNFUNDED_AMM");
+});
+
+test("validated ledger tesSUCCESS wins over a leftover Xaman tec", () => {
+  const detection = detectTradeExecution({
+    payload: {
+      meta: { signed: true, submitted: true },
+      response: { txid: HASH, dispatched_result: "tecUNFUNDED_AMM" },
+    },
+    ledger: {
+      hash: HASH,
+      validated: true,
+      Account: "rA",
+      meta: { TransactionResult: "tesSUCCESS" },
+    },
+  });
+  assert.equal(detection.executed, true);
+  assert.equal(detection.failed, false);
+  assert.equal(detection.via, "xrpl-validated");
+  assert.equal(detection.engineResult, "tesSUCCESS");
+});
+
+test("validated ledger tec is a failed trade", () => {
+  const detection = detectTradeExecution({
+    payload: {
+      meta: { signed: true, submitted: true },
+      response: { txid: HASH, dispatched_result: "tecUNFUNDED_AMM" },
+    },
+    ledger: {
+      hash: HASH,
+      validated: true,
+      Account: "rA",
+      meta: { TransactionResult: "tecUNFUNDED_AMM" },
+    },
+  });
+  assert.equal(detection.executed, false);
+  assert.equal(detection.failed, true);
+  assert.equal(detection.via, "xrpl-failed");
 });
 
 test("ledger tx unwraps the rippled result envelope", () => {
