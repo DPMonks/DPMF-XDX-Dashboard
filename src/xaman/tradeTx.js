@@ -503,14 +503,48 @@ export function poolForQuote(quote, pools = [], live = null) {
   const amm = row?.amm_account || row?.amm || liveAmm || null;
   const lpCurrency = asLpHex(row?.lp_currency || row?.lp_currency_hex || liveLp);
   if (amm && lpCurrency) return { amm, lpCurrency, pair };
-  if (quote?.currency === "RLUSD" || quote?.id === "RLUSD" || pair === "XDX/RLUSD") {
-    return { amm: amm || XDX_RLUSD_AMM, lpCurrency: lpCurrency || XDX_RLUSD_LP_HEX, pair: "XDX/RLUSD" };
-  }
-  if (isNativeXrpQuote(quote) || pair === "XDX/XRP") {
-    return { amm: amm || XDX_XRP_AMM, lpCurrency: lpCurrency || XDX_XRP_LP_HEX, pair: "XDX/XRP" };
+  const known = knownLpIdentity(pair, quoteTicker || quote?.id);
+  if (known.amm && known.lpCurrency) {
+    return {
+      amm: amm || known.amm,
+      lpCurrency: lpCurrency || known.lpCurrency,
+      pair: known.pair || pair,
+    };
   }
   if (amm) return { amm, lpCurrency, pair };
   return { amm: null, lpCurrency: null, pair };
+}
+
+export function ownerReserveIncrementXrp(account = {}) {
+  const drops = Number(account.reserve_inc_drops ?? account.reserveIncDrops);
+  return Number.isFinite(drops) && drops > 0 ? drops / DROPS_PER_XRP : 0.2;
+}
+
+export function extraTrustLinesNeeded({
+  needLpLine = false,
+  needQuoteTrust = false,
+  action = "",
+  haveLpLine = false,
+} = {}) {
+  let lines = 0;
+  if (needLpLine) lines += 1;
+  else if (String(action) === "addLp" && !haveLpLine) lines += 1;
+  if (needQuoteTrust) lines += 1;
+  return lines;
+}
+
+export function unusedXrpCoversLines({ spendable, account, extraLines = 0 } = {}) {
+  const lines = Math.max(0, Number(extraLines) || 0);
+  const increment = ownerReserveIncrementXrp(account);
+  const spend = spendable == null || spendable === "" ? null : Number(spendable);
+  const need = lines > 0 ? lines * increment + LEDGER_FEE_XRP : 0;
+  if (!(lines > 0)) {
+    return { ok: true, need: 0, increment, spendable: Number.isFinite(spend) ? spend : null };
+  }
+  if (!Number.isFinite(spend)) {
+    return { ok: true, need, increment, spendable: null };
+  }
+  return { ok: spend + 1e-9 >= need, need, increment, spendable: spend };
 }
 
 export function lpTrustSetTxjson(account, spec = {}) {

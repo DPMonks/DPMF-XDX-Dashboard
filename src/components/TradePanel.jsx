@@ -11,6 +11,7 @@ import {
   expectedLpTokens,
   expectedSingleLpTokens,
   expectedSingleWithdraw,
+  extraTrustLinesNeeded,
   hasLpRow,
   hasLpTrustline,
   hasQuoteTrustline,
@@ -37,6 +38,7 @@ import {
   sanitizeQtyInput,
   tradeSides,
   tradeTotal,
+  unusedXrpCoversLines,
   xdxUnitUsd,
 } from "../xaman/tradeTx";
 import { walletAvailableAmounts } from "../wallet/composeWallet";
@@ -261,6 +263,16 @@ export default function TradePanel({
     account: walletAccount,
     lines: walletLines,
     quote,
+  });
+  const lineCover = unusedXrpCoversLines({
+    spendable: available.xrp,
+    account: walletAccount,
+    extraLines: extraTrustLinesNeeded({
+      needLpLine,
+      needQuoteTrust,
+      action,
+      haveLpLine,
+    }),
   });
   const sides = tradeSides({
     action,
@@ -488,6 +500,14 @@ export default function TradePanel({
     setFormError("");
     if (!signedIn || !account) {
       signIn();
+      return;
+    }
+    if (!lineCover.ok) {
+      setFormError(
+        (t.tradeNeedLineReserve || "")
+          .replace("{pair}", quotePair || `XDX/${quoteId}` || "this pair")
+          .replace("{amount}", formatToken(lineCover.need, locale, 4))
+      );
       return;
     }
     if (needLpLine) {
@@ -984,6 +1004,13 @@ export default function TradePanel({
 
         {needLpLine ? null : needQuoteTrust && quote.issuer && signedIn ? (
           <p className="trade-panel-hint">{t.tradeNeedTrustline}</p>
+        ) : null}
+        {signedIn && !lineCover.ok ? (
+          <p className="trade-panel-hint">
+            {(t.tradeNeedLineReserve || "")
+              .replace("{pair}", quotePair || `XDX/${quoteId}`)
+              .replace("{amount}", formatToken(lineCover.need, locale, 4))}
+          </p>
         ) : null}
         {formError ? <p className="wallet-error">{formError}</p> : null}
         {error ? <p className="wallet-error">{error}</p> : null}
