@@ -37,7 +37,7 @@ import {
   incomePairTotals,
   incomeRowsForPair,
   lpIncomeCsv,
-  mergeFrozenCredits,
+  mergeFrozenFees,
   pageLpIncome,
   readRecordedLpIncome,
   remapIncomeActivity,
@@ -233,7 +233,7 @@ function LpInfographic({ position, earn, locale, t, empty }) {
 function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook, locale, t, empty }) {
   const [incomePair, setIncomePair] = useState(INCOME_ALL_PAIRS);
   const [historyActivity, setHistoryActivity] = useState(null);
-  const [, setHistoryDays] = useState([]);
+  const [historyDays, setHistoryDays] = useState([]);
   const [recordedRows] = useState(() => readRecordedLpIncome(address));
   const [loading, setLoading] = useState(() => Boolean(address) && !empty);
   const [historyComplete, setHistoryComplete] = useState(false);
@@ -248,6 +248,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
     pair: selectedPair,
     snapshotRows,
     historyActivity: historyRows,
+    historyDays,
     recordedRows,
     positions,
     pools,
@@ -354,7 +355,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
   useEffect(() => {
     if (!address || empty || !all.length) return;
     if (allPairs || all.some((row) => row.kind === "hold")) return;
-    writeRecordedLpIncome(address, mergeFrozenCredits(readRecordedLpIncome(address), all));
+    writeRecordedLpIncome(address, mergeFrozenFees(readRecordedLpIncome(address), all));
   }, [address, empty, all, allPairs]);
 
   return (
