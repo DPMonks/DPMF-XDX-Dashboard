@@ -22,6 +22,7 @@ import {
   TF_SINGLE_ASSET,
   TF_TWO_ASSET,
   ammDepositTx,
+  ammQuoteAsset,
   ammWithdrawTx,
   expectedLpTokens,
   expectedSingleLpTokens,
@@ -169,6 +170,29 @@ test("AMM deposit and withdraw follow XRPL two-asset / LP token flags", () => {
   assert.equal(singleXrp.Flags, TF_SINGLE_ASSET);
   assert.equal(singleXrp.Amount, "500000");
   assert.equal(singleXrp.Amount2, undefined);
+
+  const leftoverIssuer = { ...quoteAsset("XRP"), issuer: "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo" };
+  assert.deepEqual(ammQuoteAsset(leftoverIssuer), { currency: "XRP" });
+  const doubleWithLeftover = ammDepositTx({
+    account: "rLp",
+    quote: leftoverIssuer,
+    xdx: "100",
+    quoteQty: 1,
+    mode: "double",
+  });
+  assert.deepEqual(doubleWithLeftover.Asset2, { currency: "XRP" });
+  assert.equal(doubleWithLeftover.Amount2, "1000000");
+  const singleWithLeftover = ammDepositTx({
+    account: "rLp",
+    quote: leftoverIssuer,
+    quoteQty: "0.5",
+    mode: "single",
+    singleAsset: "quote",
+  });
+  assert.equal(singleWithLeftover.Amount, "500000");
+  assert.equal(typeof singleWithLeftover.Amount, "string");
+  const xrpQuote = resolveQuote("XRP", { quote_issuer: XDX_ISSUER });
+  assert.equal(xrpQuote.issuer, null);
   assert.equal(expectedSingleLpTokens(100, 1000, 500), 500 * (Math.sqrt(1.1) - 1));
   assert.equal(expectedSingleLpTokens(0, 1000, 500), 0);
 

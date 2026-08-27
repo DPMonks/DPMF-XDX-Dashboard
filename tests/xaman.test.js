@@ -328,6 +328,22 @@ test("claimExecutedTrade only treats tesSUCCESS as executed", async () => {
   });
   assert.equal(claimed.executed, true);
   assert.equal(claimed.engineResult, "tesSUCCESS");
+
+  const recovered = await claimExecutedTrade(uuid, {
+    waitMs: 0,
+    fetchResult: async () => ({
+      meta: { signed: true, submitted: true },
+      response: { dispatched_result: "tecUNFUNDED_AMM", txid: "B".repeat(64), account: "rA" },
+    }),
+    fetchLedger: async () => ({
+      hash: "B".repeat(64),
+      validated: true,
+      Account: "rA",
+      meta: { TransactionResult: "tesSUCCESS" },
+    }),
+  });
+  assert.equal(recovered.executed, true);
+  assert.equal(recovered.engineResult, "tesSUCCESS");
 });
 
 function memoryStore() {
