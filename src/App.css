@@ -1521,6 +1521,26 @@ body {
   flex: 0 0 auto;
 }
 
+@media (max-width: 834px) {
+  .rich-list-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .rich-list.is-lp-holders .pair-select {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .rich-search {
+    flex: 1 1 140px;
+  }
+
+  .rich-meta {
+    flex: 0 0 auto;
+  }
+}
+
 .pair-select {
   position: relative;
   flex: 0 1 188px;
@@ -5264,6 +5284,8 @@ body {
   .trade-field select,
   .trade-panel .pair-select-control,
   .pair-select-control,
+  .pair-select-list button,
+  .rich-search,
   .brand-select-list button,
   .wallet-lp-select select,
   .wallet-income-select select,

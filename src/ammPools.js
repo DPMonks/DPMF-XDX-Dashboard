@@ -202,6 +202,74 @@ function tradeDeltaFromDetail(detail = {}) {
   return { remove, xdx, quote, lp };
 }
 
+export function signedLpAccount(detail = {}, fallback = "") {
+  return String(
+    detail.account || detail.txjson?.Account || detail.trade?.account || fallback || ""
+  ).trim();
+}
+
+function ownerPair(row) {
+  return normalizeOrderbookPair(row?.pair || row?.pool_name || row?.pool || "XDX/XRP");
+}
+
+export function applySignedLpOwner(rows, detail = {}, account = "") {
+  const who = signedLpAccount(detail, account);
+  const list = Array.isArray(rows) ? rows.map((row) => ({ ...row })) : [];
+  if (!who || !isLpPoolTrade(detail)) return list;
+  const pair = normalizeOrderbookPair(tradePoolHint(detail) || detail.trade?.pair || "XDX/XRP");
+  const held = Number(detail.lpHeld);
+  const { remove, lp } = tradeDeltaFromDetail(detail);
+  const idx = list.findIndex(
+    (row) =>
+      String(row?.account || "").toLowerCase() === who.toLowerCase() && ownerPair(row) === pair
+  );
+  const prev = idx >= 0 ? Number(list[idx].lp_balance ?? list[idx].balance) || 0 : 0;
+  let nextBal;
+  if (Number.isFinite(held) && held >= 0) {
+    nextBal = held;
+  } else if (lp > 0) {
+    nextBal = remove ? Math.max(0, prev - lp) : prev + lp;
+  } else {
+    return list;
+  }
+  if (idx >= 0) list.splice(idx, 1);
+  if (nextBal > 0) {
+    const prior = idx >= 0 ? rows[idx] : {};
+    list.push({
+      ...prior,
+      account: who,
+      lp_balance: nextBal,
+      balance: nextBal,
+      pair,
+      pool_name: pair,
+      live: true,
+      updated: new Date().toISOString(),
+    });
+  }
+  return list
+    .sort((a, b) => Number(b.lp_balance ?? b.balance ?? 0) - Number(a.lp_balance ?? a.balance ?? 0))
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
+export function rememberSignedLpOverlay(rows, detail = {}, account = "") {
+  const next = applySignedLpOwner(rows, detail, account);
+  const who = signedLpAccount(detail, account);
+  const pair = normalizeOrderbookPair(tradePoolHint(detail) || detail.trade?.pair || "XDX/XRP");
+  const row = next.find(
+    (item) =>
+      String(item?.account || "").toLowerCase() === who.toLowerCase() && ownerPair(item) === pair
+  );
+  const held = Number(row?.lp_balance ?? row?.balance);
+  const { remove } = tradeDeltaFromDetail(detail);
+  const overlayDetail =
+    Number.isFinite(held) && held > 0
+      ? { ...detail, lpHeld: held }
+      : remove
+        ? { ...detail, lpHeld: 0 }
+        : detail;
+  return { rows: next, overlay: { detail: overlayDetail, account: who } };
+}
+
 export function applyTradePoolReserves(pool, detail = {}) {
   if (!pool || !isLpPoolTrade(detail)) return pool;
   const { remove, xdx, quote, lp } = tradeDeltaFromDetail(detail);
