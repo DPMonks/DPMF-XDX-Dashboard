@@ -4086,13 +4086,20 @@ body {
   font-size: 16px;
 }
 
-.wallet-income-total {
+.wallet-income-totals {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   flex: 1 1 auto;
   min-width: min-content;
   min-height: 44px;
+}
+
+.wallet-income-total {
+  display: inline-flex;
+  align-items: center;
   margin: 0;
   padding: 0 2px;
   color: var(--dpmf-neon-violet);
@@ -4100,6 +4107,10 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.wallet-income-total.is-usd {
+  color: #39ff14;
 }
 
 .wallet-income-total small {
@@ -4686,6 +4697,7 @@ body {
     min-width: 8.5rem;
   }
 
+  .wallet-income-totals,
   .wallet-income-total {
     flex: 1 1 auto;
     justify-content: flex-start;
@@ -5063,6 +5075,7 @@ body {
     min-width: 8.5rem;
   }
 
+  .wallet-income-totals,
   .wallet-income-total {
     flex: 1 1 auto;
     min-height: 44px;
@@ -5234,6 +5247,7 @@ body {
   .wallet-lp-select select,
   .wallet-income-select select,
   .wallet-income-copy,
+  .wallet-income-totals,
   .wallet-income-total,
   .orderbook-search,
   .amm-pools-search .orderbook-search {

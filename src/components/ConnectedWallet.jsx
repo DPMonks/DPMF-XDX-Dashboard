@@ -33,11 +33,11 @@ import {
   isAllIncomePairs,
   downloadTextFile,
   incomeDayKeys,
-  incomePairBalance,
   incomePairChoices,
+  incomePairTotals,
   incomeRowsForPair,
   lpIncomeCsv,
-  mergeRecordedLpIncome,
+  mergeFrozenCredits,
   pageLpIncome,
   readRecordedLpIncome,
   remapIncomeActivity,
@@ -233,7 +233,7 @@ function LpInfographic({ position, earn, locale, t, empty }) {
 function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook, locale, t, empty }) {
   const [incomePair, setIncomePair] = useState(INCOME_ALL_PAIRS);
   const [historyActivity, setHistoryActivity] = useState(null);
-  const [historyDays, setHistoryDays] = useState([]);
+  const [, setHistoryDays] = useState([]);
   const [recordedRows] = useState(() => readRecordedLpIncome(address));
   const [loading, setLoading] = useState(() => Boolean(address) && !empty);
   const [historyComplete, setHistoryComplete] = useState(false);
@@ -242,15 +242,12 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
   const cacheRef = useRef(new Map());
   const sentinelRef = useRef(null);
   const historyRows = remapIncomeActivity(historyActivity, positions, pools);
-  const pairs = incomePairChoices({
-    positions,
-    activity: [...(Array.isArray(snapshotRows) ? snapshotRows : []), ...historyRows],
-  });
+  const pairs = incomePairChoices({ positions });
+  const selectedPair = pairs.includes(incomePair) ? incomePair : INCOME_ALL_PAIRS;
   const all = incomeRowsForPair({
-    pair: incomePair,
+    pair: selectedPair,
     snapshotRows,
     historyActivity: historyRows,
-    historyDays,
     recordedRows,
     positions,
     pools,
@@ -258,18 +255,22 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
     xdxUsd: priceBook?.xdxUsd,
     xrpUsd: priceBook?.xrpUsd,
     rlusdUsd: priceBook?.RLUSD,
-    historyComplete,
   });
-  const totalLp = incomePairBalance({
-    pair: incomePair,
+  const totals = incomePairTotals({
+    pair: selectedPair,
     positions,
+    pools,
     activity: historyRows,
+    prices: priceBook,
+    xdxUsd: priceBook?.xdxUsd,
+    xrpUsd: priceBook?.xrpUsd,
+    rlusdUsd: priceBook?.RLUSD,
   });
+  const allPairs = isAllIncomePairs(selectedPair);
   const dayCount = incomeDayKeys(all).length;
-  const showAllDays = !isAllIncomePairs(incomePair);
-  const visible = showAllDays ? all : pageLpIncome(all, daysShown);
-  const pagedOut = empty || dayCount === 0 || showAllDays || daysShown >= dayCount;
-  const done = pagedOut && !loading && (empty || historyComplete);
+  const visible = allPairs ? all : pageLpIncome(all, daysShown);
+  const pagedOut = empty || allPairs || dayCount === 0 || daysShown >= dayCount;
+  const done = pagedOut && !loading && (empty || allPairs || historyComplete);
 
   useEffect(() => {
     if (!address || empty) return undefined;
@@ -352,8 +353,9 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
 
   useEffect(() => {
     if (!address || empty || !all.length) return;
-    writeRecordedLpIncome(address, mergeRecordedLpIncome(readRecordedLpIncome(address), all));
-  }, [address, empty, all]);
+    if (allPairs || all.some((row) => row.kind === "hold")) return;
+    writeRecordedLpIncome(address, mergeFrozenCredits(readRecordedLpIncome(address), all));
+  }, [address, empty, all, allPairs]);
 
   return (
     <section className={`wallet-book wallet-income${empty ? " is-empty" : " is-filled"}`}>
@@ -363,7 +365,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
           <label className="wallet-lp-select wallet-income-select">
             <span className="sr-only">{t.incomePairSelect || t.incomePair || "Pair"}</span>
             <select
-              value={incomePair}
+              value={selectedPair}
               disabled={empty}
               aria-label={t.incomePairSelect || t.incomePair || "Pair"}
               onChange={(event) => onPairChange(event.target.value)}
@@ -375,18 +377,23 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
               ))}
             </select>
           </label>
-          {!isAllIncomePairs(incomePair) ? (
-            <p className="wallet-income-total" aria-label={t.incomeTotalLp || "Total LP"}>
-              {empty || !(totalLp > 0) ? (
-                "—"
-              ) : (
-                <>
-                  {formatToken(totalLp, locale, 4)}
-                  <small>{t.incomeLpTokens || "LP"}</small>
-                </>
-              )}
+          <div className="wallet-income-totals">
+            {!allPairs ? (
+              <p className="wallet-income-total" aria-label={t.incomeTotalLp || "Total LP"}>
+                {empty || !(totals.lp > 0) ? (
+                  "—"
+                ) : (
+                  <>
+                    {formatToken(totals.lp, locale, 4)}
+                    <small>{t.incomeLpTokens || "LP"}</small>
+                  </>
+                )}
+              </p>
+            ) : null}
+            <p className="wallet-income-total is-usd" aria-label={t.incomeUsd || "USD"}>
+              {empty || !(totals.usd > 0) ? "—" : formatUsd(totals.usd, locale)}
             </p>
-          ) : null}
+          </div>
           <button
             type="button"
             className="copy-btn wallet-income-copy"
@@ -411,40 +418,46 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
         <table className="wallet-income-table">
           <thead>
             <tr>
-              <th>{t.incomeDate || "Date"}</th>
-              <th>{t.incomeLpAdded || t.incomeLpTokens || "LP"}</th>
+              <th>{allPairs ? t.incomePair || "Pair" : t.incomeDate || "Date"}</th>
+              <th>{allPairs ? t.incomeLpBalance || "LP Balance" : t.incomeLpAdded || t.incomeLpTokens || "LP"}</th>
               <th>{t.incomeUsd || "USD"}</th>
             </tr>
           </thead>
           <tbody>
             {empty || !visible.length ? (
               <tr>
-                <td colSpan={3}>{empty ? "—" : t.noLpIncome || "No LP earnings yet"}</td>
+                <td colSpan={3}>
+                  {empty ? "—" : allPairs ? t.noLpPositions || "No LP positions" : t.noLpIncome || "No LP earnings yet"}
+                </td>
               </tr>
             ) : (
               visible.map((row) => {
-                const earned = Number(row.lpEarned ?? row.lpTokens);
+                const amount = Number(row.lpEarned ?? row.lpBalance ?? row.lpTokens);
+                const hold = row.kind === "hold" || allPairs;
                 return (
-                  <tr key={`${row.date}-${row.pair}-${earned}`}>
+                  <tr key={`${row.date || "hold"}-${row.pair}-${amount}`}>
                     <td>
-                      <span className="wallet-income-day">{row.date}</span>
-                      {isAllIncomePairs(incomePair) ? (
-                        <span className="wallet-income-pair">{row.pair}</span>
-                      ) : null}
-                    </td>
-                    <td className="is-lp-add">
-                      {earned > 0 ? (
-                        <>
-                          <span className="is-plus">+</span>
-                          <span className="is-add">{formatToken(earned, locale, 4)}</span>
-                        </>
+                      {hold ? (
+                        <span className="wallet-income-day">{row.pair}</span>
                       ) : (
-                        "—"
+                        <span className="wallet-income-day">{row.date}</span>
                       )}
                     </td>
-                    <td className="is-earn">
-                      {earned > 0 && Number(row.usd) > 0 ? formatUsd(row.usd, locale) : "—"}
+                    <td className={hold ? "is-lp" : "is-lp-add"}>
+                      {amount > 0 ? (
+                        hold ? (
+                          formatToken(amount, locale, 4)
+                        ) : (
+                          <>
+                            <span className="is-plus">+</span>
+                            <span className="is-add">{formatToken(amount, locale, 4)}</span>
+                          </>
+                        )
+                      ) : (
+                        ""
+                      )}
                     </td>
+                    <td className="is-earn">{amount > 0 && Number(row.usd) > 0 ? formatUsd(row.usd, locale) : ""}</td>
                   </tr>
                 );
               })
