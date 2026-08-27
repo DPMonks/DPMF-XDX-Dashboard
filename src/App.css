@@ -1242,6 +1242,53 @@ body {
   word-break: break-all;
 }
 
+.trade-executed-modal .connect-wallet-btn {
+  width: 100%;
+  min-height: 44px;
+  font-size: 16px;
+}
+
+.trade-fail-rec {
+  margin-top: 12px;
+  text-align: start;
+  border-color: rgba(255, 107, 107, 0.45);
+  background:
+    linear-gradient(180deg, rgba(255, 107, 107, 0.08), rgba(11, 12, 16, 0.92)),
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 107, 107, 0.05) 0 1px,
+      transparent 1px 7px
+    );
+  box-shadow:
+    0 0 18px rgba(255, 107, 107, 0.12),
+    inset 0 0 24px rgba(199, 112, 255, 0.06);
+}
+
+.trade-fail-rec .xdx-swap-tip-kicker {
+  color: #ff8a8a;
+}
+
+.trade-fail-rec p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.trade-fail-rec p + p {
+  margin-top: 8px;
+}
+
+.trade-fail-fix-kicker {
+  margin-top: 10px !important;
+}
+
+.trade-fail-code {
+  margin-top: 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dpmf-text-muted);
+}
+
 .modal-title {
   font-size: 1.25rem;
   margin: 0 0 16px;

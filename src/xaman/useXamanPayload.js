@@ -143,7 +143,15 @@ export function useXamanPayload() {
       if (detection?.failed) {
         announced = true;
         onFailed?.(detection);
-        if (watchTrade) notifyTradeFailed({ ...detection, uuid: payloadUuid, txjson: request?.txjson, signMarker });
+        if (watchTrade) {
+          notifyTradeFailed({
+            ...detection,
+            uuid: payloadUuid,
+            txjson: request?.txjson,
+            trade: trade || request?.trade || null,
+            signMarker,
+          });
+        }
         return true;
       }
       if (!detection?.executed) return false;
