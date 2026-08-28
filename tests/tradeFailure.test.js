@@ -67,6 +67,23 @@ test("explainTradeFailure tells a swap why the path was dry", () => {
   assert.match(explained.fix, /smaller size/);
 });
 
+test("explainTradeFailure says a reserve-line fail is unused XRP, not a missing total", () => {
+  const explained = explainTradeFailure(
+    {
+      engineResult: "tecINSUF_RESERVE_LINE",
+      trade: { action: "addLp", pair: "XDX/XSQUAD" },
+      txjson: { TransactionType: "AMMDeposit" },
+    },
+    t
+  );
+  assert.equal(explained.family, "reserve");
+  assert.equal(explained.action, "addLp");
+  assert.match(explained.why, /XDX\/XSQUAD/);
+  assert.match(explained.why, /trust line/i);
+  assert.match(explained.why, /already reserved/i);
+  assert.match(explained.fix, /spendable XRP/i);
+});
+
 test("explainTradeFailure points missing LP trust line on withdraw", () => {
   const explained = explainTradeFailure(
     {

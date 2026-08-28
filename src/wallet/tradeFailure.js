@@ -23,6 +23,10 @@ const FALLBACK = {
   failFixUnfunded: "Lower the amount to what this account actually holds, and keep unused XRP for reserve.",
   failWhyReserve: "This account is short of unused XRP. The ledger needs more reserve before it can {action}.",
   failFixReserve: "Keep more unused XRP in this wallet, then try again.",
+  failWhyReserveLine:
+    "The ledger needed a new trust line for {pair}. Unused XRP must cover the owner reserve. A total XRP balance is not enough if it is already reserved.",
+  failFixReserveLine:
+    "Free at least 0.2 spendable XRP per new line, then sign again. Do not spend the reserved XRP.",
   failWhyNoLine: "This account is missing a trust line for a token in {pair}, so the ledger cannot {action}.",
   failFixNoLine: "Open the missing trust line for that token first, then retry.",
   failWhyNoLineLp: "This account does not have the LP trust line for {pair}, so the ledger cannot {action}.",
@@ -157,6 +161,9 @@ function actionLabel(kind, t) {
 function keysFor(family, kind) {
   if (family === "noLine" && (kind === "addLp" || kind === "removeLp" || kind === "createPool")) {
     return { why: "failWhyNoLineLp", fix: "failFixNoLineLp" };
+  }
+  if (family === "reserve" && (kind === "addLp" || kind === "trust" || kind === "createPool")) {
+    return { why: "failWhyReserveLine", fix: "failFixReserveLine" };
   }
   if (family === "amm" && kind === "removeLp") {
     return { why: "failWhyAmmRemove", fix: "failFixAmmRemove" };

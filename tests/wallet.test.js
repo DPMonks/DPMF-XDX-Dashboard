@@ -51,10 +51,10 @@ test("xrpReserveBreakdown prefers ledger drops and does not reserve more than th
     balanceDrops: 0,
     ownerCount: 25,
   });
-  assert.equal(emptyHold.balance, 0);
-  assert.equal(emptyHold.reserved, 0);
-  assert.equal(emptyHold.spendable, 0);
-  assert.equal(emptyHold.required, 6);
+  assert.equal(emptyHold.balance, null);
+  assert.equal(emptyHold.reserved, null);
+  assert.equal(emptyHold.spendable, null);
+  assert.equal(emptyHold.required, null);
 
   const missingLedger = xrpReserveBreakdown({
     balance: 18.5,
@@ -74,7 +74,7 @@ test("xrpBarPercents keeps total XRP as a full reference bar", () => {
   const zero = xrpBarPercents({ reserved: 0, spendable: 0, total: 0 });
   assert.equal(zero.reservePct, 0);
   assert.equal(zero.spendPct, 0);
-  assert.equal(zero.totalPct, 100);
+  assert.equal(zero.totalPct, 0);
 
   const blank = xrpBarPercents({ reserved: 3, spendable: 22, total: 25 }, false);
   assert.equal(blank.totalPct, 0);
@@ -280,6 +280,23 @@ test("composeWalletSnapshot keeps DB XRP when ledger drops are missing", () => {
   });
   assert.equal(filled.xrp.balance, 18.5);
   assert.ok(filled.xrp.spendable > 0);
+});
+
+test("composeWalletSnapshot does not treat a failed XRP lookup as a zero hold", () => {
+  const missed = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 0, xdx: 5000 },
+    account: { balance_drops: 0, owner_count: 4, source: "empty" },
+    prices: { xdxUsd: 0.00004, xrpUsd: 2 },
+    token: { circulating: 10_000_000_000 },
+    lpRows: [{ pool_name: "XDX/XRP", lp_balance: 10 }],
+    pools: [{ pool_name: "XDX/XRP", lp_supply: 1000, reserve_asset: 50_000, reserve_currency: 2 }],
+  });
+  assert.equal(missed.xrp.balance, null);
+  assert.equal(missed.xrp.reserved, null);
+  assert.equal(missed.xrp.spendable, null);
+  assert.equal(missed.filled, true);
+  assert.equal(xrpBarPercents({ reserved: 0, spendable: 0, total: missed.xrp.balance || 0 }).totalPct, 0);
 });
 
 test("walletAvailableAmounts reports spendable XRP and issued quote", () => {

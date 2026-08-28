@@ -69,13 +69,14 @@ import {
   loadWalletLpFromLedger,
   loadWalletNetworthFromLedger,
   loadWalletOffers,
+  xrpDropsFromAccountInfo,
 } from "./walletLedger.js";
 import { knownLivePoolSpecs, liveCatalogPayload, loadLiveMarket } from "./liveCatalog.js";
 import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
 import { catalogHealth } from "./sourceControl.js";
 import { FREE_API_HEADERS } from "./xrplToCatalog.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
-import { loadLiveAmmReserves, loadLiveAmmReservesMany } from "./liveAmmReserves.js";
+import { loadLiveAmmReserves, loadLiveAmmReservesMany, withXrplRetry } from "./liveAmmReserves.js";
 import { loadDirectPairMarket } from "./directPairMarket.js";
 import { canSelect, loadIndexerSchema, peekIndexerSchema, pickColumns } from "./indexerSchema.js";
 
@@ -1363,20 +1364,33 @@ async function loadQuoteUsdMap(db, xrpUsd) {
 
 const accountCache = new Map();
 
+function emptyWalletAccount(address) {
+  return {
+    account: address,
+    balance_drops: null,
+    owner_count: null,
+    reserve_base_drops: 1_000_000,
+    reserve_inc_drops: 200_000,
+    source: "empty",
+  };
+}
+
 async function loadWalletAccount(address) {
   const key = String(address || "");
   const hit = accountCache.get(key);
   if (hit && Date.now() - hit.at < 20_000) return hit.body;
   try {
     const [info, state] = await Promise.all([
-      xrplRpc("account_info", { account: key, ledger_index: "validated" }),
-      xrplRpc("server_state", {}),
+      withXrplRetry(() => xrplRpc("account_info", { account: key, ledger_index: "validated" })),
+      withXrplRetry(() => xrplRpc("server_state", {})).catch(() => ({})),
     ]);
-    const data = info.account_data || {};
-    const ledger = state.validated_ledger || {};
+    const data = info.account_data || info.result?.account_data || {};
+    const drops = xrpDropsFromAccountInfo(info);
+    if (!(drops > 0)) return emptyWalletAccount(key);
+    const ledger = state.validated_ledger || state.result?.validated_ledger || {};
     const body = {
       account: key,
-      balance_drops: Number(data.Balance || 0),
+      balance_drops: drops,
       owner_count: Number(data.OwnerCount || 0),
       reserve_base_drops: Number(ledger.reserve_base || 1_000_000),
       reserve_inc_drops: Number(ledger.reserve_inc || 200_000),
@@ -1385,14 +1399,7 @@ async function loadWalletAccount(address) {
     accountCache.set(key, { at: Date.now(), body });
     return body;
   } catch {
-    return {
-      account: key,
-      balance_drops: null,
-      owner_count: null,
-      reserve_base_drops: 1_000_000,
-      reserve_inc_drops: 200_000,
-      source: "empty",
-    };
+    return emptyWalletAccount(key);
   }
 }
 
@@ -2734,10 +2741,13 @@ export async function readIndexerDb(suffix, search = "") {
         [address]
       );
       let xrpAmt = xrp.rows[0] != null ? Number(xrp.rows[0].balance) : null;
-      if (!Number.isFinite(xrpAmt) || xrpAmt === 0) {
+      if (!(xrpAmt > 0)) {
         const live = await loadWalletAccount(address);
-        if (Number.isFinite(Number(live?.balance_drops))) {
-          xrpAmt = Number(live.balance_drops) / 1_000_000;
+        const liveDrops = Number(live?.balance_drops);
+        if (live?.source === "xrpl" && liveDrops > 0) {
+          xrpAmt = liveDrops / 1_000_000;
+        } else if (!(xrpAmt > 0)) {
+          xrpAmt = null;
         }
       }
       return ok({

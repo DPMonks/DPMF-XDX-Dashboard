@@ -444,6 +444,12 @@ const en = {
   failFixUnfunded: "Lower the amount to what this account actually holds, and keep unused XRP for reserve.",
   failWhyReserve: "This account is short of unused XRP. The ledger needs more reserve before it can {action}.",
   failFixReserve: "Keep more unused XRP in this wallet, then try again.",
+  failWhyReserveLine:
+    "The ledger needed a new trust line for {pair}. Unused XRP must cover the owner reserve. A total XRP balance is not enough if it is already reserved.",
+  failFixReserveLine:
+    "Free at least 0.2 spendable XRP per new line, then sign again. Do not spend the reserved XRP.",
+  tradeNeedLineReserve:
+    "Opening this {pair} line needs {amount} spendable XRP left after reserve. A total XRP balance can still be too low.",
   failWhyNoLine: "This account is missing a trust line for a token in {pair}, so the ledger cannot {action}.",
   failFixNoLine: "Open the missing trust line for that token first, then retry.",
   failWhyNoLineLp: "This account does not have the LP trust line for {pair}, so the ledger cannot {action}.",
