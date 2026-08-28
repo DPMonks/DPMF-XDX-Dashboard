@@ -313,6 +313,13 @@ export function positionsFromLines(lines = [], pools = []) {
   return out;
 }
 
+export function withdrawQuoteLabel(asset, template = "Withdraw {asset} quote") {
+  const name = String(asset || "").trim();
+  const text = String(template || "Withdraw {asset} quote");
+  if (!name) return text.replace(/\s*\{asset\}\s*/g, " ").replace(/\s+/g, " ").trim();
+  return text.replace("{asset}", name);
+}
+
 export function lpPositionFromPool(lpBalance, pool = {}, pairHint = "") {
   const tokens = num(lpBalance);
   if (tokens == null || tokens <= 0) return null;

@@ -16,6 +16,7 @@ import {
   ammFeePercent,
   formatAmmFee,
   walletActivity,
+  withdrawQuoteLabel,
   xrpBarPercents,
   xrpReserveBreakdown,
   xdxFiatValues,
@@ -176,6 +177,12 @@ test("resolveLpPairName does not stamp an unknown LP line as XDX/XRP", () => {
   });
   assert.equal(row.pool, "XDX/XSQUAD");
   assert.equal(row.quote, "XSQUAD");
+});
+
+test("withdrawQuoteLabel names the other asset in the pair", () => {
+  assert.equal(withdrawQuoteLabel("XSQUAD"), "Withdraw XSQUAD quote");
+  assert.equal(withdrawQuoteLabel("BTC", "Withdraw {asset} quote"), "Withdraw BTC quote");
+  assert.equal(withdrawQuoteLabel("", "Withdraw {asset} quote"), "Withdraw quote");
 });
 
 test("lpPositionFromPool estimates withdraw from pool share", () => {

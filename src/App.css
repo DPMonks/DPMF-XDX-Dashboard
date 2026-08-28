@@ -3952,6 +3952,8 @@ body {
 
 .wallet-mini-list dt {
   color: var(--dpmf-text-muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .wallet-mini-list dd,

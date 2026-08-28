@@ -19,6 +19,7 @@ import { copyToClipboard } from "../utils/copy";
 import {
   emptyWalletSnapshot,
   normalizeWalletPair,
+  withdrawQuoteLabel,
   preferFilledWalletSnapshot,
   preferredWalletPair,
   sortWalletPairs,
@@ -207,7 +208,7 @@ function LpInfographic({ position, earn, locale, t, empty }) {
           <dd>{empty ? "—" : formatToken(position?.withdraw_estimate_xdx, locale, 2)}</dd>
         </div>
         <div>
-          <dt>{t.withdrawQuote}</dt>
+          <dt>{withdrawQuoteLabel(position?.quote, t.withdrawQuote)}</dt>
           <dd>
             {empty
               ? "—"
