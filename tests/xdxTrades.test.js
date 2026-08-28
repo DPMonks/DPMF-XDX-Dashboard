@@ -35,6 +35,63 @@ test("inferTradesFromHistory turns AMM reserve changes into buy and sell prints"
   assert.equal(trades[1].pool, "XDX/XRP");
 });
 
+test("inferTradesFromHistory skips LP reserve adds and tags swaps as AMM", () => {
+  const trades = inferTradesFromHistory([
+    {
+      timestamp: "2026-08-22T08:00:00.000Z",
+      pool_name: "XDX/XSQUAD",
+      reserve_asset: 1000,
+      reserve_currency: 10,
+      price: 99,
+    },
+    {
+      timestamp: "2026-08-22T08:05:00.000Z",
+      pool_name: "XDX/XSQUAD",
+      reserve_asset: 1200,
+      reserve_currency: 12,
+      price: 99,
+    },
+    {
+      timestamp: "2026-08-22T08:10:00.000Z",
+      pool_name: "XDX/XSQUAD",
+      reserve_asset: 1100,
+      reserve_currency: 13,
+      price: 99,
+    },
+  ]);
+  assert.equal(trades.length, 1);
+  assert.equal(trades[0].source, "amm");
+  assert.equal(trades[0].side, "buy");
+  assert.equal(trades[0].xdx, 100);
+  assert.ok(Math.abs(trades[0].price - 0.01) < 1e-9);
+});
+
+test("inferTradesFromHistory still tracks reserves after an LP skip", () => {
+  const trades = inferTradesFromHistory([
+    {
+      timestamp: "2026-08-22T08:00:00.000Z",
+      pool_name: "XDX/XRP",
+      reserve_asset: 1000,
+      reserve_currency: 10,
+    },
+    {
+      timestamp: "2026-08-22T08:05:00.000Z",
+      pool_name: "XDX/XRP",
+      reserve_asset: 1200,
+      reserve_currency: 12,
+    },
+    {
+      timestamp: "2026-08-22T08:10:00.000Z",
+      pool_name: "XDX/XRP",
+      reserve_asset: 1100,
+      reserve_currency: 13,
+    },
+  ]);
+  assert.equal(trades.length, 1);
+  assert.equal(trades[0].xdx, 100);
+  assert.ok(Math.abs(trades[0].price - 0.01) < 1e-9);
+});
+
 test("inferTradesFromHistory ignores dust and keeps pools separate", () => {
   const trades = inferTradesFromHistory([
     { timestamp: "2026-08-22T08:00:00.000Z", pool: "XDX/XRP", reserve_asset: 100, reserve_currency: 2 },

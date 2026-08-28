@@ -28,6 +28,7 @@ export default function HybridPlot({
   walls = [],
   trail = [],
   heatmap = [],
+  ammFills = [],
   wallet,
   ghost,
   drawings = [],
@@ -869,6 +870,18 @@ export default function HybridPlot({
                 );
               })
             : null}
+          {ammFills.map((row, index) =>
+            Number(row.price) > 0 ? (
+              <circle
+                key={`amm-${index}`}
+                className="hybrid-amm-fill"
+                cx={scale.x(row.t)}
+                cy={scale.y(row.price)}
+                r={Math.max(3.5, Math.min(7, Math.log10((row.size || 0) + 10) * 1.5))}
+                opacity={row.opacity ?? 0.85}
+              />
+            ) : null
+          )}
           {(wallet?.fills || []).map((row, index) =>
             Number(row.price) > 0 ? (
               <circle

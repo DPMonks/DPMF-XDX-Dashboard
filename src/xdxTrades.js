@@ -12,15 +12,20 @@ export function inferTradesFromHistory(rows) {
       const dAsset = asset - last.asset;
       const dQuote = quote - last.quote;
       if (Math.abs(dAsset) > DUST || Math.abs(dQuote) > DUST) {
-        const side = dAsset < 0 ? "buy" : dAsset > 0 ? "sell" : dQuote > 0 ? "buy" : "sell";
-        trades.push({
-          timestamp: row.timestamp,
-          pool: key,
-          side,
-          xdx: Math.abs(dAsset),
-          quote: Math.abs(dQuote),
-          price: Number(row.price || 0),
-        });
+        const sameWay = (dAsset > 0 && dQuote > 0) || (dAsset < 0 && dQuote < 0);
+        if (!sameWay) {
+          const side = dAsset < 0 ? "buy" : dAsset > 0 ? "sell" : dQuote > 0 ? "buy" : "sell";
+          const fill = Math.abs(dAsset) > DUST ? Math.abs(dQuote) / Math.abs(dAsset) : 0;
+          trades.push({
+            timestamp: row.timestamp,
+            pool: key,
+            side,
+            xdx: Math.abs(dAsset),
+            quote: Math.abs(dQuote),
+            price: fill > 0 ? fill : Number(row.price || 0),
+            source: "amm",
+          });
+        }
       }
     }
     prev.set(key, { asset, quote });
