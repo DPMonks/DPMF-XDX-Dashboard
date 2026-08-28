@@ -40,6 +40,7 @@ import {
 } from "../orderbook";
 import { composeWalletSnapshot, emptyWalletSnapshot } from "../wallet/composeWallet";
 import { normalizeWalletLines } from "../wallet/ammCreate";
+import { mapXdxFlowRow } from "../xdxTrades";
 
 export { INDEXER_ORIGIN };
 export const INDEXER_URL = INDEXER_ORIGIN;
@@ -854,15 +855,7 @@ export async function getXdxFlows() {
   }
   const rows = asArray(payload);
   return rows
-    .map((row) => ({
-      timestamp: rowTimestamp(row),
-      account: row.account || row.address || row.wallet || null,
-      pool: row.pool || row.pool_name || null,
-      side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
-      xdx: numberOrNull(row.xdx ?? row.amount) ?? 0,
-      quote: numberOrNull(row.quote) ?? 0,
-      price: numberOrNull(row.price),
-    }))
+    .map((row) => mapXdxFlowRow(row, rowTimestamp(row)))
     .filter((row) => row.timestamp)
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 }

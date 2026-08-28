@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inferTradesFromHistory, traderSeriesFromTrades } from "../src/xdxTrades.js";
+import { inferTradesFromHistory, mapXdxFlowRow, traderSeriesFromTrades } from "../src/xdxTrades.js";
 
 test("inferTradesFromHistory turns AMM reserve changes into buy and sell prints", () => {
   const trades = inferTradesFromHistory([
@@ -103,6 +103,25 @@ test("inferTradesFromHistory ignores dust and keeps pools separate", () => {
   assert.equal(trades[0].pool, "XDX/RLUSD");
   assert.equal(trades[0].side, "buy");
   assert.equal(trades[0].xdx, 20);
+});
+
+test("mapXdxFlowRow keeps AMM source so chart dots can plot", () => {
+  const tagged = mapXdxFlowRow({
+    timestamp: "2026-08-22T08:00:00.000Z",
+    pool_name: "XDX/XRP",
+    price: 0.00003,
+    xdx: 50,
+    source: "amm",
+  });
+  const inferred = mapXdxFlowRow({
+    timestamp: "2026-08-22T08:00:00.000Z",
+    pool: "XDX/XRP",
+    price: 0.00003,
+    amount: 50,
+  });
+  assert.equal(tagged.source, "amm");
+  assert.equal(inferred.source, "amm");
+  assert.equal(inferred.xdx, 50);
 });
 
 test("traderSeriesFromTrades buckets unique accounts by hour", () => {

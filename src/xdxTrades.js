@@ -33,6 +33,20 @@ export function inferTradesFromHistory(rows) {
   return trades.reverse();
 }
 
+export function mapXdxFlowRow(row = {}, timestamp) {
+  return {
+    timestamp: timestamp || row.timestamp || row.t || row.time || null,
+    account: row.account || row.address || row.wallet || null,
+    pool: row.pool || row.pool_name || null,
+    side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
+    xdx: Number(row.xdx ?? row.amount) || 0,
+    quote: Number(row.quote) || 0,
+    price: Number(row.price) || null,
+    source: row.source || row.venue || row.route || "amm",
+    amm: row.amm || row.amm_account || null,
+  };
+}
+
 export function mergeTradePrints(primary = [], extra = []) {
   const seen = new Set();
   const out = [];
