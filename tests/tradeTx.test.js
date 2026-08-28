@@ -292,6 +292,7 @@ test("unused XRP must cover each new trust line, including XDX/XSQUAD LP", () =>
   assert.equal(extraTrustLinesNeeded({ action: "addLp", haveLpLine: true }), 0);
   const short = unusedXrpCoversLines({
     spendable: 0.05,
+    total: 5,
     account: { reserve_inc_drops: 200_000 },
     extraLines: 1,
   });
@@ -299,12 +300,21 @@ test("unused XRP must cover each new trust line, including XDX/XSQUAD LP", () =>
   assert.ok(short.need > 0.2);
   const enough = unusedXrpCoversLines({
     spendable: 2,
+    total: 5,
     account: { reserve_inc_drops: 200_000 },
     extraLines: 2,
   });
   assert.equal(enough.ok, true);
   const unknown = unusedXrpCoversLines({ spendable: null, extraLines: 1 });
   assert.equal(unknown.ok, true);
+  const falseZero = unusedXrpCoversLines({
+    spendable: 0,
+    total: 0,
+    account: { reserve_inc_drops: 200_000 },
+    extraLines: 1,
+  });
+  assert.equal(falseZero.ok, true);
+  assert.equal(falseZero.unknown, true);
 });
 
 test("LP TrustSet uses the pool LP hex and AMM account", () => {

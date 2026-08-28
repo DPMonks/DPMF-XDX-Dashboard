@@ -274,6 +274,7 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     });
     const cover = unusedXrpCoversLines({
       spendable: hold.xrp,
+      total: Number(walletHold.xrp) > 0 ? Number(walletHold.xrp) : hold.xrp,
       account: walletHold.account || {},
       extraLines: 1,
     });

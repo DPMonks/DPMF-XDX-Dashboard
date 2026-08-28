@@ -533,16 +533,22 @@ export function extraTrustLinesNeeded({
   return lines;
 }
 
-export function unusedXrpCoversLines({ spendable, account, extraLines = 0 } = {}) {
+export function unusedXrpCoversLines({ spendable, total, account, extraLines = 0 } = {}) {
   const lines = Math.max(0, Number(extraLines) || 0);
   const increment = ownerReserveIncrementXrp(account);
   const spend = spendable == null || spendable === "" ? null : Number(spendable);
+  const hold = total == null || total === "" ? null : Number(total);
   const need = lines > 0 ? lines * increment + LEDGER_FEE_XRP : 0;
   if (!(lines > 0)) {
     return { ok: true, need: 0, increment, spendable: Number.isFinite(spend) ? spend : null };
   }
   if (!Number.isFinite(spend)) {
     return { ok: true, need, increment, spendable: null };
+  }
+  // A missed account_info used to store XRP as 0. Do not block a live
+  // deposit on that false zero — only refuse when a real hold is reserved.
+  if (!(hold > 0) && !(spend > 0)) {
+    return { ok: true, need, increment, spendable: spend, unknown: true };
   }
   return { ok: spend + 1e-9 >= need, need, increment, spendable: spend };
 }

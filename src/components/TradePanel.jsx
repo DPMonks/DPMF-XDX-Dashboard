@@ -167,7 +167,7 @@ export default function TradePanel({
     lineHint.includes(String(quote.issuer || "").toUpperCase()) ||
     lineHint.includes(String(quote.currency || "").toUpperCase());
   const needLpLine =
-    isLp &&
+    action === "removeLp" &&
     signedIn &&
     shouldAskLpTrustline({ loaded: walletReady, haveLine: haveLpLine, spec: lpSpec });
   const isSingleLp = isLp && lpMode === "single";
@@ -266,6 +266,12 @@ export default function TradePanel({
   });
   const lineCover = unusedXrpCoversLines({
     spendable: available.xrp,
+    total:
+      Number(walletHold.xrp) > 0
+        ? Number(walletHold.xrp)
+        : Number(walletAccount.balance_drops) > 0
+          ? Number(walletAccount.balance_drops) / 1_000_000
+          : walletHold.xrp,
     account: walletAccount,
     extraLines: extraTrustLinesNeeded({
       needLpLine,
