@@ -6,9 +6,11 @@ import {
   isTelegramWebView,
   launchXamanSign,
   shouldCancelConnectNavigation,
+  shouldShowXamanConnect,
   xamanAppUrl,
   xamanSignUrl,
 } from "../xaman/xamanClient";
+import { xamanAppQrDataUrl } from "../xaman/inHouseQr";
 import { isXappHost } from "../xaman/xappHost";
 import { useI18n } from "../i18n/useI18n";
 
@@ -28,11 +30,20 @@ export default function WalletModal({
   const phone = isPhoneDevice() || isInAppBrowser();
   const appHref = xamanAppUrl(uuid) || mobileUrl;
   const webHref = xamanSignUrl(uuid);
-  const connectHref = webHref || appHref;
+  const connectHref = phone || telegram ? webHref || appHref : appHref;
   const connectLabel = xapp ? t.xappApprove || t.connectXaman || t.openApp : t.connectXaman || t.openApp;
   const confirming = status === "confirming";
-  const showQr = Boolean(!xapp && qrUrl && status !== "loading" && !confirming);
-  const showConnect = Boolean(!xapp && status !== "loading" && !confirming && (connectHref || uuid));
+  const inHouseQr = xamanAppQrDataUrl(uuid);
+  const showQr = Boolean(!xapp && (inHouseQr || qrUrl) && status !== "loading" && !confirming);
+  const qrSrc = inHouseQr || qrUrl;
+  const showConnect = shouldShowXamanConnect({
+    xapp,
+    phone,
+    telegram,
+    confirming,
+    loading: status === "loading",
+    hasLink: Boolean(connectHref || uuid),
+  });
   const heading =
     status === "loading"
       ? preparingLabel || t.preparing
@@ -85,7 +96,7 @@ export default function WalletModal({
           {heading}
         </h2>
 
-        {showQr ? <img src={qrUrl} alt={t.xamanQr || t.scan} className="qr-image" /> : null}
+        {showQr ? <img src={qrSrc} alt={t.xamanQr || t.scan} className="qr-image" /> : null}
 
         {xapp && status !== "loading" && !confirming ? (
           <p className="wallet-modal-hint">{t.xappApproveHint || t.waitingXaman}</p>

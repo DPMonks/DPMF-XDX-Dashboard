@@ -409,6 +409,16 @@ test("composeWalletSnapshot stays blank until an address is signed in", () => {
   assert.equal(filled.xdx.gbp, 0.15);
   assert.ok(Math.abs(filled.xdx.eur - 0.18) < 1e-12);
   assert.ok(Math.abs(filled.xdx.jpy - 30) < 1e-12);
+
+  const hollow = composeWalletSnapshot({ address: "rExample" });
+  assert.equal(hollow.filled, false);
+  const kept = preferFilledWalletSnapshot(filled, hollow);
+  assert.equal(kept.holdings.xdx, 5000);
+  assert.equal(kept.holdings.rlusd, 127.3);
+  assert.equal(kept.xdx.usd, 0.2);
+  const dropped = preferFilledWalletSnapshot(filled, emptyWalletSnapshot("rExample"));
+  assert.equal(dropped.holdings.xdx, 5000);
+  assert.equal(preferFilledWalletSnapshot(filled, null).holdings.xdx, 5000);
 });
 
 test("lpFeeEarnings sums 24h pool fees across every LP position", () => {
