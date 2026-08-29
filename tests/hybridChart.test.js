@@ -33,9 +33,9 @@ import {
 } from "../src/chart/candles.js";
 import { bucketTime, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
-import { ammImpact, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, scalePriceView, shiftAfterPriceZoom, zoomPriceScale } from "../src/chart/overlays.js";
+import { ammFillDots, ammImpact, arbitrageWindow, clampPriceZoom, isAmmTradePrint, liquidityPressure, liquidityWalls, scalePriceView, shiftAfterPriceZoom, smartView, zoomPriceScale } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
-import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
+import { clipCandleSpikes, composePairCandles, filterSpikeTicks, lockedSnapshot } from "../src/chart/composeChart.js";
 import { fullViewPriceHeight } from "../src/chart/fullView.js";
 import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTagOrigin, timeTagWidth, timeTicks } from "../src/chart/axis.js";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
@@ -522,6 +522,74 @@ test("wallet marks stay empty until an address is signed in", () => {
 test("pressure is down when the AMM holds more XDX than quote", () => {
   assert.equal(liquidityPressure({ xdxPct: 77.6, quotePct: 22.4 }).bias, "down");
   assert.equal(liquidityPressure({ xdxPct: 22.4, quotePct: 77.6 }).bias, "up");
+});
+
+test("filterSpikeTicks drops fake prints that are not real price points", () => {
+  const kept = filterSpikeTicks(
+    [
+      { t: 1, p: 0.00003 },
+      { t: 2, p: 0.000031 },
+      { t: 3, p: 1.2 },
+      { t: 4, p: 0.000029 },
+      { t: 5, p: 0.000000001 },
+    ],
+    { seed: 0.00003 }
+  );
+  assert.deepEqual(
+    kept.map((row) => row.p),
+    [0.00003, 0.000031, 0.000029]
+  );
+});
+
+test("clipCandleSpikes pulls a lone wick back to nearby closes", () => {
+  const rows = [
+    { t: 1, o: 1, h: 1.02, l: 0.98, c: 1 },
+    { t: 2, o: 1, h: 80, l: 1, c: 1.01 },
+    { t: 3, o: 1.01, h: 1.03, l: 0.99, c: 1.02 },
+  ];
+  const clipped = clipCandleSpikes(rows);
+  assert.ok(clipped[1].h < 3);
+  assert.equal(clipped[1].c, 1.01);
+});
+
+test("smartView ignores a non-price spike when scaling the Y axis", () => {
+  const now = Date.parse("2026-08-22T00:00:00.000Z");
+  const view = smartView(
+    [
+      { t: now - 2 * 86_400_000, o: 1, h: 1.02, l: 0.98, c: 1 },
+      { t: now - 86_400_000, o: 1, h: 90, l: 1, c: 90 },
+      { t: now, o: 1.01, h: 1.03, l: 0.99, c: 1.02 },
+    ],
+    { rangeId: "Max", now }
+  );
+  assert.ok(view.max < 5);
+  assert.ok(view.min > 0.5);
+});
+
+test("ammFillDots plot purple AMM prints and skip book leftovers", () => {
+  const now = Date.parse("2026-08-22T12:00:00.000Z");
+  assert.equal(isAmmTradePrint({ source: "amm" }), true);
+  assert.equal(isAmmTradePrint({ source: "dex" }), false);
+  const dots = ammFillDots(
+    [
+      { timestamp: "2026-08-22T11:00:00.000Z", pool: "XDX/XRP", price: 0.00003, xdx: 5000, source: "amm" },
+      { timestamp: "2026-08-22T11:05:00.000Z", pool: "XDX/RLUSD", price: 0.00004, xdx: 100, source: "amm" },
+      { timestamp: "2026-08-22T11:10:00.000Z", pool: "XDX/XRP", price: 0.000031, xdx: 80, source: "dex" },
+    ],
+    { pair: "XDX/XRP", now }
+  );
+  assert.equal(dots.length, 1);
+  assert.equal(dots[0].price, 0.00003);
+  assert.equal(dots[0].source, "amm");
+  const sane = ammFillDots(
+    [
+      { timestamp: "2026-08-22T11:00:00.000Z", pool: "XDX / XRP", price: 0.00003, xdx: 5000, source: "amm" },
+      { timestamp: "2026-08-22T11:01:00.000Z", pool: "XDX/XRP", price: 1.2, xdx: 5000, source: "amm" },
+    ],
+    { pair: "XDX/XRP", now, medianPrice: 0.00003 }
+  );
+  assert.equal(sane.length, 1);
+  assert.equal(sane[0].price, 0.00003);
 });
 
 test("composePairCandles appends a live close onto locked history", () => {

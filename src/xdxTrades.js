@@ -12,20 +12,39 @@ export function inferTradesFromHistory(rows) {
       const dAsset = asset - last.asset;
       const dQuote = quote - last.quote;
       if (Math.abs(dAsset) > DUST || Math.abs(dQuote) > DUST) {
-        const side = dAsset < 0 ? "buy" : dAsset > 0 ? "sell" : dQuote > 0 ? "buy" : "sell";
-        trades.push({
-          timestamp: row.timestamp,
-          pool: key,
-          side,
-          xdx: Math.abs(dAsset),
-          quote: Math.abs(dQuote),
-          price: Number(row.price || 0),
-        });
+        const sameWay = (dAsset > 0 && dQuote > 0) || (dAsset < 0 && dQuote < 0);
+        if (!sameWay) {
+          const side = dAsset < 0 ? "buy" : dAsset > 0 ? "sell" : dQuote > 0 ? "buy" : "sell";
+          const fill = Math.abs(dAsset) > DUST ? Math.abs(dQuote) / Math.abs(dAsset) : 0;
+          trades.push({
+            timestamp: row.timestamp,
+            pool: key,
+            side,
+            xdx: Math.abs(dAsset),
+            quote: Math.abs(dQuote),
+            price: fill > 0 ? fill : Number(row.price || 0),
+            source: "amm",
+          });
+        }
       }
     }
     prev.set(key, { asset, quote });
   }
   return trades.reverse();
+}
+
+export function mapXdxFlowRow(row = {}, timestamp) {
+  return {
+    timestamp: timestamp || row.timestamp || row.t || row.time || null,
+    account: row.account || row.address || row.wallet || null,
+    pool: row.pool || row.pool_name || null,
+    side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
+    xdx: Number(row.xdx ?? row.amount) || 0,
+    quote: Number(row.quote) || 0,
+    price: Number(row.price) || null,
+    source: row.source || row.venue || row.route || "amm",
+    amm: row.amm || row.amm_account || null,
+  };
 }
 
 export function mergeTradePrints(primary = [], extra = []) {

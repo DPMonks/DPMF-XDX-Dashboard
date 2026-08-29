@@ -497,6 +497,7 @@ const en = {
   tradeNeedPrice: "Enter a price first",
   tradeNeedTrustline: "This asset needs a trustline. Sign that first, then trade.",
   showLedgerOrders: "Show ledger orders",
+  chartAmmFills: "AMM fills",
   poolGovernance: "Pool Governance Voting",
   votePool: "Governance pool",
   eligibleVoter: "Eligible voter",

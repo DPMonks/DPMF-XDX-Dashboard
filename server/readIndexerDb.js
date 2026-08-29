@@ -2114,6 +2114,7 @@ async function readAmmTrades(db) {
     quote: Number(row.quote || 0),
     price: Number(row.price || 0),
     account: row.account || null,
+    source: "amm",
   }));
 
   const history = await tryQuery(

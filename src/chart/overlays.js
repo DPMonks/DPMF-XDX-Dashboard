@@ -75,6 +75,47 @@ export function arbitrageWindow(ammPrice, mid) {
   };
 }
 
+export function isAmmTradePrint(row = {}) {
+  const src = String(row.source || row.venue || row.route || row.kind || "").toLowerCase();
+  if (src.includes("amm") || src === "pool") return true;
+  return Boolean(row.amm || row.amm_account);
+}
+
+export function sameChartPair(row = {}, pair) {
+  const pool = String(row.pool || row.pool_name || row.pair || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const want = String(pair || "").replace(/\s+/g, "").toUpperCase();
+  return !pool || !want || pool === want;
+}
+
+export function ammFillDots(
+  trades = [],
+  { pair, now = Date.now(), maxAgeMs = 7 * 86_400_000, medianPrice, maxRatio = 2.5 } = {}
+) {
+  const mid = Number(medianPrice);
+  return (Array.isArray(trades) ? trades : [])
+    .filter((row) => isAmmTradePrint(row) && sameChartPair(row, pair))
+    .map((row) => {
+      const t = Date.parse(row.timestamp || row.t || row.time);
+      const price = Number(row.price);
+      const size = Number(row.xdx ?? row.base_size ?? row.v ?? 0);
+      if (!Number.isFinite(t) || !(price > 0)) return null;
+      if (mid > 0 && (price > mid * maxRatio || price < mid / maxRatio)) return null;
+      const age = now - t;
+      if (age > maxAgeMs || age < -60_000) return null;
+      return {
+        t,
+        price,
+        size: size > 0 ? size : 0,
+        side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
+        opacity: Math.max(0.35, 1 - Math.max(0, age) / maxAgeMs),
+        source: "amm",
+      };
+    })
+    .filter(Boolean);
+}
+
 export function heatmapDots(trades = [], { now = Date.now(), maxAgeMs = 24 * 3_600_000 } = {}) {
   return (Array.isArray(trades) ? trades : [])
     .map((row) => {
@@ -188,10 +229,23 @@ export function smartView(candles = [], { rangeId = "1M", spread, now = Date.now
   const visible = candles.filter((row) => row.t >= (start || 0));
   const use = visible.length ? visible : candles.slice(-30);
   if (!use.length) return { start: now - 30 * 86_400_000, end: now, min: 0, max: 1 };
-  const lows = use.map((row) => Number(row.l || row.c));
-  const highs = use.map((row) => Number(row.h || row.c));
-  let min = Math.min(...lows);
-  let max = Math.max(...highs);
+  const closes = use.map((row) => Number(row.c)).filter((value) => value > 0);
+  const mid = median(closes);
+  const sane = mid > 0
+    ? use.filter((row) => {
+        const close = Number(row.c);
+        return close > 0 && close <= mid * 2.5 && close >= mid / 2.5;
+      })
+    : use;
+  const viewRows = sane.length ? sane : use;
+  const lows = viewRows
+    .map((row) => Number(row.l || row.c))
+    .filter((value) => value > 0 && (!(mid > 0) || value >= mid / 2.5));
+  const highs = viewRows
+    .map((row) => Number(row.h || row.c))
+    .filter((value) => value > 0 && (!(mid > 0) || value <= mid * 2.5));
+  let min = Math.min(...(lows.length ? lows : viewRows.map((row) => Number(row.c) || 0)));
+  let max = Math.max(...(highs.length ? highs : viewRows.map((row) => Number(row.c) || 1)));
   const pad = (max - min) * (Number(spread) > 0 && spread / ((min + max) / 2) > 0.02 ? 0.18 : 0.08);
   if (!(max > min)) {
     min *= 0.98;

@@ -25,7 +25,10 @@ import {
   ammRebalanceTrail,
   arbitrageWindow,
   bookBands,
+  ammFillDots,
   heatmapDots,
+  median,
+  sameChartPair,
   liquidityPressure,
   liquidityWalls,
   microEvents,
@@ -334,7 +337,10 @@ export default function HybridChart() {
   const arb = arbitrageWindow(ammPrice, header.mid || livePrice);
   const autoView = smartView(candles, { rangeId: "Max", spread: bands.spread, now });
   const view = scalePriceView(autoView, { zoom: priceZoom, shift: priceShift });
-  const heat = heatmapDots(trades.filter((row) => !row.pool || String(row.pool).toUpperCase() === pair));
+  const pairTrades = trades.filter((row) => sameChartPair(row, pair));
+  const heat = heatmapDots(pairTrades);
+  const fillMid = median(candles.slice(-24).map((row) => Number(row.c)));
+  const ammFills = ammFillDots(pairTrades, { pair, now, medianPrice: fillMid });
   const trail = ammRebalanceTrail(
     candles.slice(-24).map((row) => ({ t: row.t, price: row.c, timestamp: row.t }))
   );
@@ -680,6 +686,10 @@ export default function HybridChart() {
                 />
                 {t.showLedgerOrders}
               </label>
+              <p className="hybrid-amm-legend" title={t.chartAmmFills || "AMM fills"}>
+                <i aria-hidden="true" />
+                <span>{t.chartAmmFills || "AMM fills"}</span>
+              </p>
               <button
                 type="button"
                 aria-label={t.chartZoomOut}
@@ -714,6 +724,7 @@ export default function HybridChart() {
             walls={walls}
             trail={trail}
             heatmap={heat}
+            ammFills={ammFills}
             wallet={wallet}
             ghost={ghost}
             drawings={drawings}

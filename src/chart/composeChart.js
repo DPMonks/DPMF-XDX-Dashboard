@@ -40,6 +40,56 @@ export function ticksFromSparkline(rows = [], pair, prices = {}) {
     .filter(Boolean);
 }
 
+export function medianPrice(values = []) {
+  const nums = (Array.isArray(values) ? values : [])
+    .map(Number)
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((left, right) => left - right);
+  if (!nums.length) return 0;
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+}
+
+export function isSanePriceTick(price, median, maxRatio = 2.5) {
+  const p = Number(price);
+  const mid = Number(median);
+  if (!(p > 0)) return false;
+  if (!(mid > 0)) return true;
+  return p <= mid * maxRatio && p >= mid / maxRatio;
+}
+
+export function filterSpikeTicks(ticks = [], { maxRatio = 2.5, window = 24, seed } = {}) {
+  const rows = (Array.isArray(ticks) ? ticks : []).filter((row) => Number(row?.p ?? row?.price) > 0);
+  if (!rows.length) return [];
+  const accepted = [];
+  const recent = Number(seed) > 0 ? [Number(seed)] : [];
+  for (const tick of [...rows].sort((left, right) => left.t - right.t)) {
+    const price = Number(tick.p ?? tick.price);
+    const mid = medianPrice(recent.slice(-window));
+    if (!isSanePriceTick(price, mid, maxRatio)) continue;
+    accepted.push(tick);
+    recent.push(price);
+  }
+  return accepted;
+}
+
+export function clipCandleSpikes(candles = [], { maxRatio = 2.5 } = {}) {
+  const rows = Array.isArray(candles) ? candles : [];
+  if (rows.length < 3) return rows;
+  return rows.map((row, index) => {
+    const around = rows.slice(Math.max(0, index - 8), index + 9).map((item) => item.c);
+    const mid = medianPrice(around);
+    if (!(mid > 0)) return row;
+    const close = isSanePriceTick(row.c, mid, maxRatio) ? row.c : mid;
+    const open = isSanePriceTick(row.o, mid, maxRatio) ? row.o : close;
+    let high = Math.max(open, close, Number(row.h) || 0);
+    let low = Math.min(open, close, Number(row.l) || open);
+    if (high > mid * maxRatio) high = Math.max(open, close);
+    if (low > 0 && low < mid / maxRatio) low = Math.min(open, close);
+    return { ...row, o: open, h: high, l: low, c: close };
+  });
+}
+
 export function ticksFromTrades(rows = [], pair) {
   const want = String(pair || "").toUpperCase();
   return (Array.isArray(rows) ? rows : [])
@@ -80,10 +130,13 @@ export function composePairCandles({
     });
   }
 
-  const liveTicks = [
-    ...ticksFromSparkline(sparkline, name, { xrpUsd: prices.xrpUsd || latestLockedUsd() }),
-    ...ticksFromTrades(trades, name),
-  ];
+  const liveTicks = filterSpikeTicks(
+    [
+      ...ticksFromSparkline(sparkline, name, { xrpUsd: prices.xrpUsd || latestLockedUsd() }),
+      ...ticksFromTrades(trades, name),
+    ],
+    { seed: base[base.length - 1]?.c }
+  );
   const dbHistory = candlesFromMarketData(locked.dbMarket?.[name] || [], "db");
   if (dbHistory.length) {
     const map = new Map(base.map((row) => [row.t, row]));
@@ -122,6 +175,7 @@ export function composePairCandles({
     candles = [...intraMap.values()].sort((left, right) => left.t - right.t);
     candles = appendLiveClose(candles, livePrice, now, interval);
   }
+  candles = clipCandleSpikes(candles);
   return windowed ? windowCandles(candles, range, now) : candles;
 }
 

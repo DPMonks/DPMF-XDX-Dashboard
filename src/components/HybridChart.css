@@ -383,6 +383,7 @@
 .hybrid-ghost,
 .hybrid-wallet-order,
 .hybrid-wallet-fill,
+.hybrid-amm-fill,
 .hybrid-heat,
 .hybrid-axis,
 .hybrid-pane-label,
@@ -630,7 +631,10 @@
   z-index: 6;
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 2px;
+  max-width: calc(100% - 12px);
 }
 
 .hybrid-ledger-toggle {
@@ -823,6 +827,35 @@
   fill: #7b76a0;
   font-size: 9px;
   letter-spacing: 0.04em;
+}
+
+.hybrid-amm-fill {
+  fill: #c770ff;
+  stroke: #1a1024;
+  stroke-width: 1.1;
+}
+
+.hybrid-amm-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0 8px 0 4px;
+  color: #c8c2e0;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.hybrid-amm-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #c770ff;
+  box-shadow: 0 0 0 1px #1a1024;
 }
 
 .hybrid-heat.is-buy,
@@ -1243,6 +1276,28 @@
 
   .hybrid-plot-error {
     min-height: 220px;
+  }
+
+  .hybrid-plot-wrap .hybrid-zoom {
+    right: 8px;
+    max-width: calc(100% - 8px);
+  }
+
+  .hybrid-amm-legend {
+    padding: 0 6px 0 2px;
+  }
+
+  .hybrid-amm-legend span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .hybrid-amm-legend i {
+    width: 10px;
+    height: 10px;
   }
 }
 
