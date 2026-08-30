@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   applyLivePoolReserves,
+  applySignedLpOwner,
   applyTradePoolReserves,
   applyTradePoolVolume,
   looksLikeLpAsQuote,
   rememberPoolVolume,
+  rememberSignedLpOverlay,
   resetHeldPoolVolumes,
   rollingPoolVolume,
   compactPoolAmount,
@@ -17,6 +19,7 @@ import {
   poolSplitMeta,
   searchAmmAccount,
   searchPairHint,
+  signedLpAccount,
   tradePoolHint,
 } from "../src/ammPools.js";
 import { XDX_ISSUER, XDX_XRP_AMM, XDX_XRP_LP_HEX, XIO_ISSUER, xdxTrustSetTxjson } from "../src/constants/ledger.js";
@@ -214,10 +217,72 @@ test("a signed buy or sell adds XDX to that pool's 24h volume immediately", () =
   assert.equal(fresh.volume24h, 25);
 });
 
+test("a signed add LP paints the owner on that pair immediately", () => {
+  const detail = {
+    account: "rDPMFBANKMexTKkC7e4Add",
+    trade: { action: "addLp", pair: "XDX/XAH", lpOut: 12.5 },
+  };
+  assert.equal(signedLpAccount(detail), "rDPMFBANKMexTKkC7e4Add");
+  const added = applySignedLpOwner(
+    [
+      { account: "rWhale", pair: "XDX/XAH", lp_balance: 100, rank: 1 },
+      { account: "rOther", pair: "XDX/XRP", lp_balance: 50, rank: 2 },
+    ],
+    detail
+  );
+  const row = added.find((item) => item.account === "rDPMFBANKMexTKkC7e4Add");
+  assert.equal(row.pair, "XDX/XAH");
+  assert.equal(row.lp_balance, 12.5);
+  assert.equal(row.live, true);
+  assert.equal(row.rank, 3);
+
+  const bumped = applySignedLpOwner(added, {
+    account: "rDPMFBANKMexTKkC7e4Add",
+    trade: { action: "addLp", pair: "XDX/XAH", lpOut: 5 },
+  });
+  assert.equal(
+    bumped.find((item) => item.account === "rDPMFBANKMexTKkC7e4Add").lp_balance,
+    17.5
+  );
+
+  const held = applySignedLpOwner(bumped, {
+    account: "rDPMFBANKMexTKkC7e4Add",
+    trade: { action: "addLp", pair: "XDX/XAH", lpOut: 1 },
+    lpHeld: 37.41657387,
+  });
+  assert.equal(
+    held.find((item) => item.account === "rDPMFBANKMexTKkC7e4Add").lp_balance,
+    37.41657387
+  );
+
+  const removed = applySignedLpOwner(held, {
+    account: "rDPMFBANKMexTKkC7e4Add",
+    trade: { action: "removeLp", pair: "XDX/XAH", lpAmount: 37.41657387 },
+  });
+  assert.equal(
+    removed.some((item) => item.account === "rDPMFBANKMexTKkC7e4Add"),
+    false
+  );
+  assert.equal(
+    applySignedLpOwner(held, { trade: { action: "buy", pair: "XDX/XAH", amount: 10 } }, "rSkip")
+      .find((item) => item.account === "rDPMFBANKMexTKkC7e4Add").lp_balance,
+    37.41657387
+  );
+
+  const remembered = rememberSignedLpOverlay(
+    [{ account: "rWhale", pair: "XDX/XAH", lp_balance: 100 }],
+    detail
+  );
+  assert.equal(remembered.overlay.detail.lpHeld, 12.5);
+  assert.equal(remembered.overlay.account, "rDPMFBANKMexTKkC7e4Add");
+});
+
 test("known live pool specs include featured XDX quotes, not only XRP and RLUSD", () => {
   const pairs = knownLivePoolSpecs().map((row) => row.pair);
   assert.ok(pairs.includes("XDX/XRP"));
   assert.ok(pairs.includes("XDX/RLUSD"));
   assert.ok(pairs.includes("XDX/XIO"));
   assert.ok(pairs.includes("XDX/XSQUAD"));
+  const squad = knownLivePoolSpecs().find((row) => row.pair === "XDX/XSQUAD");
+  assert.equal(squad.ammAccount || squad.amm, "rwpht3XDGMhzYmT5V6ZyMyg6Uc37XFLSwv");
 });

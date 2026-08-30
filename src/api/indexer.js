@@ -909,12 +909,13 @@ export async function getWalletBalances(address) {
     return fallback ?? null;
   }
   const xdxFromLines = amountFromBalances(payload, ["XDX", "5844580000000000000000000000000000000000"]);
+  const xrpHeld = held(
+    payload?.xrp,
+    drops != null && drops > 0 ? drops / 1_000_000 : amountFromBalances(payload, ["XRP"])
+  );
   return {
     raw: payload,
-    xrp:
-      numberOrNull(payload?.xrp) ??
-      (drops != null ? drops / 1_000_000 : null) ??
-      amountFromBalances(payload, ["XRP"]),
+    xrp: xrpHeld > 0 ? xrpHeld : null,
     xdx: held(payload?.xdx, xdxFromLines),
     lp:
       numberOrNull(payload?.lp) ??
@@ -1014,43 +1015,43 @@ export async function getWalletActivity(address, extra = {}) {
 
 export async function getWalletLpIncome(address, extra = {}) {
   const name = String(address || "").trim();
-  if (!name) return { account: null, pair: extra.pair || "XDX/XRP", activity: [], complete: true, marker: null };
+  if (!name) return { account: null, pair: extra.pair || "ALL", activity: [], complete: true, marker: null };
   const body = await api.walletLpIncome(name, extra);
   return {
     account: body?.account || name,
-    pair: body?.pair || extra.pair || "XDX/XRP",
+    pair: body?.pair || extra.pair || "ALL",
     activity: asArray(body?.activity),
     days: asArray(body?.days),
-    complete: Boolean(body?.complete) || !body?.marker,
+    complete: body?.complete === true,
     marker: body?.marker || null,
     source: body?.source || null,
   };
 }
 
-const LP_INCOME_CLIENT_PAGES = 40;
+const LP_INCOME_CLIENT_PAGES = 80;
 
 export async function loadWalletLpIncomeHistory(address, extra = {}) {
   const name = String(address || "").trim();
-  const pair = extra.pair || "XDX/XRP";
-  if (!name) return { account: null, pair, activity: [], days: [], complete: true };
+  const pair = extra.pair && extra.pair !== "ALL" ? extra.pair : "";
+  if (!name) return { account: null, pair: pair || "ALL", activity: [], days: [], complete: true };
   const merged = [];
   const days = [];
   let marker = extra.marker || null;
   let complete = false;
   for (let page = 0; page < LP_INCOME_CLIENT_PAGES; page += 1) {
     const next = await getWalletLpIncome(name, {
-      pair,
+      ...(pair ? { pair } : {}),
       marker,
       fresh: extra.fresh && page === 0,
     });
     merged.push(...next.activity);
     days.push(...(next.days || []));
     marker = next.marker;
-    complete = Boolean(next.complete) || !marker;
-    extra.onPage?.({ activity: merged, days, complete, pages: page + 1 });
+    complete = next.complete === true || !marker;
+    extra.onPage?.({ activity: merged, days, complete: next.complete === true, pages: page + 1 });
     if (complete) break;
   }
-  return { account: name, pair, activity: merged, days, complete, marker: complete ? null : marker };
+  return { account: name, pair: pair || "ALL", activity: merged, days, complete, marker: complete ? null : marker };
 }
 
 export async function getConnectedWallet(address, extra = {}) {

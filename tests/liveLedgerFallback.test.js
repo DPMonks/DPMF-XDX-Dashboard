@@ -15,10 +15,20 @@ import {
   preferPositiveAmount,
   rlusdBalanceFromLines,
   xdxBalanceFromLines,
+  xrpDropsFromAccountInfo,
 } from "../server/walletLedger.js";
 import { lpHeldForPair } from "../src/xaman/tradeTx.js";
 import { liveCatalogPayload } from "../server/liveCatalog.js";
 import { RLUSD_HEX, RLUSD_ISSUER } from "../src/constants/ledger.js";
+
+test("xrpDropsFromAccountInfo ignores missing or zero Balance", () => {
+  assert.equal(xrpDropsFromAccountInfo({ account_data: { Balance: "25000000" } }), 25_000_000);
+  assert.equal(xrpDropsFromAccountInfo({ result: { account_data: { Balance: "1000000" } } }), 1_000_000);
+  assert.equal(xrpDropsFromAccountInfo({ account_data: {} }), null);
+  assert.equal(xrpDropsFromAccountInfo({ account_data: { Balance: "0" } }), null);
+  assert.equal(xrpDropsFromAccountInfo({}), null);
+  assert.equal(xrpDropsFromAccountInfo(null), null);
+});
 
 test("XDX and LP holdings are read from account_lines", () => {
   assert.equal(
@@ -87,6 +97,56 @@ test("live wallet balances take XDX from gateway_balances when account_lines mis
   });
   assert.equal(snap.xdx, 1500.25);
   assert.equal(snap.xrp, 25);
+});
+
+test("live wallet balances retry account_info and do not store a failed XRP lookup as zero", async () => {
+  let infoHits = 0;
+  const fetchImpl = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    if (body.method === "account_info") {
+      infoHits += 1;
+      if (infoHits < 2) return { ok: false, status: 429, json: async () => ({}) };
+      return {
+        ok: true,
+        json: async () => ({
+          result: { status: "success", account_data: { Balance: "18500000", OwnerCount: 3 } },
+        }),
+      };
+    }
+    return { ok: true, json: async () => ({ result: { status: "success", lines: [] } }) };
+  };
+  const snap = await loadWalletBalancesFromLedger("rWallet111111111111111111111111111", {
+    fetchImpl,
+    fresh: true,
+  });
+  assert.equal(infoHits, 2);
+  assert.equal(snap.xrp, 18.5);
+  assert.equal(snap.balance_drops, 18_500_000);
+});
+
+test("a missing account_info leaves XRP unknown instead of zero", async () => {
+  const fetchImpl = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    if (body.method === "account_info") {
+      return { ok: true, json: async () => ({ result: { status: "error", error: "actNotFound" } }) };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        result: {
+          status: "success",
+          lines: [{ account: XDX_ISSUER, currency: "XDX", balance: "88" }],
+        },
+      }),
+    };
+  };
+  const snap = await loadWalletBalancesFromLedger("rWalletMissingXrp11111111111111111", {
+    fetchImpl,
+    fresh: true,
+  });
+  assert.equal(snap.xdx, 88);
+  assert.equal(snap.xrp, null);
+  assert.equal(snap.balance_drops, null);
 });
 
 test("live wallet balances prefer the XRPL account and XDX line", async () => {

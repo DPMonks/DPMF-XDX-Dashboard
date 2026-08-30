@@ -15,7 +15,13 @@ import { attachQuoteXrpPrices, loadQuoteXrpRates } from "./quoteXrpMarket.js";
 import { attachXdxFiat, loadFiatQuote } from "./fiatQuotes.js";
 import { loadLiveAmmReservesMany } from "./liveAmmReserves.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
-import { composeAmmBook, emptyOrderbook, FEATURED_ORDERBOOK_PAIRS } from "../src/orderbook.js";
+import {
+  composeAmmBook,
+  emptyOrderbook,
+  FEATURED_ORDERBOOK_PAIRS,
+  normalizeOrderbookPair,
+  quotePerXrpFromSpots,
+} from "../src/orderbook.js";
 import {
   FREE_API_HEADERS,
   loadXrplToCandles,
@@ -29,6 +35,7 @@ import {
   loadXrpSparkline,
 } from "./xrplToCatalog.js";
 import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
+import { loadLedgerPoolVolumes, mergeVolumeMaps } from "./ammPoolVolume.js";
 import { QUOTE_ASSETS } from "../src/xaman/tradeTx.js";
 
 export function knownLivePoolSpecs(extra = []) {
@@ -292,12 +299,11 @@ export async function loadLiveMarket(options = {}) {
     fetchImpl: options.fetchImpl,
     pairs: liveSpecs.map((spec) => spec.pair),
   }).catch(() => ({}));
-  const pools = applyPoolVolumes(
-    liveSpecs
-      .map((spec, index) => poolRowFromLive(spec, lives[index], prices))
-      .filter((row) => row.amm_account || row.reserve_asset || row.lp_supply),
-    volumes
-  );
+  const liveRows = liveSpecs
+    .map((spec, index) => poolRowFromLive(spec, lives[index], prices))
+    .filter((row) => row.amm_account || row.reserve_asset || row.lp_supply);
+  const ledgerVolumes = await loadLedgerPoolVolumes(liveRows, options).catch(() => ({}));
+  const pools = applyPoolVolumes(liveRows, mergeVolumeMaps(volumes, ledgerVolumes));
   const volume24h = num(volumes["XDX/XRP"]?.volume24hXdx) || num(pools[0]?.volume24h);
   const volume24hUsd = num(volumes["XDX/XRP"]?.volume24hUsd);
   const volume24hXrp = num(volumes["XDX/XRP"]?.volume24hXrp) || num(token.vol24hXrp);
@@ -471,6 +477,65 @@ async function liveMarketOrXrplTo(options = {}) {
   return loadXrplToMarket(options);
 }
 
+export function orderbookPairFromSearch(search = "") {
+  const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+  return normalizeOrderbookPair(
+    params.get("pair") || params.get("quote") || params.get("market") || "XDX/XRP"
+  );
+}
+
+function liveBookReserves(pair, pool = {}, market = {}) {
+  const name = normalizeOrderbookPair(pair);
+  const reserveAsset =
+    Number(pool.reserve_asset || pool.reserve_xdx) ||
+    (name === "XDX/XRP" ? Number(market.overview?.reserve_asset) || 0 : 0);
+  const reserveQuote =
+    Number(pool.reserve_currency || pool.reserve_quote) ||
+    (name === "XDX/XRP" ? Number(market.overview?.reserve_currency) || 0 : 0);
+  const price =
+    name === "XDX/XRP"
+      ? Number(market.overview?.xdxPerXrp) || null
+      : reserveAsset > 0 && reserveQuote > 0
+        ? reserveQuote / reserveAsset
+        : null;
+  return {
+    reserve_asset: reserveAsset || null,
+    reserve_currency: reserveQuote || null,
+    trading_fee: pool.trading_fee ?? market.overview?.trading_fee,
+    price,
+  };
+}
+
+function poolForPair(market, pair) {
+  const name = normalizeOrderbookPair(pair);
+  return (
+    (market.pools || []).find((row) => normalizeOrderbookPair(row.pool_name || row.pool) === name) ||
+    (name === "XDX/XRP" ? market.pools?.[0] || {} : {})
+  );
+}
+
+async function composeLivePairBook(pair, market, options = {}, extras = {}) {
+  const name = normalizeOrderbookPair(pair);
+  const pool = poolForPair(market, name);
+  const live = await fillNativeBookFromXrpl(name, pool, options);
+  return composeAmmBook(live || emptyOrderbook(name), liveBookReserves(name, pool, market), name, extras);
+}
+
+async function composeLiveFeaturedBooks(market, options = {}) {
+  const xrpBook = await composeLivePairBook("XDX/XRP", market, options);
+  const books = { "XDX/XRP": xrpBook };
+  for (const pair of FEATURED_ORDERBOOK_PAIRS) {
+    if (pair === "XDX/XRP") continue;
+    const pool = poolForPair(market, pair);
+    const reserves = liveBookReserves(pair, pool, market);
+    books[pair] = await composeLivePairBook(pair, market, options, {
+      xrpBook,
+      quotePerXrp: quotePerXrpFromSpots(reserves.price, xrpBook?.amm?.price),
+    });
+  }
+  return books;
+}
+
 export async function liveCatalogPayload(suffix, options = {}) {
   const path = String(suffix || "").split("?")[0];
   if (path === "overview" || path === "token-details") {
@@ -533,36 +598,20 @@ export async function liveCatalogPayload(suffix, options = {}) {
   }
   if (path === "orderbook") {
     const market = await loadLiveMarket(options);
-    const pool = market.pools?.[0] || {};
-    const live = await fillNativeBookFromXrpl("XDX/XRP", pool, options);
-    return composeAmmBook(
-      live || emptyOrderbook("XDX/XRP"),
-      {
-        reserve_asset: market.overview.reserve_asset,
-        reserve_currency: market.overview.reserve_currency,
-        trading_fee: market.overview.trading_fee,
-        price: market.overview.xdxPerXrp,
-      },
-      "XDX/XRP"
-    );
+    const name = orderbookPairFromSearch(options.search);
+    if (name === "XDX/XRP") {
+      return composeLivePairBook(name, market, options);
+    }
+    const xrpBook = await composeLivePairBook("XDX/XRP", market, options);
+    const reserves = liveBookReserves(name, poolForPair(market, name), market);
+    return composeLivePairBook(name, market, options, {
+      xrpBook,
+      quotePerXrp: quotePerXrpFromSpots(reserves.price, xrpBook?.amm?.price),
+    });
   }
   if (path === "orderbooks") {
     const market = await loadLiveMarket(options);
-    const books = {};
-    for (const pair of FEATURED_ORDERBOOK_PAIRS) {
-      const pool = market.pools.find((row) => row.pool_name === pair) || market.pools[0] || {};
-      const live = await fillNativeBookFromXrpl(pair, pool, options);
-      books[pair] = composeAmmBook(
-        live || emptyOrderbook(pair),
-        {
-          reserve_asset: pool.reserve_asset ?? market.overview.reserve_asset,
-          reserve_currency: pool.reserve_currency ?? market.overview.reserve_currency,
-          trading_fee: pool.trading_fee ?? market.overview.trading_fee,
-          price: pair === "XDX/XRP" ? market.overview.xdxPerXrp : null,
-        },
-        pair
-      );
-    }
+    const books = await composeLiveFeaturedBooks(market, options);
     return {
       quotes: FEATURED_ORDERBOOK_PAIRS.map((pair) => pair.split("/")[1]).filter(Boolean),
       featured: FEATURED_ORDERBOOK_PAIRS,

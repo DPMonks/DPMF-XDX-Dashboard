@@ -8,6 +8,10 @@ import {
   XDX_RLUSD_LP_HEX,
   XDX_XRP_AMM,
   XDX_XRP_LP_HEX,
+  XDX_XIO_AMM,
+  XDX_XIO_LP_HEX,
+  XDX_XSQUAD_AMM,
+  XDX_XSQUAD_LP_HEX,
   XIO_ISSUER,
   XSQUAD_HEX,
   XSQUAD_ISSUER,
@@ -127,8 +131,31 @@ export function knownLpIdentity(pair, quoteId) {
   if (want === "XDX/XRP" || String(quoteId || "").toUpperCase() === "XRP") {
     return { pair: "XDX/XRP", amm: XDX_XRP_AMM, lpCurrency: XDX_XRP_LP_HEX };
   }
+  if (want === "XDX/XIO" || String(quoteId || "").toUpperCase() === "XIO") {
+    return { pair: "XDX/XIO", amm: XDX_XIO_AMM, lpCurrency: XDX_XIO_LP_HEX };
+  }
+  if (want === "XDX/XSQUAD" || String(quoteId || "").toUpperCase() === "XSQUAD") {
+    return { pair: "XDX/XSQUAD", amm: XDX_XSQUAD_AMM, lpCurrency: XDX_XSQUAD_LP_HEX };
+  }
   return { pair: want, amm: "", lpCurrency: "" };
 }
+
+const KNOWN_LP_BY_AMM = new Map(
+  [
+    [XDX_XRP_AMM, "XDX/XRP"],
+    [XDX_RLUSD_AMM, "XDX/RLUSD"],
+    [XDX_XIO_AMM, "XDX/XIO"],
+    [XDX_XSQUAD_AMM, "XDX/XSQUAD"],
+  ].map(([amm, pair]) => [String(amm).toLowerCase(), pair])
+);
+const KNOWN_LP_BY_HEX = new Map(
+  [
+    [XDX_XRP_LP_HEX, "XDX/XRP"],
+    [XDX_RLUSD_LP_HEX, "XDX/RLUSD"],
+    [XDX_XIO_LP_HEX, "XDX/XIO"],
+    [XDX_XSQUAD_LP_HEX, "XDX/XSQUAD"],
+  ].map(([hex, pair]) => [String(hex).toUpperCase(), pair])
+);
 
 export function lpRowMatchesPair(item, pair, quoteId, spec = {}) {
   const want = String(pair || (quoteId ? `XDX/${quoteId}` : ""))
@@ -146,9 +173,9 @@ export function lpRowMatchesPair(item, pair, quoteId, spec = {}) {
   const hex = String(item?.lp_currency || item?.lp_currency_hex || "")
     .replace(/^0x/i, "")
     .toUpperCase();
+  const rowKnownPair = KNOWN_LP_BY_AMM.get(amm) || (isLpCurrency(hex) ? KNOWN_LP_BY_HEX.get(hex) : "");
 
-  if (wantAmm && amm && amm !== wantAmm) return false;
-  if (wantLp && isLpCurrency(hex) && hex !== wantLp) return false;
+  if (rowKnownPair && rowKnownPair !== want) return false;
   if (wantAmm && amm && amm === wantAmm) return true;
   if (wantLp && isLpCurrency(hex) && hex === wantLp) return true;
   if (quote && rowQuote && rowQuote === quote) return true;
@@ -228,7 +255,7 @@ export function resolveQuote(id, extra = {}) {
     return {
       ...known,
       pair: `XDX/${known.id}`,
-      issuer: extra.quoteIssuer || extra.quote_issuer || extra.issuer || known.issuer || null,
+      issuer: known.id === "XRP" ? null : extra.quoteIssuer || extra.quote_issuer || extra.issuer || known.issuer || null,
       hex: extra.quoteHex || extra.quote_hex || extra.hex || known.hex || null,
       amm: extra.amm || extra.amm_account || null,
       lpCurrency: extra.lpCurrency || extra.lp_currency || null,
@@ -237,7 +264,7 @@ export function resolveQuote(id, extra = {}) {
   return {
     id: key,
     currency: key === "XRP" ? "XRP" : rawQuote || key,
-    issuer: extra.quoteIssuer || extra.quote_issuer || extra.issuer || null,
+    issuer: key === "XRP" ? null : extra.quoteIssuer || extra.quote_issuer || extra.issuer || null,
     hex: extra.quoteHex || extra.quote_hex || extra.hex || null,
     label: key,
     pair: `XDX/${key}`,
@@ -318,7 +345,16 @@ export function issuedAmount(currency, issuer, value) {
 
 export function quoteAmount(quote, value) {
   if (isNativeXrpQuote(quote)) return xrpDrops(value);
-  return issuedAmount(quoteLedgerCurrency(quote), quote.issuer, value);
+  const currency = quoteLedgerCurrency(quote);
+  if (!currency || currency === "XRP") return xrpDrops(value);
+  return issuedAmount(currency, quote.issuer, value);
+}
+
+export function ammQuoteAsset(quote) {
+  if (isNativeXrpQuote(quote)) return { currency: "XRP" };
+  const currency = quoteLedgerCurrency(quote);
+  if (!currency || currency === "XRP") return { currency: "XRP" };
+  return { currency, issuer: quote.issuer };
 }
 
 export function xdxAmount(value) {
@@ -406,9 +442,7 @@ export function ammDepositTx({ account, quote, xdx, quoteQty, mode = "double", s
   const txjson = {
     TransactionType: "AMMDeposit",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
-    Asset2: isNativeXrpQuote(quote)
-      ? { currency: "XRP" }
-      : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
+    Asset2: ammQuoteAsset(quote),
   };
   if (mode === "single") {
     txjson.Flags = TF_SINGLE_ASSET;
@@ -469,14 +503,54 @@ export function poolForQuote(quote, pools = [], live = null) {
   const amm = row?.amm_account || row?.amm || liveAmm || null;
   const lpCurrency = asLpHex(row?.lp_currency || row?.lp_currency_hex || liveLp);
   if (amm && lpCurrency) return { amm, lpCurrency, pair };
-  if (quote?.currency === "RLUSD" || quote?.id === "RLUSD" || pair === "XDX/RLUSD") {
-    return { amm: amm || XDX_RLUSD_AMM, lpCurrency: lpCurrency || XDX_RLUSD_LP_HEX, pair: "XDX/RLUSD" };
-  }
-  if (isNativeXrpQuote(quote) || pair === "XDX/XRP") {
-    return { amm: amm || XDX_XRP_AMM, lpCurrency: lpCurrency || XDX_XRP_LP_HEX, pair: "XDX/XRP" };
+  const known = knownLpIdentity(pair, quoteTicker || quote?.id);
+  if (known.amm && known.lpCurrency) {
+    return {
+      amm: amm || known.amm,
+      lpCurrency: lpCurrency || known.lpCurrency,
+      pair: known.pair || pair,
+    };
   }
   if (amm) return { amm, lpCurrency, pair };
   return { amm: null, lpCurrency: null, pair };
+}
+
+export function ownerReserveIncrementXrp(account = {}) {
+  const drops = Number(account.reserve_inc_drops ?? account.reserveIncDrops);
+  return Number.isFinite(drops) && drops > 0 ? drops / DROPS_PER_XRP : 0.2;
+}
+
+export function extraTrustLinesNeeded({
+  needLpLine = false,
+  needQuoteTrust = false,
+  action = "",
+  haveLpLine = false,
+} = {}) {
+  let lines = 0;
+  if (needLpLine) lines += 1;
+  else if (String(action) === "addLp" && !haveLpLine) lines += 1;
+  if (needQuoteTrust) lines += 1;
+  return lines;
+}
+
+export function unusedXrpCoversLines({ spendable, total, account, extraLines = 0 } = {}) {
+  const lines = Math.max(0, Number(extraLines) || 0);
+  const increment = ownerReserveIncrementXrp(account);
+  const spend = spendable == null || spendable === "" ? null : Number(spendable);
+  const hold = total == null || total === "" ? null : Number(total);
+  const need = lines > 0 ? lines * increment + LEDGER_FEE_XRP : 0;
+  if (!(lines > 0)) {
+    return { ok: true, need: 0, increment, spendable: Number.isFinite(spend) ? spend : null };
+  }
+  if (!Number.isFinite(spend)) {
+    return { ok: true, need, increment, spendable: null };
+  }
+  // A missed account_info used to store XRP as 0. Do not block a live
+  // deposit on that false zero — only refuse when a real hold is reserved.
+  if (!(hold > 0) && !(spend > 0)) {
+    return { ok: true, need, increment, spendable: spend, unknown: true };
+  }
+  return { ok: spend + 1e-9 >= need, need, increment, spendable: spend };
 }
 
 export function lpTrustSetTxjson(account, spec = {}) {
@@ -532,9 +606,7 @@ export function ammWithdrawTx({
   const txjson = {
     TransactionType: "AMMWithdraw",
     Asset: { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
-    Asset2: isNativeXrpQuote(quote)
-      ? { currency: "XRP" }
-      : { currency: quoteLedgerCurrency(quote), issuer: quote.issuer },
+    Asset2: ammQuoteAsset(quote),
     LPTokenIn: {
       currency: pool.lpCurrency,
       issuer: pool.amm,
@@ -909,8 +981,15 @@ export function notifyFunctionConfirmed(detail = {}) {
 
 export function notifyTradeFailed(detail = {}) {
   if (typeof window === "undefined") return;
-  rememberTradeNotice({ ...detail, kind: "failed" });
-  window.dispatchEvent(new CustomEvent("dpmf-trade-failed", { detail }));
+  const pending = peekPendingPayload();
+  const notice = {
+    ...detail,
+    kind: "failed",
+    txjson: detail.txjson || pending?.txjson || null,
+    trade: detail.trade || pending?.trade || null,
+  };
+  rememberTradeNotice(notice);
+  window.dispatchEvent(new CustomEvent("dpmf-trade-failed", { detail: notice }));
 }
 
 export function notifyTradeUnconfirmed(detail = {}) {

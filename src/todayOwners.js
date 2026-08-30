@@ -96,6 +96,34 @@ export function mapOwnerRows(holders = [], offset = 0) {
   }));
 }
 
+function ownerRowKey(row) {
+  const account = String(row?.account || "").toLowerCase();
+  const pair = String(row?.pair || row?.pool_name || "").replace(/\s+/g, "").toUpperCase();
+  return pair ? `${account}|${pair}` : account;
+}
+
+export function preferLiveOwnerRows(previous = [], next = []) {
+  const out = (Array.isArray(next) ? next : []).map((row) => ({ ...row }));
+  const indexByKey = new Map(out.map((row, index) => [ownerRowKey(row), index]));
+  for (const row of Array.isArray(previous) ? previous : []) {
+    if (!row?.live || !row.account) continue;
+    const liveBal = Number(row.lp_balance ?? row.balance) || 0;
+    if (!(liveBal > 0)) continue;
+    const key = ownerRowKey(row);
+    const idx = indexByKey.get(key);
+    if (idx == null) {
+      indexByKey.set(key, out.length);
+      out.push({ ...row });
+      continue;
+    }
+    const snapBal = Number(out[idx].lp_balance ?? out[idx].balance) || 0;
+    if (liveBal > snapBal + 1e-9) {
+      out[idx] = { ...out[idx], ...row, live: true };
+    }
+  }
+  return out.map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
 export function keepLastGoodOwners(previous, next) {
   const prevRows = Array.isArray(previous?.rows)
     ? previous.rows
@@ -112,7 +140,7 @@ export function keepLastGoodOwners(previous, next) {
   const nextFresh = next?.freshness && typeof next.freshness === "object" ? next.freshness : null;
 
   if (nextRows.length) {
-    return { rows: nextRows, freshness: nextFresh || prevFresh };
+    return { rows: preferLiveOwnerRows(prevRows, nextRows), freshness: nextFresh || prevFresh };
   }
   if (prevRows.length) {
     return {

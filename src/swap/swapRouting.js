@@ -1,4 +1,4 @@
-import { IMPACT_HIGH_PCT } from "./quoteSwap.js";
+import { IMPACT_HIGH_PCT, quoteUsesPool } from "./quoteSwap.js";
 import { normalizeSwapMode, swapModeById } from "./swapModes.js";
 
 export const TF_NO_DIRECT_RIPPLE = 65536;
@@ -111,8 +111,13 @@ export function smartChatMessages({
   if (quote.via === "xrp-bridge" || quote.via === "bridge") {
     rows.push(`Smart routing used multi-hop to reach ${toTicker || "the target"} with 0% extra hop fee.`);
   }
-  if (quote.isNegativeSlippage) {
+  if (quote.isNegativeSlippage && !quoteUsesPool(quote)) {
     rows.push("Smart routing detected negative slippage and switched venue.");
+  }
+  const share = Number(quote.poolReducePercent);
+  if (quoteUsesPool(quote) && share > 0) {
+    const shown = share < 0.01 ? "<0.01%" : `${share >= 10 ? share.toFixed(1) : share.toFixed(2)}%`;
+    rows.push(`This fill takes ${shown} of the pool reserve.`);
   }
   if (quote.bookOutput > 0 && quote.ammOutput > 0) {
     rows.push("Smart routing split the trade across AMM + order book.");
@@ -152,7 +157,7 @@ export function recommendSwapMode({
   if (noRoute) {
     if (id === "orderbook-only") return { id: "amm-only", reason: "nobook", amountIn: qty };
     if (id === "amm-only" || id === "passive-amm") return { id: "smart", reason: "noamm", amountIn: qty };
-    return { id: "half", reason: "half", amountIn: qty / 2 };
+    return null;
   }
   const demand = assessSwapSupplyDemand({ bookQuote, ammQuote, quote, fromTicker, toTicker, qty });
   const currentOut = Number(quote?.actualOutput || 0);
@@ -168,6 +173,6 @@ export function recommendSwapMode({
   if (quote?.via === "xrp-bridge" && id === "smart") {
     return { id: "auto-bridging", reason: "bridge", amountIn: qty };
   }
-  if (half) return { id: "half", reason: "half", amountIn: half.amountIn };
+  if (half && !quoteUsesPool(quote)) return { id: "half", reason: "half", amountIn: half.amountIn };
   return null;
 }

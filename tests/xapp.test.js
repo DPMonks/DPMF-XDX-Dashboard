@@ -126,6 +126,11 @@ test("xApp external links stay in the wallet browser overlay", () => {
     posted[0],
     JSON.stringify({ command: "openBrowser", url: "https://dpmf.technology" })
   );
+  assert.equal(openExternalUrl("https://t.me/DPMF_XDX", win), true);
+  assert.equal(
+    posted[1],
+    JSON.stringify({ command: "openBrowser", url: "https://t.me/DPMF_XDX" })
+  );
   assert.equal(openExternalUrl("javascript:alert(1)", win), false);
 });
 

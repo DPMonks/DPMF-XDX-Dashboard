@@ -135,20 +135,38 @@ export function detectTradeExecution({ payload, socket, ledger } = {}) {
   if ((p.expired || s.expired) && !signed && !submitted) {
     return { executed: false, rejected: true, failed: false, via: "expired", txid, detectors, signed, tesSuccess, engineResult };
   }
+  // Validated ledger wins. Xaman can keep a leftover tec* on the payload
+  // after a successful AMMDeposit / AMMWithdraw, which used to flash a fail.
+  if (l.validated && l.tesSuccess && txid) {
+    return { executed: true, failed: false, via: "xrpl-validated", txid, detectors, signed, tesSuccess: true, engineResult: "tesSUCCESS" };
+  }
   if (l.validated && l.failed && engineResult) {
     return { executed: false, rejected: true, failed: true, via: "xrpl-failed", txid, detectors, signed, tesSuccess, engineResult };
   }
-  if (p.failed || s.failed) {
-    return { executed: false, rejected: true, failed: true, via: "xaman-dispatch-failed", txid, detectors, signed, tesSuccess, engineResult };
-  }
-  if (l.validated && tesSuccess && txid) {
-    return { executed: true, via: "xrpl-validated", txid, detectors, signed, tesSuccess, engineResult: engineResult || "tesSUCCESS" };
+  if (l.found && tesSuccess) {
+    return { executed: true, failed: false, via: "xrpl-tx", txid, detectors, signed, tesSuccess: true, engineResult: engineResult || "tesSUCCESS" };
   }
   if (p.tesSuccess || s.tesSuccess) {
-    return { executed: true, via: "xaman-dispatch", txid, detectors, signed, tesSuccess, engineResult: engineResult || "tesSUCCESS" };
+    return { executed: true, failed: false, via: "xaman-dispatch", txid, detectors, signed, tesSuccess: true, engineResult: engineResult || "tesSUCCESS" };
   }
-  if (l.found && tesSuccess) {
-    return { executed: true, via: "xrpl-tx", txid, detectors, signed, tesSuccess, engineResult: engineResult || "tesSUCCESS" };
+  if (p.failed || s.failed) {
+    // A hash without a ledger result is still in flight — do not treat the
+    // Xaman dispatched_result as final (single- and double-sided LP included).
+    if (signed || txid) {
+      return {
+        executed: false,
+        rejected: false,
+        failed: false,
+        pending: true,
+        signed,
+        tesSuccess,
+        txid,
+        via: signed ? "xaman-signed" : "xaman-dispatch-pending",
+        detectors,
+        engineResult,
+      };
+    }
+    return { executed: false, rejected: true, failed: true, via: "xaman-dispatch-failed", txid, detectors, signed, tesSuccess, engineResult };
   }
   return {
     executed: false,

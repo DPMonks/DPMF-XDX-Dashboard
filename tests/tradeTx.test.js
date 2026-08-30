@@ -10,6 +10,12 @@ import {
   XDX_RLUSD_LP_HEX,
   XDX_XRP_AMM,
   XDX_XRP_LP_HEX,
+  XDX_XIO_AMM,
+  XDX_XIO_LP_HEX,
+  XDX_XSQUAD_AMM,
+  XDX_XSQUAD_LP_HEX,
+  XSQUAD_HEX,
+  XSQUAD_ISSUER,
 } from "../src/constants/ledger.js";
 import {
   MARKET_SLIPPAGE,
@@ -20,11 +26,13 @@ import {
   TF_SINGLE_ASSET,
   TF_TWO_ASSET,
   ammDepositTx,
+  ammQuoteAsset,
   ammWithdrawTx,
   expectedLpTokens,
   expectedSingleLpTokens,
   expectedSingleWithdraw,
   expectedWithdraw,
+  extraTrustLinesNeeded,
   executionBelongsToOpenTrade,
   executionClosesTradeAction,
   gateUnsignedTrade,
@@ -57,6 +65,7 @@ import {
   visibleQuoteQty,
   xdxUnitUsd,
   tradeTotal,
+  unusedXrpCoversLines,
   xrpDrops,
   xrplIssuedFloor,
   xrplIssuedValue,
@@ -167,6 +176,29 @@ test("AMM deposit and withdraw follow XRPL two-asset / LP token flags", () => {
   assert.equal(singleXrp.Flags, TF_SINGLE_ASSET);
   assert.equal(singleXrp.Amount, "500000");
   assert.equal(singleXrp.Amount2, undefined);
+
+  const leftoverIssuer = { ...quoteAsset("XRP"), issuer: "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo" };
+  assert.deepEqual(ammQuoteAsset(leftoverIssuer), { currency: "XRP" });
+  const doubleWithLeftover = ammDepositTx({
+    account: "rLp",
+    quote: leftoverIssuer,
+    xdx: "100",
+    quoteQty: 1,
+    mode: "double",
+  });
+  assert.deepEqual(doubleWithLeftover.Asset2, { currency: "XRP" });
+  assert.equal(doubleWithLeftover.Amount2, "1000000");
+  const singleWithLeftover = ammDepositTx({
+    account: "rLp",
+    quote: leftoverIssuer,
+    quoteQty: "0.5",
+    mode: "single",
+    singleAsset: "quote",
+  });
+  assert.equal(singleWithLeftover.Amount, "500000");
+  assert.equal(typeof singleWithLeftover.Amount, "string");
+  const xrpQuote = resolveQuote("XRP", { quote_issuer: XDX_ISSUER });
+  assert.equal(xrpQuote.issuer, null);
   assert.equal(expectedSingleLpTokens(100, 1000, 500), 500 * (Math.sqrt(1.1) - 1));
   assert.equal(expectedSingleLpTokens(0, 1000, 500), 0);
 
@@ -243,6 +275,48 @@ test("RLUSD needs a trustline; XRP does not", () => {
   assert.notEqual(line.LimitAmount.currency, "RLUSD");
 });
 
+test("XSQUAD trustline and LP spec use the on-ledger hex", () => {
+  const line = quoteTrustSetTxjson("rA", quoteAsset("XSQUAD"));
+  assert.equal(line.LimitAmount.issuer, XSQUAD_ISSUER);
+  assert.equal(line.LimitAmount.currency, XSQUAD_HEX);
+  assert.notEqual(line.LimitAmount.currency, "XSQUAD");
+  const spec = poolForQuote(quoteAsset("XSQUAD"));
+  const lp = lpTrustSetTxjson("rA", spec);
+  assert.equal(lp.LimitAmount.issuer, XDX_XSQUAD_AMM);
+  assert.equal(lp.LimitAmount.currency, XDX_XSQUAD_LP_HEX);
+});
+
+test("unused XRP must cover each new trust line, including XDX/XSQUAD LP", () => {
+  assert.equal(extraTrustLinesNeeded({ needLpLine: true, needQuoteTrust: true }), 2);
+  assert.equal(extraTrustLinesNeeded({ action: "addLp", haveLpLine: false }), 1);
+  assert.equal(extraTrustLinesNeeded({ action: "addLp", haveLpLine: true }), 0);
+  const short = unusedXrpCoversLines({
+    spendable: 0.05,
+    total: 5,
+    account: { reserve_inc_drops: 200_000 },
+    extraLines: 1,
+  });
+  assert.equal(short.ok, false);
+  assert.ok(short.need > 0.2);
+  const enough = unusedXrpCoversLines({
+    spendable: 2,
+    total: 5,
+    account: { reserve_inc_drops: 200_000 },
+    extraLines: 2,
+  });
+  assert.equal(enough.ok, true);
+  const unknown = unusedXrpCoversLines({ spendable: null, extraLines: 1 });
+  assert.equal(unknown.ok, true);
+  const falseZero = unusedXrpCoversLines({
+    spendable: 0,
+    total: 0,
+    account: { reserve_inc_drops: 200_000 },
+    extraLines: 1,
+  });
+  assert.equal(falseZero.ok, true);
+  assert.equal(falseZero.unknown, true);
+});
+
 test("LP TrustSet uses the pool LP hex and AMM account", () => {
   const xrp = lpTrustSetTxjson("rLp", poolForQuote(quoteAsset("XRP")));
   assert.equal(xrp.TransactionType, "TrustSet");
@@ -262,7 +336,10 @@ test("LP TrustSet uses the pool LP hex and AMM account", () => {
   const rlusd = poolForQuote(quoteAsset("RLUSD"));
   assert.equal(rlusd.amm, XDX_RLUSD_AMM);
   assert.equal(rlusd.lpCurrency, XDX_RLUSD_LP_HEX);
-  assert.equal(poolForQuote(quoteAsset("XIO")).amm, null);
+  assert.equal(poolForQuote(quoteAsset("XIO")).amm, XDX_XIO_AMM);
+  assert.equal(poolForQuote(quoteAsset("XIO")).lpCurrency, XDX_XIO_LP_HEX);
+  assert.equal(poolForQuote(quoteAsset("XSQUAD")).amm, XDX_XSQUAD_AMM);
+  assert.equal(poolForQuote(quoteAsset("XSQUAD")).lpCurrency, XDX_XSQUAD_LP_HEX);
   const liveXio = poolForQuote(quoteAsset("XIO"), [], {
     pair: "XDX/XIO",
     amm_account: "rDJXzsZGACeHGJQYfaudsYshaC5zJxqsHr",
@@ -481,8 +558,8 @@ test("opening add LP from a pool card keeps that pair", () => {
 });
 
 test("remove LP held tokens stay on the selected pair, not another LP line", () => {
-  const xsquadHex = "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-  const xsquadAmm = "rXsquadAmm11111111111111111111111";
+  const xsquadHex = XDX_XSQUAD_LP_HEX;
+  const xsquadAmm = XDX_XSQUAD_AMM;
   const mixed = [
     {
       pool: "XDX/XRP",
@@ -507,7 +584,7 @@ test("remove LP held tokens stay on the selected pair, not another LP line", () 
   assert.equal(pairFromRow({ lp_currency: xsquadHex, amm_account: xsquadAmm }), "XDX/XSQUAD");
   const otherAmm = "rOtherAmm1111111111111111111111111";
   assert.equal(
-    pairFromRow({ lp_currency: xsquadHex, amm_account: otherAmm }),
+    pairFromRow({ lp_currency: "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", amm_account: otherAmm }),
     `XDX/${otherAmm.slice(0, 4)}…${otherAmm.slice(-4)}`
   );
 });

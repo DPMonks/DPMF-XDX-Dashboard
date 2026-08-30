@@ -18,7 +18,7 @@ import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
 import { handshake } from "./api";
-import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
+import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp, getWalletLp } from "./api/indexer";
 import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 import { useWallet } from "./context/useWallet";
@@ -31,9 +31,18 @@ import {
   shouldAutoClaimPendingTrade,
 } from "./xaman/payloadResume";
 import {
+  applySignedLpOwner,
+  isLpPoolTrade,
+  rememberSignedLpOverlay,
+  signedLpAccount,
+  tradePoolHint,
+} from "./ammPools";
+import { preferLiveOwnerRows } from "./todayOwners";
+import {
   WALLET_EVENTS,
   executionBelongsToOpenTrade,
   gateUnsignedTrade,
+  lpHeldForPair,
   normalizeTradeRequest,
 } from "./xaman/tradeTx";
 
@@ -45,6 +54,9 @@ export default function App() {
   const { t } = useI18n();
   const { walletAddress } = useWallet();
   const pendingTradeRef = useRef(null);
+  const lpOverlayRef = useRef(null);
+  const [lpFocusPair, setLpFocusPair] = useState(null);
+  const [lpFocusAt, setLpFocusAt] = useState(0);
   const [holders, setHolders] = useState([]);
   const [holderFreshness, setHolderFreshness] = useState(null);
   const [holdersLoading, setHoldersLoading] = useState(true);
@@ -56,6 +68,16 @@ export default function App() {
   const [errors, setErrors] = useState({});
   const [link, setLink] = useState({ status: "connecting" });
   const [tradeAction, setTradeAction] = useState(null);
+
+  const paintLp = useCallback((rows, meta) => {
+    const overlay = lpOverlayRef.current;
+    const incoming = Array.isArray(rows) ? rows : [];
+    const applied = overlay
+      ? applySignedLpOwner(incoming, overlay.detail, overlay.account)
+      : incoming;
+    setLpHolders((prev) => (overlay ? applied : preferLiveOwnerRows(prev, applied)));
+    if (meta) setLpFreshness(meta);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -108,13 +130,12 @@ export default function App() {
       try {
         const nextLp = await getTopLp((rows, meta) => {
           if (!cancelled) {
-            setLpHolders(rows);
-            if (meta) setLpFreshness(meta);
+            paintLp(rows, meta);
             setLpLoading(false);
           }
         });
         if (!cancelled) {
-          setLpHolders(nextLp);
+          paintLp(nextLp);
           setErrors((current) => ({ ...current, lp: undefined }));
         }
         return null;
@@ -171,7 +192,7 @@ export default function App() {
       cancelled = true;
       clearInterval(id);
     };
-  }, []);
+  }, [paintLp]);
 
   const refreshLists = useCallback(() => {
     getAmm()
@@ -186,14 +207,13 @@ export default function App() {
       })
       .catch(() => {});
     getTopLp((rows, meta) => {
-      setLpHolders(rows);
-      if (meta) setLpFreshness(meta);
+      paintLp(rows, meta);
     })
       .then((rows) => {
-        if (rows) setLpHolders(rows);
+        if (rows) paintLp(rows);
       })
       .catch(() => {});
-  }, []);
+  }, [paintLp]);
 
   const openTrade = useCallback((detail) => {
     const live = liveWalletAddress(walletAddress);
@@ -244,6 +264,30 @@ export default function App() {
         }
         return null;
       });
+      if (isLpPoolTrade(detail)) {
+        const account = signedLpAccount(detail, liveWalletAddress(walletAddress));
+        const pair = tradePoolHint(detail);
+        setLpHolders((rows) => {
+          const painted = rememberSignedLpOverlay(rows, detail, account);
+          lpOverlayRef.current = painted.overlay;
+          return painted.rows;
+        });
+        if (pair) {
+          setLpFocusPair(pair);
+          setLpFocusAt(Date.now());
+        }
+        if (account && pair) {
+          getWalletLp(account, { fresh: true })
+            .then((positions) => {
+              const held = lpHeldForPair(positions, pair, pair.split("/")[1]);
+              if (!(held > 0)) return;
+              const nextDetail = { ...detail, lpHeld: held };
+              lpOverlayRef.current = { detail: nextDetail, account };
+              setLpHolders((rows) => applySignedLpOwner(rows, nextDetail, account));
+            })
+            .catch(() => {});
+        }
+      }
       refreshLists();
     }
     window.addEventListener("dpmf-open-trade", onOpen);
@@ -258,7 +302,7 @@ export default function App() {
       window.removeEventListener(WALLET_EVENTS.signedIn, onSignedIn);
       window.removeEventListener(WALLET_EVENTS.signInCancelled, onSignInCancelled);
     };
-  }, [openTrade, refreshLists]);
+  }, [openTrade, refreshLists, walletAddress]);
 
   useEffect(() => {
     let busy = false;
@@ -321,9 +365,9 @@ export default function App() {
             </div>
           </div>
         </header>
-
-        <SiteJump />
       </div>
+
+      <SiteJump />
 
       <p className={`indexer-source is-${linkState.tone}`} title={INDEXER_ORIGIN}>
         <span className="handshake-dot" aria-hidden="true" />
@@ -397,6 +441,8 @@ export default function App() {
               unit="LP"
               showPair
               defaultPair="XDX/XRP"
+              focusPair={lpFocusPair}
+              focusAt={lpFocusAt}
               pairOptions={ammData.map((row) => row.pool_name || row.pool).filter(Boolean)}
               emptyLabel={t.emptyLp}
               searchPlaceholder={t.searchLp}

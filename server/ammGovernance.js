@@ -1,6 +1,8 @@
 import { xrplRpc } from "./xrplBookOffers.js";
+import { mapLimit } from "./liveAmmReserves.js";
 import {
   activityFromAmmVoteTx,
+  attachVoteTimestamps,
   governanceFromAmmInfo,
   quoteIdFromName,
   quoteIssue,
@@ -41,8 +43,10 @@ export async function loadPoolGovernance(pair, address = "", extra = {}) {
           ? { amm_account: ammAccount, ledger_index: "validated" }
           : { asset: xdxIssue(), asset2, ledger_index: "validated" }
       );
+      const gov = governanceFromAmmInfo(result, { address, pair: name, lpBalance });
       return {
-        ...governanceFromAmmInfo(result, { address, pair: name, lpBalance }),
+        ...gov,
+        voteSlots: await datedVoteSlots(gov.voteSlots, name),
         source: "xrpl",
       };
     } catch {
@@ -54,6 +58,17 @@ export async function loadPoolGovernance(pair, address = "", extra = {}) {
   });
 }
 
+async function datedVoteSlots(slots = [], pair = "XDX/XRP") {
+  const rows = (Array.isArray(slots) ? slots : []).map((row) => ({ ...row, pair: row.pair || pair }));
+  const accounts = [...new Set(rows.map((row) => String(row.account || "").trim()).filter(Boolean))];
+  if (!accounts.length) return rows;
+  const lists = await mapLimit(accounts, 3, async (account) => {
+    const body = await loadWalletVotes(account).catch(() => ({ activity: [] }));
+    return Array.isArray(body?.activity) ? body.activity : [];
+  });
+  return attachVoteTimestamps(rows, lists.flat());
+}
+
 export async function loadWalletVotes(address) {
   const name = String(address || "").trim();
   if (!name) return { account: null, activity: [], source: "empty" };
@@ -63,7 +78,7 @@ export async function loadWalletVotes(address) {
         account: name,
         ledger_index_min: -1,
         ledger_index_max: -1,
-        limit: 40,
+        limit: 80,
         binary: false,
         forward: false,
       });

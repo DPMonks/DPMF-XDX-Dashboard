@@ -28,6 +28,19 @@ export function inferTradesFromHistory(rows) {
   return trades.reverse();
 }
 
+export function mergeTradePrints(primary = [], extra = []) {
+  const seen = new Set();
+  const out = [];
+  for (const row of [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(extra) ? extra : [])]) {
+    if (!row) continue;
+    const key = row.hash || `${row.timestamp}|${row.pool || row.pair}|${row.xdx}|${row.side}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out.sort((a, b) => Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0));
+}
+
 export function traderSeriesFromTrades(trades) {
   const byHour = new Map();
   for (const row of trades || []) {

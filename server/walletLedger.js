@@ -1,10 +1,10 @@
 import { xrplRpc } from "./xrplBookOffers.js";
 import { hexCurrencyLabel } from "../src/wallet/ammCreate.js";
-import { activityFromAccountTx, ordersFromAccountOffers } from "../src/wallet/ledgerOrders.js";
+import { activityFromAccountTx, lpHistoryFromAccountTx, ordersFromAccountOffers } from "../src/wallet/ledgerOrders.js";
 import { POOLS, RLUSD_ISSUER, XDX_ISSUER } from "../src/constants/ledger.js";
-import { lpPositionFromPool } from "../src/wallet/composeWallet.js";
+import { lpPositionFromPool, resolveLpPairName } from "../src/wallet/composeWallet.js";
 import { DEFAULT_INCOME_PAIR, incomePairName, isXdxAmmPair } from "../src/wallet/lpIncome.js";
-import { loadLiveAmmReserves } from "./liveAmmReserves.js";
+import { loadLiveAmmReserves, withXrplRetry } from "./liveAmmReserves.js";
 import { loadLiveMarket } from "./liveCatalog.js";
 
 const CACHE_MS = 8_000;
@@ -24,6 +24,18 @@ function cached(key, loader) {
     if (body && body.source !== "empty") cache.set(key, { at: Date.now(), body });
     return body;
   });
+}
+
+export function accountDataFromRpc(info) {
+  if (!info || typeof info !== "object") return null;
+  return info.account_data || info.result?.account_data || null;
+}
+
+export function xrpDropsFromAccountInfo(info) {
+  const data = accountDataFromRpc(info);
+  if (!data || data.Balance == null || data.Balance === "") return null;
+  const drops = Number(data.Balance);
+  return Number.isFinite(drops) && drops > 0 ? drops : null;
 }
 
 export function preferPositiveAmount(live, catalog) {
@@ -242,7 +254,10 @@ export async function loadWalletBalancesFromLedger(address, options = {}) {
   if (options.fresh) cache.delete(`balances:${name}`);
   return cached(`balances:${name}`, async () => {
     const [infoResult, raw] = await Promise.all([
-      xrplRpc("account_info", { account: name, ledger_index: "validated" }, options).catch(() => null),
+      withXrplRetry(
+        () => xrplRpc("account_info", { account: name, ledger_index: "validated" }, options),
+        { retries: 3, waitMs: 280 }
+      ).catch(() => null),
       loadRawAccountLines(name, options),
     ]);
     let xdx = xdxBalanceFromLines(raw.lines);
@@ -265,18 +280,17 @@ export async function loadWalletBalancesFromLedger(address, options = {}) {
       }
     }
     const lpRows = lpHoldingsFromLines(raw.lines);
-    const drops = Number(infoResult?.account_data?.Balance);
-    const xrp = Number.isFinite(drops) ? drops / 1_000_000 : null;
-    const source = infoResult || raw.source === "xrpl" ? "xrpl" : "empty";
+    const drops = xrpDropsFromAccountInfo(infoResult);
+    const source = drops != null || raw.source === "xrpl" ? "xrpl" : "empty";
     return {
       account: name,
-      xrp,
+      xrp: drops != null ? drops / 1_000_000 : null,
       xdx,
       rlusd,
       lp: lpRows.reduce((sum, row) => sum + Number(row.lp_balance || 0), 0),
       lines: linesFromAccountLines(raw.lines),
       source,
-      balance_drops: Number.isFinite(drops) ? drops : null,
+      balance_drops: drops,
     };
   });
 }
@@ -398,27 +412,62 @@ export async function loadWalletActivity(address, options = {}) {
 }
 
 function lpIncomeCacheKey(address, pair, marker) {
-  return `lp-income:${address}:${pair}:${marker ? JSON.stringify(marker) : "start"}`;
+  return `lp-income:${address}:${pair || "all"}:${marker ? JSON.stringify(marker) : "start"}`;
 }
 
-function isLpIncomeRow(row, pair) {
-  if (!row || (row.side !== "addLp" && row.side !== "createPool")) return false;
+function requestedIncomePair(value) {
+  const raw = String(value || "").trim();
+  if (!raw || raw.toUpperCase() === "ALL") return "";
+  const pair = incomePairName(raw);
+  return isXdxAmmPair(pair) ? pair : "";
+}
+
+function isLpHistoryRow(row, pair) {
+  if (!row || (row.side !== "addLp" && row.side !== "createPool" && row.side !== "removeLp")) return false;
   if (!(Number(row.lp) > 0)) return false;
-  return incomePairName(row.pair || row.pool) === pair;
+  const name = incomePairName(row.pair || row.pool);
+  if (pair) return name === pair;
+  return isXdxAmmPair(name) || Boolean(row.amm || row.lpCurrency);
 }
 
 export async function loadWalletLpIncome(address, options = {}) {
   const name = String(address || "").trim();
-  const pair = incomePairName(options.pair || DEFAULT_INCOME_PAIR);
+  const pair = requestedIncomePair(options.pair);
   const marker = options.marker && typeof options.marker === "object" ? options.marker : null;
   const maxPages = Math.max(1, Number(options.maxPages) || LP_INCOME_PAGES_PER_REQUEST);
-  if (!name || !isXdxAmmPair(pair)) {
-    return { account: name || null, pair, activity: [], complete: true, marker: null, source: "empty" };
+  if (!name) {
+    return { account: null, pair: pair || DEFAULT_INCOME_PAIR, activity: [], complete: true, marker: null, source: "empty" };
+  }
+  if (options.pair && String(options.pair).trim() && String(options.pair).toUpperCase() !== "ALL" && !pair) {
+    return { account: name, pair: incomePairName(options.pair), activity: [], complete: true, marker: null, source: "empty" };
   }
   const key = lpIncomeCacheKey(name, pair, marker);
   if (options.fresh) cache.delete(key);
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < LP_INCOME_CACHE_MS && !options.fresh) return hit.body;
+
+  const catalogs = Array.isArray(options.pools) ? options.pools : [];
+  const resolvePair = (_tx, event) => {
+    const catalog = catalogs.find((item) => {
+      const amm = String(item?.amm_account || item?.amm || "").toLowerCase();
+      const hex = String(item?.lp_currency || item?.lp_currency_hex || item?.lpHex || "").toUpperCase();
+      return (
+        (event.amm && amm === String(event.amm).toLowerCase()) ||
+        (event.currency && hex === String(event.currency).toUpperCase())
+      );
+    });
+    if (!catalog) return "";
+    return (
+      resolveLpPairName(
+        {
+          ...catalog,
+          amm_account: event.amm,
+          lp_currency: event.currency,
+        },
+        catalog.pool || catalog.pool_name || catalog.pair
+      ) || ""
+    );
+  };
 
   const rpc = { fetchImpl: options.fetchImpl, rpcUrl: options.rpcUrl };
   const activity = [];
@@ -440,8 +489,8 @@ export async function loadWalletLpIncome(address, options = {}) {
         },
         rpc
       );
-      const batch = activityFromAccountTx(result.transactions || [], name).filter((row) =>
-        isLpIncomeRow(row, pair)
+      const batch = lpHistoryFromAccountTx(result.transactions || [], name, { resolvePair }).filter((row) =>
+        isLpHistoryRow(row, pair)
       );
       activity.push(...batch);
       nextMarker = result.marker || null;
@@ -458,7 +507,7 @@ export async function loadWalletLpIncome(address, options = {}) {
 
   const body = {
     account: name,
-    pair,
+    pair: pair || "ALL",
     activity,
     complete,
     marker: complete ? null : nextMarker,

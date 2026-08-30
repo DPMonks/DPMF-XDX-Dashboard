@@ -101,6 +101,54 @@ test("loadWalletLpIncome pages account_tx and keeps only the selected pair", asy
   assert.equal(calls, 2);
 });
 
+test("loadWalletLpIncome walks all pairs and Payment LP credits unless a pair is selected", async () => {
+  const payment = {
+    hash: "P".padEnd(64, "0"),
+    close_time_iso: "2026-08-11T16:46:11.000Z",
+    tx: { TransactionType: "Payment", Account: "rSender", Destination: "rWallet" },
+    meta: {
+      TransactionResult: "tesSUCCESS",
+      AffectedNodes: [
+        {
+          ModifiedNode: {
+            LedgerEntryType: "RippleState",
+            FinalFields: {
+              Balance: { currency: "03970105D80AE3C54085F6E97EE16CEDE6CE8200", value: "-100" },
+              HighLimit: { issuer: "rWallet" },
+              LowLimit: { issuer: "rhEwhutV5EyYzTbBYDdK7dHxwdi5omqffB" },
+            },
+            PreviousFields: {
+              Balance: { currency: "03970105D80AE3C54085F6E97EE16CEDE6CE8200", value: "0" },
+            },
+          },
+        },
+      ],
+    },
+  };
+  const fetchImpl = async () => ({
+    ok: true,
+    json: async () => ({
+      result: {
+        transactions: [
+          payment,
+          depositRow({ pair: "XDX/RLUSD", lp: "40", hash: "B" }),
+        ],
+      },
+    }),
+  });
+  const all = await loadWalletLpIncome("rWallet", { pair: "ALL", fetchImpl, fresh: true });
+  assert.equal(all.complete, true);
+  assert.equal(all.activity.length, 2);
+  assert.deepEqual(
+    all.activity.map((row) => row.pair).sort(),
+    ["XDX/RLUSD", "XDX/XRP"]
+  );
+  const xrp = await loadWalletLpIncome("rWallet", { pair: "XDX/XRP", fetchImpl, fresh: true });
+  assert.equal(xrp.activity.length, 1);
+  assert.equal(xrp.activity[0].pair, "XDX/XRP");
+  assert.equal(xrp.activity[0].kind, "Payment");
+});
+
 test("loadWalletLpIncome walks several account_tx pages in one request", async () => {
   let calls = 0;
   const fetchImpl = async () => {

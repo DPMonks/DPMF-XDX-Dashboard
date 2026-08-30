@@ -81,7 +81,7 @@ export function walkBook({ levels, amountIn, inIsBase } = {}) {
   let left = num(amountIn);
   let out = 0;
   const used = [];
-  for (const row of copyLevels(levels)) {
+  for (const row of copyLevels(levels, { dexOnly: true })) {
     if (!(left > 0)) break;
     if (inIsBase) {
       const take = Math.min(left, row.base_size);
@@ -133,7 +133,9 @@ export function walkHybrid({
   reserveQuote,
   tradingFee = 1000,
 } = {}) {
-  const queue = copyLevels(levels).sort((a, b) => (inIsBase ? b.price - a.price : a.price - b.price));
+  const queue = copyLevels(levels, { dexOnly: true }).sort((a, b) =>
+    inIsBase ? b.price - a.price : a.price - b.price
+  );
   const state = { base: num(reserveBase), quote: num(reserveQuote) };
   let left = num(amountIn);
   let out = 0;
@@ -184,6 +186,22 @@ export function walkHybrid({
 
   const route = usedAmm && usedDex ? "hybrid" : usedAmm ? "amm" : usedDex ? "book" : "none";
   return { out, leftover: left > 0 ? left : 0, route, usedAmm, usedDex, bookOut, ammOut: ammOutTotal };
+}
+
+export function poolReducePercent({
+  ammOutput = 0,
+  sellingXdx,
+  reserveBase,
+  reserveQuote,
+} = {}) {
+  const out = num(ammOutput);
+  const reserveOut = sellingXdx ? num(reserveQuote) : num(reserveBase);
+  if (!(out > 0) || !(reserveOut > 0)) return null;
+  return (out / reserveOut) * 100;
+}
+
+export function quoteUsesPool(quote) {
+  return num(quote?.ammOutput) > 0 || quote?.routeUsed === "amm" || quote?.routeUsed === "hybrid";
 }
 
 export function expectedFromMid(amountIn, mid, sellingXdx) {
@@ -274,6 +292,12 @@ export function quoteSwap({
     mid: venueMid,
     partialFill: hasFill && leftover > 0,
     xdxNotional: sellingXdx ? filledIn : actual,
+    poolReducePercent: poolReducePercent({
+      ammOutput: walk.ammOut,
+      sellingXdx,
+      reserveBase,
+      reserveQuote,
+    }),
   };
 }
 
@@ -328,6 +352,7 @@ export function quoteBridgeSwap({ amountIn, fromVenue = {}, toVenue = {}, routin
     partialFill: Boolean(hop1.partialFill || hop2.partialFill),
     xdxNotional: hop1.actualOutput,
     hops: [hop1, hop2],
+    poolReducePercent: Math.max(num(hop1.poolReducePercent), num(hop2.poolReducePercent)) || null,
   };
 }
 
@@ -340,7 +365,13 @@ export function saferSwapAlternatives(input, quote, extras = {}) {
   const book = quoteSwap({ ...extras, amountIn: input, routingMode: "book" });
 
   const impactHigh = Math.abs(num(quote.priceImpactPercent)) >= IMPACT_WARN_PCT || quote.isNegativeSlippage;
-  if (impactHigh && half.actualOutput > 0 && Math.abs(half.priceImpactPercent) < Math.abs(quote.priceImpactPercent)) {
+  const poolFill = quoteUsesPool(quote);
+  if (
+    impactHigh &&
+    !poolFill &&
+    half.actualOutput > 0 &&
+    Math.abs(half.priceImpactPercent) < Math.abs(quote.priceImpactPercent)
+  ) {
     rows.push({ id: "half", amountIn: halfIn, quote: half });
   }
   if (amm.actualOutput > quote.actualOutput + 1e-9) rows.push({ id: "amm", amountIn: input, quote: amm });

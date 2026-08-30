@@ -4,7 +4,9 @@ import {
   ammSwapOut,
   expectedFromMid,
   quoteBridgeSwap,
+  poolReducePercent,
   quoteSwap,
+  quoteUsesPool,
   resolveVenueMid,
   saferSwapAlternatives,
   walkBook,
@@ -39,6 +41,20 @@ test("walkBook consumes bids when selling XDX", () => {
   });
   assert.equal(fill.leftover, 0);
   assert.ok(Math.abs(fill.out - (100 * 0.02 + 50 * 0.019)) < 1e-12);
+});
+
+test("walkHybrid does not treat implied AMM tape rows as resting DEX offers", () => {
+  const fill = walkHybrid({
+    inIsBase: true,
+    amountIn: 50,
+    reserveBase: 10_000,
+    reserveQuote: 200,
+    tradingFee: 1000,
+    levels: [{ price: 0.05, base_size: 50, source: "amm" }],
+  });
+  assert.equal(fill.usedDex, false);
+  assert.equal(fill.bookOut, 0);
+  assert.equal(fill.route, "amm");
 });
 
 test("walkHybrid prefers a better book level then finishes on the AMM", () => {
@@ -106,7 +122,7 @@ test("unwrapped catalog bids fill a book-only sell quote", () => {
   assert.ok(quote.bookOutput > 0);
 });
 
-test("saferSwapAlternatives offers a smaller size when impact is high", () => {
+test("pool fills report reserve share and do not recommend cutting in half", () => {
   const extras = {
     sellingXdx: true,
     mid: 0.03,
@@ -117,7 +133,31 @@ test("saferSwapAlternatives offers a smaller size when impact is high", () => {
     asks: [],
   };
   const quote = quoteSwap({ ...extras, amountIn: 2_000, routingMode: "smart" });
+  assert.ok(quoteUsesPool(quote));
+  assert.ok(quote.poolReducePercent > 1);
+  assert.ok(
+    Math.abs(quote.poolReducePercent - poolReducePercent({ ammOutput: quote.ammOutput, sellingXdx: true, reserveBase: 8_000, reserveQuote: 80 })) < 1e-9
+  );
   const rows = saferSwapAlternatives(2_000, quote, extras);
+  assert.equal(rows.some((row) => row.id === "half"), false);
+});
+
+test("saferSwapAlternatives can still shrink a book-only walk", () => {
+  const extras = {
+    sellingXdx: true,
+    mid: 0.02,
+    reserveBase: 0,
+    reserveQuote: 0,
+    tradingFee: 1000,
+    bids: [
+      { price: 0.02, base_size: 80, source: "dex" },
+      { price: 0.01, base_size: 400, source: "dex" },
+    ],
+    asks: [],
+  };
+  const quote = quoteSwap({ ...extras, amountIn: 400, routingMode: "book" });
+  assert.equal(quoteUsesPool(quote), false);
+  const rows = saferSwapAlternatives(400, quote, extras);
   assert.ok(rows.some((row) => row.id === "half"));
 });
 

@@ -23,11 +23,12 @@ import {
   tradePoolHint,
   tradeXdxVolume,
 } from "../ammPools";
-import { discoverLiveAmmPool, getLiveLpReserves, getWalletBalances, getWalletLines } from "../api/indexer";
+import { discoverLiveAmmPool, getLiveLpReserves, getWalletAccount, getWalletBalances, getWalletLines } from "../api/indexer";
 import { issuedBalance } from "../wallet/ammCreate";
+import { walletAvailableAmounts } from "../wallet/composeWallet";
 import { assetTrustTxjson, lpTrustTxjson, poolQuote } from "../ammTrustActions";
 import { useWallet } from "../context/useWallet";
-import { QUOTE_ASSETS, notifyWalletRefresh } from "../xaman/tradeTx";
+import { QUOTE_ASSETS, notifyWalletRefresh, unusedXrpCoversLines } from "../xaman/tradeTx";
 import { useXamanPayload } from "../xaman/useXamanPayload";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import { useI18n } from "../i18n/useI18n";
@@ -213,18 +214,20 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     let cancelled = false;
     async function loadLines() {
       if (!account) {
-        setWalletHold({ xdx: 0, xrp: 0, raw: {} });
+        setWalletHold({ xdx: 0, xrp: 0, raw: {}, account: {} });
         return;
       }
-      const [next, bals] = await Promise.all([
+      const [next, bals, nextAccount] = await Promise.all([
         getWalletLines(account, { fresh: true }).catch(() => []),
         getWalletBalances(account).catch(() => ({})),
+        getWalletAccount(account).catch(() => ({})),
       ]);
       if (cancelled) return;
       setWalletHold({
         xdx: Number(bals?.xdx) || 0,
         xrp: Number(bals?.xrp) || 0,
         raw: { ...(bals?.raw || {}), lines: Array.isArray(next) ? next : bals?.raw?.lines || [] },
+        account: nextAccount && typeof nextAccount === "object" ? nextAccount : {},
       });
     }
     loadLines();
@@ -260,6 +263,30 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     const txjson = kind === "lp" ? lpTrustTxjson(pool, account) : assetTrustTxjson(pool, account);
     if (!txjson) {
       setLineError(kind === "lp" ? t.lpTrustlineError : t.trustlineError);
+      return;
+    }
+    const quote = poolQuote(pool);
+    const hold = walletAvailableAmounts({
+      balances: walletHold,
+      account: walletHold.account || {},
+      lines: walletHold.raw?.lines,
+      quote,
+    });
+    const cover = unusedXrpCoversLines({
+      spendable: hold.xrp,
+      total: Number(walletHold.xrp) > 0 ? Number(walletHold.xrp) : hold.xrp,
+      account: walletHold.account || {},
+      extraLines: 1,
+    });
+    if (!cover.ok) {
+      const pair = String(pool?.pool || pool?.pool_name || quote.pair || `XDX/${quote.id || "XSQUAD"}`)
+        .replace(/\s+/g, "")
+        .toUpperCase();
+      setLineError(
+        (t.tradeNeedLineReserve || "")
+          .replace("{pair}", pair)
+          .replace("{amount}", formatToken(cover.need, locale, 4))
+      );
       return;
     }
     setLineError("");

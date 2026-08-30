@@ -130,6 +130,63 @@ export function dailyXdxFlowsFromOhlc(
   return [...byDay.values()].sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
 }
 
+function utcDayFromVolume(row = {}) {
+  const raw = row.timestamp || row.date || row.day;
+  if (!raw) return "";
+  const ts = Date.parse(raw);
+  if (!Number.isFinite(ts)) return String(raw).slice(0, 10);
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+export function projectXdxMarketDaysToPair(marketDays = [], pair, pairXdx24h, now = Date.now()) {
+  const want = String(pair || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  const pairVol = numPos(pairXdx24h);
+  if (!want || want === "XDX/XRP" || !(pairVol > 0)) return [];
+  const today = new Date(Number(now)).toISOString().slice(0, 10);
+  const days = (Array.isArray(marketDays) ? marketDays : [])
+    .map((row) => ({
+      date: utcDayFromVolume(row),
+      xdx: numPos(row.xdx),
+      timestamp: row.timestamp || `${utcDayFromVolume(row)}T12:00:00.000Z`,
+    }))
+    .filter((row) => row.date && row.xdx > 0);
+  if (!days.length) return [];
+  const todayMarket =
+    days.find((row) => row.date === today)?.xdx ||
+    days.slice().sort((left, right) => (left.date < right.date ? 1 : -1))[0]?.xdx ||
+    0;
+  if (!(todayMarket > 0)) return [];
+  return days.map((row) => ({
+    timestamp: row.timestamp,
+    date: row.date,
+    pool: want,
+    pair: want,
+    xdx: pairVol * (row.xdx / todayMarket),
+    source: "xdx-projected",
+  }));
+}
+
+export function volumeDaysForHeldPairs(marketDays = [], positions = [], now = Date.now()) {
+  const market = (Array.isArray(marketDays) ? marketDays : []).map((row) => ({
+    ...row,
+    pair: row.pair || row.pool || "XDX/XRP",
+    pool: row.pool || row.pair || "XDX/XRP",
+  }));
+  const extra = [];
+  for (const position of Array.isArray(positions) ? positions : []) {
+    const pair = String(position?.pool || position?.pool_name || position?.pair || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "");
+    if (!pair || pair === "XDX/XRP") continue;
+    extra.push(...projectXdxMarketDaysToPair(market, pair, catalogXdxVolume24h(position), now));
+  }
+  return [...market, ...extra];
+}
+
 export function xdxVolumeFromDexscreenerPair(pair = {}, xdxUsd) {
   const usd = numPos(pair?.volume?.h24 ?? pair?.volume24h);
   const price = numPos(pair?.priceUsd) || numPos(xdxUsd);
@@ -293,7 +350,7 @@ export function volumesFromFlows(flows = [], { now = Date.now(), windowMs = DAY_
     const ts = new Date(row.timestamp || row.time).getTime();
     if (!Number.isFinite(ts) || ts < cutoff) continue;
     const pair = xdxPairKey(row.pool || row.pool_name || row.pair);
-    if (!/^XDX\/[A-Z0-9]{2,12}$/.test(pair)) continue;
+    if (!/^XDX\/[A-Z0-9$]{2,24}$/.test(pair)) continue;
     byPair[pair] = (byPair[pair] || 0) + Math.abs(Number(row.xdx) || 0);
   }
   return byPair;
@@ -342,10 +399,12 @@ export function preferRailwayXdxVolume(dbRow = {}, liveRow = {}) {
   const liveXdx = catalogXdxVolume24h(liveRow);
   const db7d = catalogXdxVolume7d(dbRow);
   const live7d = catalogXdxVolume7d(liveRow);
-  if (looksLikeXdxVolume(dbXdx)) {
+  const dbTagged = numPos(dbRow.volume24hXdx ?? dbRow.volume_24h_xdx);
+  const dbUsable = dbTagged || (looksLikeXdxVolume(dbXdx) ? dbXdx : 0);
+  if (dbUsable && dbUsable >= liveXdx) {
     return {
-      volume24h: dbXdx,
-      volume24hXdx: numPos(dbRow.volume24hXdx) || dbXdx,
+      volume24h: dbUsable,
+      volume24hXdx: dbUsable,
       volume24hXrp: numPos(dbRow.volume24hXrp) || numPos(liveRow.volume24hXrp) || null,
       volume24hUsd: numPos(dbRow.volume24hUsd) || numPos(liveRow.volume24hUsd) || null,
       volume7d: db7d || live7d || null,

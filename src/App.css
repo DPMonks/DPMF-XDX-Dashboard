@@ -53,9 +53,8 @@ body {
 }
 
 .site-chrome {
-  position: sticky;
-  top: 0;
-  z-index: 40;
+  position: relative;
+  z-index: 50;
   padding-top: calc(16px + var(--header-safe));
   background: #050507;
 }
@@ -67,11 +66,14 @@ body {
 }
 
 .site-jump {
-  position: relative;
-  z-index: 1;
+  position: sticky;
+  top: var(--header-safe);
+  z-index: 40;
+  width: 100%;
   margin: 0;
-  padding: 8px 0 0;
+  padding: 8px 0 6px;
   background: #050507;
+  box-sizing: border-box;
 }
 
 .site-jump-bar {
@@ -163,6 +165,11 @@ body {
 }
 
 .site-jump-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 2;
   margin-top: 8px;
   padding: 12px;
   border: 1px solid rgba(199, 112, 255, 0.35);
@@ -272,15 +279,24 @@ body {
 
 @media (max-width: 767px) {
   .site-chrome {
-    padding-top: calc(8px + var(--header-safe));
+    padding-top: var(--header-safe);
   }
 
   .dashboard-header {
-    padding-bottom: 8px;
+    padding-bottom: 2px;
+  }
+
+  .header-bar {
+    gap: 6px;
+  }
+
+  .header-actions {
+    gap: 6px;
   }
 
   .site-jump {
-    padding-top: 4px;
+    padding-top: 2px;
+    padding-bottom: 4px;
   }
 
   .site-jump-now {
@@ -1226,6 +1242,53 @@ body {
   word-break: break-all;
 }
 
+.trade-executed-modal .connect-wallet-btn {
+  width: 100%;
+  min-height: 44px;
+  font-size: 16px;
+}
+
+.trade-fail-rec {
+  margin-top: 12px;
+  text-align: start;
+  border-color: rgba(255, 107, 107, 0.45);
+  background:
+    linear-gradient(180deg, rgba(255, 107, 107, 0.08), rgba(11, 12, 16, 0.92)),
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 107, 107, 0.05) 0 1px,
+      transparent 1px 7px
+    );
+  box-shadow:
+    0 0 18px rgba(255, 107, 107, 0.12),
+    inset 0 0 24px rgba(199, 112, 255, 0.06);
+}
+
+.trade-fail-rec .xdx-swap-tip-kicker {
+  color: #ff8a8a;
+}
+
+.trade-fail-rec p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.trade-fail-rec p + p {
+  margin-top: 8px;
+}
+
+.trade-fail-fix-kicker {
+  margin-top: 10px !important;
+}
+
+.trade-fail-code {
+  margin-top: 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dpmf-text-muted);
+}
+
 .modal-title {
   font-size: 1.25rem;
   margin: 0 0 16px;
@@ -1617,6 +1680,7 @@ body {
   color: var(--dpmf-text-main);
   border-radius: 10px;
   padding: 8px 10px;
+  font-size: 16px;
 }
 
 .rich-meta {
@@ -1794,6 +1858,44 @@ body {
   border-color: rgba(0, 234, 255, 0.35);
 }
 
+@media (max-width: 1180px) {
+  .rich-list-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .rich-list.is-lp-holders .pair-select {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .rich-list.is-lp-holders .rich-search,
+  .rich-list.is-lp-holders .rich-meta {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .rich-list .pair-select-control,
+  .rich-list .pair-select-list button,
+  .rich-list .rich-search,
+  .rich-list .copy-btn {
+    min-height: 44px;
+  }
+
+  .rich-list .pair-select-list button {
+    display: flex;
+    align-items: center;
+    padding: 12px 10px;
+    font-size: 16px;
+  }
+
+  .rich-list .copy-btn {
+    min-width: 44px;
+    padding: 10px 12px;
+  }
+}
+
 .pagination {
   display: flex;
   align-items: center;
@@ -1952,7 +2054,7 @@ body {
 }
 
 .pool-split-xdx {
-  color: var(--dpmf-neon-cyan);
+  color: var(--dpmf-neon-lime);
   justify-content: flex-start;
 }
 
@@ -1978,8 +2080,8 @@ body {
 }
 
 .pool-split-swatch.is-xdx {
-  background: #00eaff;
-  box-shadow: 0 0 8px rgba(0, 234, 255, 0.7);
+  background: var(--dpmf-neon-lime);
+  box-shadow: 0 0 8px var(--dpmf-neon-lime-soft);
 }
 
 .pool-split-swatch.is-quote {
@@ -2001,7 +2103,7 @@ body {
   background: #101018;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 0 12px rgba(0, 234, 255, 0.45),
+    0 0 12px var(--dpmf-neon-lime-soft),
     0 0 16px rgba(199, 112, 255, 0.4);
 }
 
@@ -2013,8 +2115,8 @@ body {
 }
 
 .pool-split-bar-xdx {
-  background: linear-gradient(90deg, #005f6d 0%, #00eaff 100%);
-  box-shadow: inset 0 0 12px rgba(0, 234, 255, 0.55);
+  background: linear-gradient(90deg, #2f7a14 0%, var(--dpmf-neon-lime) 100%);
+  box-shadow: inset 0 0 12px var(--dpmf-neon-lime-soft);
 }
 
 .pool-split-bar-quote {
@@ -2335,12 +2437,82 @@ body {
   min-width: 0;
 }
 
+.xdx-swap-amount {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.xdx-swap-amount > span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dpmf-neon-cyan);
+}
+
+.xdx-swap-amount-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 10px 8px 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--dpmf-neon-cyan);
+  border-radius: 12px;
+  background: #1e2030;
+  box-shadow: inset 0 0 0 1px rgba(0, 234, 255, 0.18), 0 0 16px rgba(0, 234, 255, 0.12);
+}
+
+.xdx-swap-amount-field:focus-within {
+  border-color: var(--dpmf-neon-lime);
+  box-shadow: inset 0 0 0 1px rgba(152, 240, 80, 0.28), 0 0 18px rgba(152, 240, 80, 0.14);
+}
+
 .xdx-swap-input.is-amount {
-  margin-top: 10px;
+  min-width: 0;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #ffffff;
+  caret-color: var(--dpmf-neon-lime);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.xdx-swap-input.is-amount:focus {
+  outline: none;
+}
+
+.xdx-swap-input.is-amount::placeholder {
+  color: rgba(232, 232, 245, 0.42);
+  font-weight: 700;
+}
+
+.xdx-swap-amount-asset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 52px;
+  max-width: 42vw;
   padding: 0 12px;
-  border: 1px solid var(--dpmf-border-soft);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  border: 1px solid rgba(199, 112, 255, 0.55);
+  background: rgba(199, 112, 255, 0.2);
+  color: #ffffff;
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .xdx-swap-receive-block {
@@ -2433,6 +2605,13 @@ body {
   font: inherit;
   font-size: 16px;
   font-variant-numeric: tabular-nums;
+}
+
+.xdx-swap-input.is-amount {
+  min-height: 40px;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 700;
 }
 
 .xdx-swap-out {
@@ -2935,6 +3114,10 @@ body {
   overflow-x: auto;
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.orderbook-pairs .pair-chip {
+  flex: 0 0 auto;
 }
 
 .orderbook-search-wrap {
@@ -3616,10 +3799,12 @@ body {
 
 @container wallet (max-width: 560px) {
   .wallet-earn-beam {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     grid-template-areas:
-      "xrp xdx"
-      "rlusd total";
+      "total"
+      "xrp"
+      "xdx"
+      "rlusd";
   }
 
   .wallet-earn-row {
@@ -3641,6 +3826,11 @@ body {
   .wallet-earn-usd {
     font-size: 12px;
     max-width: 100%;
+  }
+
+  .wallet-earn-cell.is-usd-only .wallet-earn-usd {
+    overflow: visible;
+    text-overflow: unset;
   }
 }
 
@@ -3778,6 +3968,8 @@ body {
 
 .wallet-mini-list dt {
   color: var(--dpmf-text-muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .wallet-mini-list dd,
@@ -3922,7 +4114,7 @@ body {
 }
 
 .wallet-lp-comp .is-xdx {
-  background: var(--dpmf-neon-cyan);
+  background: var(--dpmf-neon-lime);
 }
 
 .wallet-lp-comp .is-quote {
@@ -3983,25 +4175,71 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
-  flex: 1 1 12rem;
-  min-width: min(100%, 12rem);
+  flex: 1 1 16rem;
+  min-width: min(100%, 16rem);
 }
 
 .wallet-income-select {
-  flex: 1 1 10rem;
-  min-width: 10rem;
+  flex: 1 1 8.5rem;
+  min-width: 8.5rem;
+  max-width: 12rem;
 }
 
 .wallet-income-select select {
+  box-sizing: border-box;
   width: 100%;
   max-width: none;
-  min-height: 44px;
-  font-size: 16px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px 8px;
+  line-height: 1;
+  font-size: 13px;
+}
+
+.wallet-income-totals {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  flex: 1 1 auto;
+  min-width: min-content;
+  min-height: 28px;
+}
+
+.wallet-income-total {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 2px;
+  color: var(--dpmf-neon-violet);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wallet-income-total.is-usd {
+  color: #39ff14;
+}
+
+.wallet-income-total small {
+  margin-left: 5px;
+  color: var(--dpmf-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .wallet-income-copy {
+  box-sizing: border-box;
   flex-shrink: 0;
+  height: 28px;
+  min-height: 28px;
+  padding: 5px 10px;
 }
 
 .wallet-income-load {
@@ -4103,6 +4341,30 @@ body {
 .wallet-income-table td.is-lp {
   color: var(--dpmf-neon-violet);
   font-weight: 700;
+}
+
+.wallet-income-table td.is-lp-add {
+  font-weight: 700;
+}
+
+.wallet-income-table .is-plus {
+  color: var(--dpmf-text-main);
+  margin-right: 2px;
+}
+
+.wallet-income-table .is-add {
+  color: var(--dpmf-neon-violet);
+}
+
+.wallet-income-day,
+.wallet-income-pair {
+  display: block;
+}
+
+.wallet-income-pair {
+  margin-top: 2px;
+  color: var(--dpmf-text-muted);
+  font-size: 10px;
 }
 
 .wallet-income-table td.is-earn {
@@ -4300,9 +4562,13 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+.governance-history .is-date {
+  min-width: 6.5rem;
+}
+
 .governance-history table {
   width: 100%;
-  min-width: 420px;
+  min-width: 560px;
   border-collapse: collapse;
   font-size: 12px;
 }
@@ -4322,6 +4588,74 @@ body {
 
 .governance-history tr.is-you td {
   color: var(--dpmf-neon-lime);
+}
+
+.governance-history .is-vote-on {
+  color: var(--dpmf-neon-lime);
+}
+
+.governance-history .is-vote-off,
+.governance-history tr.is-you td.is-vote-off {
+  color: #ff5d73;
+}
+
+@media (max-width: 1180px) {
+  .orderbook-toolbar {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .orderbook-pairs {
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .orderbook-pairs .pair-chip {
+    width: 100%;
+    min-height: 44px;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .orderbook-unit {
+    flex: 1 1 100%;
+    white-space: normal;
+  }
+
+  .orderbook-search-wrap {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    margin-left: 0;
+  }
+
+  .governance-history h3 {
+    margin: 16px 0 18px;
+  }
+
+  .wallet-income-copy {
+    display: inline-flex;
+    align-items: center;
+    height: 44px;
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+
+  .wallet-income-select select {
+    height: 44px;
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 16px;
+  }
+
+  .wallet-income-totals {
+    min-height: 44px;
+  }
 }
 
 @media (max-width: 700px) {
@@ -4369,9 +4703,19 @@ body {
   font-size: 13px;
 }
 
-.footer-link {
-  display: inline-block;
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 20px;
   margin-top: 10px;
+}
+
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--dpmf-neon-cyan);
   text-decoration: none;
 }
@@ -4381,6 +4725,12 @@ body {
 }
 
 @media (max-width: 1180px) {
+  .footer-link {
+    min-height: 44px;
+    padding: 0 10px;
+    font-size: 16px;
+  }
+
   .pool-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4499,7 +4849,23 @@ body {
     min-width: 0;
   }
 
-  .wallet-income-select,
+  .wallet-income-tools {
+    justify-content: flex-start;
+  }
+
+  .wallet-income-select {
+    flex: 1 1 8.5rem;
+    width: auto;
+    max-width: 12rem;
+    min-width: 8.5rem;
+  }
+
+  .wallet-income-totals,
+  .wallet-income-total {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+  }
+
   .wallet-lp-select {
     width: 100%;
     min-width: 0;
@@ -4550,9 +4916,16 @@ body {
     width: 44px;
   }
 
-  .copy-btn {
+  .copy-btn:not(.wallet-income-copy) {
     padding: 4px 6px;
     font-size: 11px;
+  }
+
+  .rich-list .copy-btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 8px;
+    font-size: 12px;
   }
 }
 
@@ -4616,26 +4989,51 @@ body {
     overflow: visible;
   }
 
+  .site-chrome {
+    padding-top: var(--header-safe);
+  }
+
+  .dashboard-header {
+    padding-bottom: 2px;
+  }
+
   .header-bar {
     flex-direction: column;
     align-items: stretch;
     text-align: center;
+    gap: 6px;
   }
 
   .header-brand {
+    flex: 0 0 auto;
     justify-content: center;
+    align-items: center;
+    gap: 6px;
   }
 
   .header-actions {
     width: 100%;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .header-actions .wallet-control {
+    flex: 1 1 0;
+    min-width: 0;
     align-items: stretch;
   }
 
-  .wallet-control,
-  .connect-wallet-btn {
+  .header-actions .connect-wallet-btn {
     width: 100%;
-    align-items: center;
+    min-height: 44px;
+    padding: 0 8px;
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+
+  .indexer-source {
+    margin-top: 6px;
   }
 
   .wallet-modal {
@@ -4746,6 +5144,19 @@ body {
     grid-template-columns: 2.4rem minmax(0, 1fr) minmax(6.5rem, auto);
   }
 
+  .xdx-swap-amount {
+    width: 100%;
+  }
+
+  .xdx-swap-amount-field {
+    width: 100%;
+    min-height: 56px;
+  }
+
+  .xdx-swap-input.is-amount {
+    font-size: 20px;
+  }
+
   .xdx-swap-token,
   .xdx-swap-row .brand-select,
   .xdx-swap-row .pair-select {
@@ -4755,6 +5166,28 @@ body {
 
   .orderbook-toolbar {
     flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .orderbook-pairs {
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .orderbook-pairs .pair-chip {
+    width: 100%;
+    min-height: 44px;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .orderbook-unit {
+    flex: 1 1 100%;
+    white-space: normal;
   }
 
   .orderbook-search-wrap {
@@ -4792,16 +5225,39 @@ body {
     display: none;
   }
 
+  .rich-list .copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
   .wallet-income-copy {
     display: inline-flex;
     align-items: center;
+    height: 44px;
     min-height: 44px;
     padding: 8px 12px;
+  }
+
+  .wallet-income-table {
+    table-layout: fixed;
   }
 
   .wallet-income-table th,
   .wallet-income-table td {
     white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .wallet-income-table td.is-earn,
+  .wallet-income-table td.is-lp,
+  .wallet-income-table td.is-lp-add {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
   }
 
   .wallet-lp-head,
@@ -4812,11 +5268,25 @@ body {
   .wallet-income-tools {
     width: 100%;
     flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
-  .wallet-lp-select,
-  .wallet-income-select {
+  .wallet-lp-select {
     width: 100%;
+  }
+
+  .wallet-income-select {
+    flex: 1 1 8.5rem;
+    width: auto;
+    max-width: 12rem;
+    min-width: 8.5rem;
+  }
+
+  .wallet-income-totals,
+  .wallet-income-total {
+    flex: 1 1 auto;
+    min-height: 44px;
+    justify-content: flex-start;
   }
 
   .wallet-lp-select select,
@@ -4836,6 +5306,15 @@ body {
     width: 0;
   }
 
+  .rich-list .rich-table col.col-copy,
+  .rich-list .rich-table th.col-copy,
+  .rich-list .rich-table td.col-copy,
+  .rich-list .rich-table th:last-child,
+  .rich-list .rich-table td:last-child {
+    display: table-cell;
+    width: 44px;
+  }
+
   .tab,
   .range,
   .pair-chip {
@@ -4845,6 +5324,23 @@ body {
 }
 
 @media (max-width: 767px) {
+  .header-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  .dashboard-title {
+    font-size: clamp(1.05rem, 5.2vw, 1.28rem);
+    letter-spacing: 0.04em;
+    line-height: 1.05;
+  }
+
+  .dashboard-subtitle {
+    margin-top: 0;
+    font-size: 0.7rem;
+    line-height: 1.15;
+  }
+
   .xdx-swap-layout,
   .xdx-swap-main,
   .xdx-swap-guide,
@@ -4963,13 +5459,22 @@ body {
   .trade-field select,
   .trade-panel .pair-select-control,
   .pair-select-control,
+  .pair-select-list button,
+  .rich-search,
   .brand-select-list button,
   .wallet-lp-select select,
   .wallet-income-select select,
   .wallet-income-copy,
+  .wallet-income-totals,
+  .wallet-income-total,
   .orderbook-search,
   .amm-pools-search .orderbook-search {
     min-height: 44px;
+  }
+
+  .wallet-income-select select,
+  .wallet-income-copy {
+    height: 44px;
   }
 
   .tab,

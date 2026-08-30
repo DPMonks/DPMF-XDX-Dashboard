@@ -19,6 +19,7 @@ import { copyToClipboard } from "../utils/copy";
 import {
   emptyWalletSnapshot,
   normalizeWalletPair,
+  withdrawQuoteLabel,
   preferFilledWalletSnapshot,
   preferredWalletPair,
   sortWalletPairs,
@@ -26,18 +27,21 @@ import {
 } from "../wallet/composeWallet";
 import { formatFeePercent } from "../wallet/ammVote";
 import { useMorph } from "../wallet/useMorph";
-import { mergeWalletActivity, mergeWalletOrders, pendingFromExecution } from "../wallet/ledgerOrders";
+import { displayTrustlinePair, mergeWalletActivity, mergeWalletOrders, pendingFromExecution } from "../wallet/ledgerOrders";
 import {
-  DEFAULT_INCOME_PAIR,
+  INCOME_ALL_PAIRS,
   INCOME_PAGE_DAYS,
+  isAllIncomePairs,
   downloadTextFile,
   incomeDayKeys,
   incomePairChoices,
+  incomePairTotals,
   incomeRowsForPair,
   lpIncomeCsv,
-  mergeRecordedLpIncome,
+  mergeFrozenFees,
   pageLpIncome,
   readRecordedLpIncome,
+  remapIncomeActivity,
   writeRecordedLpIncome,
 } from "../wallet/lpIncome";
 
@@ -54,16 +58,17 @@ function XrpColumn({ label, tone, percent, value, locale, empty }) {
 }
 
 function XrpBalanceBars({ xrp, locale, t, empty }) {
-  const spendable = useMorph(empty ? 0 : xrp.spendable);
-  const reserved = useMorph(empty ? 0 : xrp.reserved);
-  const total = useMorph(empty ? 0 : xrp.balance);
+  const unknown = empty || xrp?.balance == null;
+  const spendable = useMorph(unknown ? 0 : xrp.spendable);
+  const reserved = useMorph(unknown ? 0 : xrp.reserved);
+  const total = useMorph(unknown ? 0 : xrp.balance);
   const bars = xrpBarPercents(
     { reserved, spendable, total },
-    !empty
+    !unknown
   );
 
   return (
-    <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
+    <div className={`wallet-panel${unknown ? " is-empty" : " is-filled"}`}>
       <p className="wallet-panel-title is-center">{t.xrpBalance}</p>
       <div className="wallet-xrp-bars">
         <XrpColumn
@@ -72,7 +77,7 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
           percent={bars.reservePct}
           value={reserved}
           locale={locale}
-          empty={empty}
+          empty={unknown}
         />
         <XrpColumn
           label={t.spendableXrp}
@@ -80,7 +85,7 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
           percent={bars.spendPct}
           value={spendable}
           locale={locale}
-          empty={empty}
+          empty={unknown}
         />
         <XrpColumn
           label={t.totalXrp}
@@ -88,7 +93,7 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
           percent={bars.totalPct}
           value={total}
           locale={locale}
-          empty={empty}
+          empty={unknown}
         />
       </div>
     </div>
@@ -203,7 +208,7 @@ function LpInfographic({ position, earn, locale, t, empty }) {
           <dd>{empty ? "—" : formatToken(position?.withdraw_estimate_xdx, locale, 2)}</dd>
         </div>
         <div>
-          <dt>{t.withdrawQuote}</dt>
+          <dt>{withdrawQuoteLabel(position?.quote, t.withdrawQuote)}</dt>
           <dd>
             {empty
               ? "—"
@@ -228,7 +233,7 @@ function LpInfographic({ position, earn, locale, t, empty }) {
 }
 
 function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook, locale, t, empty }) {
-  const [incomePair, setIncomePair] = useState(DEFAULT_INCOME_PAIR);
+  const [incomePair, setIncomePair] = useState(INCOME_ALL_PAIRS);
   const [historyActivity, setHistoryActivity] = useState(null);
   const [historyDays, setHistoryDays] = useState([]);
   const [recordedRows] = useState(() => readRecordedLpIncome(address));
@@ -238,14 +243,13 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
   const [epoch, setEpoch] = useState(0);
   const cacheRef = useRef(new Map());
   const sentinelRef = useRef(null);
-  const pairs = incomePairChoices({
-    positions,
-    activity: [...(Array.isArray(snapshotRows) ? snapshotRows : []), ...(historyActivity || [])],
-  });
+  const historyRows = remapIncomeActivity(historyActivity, positions, pools);
+  const pairs = incomePairChoices({ positions });
+  const selectedPair = pairs.includes(incomePair) ? incomePair : INCOME_ALL_PAIRS;
   const all = incomeRowsForPair({
-    pair: incomePair,
+    pair: selectedPair,
     snapshotRows,
-    historyActivity,
+    historyActivity: historyRows,
     historyDays,
     recordedRows,
     positions,
@@ -255,26 +259,46 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
     xrpUsd: priceBook?.xrpUsd,
     rlusdUsd: priceBook?.RLUSD,
   });
+  const totals = incomePairTotals({
+    pair: selectedPair,
+    positions,
+    pools,
+    activity: historyRows,
+    prices: priceBook,
+    xdxUsd: priceBook?.xdxUsd,
+    xrpUsd: priceBook?.xrpUsd,
+    rlusdUsd: priceBook?.RLUSD,
+  });
+  const allPairs = isAllIncomePairs(selectedPair);
   const dayCount = incomeDayKeys(all).length;
-  const visible = pageLpIncome(all, daysShown);
-  const pagedOut = empty || dayCount === 0 || daysShown >= dayCount;
-  const done = pagedOut && !loading && (empty || historyComplete || historyActivity != null);
+  const visible = allPairs ? all : pageLpIncome(all, daysShown);
+  const pagedOut = empty || allPairs || dayCount === 0 || daysShown >= dayCount;
+  const done = pagedOut && !loading && (empty || allPairs || historyComplete);
 
   useEffect(() => {
     if (!address || empty) return undefined;
-    const key = `${address}:${incomePair}`;
+    const key = address;
     const cached = cacheRef.current.get(key);
     if (cached) {
       setHistoryActivity(cached.activity);
       setHistoryDays(Array.isArray(cached.days) ? cached.days : []);
       setHistoryComplete(cached.complete);
-      setLoading(false);
-      return undefined;
+      setLoading(!cached.complete);
+      if (cached.complete) return undefined;
     }
     let cancelled = false;
     setLoading(true);
     setHistoryComplete(false);
-    loadWalletLpIncomeHistory(address, { pair: incomePair, fresh: epoch > 0 })
+    loadWalletLpIncomeHistory(address, {
+      fresh: epoch > 0,
+      onPage: (partial) => {
+        if (cancelled) return;
+        cacheRef.current.set(key, partial);
+        setHistoryActivity(partial.activity);
+        setHistoryDays(Array.isArray(partial.days) ? partial.days : []);
+        setHistoryComplete(false);
+      },
+    })
       .then((result) => {
         if (cancelled) return;
         cacheRef.current.set(key, result);
@@ -290,7 +314,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
     return () => {
       cancelled = true;
     };
-  }, [address, incomePair, empty, epoch]);
+  }, [address, empty, epoch]);
 
   useEffect(() => {
     if (!address) return undefined;
@@ -328,24 +352,13 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
   function onPairChange(next) {
     setIncomePair(next);
     setDaysShown(INCOME_PAGE_DAYS);
-    const cached = address ? cacheRef.current.get(`${address}:${next}`) : null;
-    if (cached) {
-      setHistoryActivity(cached.activity);
-      setHistoryDays(Array.isArray(cached.days) ? cached.days : []);
-      setHistoryComplete(cached.complete);
-      setLoading(false);
-      return;
-    }
-    setHistoryActivity(null);
-    setHistoryDays([]);
-    setHistoryComplete(false);
-    setLoading(true);
   }
 
   useEffect(() => {
     if (!address || empty || !all.length) return;
-    writeRecordedLpIncome(address, mergeRecordedLpIncome(readRecordedLpIncome(address), all));
-  }, [address, empty, all]);
+    if (allPairs || all.some((row) => row.kind === "hold")) return;
+    writeRecordedLpIncome(address, mergeFrozenFees(readRecordedLpIncome(address), all));
+  }, [address, empty, all, allPairs]);
 
   return (
     <section className={`wallet-book wallet-income${empty ? " is-empty" : " is-filled"}`}>
@@ -355,18 +368,35 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
           <label className="wallet-lp-select wallet-income-select">
             <span className="sr-only">{t.incomePairSelect || t.incomePair || "Pair"}</span>
             <select
-              value={incomePair}
+              value={selectedPair}
               disabled={empty}
               aria-label={t.incomePairSelect || t.incomePair || "Pair"}
               onChange={(event) => onPairChange(event.target.value)}
             >
               {pairs.map((name) => (
                 <option key={name} value={name}>
-                  {name}
+                  {name === INCOME_ALL_PAIRS ? t.incomeAllPairs || "All pairs" : name}
                 </option>
               ))}
             </select>
           </label>
+          <div className="wallet-income-totals">
+            {!allPairs ? (
+              <p className="wallet-income-total" aria-label={t.incomeTotalLp || "Total LP"}>
+                {empty || !(totals.lp > 0) ? (
+                  "—"
+                ) : (
+                  <>
+                    {formatToken(totals.lp, locale, 4)}
+                    <small>{t.incomeLpTokens || "LP"}</small>
+                  </>
+                )}
+              </p>
+            ) : null}
+            <p className="wallet-income-total is-usd" aria-label={t.incomeUsd || "USD"}>
+              {empty || !(totals.usd > 0) ? "—" : formatUsd(totals.usd, locale)}
+            </p>
+          </div>
           <button
             type="button"
             className="copy-btn wallet-income-copy"
@@ -391,26 +421,49 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
         <table className="wallet-income-table">
           <thead>
             <tr>
-              <th>{t.incomeDate || "Date"}</th>
-              <th>{t.incomeLpTokens || "LP"}</th>
-              <th>{t.incomePair || "Pair"}</th>
+              <th>{allPairs ? t.incomePair || "Pair" : t.incomeDate || "Date"}</th>
+              <th>{allPairs ? t.incomeLpBalance || "LP Balance" : t.incomeLpAdded || t.incomeLpTokens || "LP"}</th>
               <th>{t.incomeUsd || "USD"}</th>
             </tr>
           </thead>
           <tbody>
             {empty || !visible.length ? (
               <tr>
-                <td colSpan={4}>{empty ? "—" : t.noLpIncome || "No LP earnings yet"}</td>
+                <td colSpan={3}>
+                  {empty ? "—" : allPairs ? t.noLpPositions || "No LP positions" : t.noLpIncome || "No LP earnings yet"}
+                </td>
               </tr>
             ) : (
-              visible.map((row) => (
-                <tr key={`${row.txid || row.date}-${row.pair}-${row.kind || "fee"}-${row.lpTokens}`}>
-                  <td>{row.date}</td>
-                  <td className="is-lp">{formatToken(row.lpTokens, locale, 4)}</td>
-                  <td>{row.pair}</td>
-                  <td className="is-earn">{formatUsd(row.usd, locale)}</td>
-                </tr>
-              ))
+              visible.map((row) => {
+                const amount = Number(row.lpEarned ?? row.lpBalance ?? row.lpTokens);
+                const hold = row.kind === "hold" || allPairs;
+                return (
+                  <tr key={`${row.date || "hold"}-${row.pair}-${amount}`}>
+                    <td>
+                      {hold ? (
+                        <span className="wallet-income-day">{row.pair}</span>
+                      ) : (
+                        <span className="wallet-income-day">{row.date}</span>
+                      )}
+                    </td>
+                    <td className={hold ? "is-lp" : "is-lp-add"}>
+                      {amount > 0 ? (
+                        hold ? (
+                          formatToken(amount, locale, 4)
+                        ) : (
+                          <>
+                            <span className="is-plus">+</span>
+                            <span className="is-add">{formatToken(amount, locale, 4)}</span>
+                          </>
+                        )
+                      ) : (
+                        ""
+                      )}
+                    </td>
+                    <td className="is-earn">{amount > 0 && Number(row.usd) > 0 ? formatUsd(row.usd, locale) : ""}</td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -727,7 +780,7 @@ export default function ConnectedWallet() {
                         : row.side === "trustline"
                           ? (t.trustlineActivity || "Added {asset} trustline").replace(
                               "{asset}",
-                              row.currency || t.xdx
+                              displayTrustlinePair(row, view.pools) || row.pair || t.xdx
                             )
                           : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
                               row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""

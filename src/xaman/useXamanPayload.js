@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { detectTradeExecution, isTradeTxjson } from "./detectExecution";
+import { detectTradeExecution, isEngineFailure, isTradeTxjson } from "./detectExecution";
 import {
   clearXamanReturn,
   isConsumedUuid,
@@ -143,7 +143,15 @@ export function useXamanPayload() {
       if (detection?.failed) {
         announced = true;
         onFailed?.(detection);
-        if (watchTrade) notifyTradeFailed({ ...detection, uuid: payloadUuid, txjson: request?.txjson, signMarker });
+        if (watchTrade) {
+          notifyTradeFailed({
+            ...detection,
+            uuid: payloadUuid,
+            txjson: request?.txjson,
+            trade: trade || request?.trade || null,
+            signMarker,
+          });
+        }
         return true;
       }
       if (!detection?.executed) return false;
@@ -279,6 +287,18 @@ export function useXamanPayload() {
             await new Promise((resolve) => setTimeout(resolve, 1500));
           }
           if (looksSigned && !announced && watchTrade) {
+            const last = await inspect();
+            if (last.executed && announce(last)) {
+              reset();
+              setStatus("signed");
+              return;
+            }
+            if (last.failed || isEngineFailure(last.engineResult)) {
+              announce({ ...last, failed: true });
+              reset();
+              setStatus("failed");
+              return;
+            }
             notifyTradeUnconfirmed({
               ...detection,
               uuid: payloadUuid,

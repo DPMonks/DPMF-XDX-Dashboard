@@ -1,4 +1,6 @@
 import { preferRailwayXdxVolume } from "../src/utils/lpVolume.js";
+import { mergeTradePrints } from "../src/xdxTrades.js";
+import { bookHasTape, mergeOrderbookPayloads } from "../src/orderbook.js";
 import { payloadUsable, preferUsable, recallCatalog, rememberCatalog } from "./sourceControl.js";
 
 function asObject(value) {
@@ -211,6 +213,14 @@ export function mergePoolRows(dbPools, livePools) {
   return [...byKey.values()];
 }
 
+export function mergeTradeFlows(db, live) {
+  const dbRows = Array.isArray(db) ? db : Array.isArray(db?.rows) ? db.rows : [];
+  const liveRows = Array.isArray(live) ? live : Array.isArray(live?.rows) ? live.rows : [];
+  if (!liveRows.length) return db;
+  if (!dbRows.length) return live;
+  return mergeTradePrints(dbRows, liveRows);
+}
+
 export function mergeLivePools(db = {}, live = {}) {
   const livePools = Array.isArray(live.pools) ? live.pools : [];
   const dbPools = Array.isArray(db.pools) ? db.pools : Array.isArray(db) ? db : [];
@@ -268,8 +278,39 @@ function hasRows(value) {
     (Array.isArray(value.pools) && value.pools.length > 0) ||
     (Array.isArray(value.price_history) && value.price_history.length > 0) ||
     (Array.isArray(value.amm_pool_history) && value.amm_pool_history.length > 0) ||
-    (value.books && typeof value.books === "object" && Object.keys(value.books).some((key) => value.books[key]))
+    (value.books && typeof value.books === "object" && Object.keys(value.books).some((key) => value.books[key])) ||
+    (Array.isArray(value.bids) && value.bids.length > 0) ||
+    (Array.isArray(value.asks) && value.asks.length > 0)
   );
+}
+
+export function mergeOrderbookCatalogs(db, live) {
+  const stored = asObject(db);
+  const fresh = asObject(live);
+  if (!stored) return live;
+  if (!fresh) return db;
+
+  if (stored.books || fresh.books) {
+    const merged = mergeOrderbookPayloads(
+      stored.books ? stored : { ...stored, books: {} },
+      fresh.books ? fresh : { ...fresh, books: {} }
+    );
+    const source =
+      stored.source && fresh.source && stored.source !== fresh.source
+        ? "hybrid"
+        : fresh.source || stored.source;
+    return {
+      ...stored,
+      ...fresh,
+      ...merged,
+      featured: stored.featured || fresh.featured,
+      source,
+    };
+  }
+
+  if (bookHasTape(stored)) return stored;
+  if (bookHasTape(fresh)) return { ...stored, ...fresh, source: fresh.source || stored.source };
+  return stored;
 }
 
 export function mergeCatalogPayload(suffix, db, live) {
@@ -286,7 +327,7 @@ export function mergeCatalogPayload(suffix, db, live) {
   if (path === "issuer-locked") return mergeIssuerLocked(db, live);
   if (/\/count$/.test(path) || path.endsWith("/count")) return mergeCountPayload(db, live);
   if (path === "xdx-flows" || path === "trades" || path === "charts/trades") {
-    return hasRows(db) ? db : live;
+    return mergeTradeFlows(db, live);
   }
   if (/^charts\//.test(path) || path === "chart/candles" || path === "charts/candles" || path.startsWith("sparkline/")) {
     return hasRows(db) ? db : live;
@@ -295,7 +336,7 @@ export function mergeCatalogPayload(suffix, db, live) {
     return hasRows(db) ? db : live;
   }
   if (path === "orderbook" || path === "orderbooks") {
-    return hasRows(db) ? db : live;
+    return mergeOrderbookCatalogs(db, live);
   }
   if (path === "wallet/rank" || /^wallet\/rank\//.test(path)) {
     if (!isBlankAmount(db?.rank)) return { ...db, source: db.source || "db" };

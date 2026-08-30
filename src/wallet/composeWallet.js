@@ -3,11 +3,13 @@ import {
   XDX_RLUSD_AMM,
   XDX_RLUSD_LP_HEX,
   XDX_TOTAL_SUPPLY,
+  XDX_XIO_AMM,
+  XDX_XIO_LP_HEX,
   XDX_XRP_AMM,
   XDX_XRP_LP_HEX,
 } from "../constants/ledger.js";
 import { fillMissingXdxFiat } from "../utils/fiatFx.js";
-import { catalogXdxVolume24h, catalogXdxVolume7d, dailyPricesFromOhlc, dailyXdxFlowsFromOhlc } from "../utils/lpVolume.js";
+import { catalogXdxVolume24h, catalogXdxVolume7d, dailyPricesFromOhlc, dailyXdxFlowsFromOhlc, volumeDaysForHeldPairs } from "../utils/lpVolume.js";
 import { looksLikeXrpPerXdx, saneXrpUsd } from "../utils/recordedPrice.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
 import { isNativeXrpQuote, lineCounterparty, lineCurrencyCodes, sameIssuedCurrency } from "../utils/currency.js";
@@ -46,7 +48,7 @@ export function xrpReserveBreakdown({
   const drops = dropsOrNull(balanceDrops);
   const fromAccount = drops != null && drops > 0 ? drops / DROPS : null;
   const fromBalances = num(balance);
-  const total = fromAccount != null ? fromAccount : fromBalances;
+  const total = fromAccount != null ? fromAccount : fromBalances > 0 ? fromBalances : null;
   if (total == null) {
     return {
       balance: null,
@@ -78,7 +80,7 @@ export function xrpReserveBreakdown({
 export function xrpBarPercents({ reserved, spendable, total } = {}, filled = true) {
   if (!filled) return { reservePct: 0, spendPct: 0, totalPct: 0 };
   const hold = Math.max(0, Number(total) || 0);
-  if (!(hold > 0)) return { reservePct: 0, spendPct: 0, totalPct: 100 };
+  if (!(hold > 0)) return { reservePct: 0, spendPct: 0, totalPct: 0 };
   return {
     reservePct: (Math.max(0, Number(reserved) || 0) / hold) * 100,
     spendPct: (Math.max(0, Number(spendable) || 0) / hold) * 100,
@@ -232,6 +234,7 @@ export function resolveLpPairName(pool = {}, pairHint = "") {
   const amm = String(pool.amm_account || pool.amm || "").trim();
   if (hex === XDX_RLUSD_LP_HEX || amm === XDX_RLUSD_AMM) return "XDX/RLUSD";
   if (hex === XDX_XRP_LP_HEX || amm === XDX_XRP_AMM) return "XDX/XRP";
+  if (hex === XDX_XIO_LP_HEX || amm === XDX_XIO_AMM) return "XDX/XIO";
 
   const quote = String(pool.quote || "").trim().toUpperCase().replace(/^XDX\//, "");
   if (quote && quote !== "XRP") return normalizeWalletPair(`XDX/${quote}`);
@@ -308,6 +311,13 @@ export function positionsFromLines(lines = [], pools = []) {
     if (position) out.push(position);
   }
   return out;
+}
+
+export function withdrawQuoteLabel(asset, template = "Withdraw {asset} quote") {
+  const name = String(asset || "").trim();
+  const text = String(template || "Withdraw {asset} quote");
+  if (!name) return text.replace(/\s*\{asset\}\s*/g, " ").replace(/\s+/g, " ").trim();
+  return text.replace("{asset}", name);
 }
 
 export function lpPositionFromPool(lpBalance, pool = {}, pairHint = "") {
@@ -853,18 +863,20 @@ export function composeWalletSnapshot({
   const xrpUsd = saneXrpUsd(prices.xrpUsd, xdxUsd, xdxPerXrp);
   const rlusdUsd = num(prices.RLUSD ?? prices.quotes?.RLUSD) ?? 1;
   const dailyPrices = dailyPricesFromOhlc(ohlcRows, { xrpUsd });
+  const xdxVolumeDays = dailyXdxFlowsFromOhlc(ohlcRows, { xrpPerXdx: xdxPerXrp });
   const priceBook = {
     ...prices,
     xdxUsd,
     xrpUsd,
     RLUSD: rlusdUsd,
     dailyPrices,
+    xdxVolumeDays,
   };
   const ledgerRows = mergeWalletActivity(ledgerActivity, pending.activity);
   const income = lpFeeIncomeRows({
     positions: lp,
     flows,
-    volumeDays: dailyXdxFlowsFromOhlc(ohlcRows, { xrpPerXdx: xdxPerXrp }),
+    volumeDays: volumeDaysForHeldPairs(xdxVolumeDays, lp),
     activity: ledgerRows,
     xdxUsd,
     xrpUsd,
