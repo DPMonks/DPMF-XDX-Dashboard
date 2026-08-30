@@ -29,7 +29,8 @@ export default function VotingContainer({ lockedPair } = {}) {
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
   const [pools, setPools] = useState([]);
   const [lpRows, setLpRows] = useState([]);
-  const [pair, setPair] = useState(lockedPair || "XDX/XRP");
+  const [pickedPair, setPickedPair] = useState("XDX/XRP");
+  const pair = lockedPair ? normalizeVotePair(lockedPair) : pickedPair;
   const [gov, setGov] = useState(null);
   const [history, setHistory] = useState([]);
   const [assetHistory, setAssetHistory] = useState([]);
@@ -47,10 +48,6 @@ export default function VotingContainer({ lockedPair } = {}) {
     return names.map((name) => ({ id: name, label: name }));
   }, [pools, lpRows, history, pair]);
   const eligible = held > 0 || Number(gov?.lpBalance) > 0 || Boolean(gov?.eligible);
-
-  useEffect(() => {
-    if (lockedPair) setPair(normalizeVotePair(lockedPair));
-  }, [lockedPair]);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,7 +194,7 @@ export default function VotingContainer({ lockedPair } = {}) {
         value={pair}
         options={options}
         onChange={(next) => {
-          setPair(normalizeVotePair(next));
+          setPickedPair(normalizeVotePair(next));
           setConfirming(false);
           setNeedLp(false);
         }}

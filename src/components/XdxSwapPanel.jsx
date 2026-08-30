@@ -133,8 +133,14 @@ export default function XdxSwapPanel({ lockedPair } = {}) {
   const lockedQuote = String(lockedPair || "").includes("/")
     ? String(lockedPair).split("/")[1]
     : "";
-  const [fromId, setFromId] = useState(lockedQuote && lockedQuote !== "XRP" ? "XDX" : "XRP");
-  const [toId, setToId] = useState(lockedQuote && lockedQuote !== "XRP" ? lockedQuote : "XDX");
+  const lockedFromId = lockedQuote ? (lockedQuote === "XRP" ? "XRP" : "XDX") : "";
+  const lockedToId = lockedQuote ? (lockedQuote === "XRP" ? "XDX" : lockedQuote) : "";
+  const [pickedFromId, setPickedFromId] = useState(lockedFromId || "XRP");
+  const [pickedToId, setPickedToId] = useState(lockedToId || "XDX");
+  const lockSides = lockedQuote ? new Set([pickedFromId, pickedToId]) : null;
+  const lockMatch = Boolean(lockSides?.has("XDX") && lockSides.has(lockedQuote));
+  const fromId = lockedQuote && !lockMatch ? lockedFromId : pickedFromId;
+  const toId = lockedQuote && !lockMatch ? lockedToId : pickedToId;
   const [amount, setAmount] = useState("");
   const [routingMode, setRoutingMode] = useState("smart");
   const [acceptedRecKey, setAcceptedRecKey] = useState("");
@@ -225,17 +231,6 @@ export default function XdxSwapPanel({ lockedPair } = {}) {
       window.removeEventListener("dpmf-wallet-refresh", loadWallet);
     };
   }, [account]);
-
-  useEffect(() => {
-    if (!lockedQuote) return;
-    if (lockedQuote === "XRP") {
-      setFromId("XRP");
-      setToId("XDX");
-      return;
-    }
-    setFromId("XDX");
-    setToId(lockedQuote);
-  }, [lockedQuote]);
 
   useEffect(() => {
     let cancelled = false;
@@ -405,10 +400,10 @@ export default function XdxSwapPanel({ lockedPair } = {}) {
   function changeFrom(id) {
     const next = String(id || "").toUpperCase();
     if (!next) return;
-    setFromId(next);
+    setPickedFromId(next);
     if (next === effectiveTo) {
       const other = assets.find((row) => row.id !== next);
-      if (other) setToId(other.id);
+      if (other) setPickedToId(other.id);
     }
     resetSmartRoute();
   }
@@ -416,25 +411,25 @@ export default function XdxSwapPanel({ lockedPair } = {}) {
   function changeTo(id) {
     const next = String(id || "").toUpperCase();
     if (!next) return;
-    setToId(next);
+    setPickedToId(next);
     if (next === effectiveFrom) {
       const other = assets.find((row) => row.id !== next);
-      if (other) setFromId(other.id);
+      if (other) setPickedFromId(other.id);
     }
     resetSmartRoute();
   }
 
   function buyXdx() {
     const counter = fromTicker !== "XDX" ? effectiveFrom : toTicker !== "XDX" ? effectiveTo : "XRP";
-    setFromId(counter);
-    setToId("XDX");
+    setPickedFromId(counter);
+    setPickedToId("XDX");
     resetSmartRoute();
   }
 
   function sellXdx() {
     const counter = toTicker !== "XDX" ? effectiveTo : fromTicker !== "XDX" ? effectiveFrom : "XRP";
-    setFromId("XDX");
-    setToId(counter);
+    setPickedFromId("XDX");
+    setPickedToId(counter);
     resetSmartRoute();
   }
 

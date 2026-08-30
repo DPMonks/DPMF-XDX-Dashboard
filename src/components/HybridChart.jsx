@@ -116,7 +116,8 @@ function poolForPair(pools, pair) {
 export default function HybridChart({ lockedPair } = {}) {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
-  const [pair, setPair] = useState(lockedPair || "XDX/RLUSD");
+  const [pickedPair, setPickedPair] = useState("XDX/RLUSD");
+  const pair = lockedPair ? normalizeOrderbookPair(lockedPair) : pickedPair;
   const [timeframe, setTimeframe] = useState(DEFAULT_INTERVAL);
   const [tool, setTool] = useState("cursor");
   const [drawColor, setDrawColor] = useState("#3d8bff");
@@ -152,10 +153,6 @@ export default function HybridChart({ lockedPair } = {}) {
   const [priceShift, setPriceShift] = useState(0);
   const [loadedBars, setLoadedBars] = useState(() => visibleBarsForInterval(DEFAULT_INTERVAL) + CHART_MA_PAD);
   const [seriesMeta, setSeriesMeta] = useState({ len: 0, head: 0 });
-  useEffect(() => {
-    if (lockedPair) setPair(normalizeOrderbookPair(lockedPair));
-  }, [lockedPair]);
-
   const windowKey = `${pair}:${timeframe}`;
   const [activeWindow, setActiveWindow] = useState(windowKey);
   const phone = isPhoneDevice();
@@ -227,11 +224,11 @@ export default function HybridChart({ lockedPair } = {}) {
       const pending = pendingFromExecution(event.detail, walletAddress);
       if (pending?.order) {
         setLedgerOrders((rows) => mergeWalletOrders([pending.order], rows));
-        if (pending.order.pair) setPair(pending.order.pair);
+        if (pending.order.pair && !lockedPair) setPickedPair(pending.order.pair);
       }
       if (pending?.activity) {
         setLedgerFills((rows) => mergeWalletActivity([pending.activity], rows));
-        if (pending.activity.pair) setPair(pending.activity.pair);
+        if (pending.activity.pair && !lockedPair) setPickedPair(pending.activity.pair);
       }
       loadLedger();
     }
@@ -244,7 +241,7 @@ export default function HybridChart({ lockedPair } = {}) {
       window.removeEventListener("dpmf-trade-executed", onTrade);
       window.removeEventListener("dpmf-wallet-refresh", loadLedger);
     };
-  }, [walletAddress]);
+  }, [walletAddress, lockedPair]);
 
   const quote = pair.split("/")[1] || "RLUSD";
   const book = books?.books?.[pair] || {};
@@ -533,7 +530,7 @@ export default function HybridChart({ lockedPair } = {}) {
               className={pair === name ? "pair-chip active" : "pair-chip"}
               onClick={() => {
                 if (lockedPair) return;
-                setPair(name);
+                setPickedPair(name);
               }}
             >
               {name}
