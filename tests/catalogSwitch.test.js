@@ -7,6 +7,7 @@ import {
   mergeCountPayload,
   mergeIssuerLocked,
   mergeLiveOverview,
+  mergeLivePools,
   mergeLivePrices,
   mergeOrderbookCatalogs,
   overlayDbResultWithLive,
@@ -62,6 +63,29 @@ test("issuer lock stays on DB when issued is present", () => {
 test("change24h uses live only when the DB row is blank", () => {
   assert.equal(mergeChange24h({ xdx: -2, xrp: 1 }, { xdx: -4, xrp: 0 }).xdx, -2);
   assert.equal(mergeChange24h({ xdx: 0, xrp: 0 }, { xdx: -3.6, xrp: 0.2 }).xdx, -3.6);
+});
+
+test("mergeLivePools keeps seeded catalog rows and adds on-ledger extras", () => {
+  const merged = mergeLivePools(
+    {
+      pools: [{ pool: "XDX/XRP", amm_account: "rXrp", reserve_xdx: 10 }],
+      source: "db",
+    },
+    {
+      pools: [
+        { pool: "XDX/XRP", amm_account: "rXrp", reserve_xdx: 12 },
+        { pool: "XDX/$CAMELTOE", amm_account: "rCamel", quote: "$CAMELTOE" },
+        { pool: "XDX/POWDERKEG", amm_account: "rPowder", quote: "POWDERKEG" },
+      ],
+      source: "xrpl",
+    }
+  );
+  assert.deepEqual(
+    merged.pools.map((row) => row.pool),
+    ["XDX/XRP", "XDX/$CAMELTOE", "XDX/POWDERKEG"]
+  );
+  assert.equal(merged.pools[0].reserve_xdx, 12);
+  assert.equal(merged.count, 3);
 });
 
 test("mergeCatalogPayload routes prices, overview, and lists", () => {

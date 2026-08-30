@@ -18,7 +18,7 @@ import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
 import { handshake } from "./api";
-import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp, getWalletLp } from "./api/indexer";
+import { INDEXER_ORIGIN, discoverLiveAmmPool, getAmm, getTopHolders, getTopLp, getWalletLp } from "./api/indexer";
 import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 import { useWallet } from "./context/useWallet";
@@ -33,6 +33,7 @@ import {
 import {
   applySignedLpOwner,
   isLpPoolTrade,
+  mergeAmmPoolLists,
   rememberSignedLpOverlay,
   signedLpAccount,
   tradePoolHint,
@@ -55,6 +56,7 @@ export default function App() {
   const { walletAddress } = useWallet();
   const pendingTradeRef = useRef(null);
   const lpOverlayRef = useRef(null);
+  const createdPoolsRef = useRef([]);
   const [lpFocusPair, setLpFocusPair] = useState(null);
   const [lpFocusAt, setLpFocusAt] = useState(0);
   const [holders, setHolders] = useState([]);
@@ -151,7 +153,7 @@ export default function App() {
       try {
         const nextAmm = await getAmm();
         if (!cancelled) {
-          setAmmData(nextAmm);
+          setAmmData(mergeAmmPoolLists(nextAmm, createdPoolsRef.current));
           setErrors((current) => ({ ...current, amm: undefined }));
         }
         return null;
@@ -194,9 +196,45 @@ export default function App() {
     };
   }, [paintLp]);
 
-  const refreshLists = useCallback(() => {
+  const rememberCreatedPool = useCallback((detail) => {
+    if (!detail || typeof detail !== "object") return null;
+    const pair = String(detail.pair || "")
+      .replace(/\s+/g, "")
+      .toUpperCase();
+    if (!pair.startsWith("XDX/")) return null;
+    const row = {
+      pool: pair,
+      pool_name: pair,
+      quote: detail.quote || pair.split("/")[1],
+      quote_issuer: detail.issuer || detail.quote_issuer || null,
+      quote_hex: detail.hex || detail.quote_hex || null,
+      amm_account: detail.ammAccount || detail.amm_account || null,
+    };
+    createdPoolsRef.current = mergeAmmPoolLists(createdPoolsRef.current, [row]);
+    setAmmData((current) => mergeAmmPoolLists(current, [row]));
+    return row;
+  }, []);
+
+  const refreshLists = useCallback((created) => {
+    const createdRow = rememberCreatedPool(created);
+    if (createdRow) {
+      discoverLiveAmmPool(createdRow.pool, created)
+        .then((hit) => {
+          if (!hit) return;
+          createdPoolsRef.current = mergeAmmPoolLists(createdPoolsRef.current, [hit]);
+          setAmmData((current) => mergeAmmPoolLists(current, [hit]));
+        })
+        .catch(() => {});
+      [2000, 6000, 12000].forEach((ms) => {
+        window.setTimeout(() => {
+          getAmm()
+            .then((next) => setAmmData(mergeAmmPoolLists(Array.isArray(next) ? next : [], createdPoolsRef.current)))
+            .catch(() => {});
+        }, ms);
+      });
+    }
     getAmm()
-      .then((next) => setAmmData(Array.isArray(next) ? next : []))
+      .then((next) => setAmmData(mergeAmmPoolLists(Array.isArray(next) ? next : [], createdPoolsRef.current)))
       .catch(() => {});
     getTopHolders((rows, meta) => {
       setHolders(rows);
@@ -213,7 +251,7 @@ export default function App() {
         if (rows) paintLp(rows);
       })
       .catch(() => {});
-  }, [paintLp]);
+  }, [paintLp, rememberCreatedPool]);
 
   const openTrade = useCallback((detail) => {
     const live = liveWalletAddress(walletAddress);

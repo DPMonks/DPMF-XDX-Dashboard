@@ -32,6 +32,8 @@ test("only XDX AMM pairs count as earn pools", () => {
   assert.equal(isXdxAmmPair("XDX/XRP"), true);
   assert.equal(isXdxAmmPair("XDX/RLUSD"), true);
   assert.equal(isXdxAmmPair("XDX/$CAMEL"), true);
+  assert.equal(isXdxAmmPair("XDX/$CAMELTOE"), true);
+  assert.equal(isXdxAmmPair("XDX/POWDERKEG"), true);
   assert.equal(isXdxAmmPair({ pool: "XDX/XIO" }), true);
   assert.equal(isXdxAmmPair("SOLO/USD"), false);
   assert.equal(isXdxAmmPair({ pool_name: "RLUSD/XRP" }), false);

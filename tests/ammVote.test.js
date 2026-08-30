@@ -19,6 +19,7 @@ import {
   pairFromVoteAssets,
   poolForVotePair,
   quoteIssue,
+  quoteTickerFromCurrency,
 } from "../src/wallet/ammVote.js";
 import { XDX_CURRENCY, XDX_ISSUER, XIO_HEX, XIO_ISSUER } from "../src/constants/ledger.js";
 
@@ -38,6 +39,22 @@ test("pairFromVoteAssets tags XDX/XIO from the XIO hex or issuer", () => {
     ),
     "XDX/USDC"
   );
+  assert.equal(
+    pairFromVoteAssets(
+      { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
+      { currency: "2443616D656C546F650000000000000000000000", issuer: "rM1BJWAQ3hfCStboh4wCXTnGyHqcAvJZy3" }
+    ),
+    "XDX/$CAMELTOE"
+  );
+  assert.equal(
+    pairFromVoteAssets(
+      { currency: XDX_CURRENCY, issuer: XDX_ISSUER },
+      { currency: "504F57444552204B454700000000000000000000", issuer: "rwrsUT6ynqimffkxd6tAohFRDGHgGFmFjc" }
+    ),
+    "XDX/POWDERKEG"
+  );
+  assert.equal(quoteTickerFromCurrency("2443616D656C546F650000000000000000000000"), "$CAMELTOE");
+  assert.equal(quoteTickerFromCurrency("504F57444552204B454700000000000000000000"), "POWDERKEG");
   assert.equal(displayVotePair("XDX/5553444300000000000000000000000000000000"), "XDX/USDC");
 });
 

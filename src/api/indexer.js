@@ -356,7 +356,7 @@ export async function getAmm() {
 export async function discoverLiveAmmPool(pair, extra = {}) {
   const name = String(pair || "").replace(/\s+/g, "").toUpperCase();
   const ammAccount = String(extra.ammAccount || extra.amm_account || "").trim();
-  const validPair = /^XDX\/[A-Z0-9]{2,12}$/.test(name);
+  const validPair = /^XDX\/[A-Z0-9.$]{2,20}$/.test(name);
   if (!validPair && !/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(ammAccount)) return null;
   const [live, flows] = await Promise.all([
     getLiveLpReserves({

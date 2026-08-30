@@ -72,6 +72,7 @@ import {
   xrpDropsFromAccountInfo,
 } from "./walletLedger.js";
 import { knownLivePoolSpecs, liveCatalogPayload, loadLiveMarket } from "./liveCatalog.js";
+import { discoverXdxAmmSpecs, mergeDiscoveredAmmRows } from "./xdxAmmDiscover.js";
 import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
 import { catalogHealth } from "./sourceControl.js";
 import { FREE_API_HEADERS } from "./xrplToCatalog.js";
@@ -1552,7 +1553,9 @@ async function loadXdxLpPools(db) {
      FROM xdx_amm_pools
      ORDER BY reserve_xdx DESC NULLS LAST`
   );
-  if (!stored.rows.length) {
+  const discovered = await discoverXdxAmmSpecs().catch(() => []);
+  const storedRows = mergeDiscoveredAmmRows(stored.rows, discovered);
+  if (!storedRows.length) {
     return { count: 0, pools: [], catching_up: true, source: "db" };
   }
 
@@ -1589,17 +1592,17 @@ async function loadXdxLpPools(db) {
   );
 
   const lives = await loadLiveAmmReservesMany(
-    stored.rows.map((row) => ({
+    storedRows.map((row) => ({
       ammAccount: row.amm_account,
       pair: row.pool_name,
       quote: row.quote,
       issuer: row.quote_issuer,
       hex: row.quote_hex,
     })),
-    { concurrency: 3, retries: 1, waitMs: 200, deadlineMs: 4500 }
+    { concurrency: 4, retries: 1, waitMs: 200, deadlineMs: 12_000 }
   );
 
-  const pools = stored.rows.map((row, index) => {
+  const pools = storedRows.map((row, index) => {
     const extra =
       reserves.byAmm.get(row.amm_account) ||
       reserves.byName.get(String(row.pool_name || "").toUpperCase()) ||

@@ -1977,11 +1977,10 @@ body {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  flex: 0 1 auto;
-  max-width: 56%;
+  flex: 1 1 auto;
+  max-width: none;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
 }
 
 .pool-updated {
@@ -2047,10 +2046,12 @@ body {
 }
 
 .pool-split-asset {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
 }
 
 .pool-split-xdx {

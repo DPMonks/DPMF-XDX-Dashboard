@@ -283,7 +283,12 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
         setConfirming(false);
         setXdx("");
         setQuoteQty("");
-        onCreated?.();
+        onCreated?.({
+          pair: `XDX/${String(quoteTicker).replace(/\s+/g, "").toUpperCase()}`,
+          quote: String(quoteTicker).replace(/\s+/g, "").toUpperCase(),
+          issuer: quote.issuer || null,
+          hex: quote.hex || null,
+        });
       },
       errorMessage: t.createPoolSignError || t.tradeSignError,
     });
