@@ -21,6 +21,7 @@ import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../char
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { fullViewPriceHeight } from "../chart/fullView";
 import { quotePerXdx } from "../chart/pairQuote";
+import { normalizeOrderbookPair } from "../orderbook";
 import {
   ammRebalanceTrail,
   arbitrageWindow,
@@ -112,10 +113,11 @@ function poolForPair(pools, pair) {
   );
 }
 
-export default function HybridChart() {
+export default function HybridChart({ lockedPair } = {}) {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
-  const [pair, setPair] = useState("XDX/RLUSD");
+  const [pickedPair, setPickedPair] = useState("XDX/RLUSD");
+  const pair = lockedPair ? normalizeOrderbookPair(lockedPair) : pickedPair;
   const [timeframe, setTimeframe] = useState(DEFAULT_INTERVAL);
   const [tool, setTool] = useState("cursor");
   const [drawColor, setDrawColor] = useState("#3d8bff");
@@ -222,11 +224,11 @@ export default function HybridChart() {
       const pending = pendingFromExecution(event.detail, walletAddress);
       if (pending?.order) {
         setLedgerOrders((rows) => mergeWalletOrders([pending.order], rows));
-        if (pending.order.pair) setPair(pending.order.pair);
+        if (pending.order.pair && !lockedPair) setPickedPair(pending.order.pair);
       }
       if (pending?.activity) {
         setLedgerFills((rows) => mergeWalletActivity([pending.activity], rows));
-        if (pending.activity.pair) setPair(pending.activity.pair);
+        if (pending.activity.pair && !lockedPair) setPickedPair(pending.activity.pair);
       }
       loadLedger();
     }
@@ -239,7 +241,7 @@ export default function HybridChart() {
       window.removeEventListener("dpmf-trade-executed", onTrade);
       window.removeEventListener("dpmf-wallet-refresh", loadLedger);
     };
-  }, [walletAddress]);
+  }, [walletAddress, lockedPair]);
 
   const quote = pair.split("/")[1] || "RLUSD";
   const book = books?.books?.[pair] || {};
@@ -516,12 +518,20 @@ export default function HybridChart() {
       ) : null}
       <div className="hybrid-topbar">
         <div className="hybrid-pairs" role="tablist">
-          {CHART_PAIRS.map((name) => (
+          {(lockedPair
+            ? [normalizeOrderbookPair(lockedPair)]
+            : CHART_PAIRS.includes(pair)
+              ? CHART_PAIRS
+              : [...CHART_PAIRS, pair]
+          ).map((name) => (
             <button
               key={name}
               type="button"
               className={pair === name ? "pair-chip active" : "pair-chip"}
-              onClick={() => setPair(name)}
+              onClick={() => {
+                if (lockedPair) return;
+                setPickedPair(name);
+              }}
             >
               {name}
             </button>

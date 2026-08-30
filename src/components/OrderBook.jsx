@@ -97,9 +97,10 @@ function BookSide({ title, rows, side, locale, t }) {
   );
 }
 
-export default function OrderBook() {
+export default function OrderBook({ lockedPair } = {}) {
   const { t, locale } = useI18n();
-  const [pair, setPair] = useState("XDX/XRP");
+  const [pickedPair, setPickedPair] = useState("XDX/XRP");
+  const pair = lockedPair ? normalizeOrderbookPair(lockedPair) : pickedPair;
   const [query, setQuery] = useState("");
   const [books, setBooks] = useState(null);
   const [error, setError] = useState(null);
@@ -172,7 +173,8 @@ export default function OrderBook() {
     : [...FEATURED_ORDERBOOK_PAIRS, normalizeOrderbookPair(pair)];
 
   function selectPair(name) {
-    setPair(normalizeOrderbookPair(name));
+    if (lockedPair) return;
+    setPickedPair(normalizeOrderbookPair(name));
     setQuery("");
   }
 

@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,9 @@ import {
 } from "./proxyIndexer.js";
 import { suffixFromPath } from "./attachProxy.js";
 import { applySecurityHeaders } from "../src/security/headers.js";
+import { ammShareMeta, ogAmmSlugFromPath, poolCardSvg, requestOrigin, rewriteAmmHtml } from "./ammOg.js";
+import { readAmmRoute } from "../src/ammPage.js";
+import { loadLiveAmmReserves } from "./liveAmmReserves.js";
 
 const dist = join(fileURLToPath(new URL(".", import.meta.url)), "..", "dist");
 const port = Number(process.env.PORT || 4173);
@@ -85,10 +88,31 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  const ogPair = ogAmmSlugFromPath(pathOnly);
+  if (ogPair) {
+    const live = await loadLiveAmmReserves({ pair: ogPair, quote: ogPair.split("/")[1] }).catch(() => ({}));
+    applySecurityHeaders(res);
+    res.writeHead(200, { "content-type": "image/svg+xml; charset=utf-8" });
+    res.end(poolCardSvg(live, ogPair));
+    return;
+  }
+
+  const ammPair = readAmmRoute(pathOnly);
   const file = safeFile(pathOnly) || join(dist, "index.html");
   if (!existsSync(file)) {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     res.end("Not found. Run npm run build first.");
+    return;
+  }
+  if (ammPair && file.endsWith("index.html")) {
+    const live = await loadLiveAmmReserves({ pair: ammPair, quote: ammPair.split("/")[1] }).catch(() => ({}));
+    const html = rewriteAmmHtml(
+      readFileSync(file, "utf8"),
+      ammShareMeta({ origin: requestOrigin(req), pair: ammPair, pool: live })
+    );
+    applySecurityHeaders(res);
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(html);
     return;
   }
   sendFile(res, file);

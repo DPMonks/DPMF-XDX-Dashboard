@@ -3,7 +3,7 @@ import { useI18n } from "../i18n/useI18n";
 import DexChart from "./DexChart";
 import HybridChart from "./HybridChart";
 
-function TradingChart() {
+function TradingChart({ lockedPair } = {}) {
   const { t } = useI18n();
   const [mode, setMode] = useState("hybrid");
 
@@ -25,7 +25,7 @@ function TradingChart() {
           Dexscreener
         </button>
       </div>
-      {mode === "hybrid" ? <HybridChart /> : <DexChart />}
+      {mode === "hybrid" ? <HybridChart lockedPair={lockedPair} /> : <DexChart />}
     </div>
   );
 }

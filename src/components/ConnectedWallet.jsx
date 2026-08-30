@@ -577,11 +577,12 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
   );
 }
 
-export default function ConnectedWallet() {
+export default function ConnectedWallet({ lockedPair } = {}) {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
   const [snap, setSnap] = useState(() => emptyWalletSnapshot(null));
-  const [pair, setPair] = useState("XDX/XRP");
+  const [pickedPair, setPickedPair] = useState("XDX/XRP");
+  const pair = lockedPair || pickedPair;
 
   useEffect(() => {
     if (!walletAddress) return undefined;
@@ -593,11 +594,13 @@ export default function ConnectedWallet() {
       );
       if (cancelled) return;
       setSnap((current) => preferFilledWalletSnapshot(current, next));
-      setPair((current) => {
-        const pairs = next.lp.map((row) => row.pool);
-        if (!pairs.length) return current;
-        return preferredWalletPair(pairs, current);
-      });
+      if (!lockedPair) {
+        setPickedPair((current) => {
+          const pairs = next.lp.map((row) => row.pool);
+          if (!pairs.length) return current;
+          return preferredWalletPair(pairs, current);
+        });
+      }
     }
 
     load();
@@ -643,7 +646,7 @@ export default function ConnectedWallet() {
       window.removeEventListener("dpmf-trade-executed", onTrade);
       window.removeEventListener("dpmf-function-confirmed", onTrade);
     };
-  }, [walletAddress]);
+  }, [walletAddress, lockedPair]);
 
   const view = walletAddress ? snap : emptyWalletSnapshot(null);
   const empty = !view.signedIn || !view.filled;
@@ -716,8 +719,8 @@ export default function ConnectedWallet() {
             <span className="sr-only">{t.pair}</span>
             <select
               value={pair}
-              disabled={empty || !pools.length}
-              onChange={(event) => setPair(event.target.value)}
+              disabled={empty || !pools.length || Boolean(lockedPair)}
+              onChange={(event) => setPickedPair(event.target.value)}
             >
               {pools.length ? (
                 pools.map((name) => (

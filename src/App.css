@@ -1958,6 +1958,43 @@ body {
   box-shadow:
     0 0 18px rgba(0, 234, 255, 0.16),
     0 0 22px rgba(199, 112, 255, 0.2);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.pool-card.is-openable {
+  cursor: pointer;
+  border-color: rgba(199, 112, 255, 0.38);
+}
+
+@media (hover: hover) {
+  .pool-card.is-openable:hover {
+    border-color: #e2a6ff;
+    box-shadow:
+      0 0 0 2px #c770ff,
+      0 0 22px rgba(199, 112, 255, 0.8),
+      0 0 36px rgba(217, 70, 239, 0.42),
+      0 0 16px rgba(0, 234, 255, 0.18);
+  }
+}
+
+.pool-card.is-openable:focus-visible {
+  outline: 2px solid #e2a6ff;
+  outline-offset: 3px;
+  border-color: #e2a6ff;
+  box-shadow:
+    0 0 0 2px #c770ff,
+    0 0 22px rgba(199, 112, 255, 0.8),
+    0 0 36px rgba(217, 70, 239, 0.42);
+}
+
+.amm-page .header-actions {
+  flex-wrap: wrap;
+}
+
+.amm-page .header-actions .connect-wallet-btn {
+  min-height: 44px;
 }
 
 .pool-card-head {

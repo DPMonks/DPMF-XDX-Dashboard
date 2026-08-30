@@ -104,7 +104,23 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead, reserveXdx, reserveQuo
   );
 }
 
-export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemoveLiquidity }) {
+function isCardChrome(node) {
+  return Boolean(
+    node?.closest?.(
+      "button, a, input, select, textarea, label, .wallet-modal, .pool-card-actions"
+    )
+  );
+}
+
+export default function AmmCard({
+  pools,
+  loading,
+  error,
+  onAddLiquidity,
+  onRemoveLiquidity,
+  onOpenPool,
+  hideSearch = false,
+}) {
   const { t, locale } = useI18n();
   const { walletAddress, connectWallet } = useWallet();
   const { qr, mobileUrl, uuid, status, error: signError, start, reset } = useXamanPayload();
@@ -367,8 +383,14 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
     return <p className="error-message">{error}</p>;
   }
 
+  function openPool(pool) {
+    if (!onOpenPool || !pool) return;
+    onOpenPool(pool);
+  }
+
   return (
     <div className="amm-pools">
+      {hideSearch ? null : (
       <label className="amm-pools-search">
         <span className="sr-only">{t.searchPair || "Search XDX / asset"}</span>
         <input
@@ -381,6 +403,7 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
           onChange={(event) => onSearch(event.target.value)}
         />
       </label>
+      )}
       {looking ? <p className="amm-pools-looking">{t.lookingForPool || "Looking up that XDX pool on the ledger…"}</p> : null}
       {!catalog.length && !query.trim() ? (
         <p className="empty-message">{t.emptyPools}</p>
@@ -396,7 +419,22 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
             key={pool.amm_account || `${pool.pool}-${index}`}
             className={`pool-card ${
               pool.lead === "quote" ? "is-quote-lead" : pool.xdx_pct != null ? "is-xdx-lead" : ""
-            }`}
+            }${onOpenPool ? " is-openable" : ""}`}
+            role={onOpenPool ? "link" : undefined}
+            tabIndex={onOpenPool ? 0 : undefined}
+            aria-label={onOpenPool ? `${t.ammPageOpen || "Open AMM page"} ${pool.pool}` : undefined}
+            onClick={(event) => {
+              if (!onOpenPool || isCardChrome(event.target)) return;
+              if (typeof window !== "undefined" && window.getSelection?.()?.toString()) return;
+              openPool(pool);
+            }}
+            onKeyDown={(event) => {
+              if (!onOpenPool) return;
+              if (event.key !== "Enter" && event.key !== " ") return;
+              if (isCardChrome(event.target)) return;
+              event.preventDefault();
+              openPool(pool);
+            }}
           >
             <header className="pool-card-head">
               <span className="pair-badge">{pool.pool}</span>
