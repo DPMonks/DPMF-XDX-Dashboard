@@ -498,20 +498,24 @@ function WalletEarnCell({ label, rows, empty, className = "", usdOnly = false, t
       <div className="wallet-earn-grid">
         <p className="wallet-earn-row is-head">
           <span className="wallet-earn-range" aria-hidden="true" />
-          {usdOnly ? null : <span className="wallet-earn-col-lp">{t?.incomeLpTokens || "LP"}</span>}
-          <span className="wallet-earn-col-usd">{t?.incomeUsd || "USD"}</span>
+          <span className="wallet-earn-values">
+            {usdOnly ? null : <span className="wallet-earn-col-lp">{t?.incomeLpTokens || "LP"}</span>}
+            <span className="wallet-earn-col-usd">{t?.incomeUsd || "USD"}</span>
+          </span>
         </p>
         {rows.map((row) => (
           <p key={row.range} className="wallet-earn-row">
             <span className="wallet-earn-range">{row.range}</span>
-            {usdOnly ? (
-              <b className="wallet-earn-usd">{row.amount}</b>
-            ) : (
-              <>
-                <b className="wallet-earn-lp">{row.amount}</b>
-                <i className="wallet-earn-usd">{row.usd}</i>
-              </>
-            )}
+            <span className="wallet-earn-values">
+              {usdOnly ? (
+                <b className="wallet-earn-usd">{row.amount}</b>
+              ) : (
+                <>
+                  <b className="wallet-earn-lp">{row.amount}</b>
+                  <i className="wallet-earn-usd">{row.usd}</i>
+                </>
+              )}
+            </span>
           </p>
         ))}
       </div>
