@@ -2,11 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   asOrderbookPayload,
+  bookFromMarketPayload,
   bookHasNativeDex,
+  bookHasTape,
   bookHeader,
   collectPairOptions,
   combineOrderbookSide,
   composeAmmBook,
+  filterBookTape,
   emptyOrderbook,
   extractDexSides,
   filterOrderbookPairs,
@@ -25,6 +28,26 @@ import {
   topDexLevels,
 } from "../src/orderbook.js";
 import { ammSizeToPrice, ammSpot } from "../src/ammCurve.js";
+
+test("bookFromMarketPayload unwraps a catalog onto the named pair book", () => {
+  const catalog = {
+    pairs: ["XDX/XRP", "XDX/RLUSD"],
+    books: {
+      "XDX/XRP": {
+        pair: "XDX/XRP",
+        bids: [{ price: 0.0002, base_size: 1000, source: "dex" }],
+        asks: [],
+      },
+    },
+  };
+  const book = bookFromMarketPayload(catalog, "XDX/XRP");
+  assert.equal(book.bids.length, 1);
+  assert.equal(book.bids[0].price, 0.0002);
+  assert.equal(bookFromMarketPayload(catalog, "XRP").bids[0].base_size, 1000);
+  assert.equal(bookFromMarketPayload(book, "XDX/XRP").bids[0].base_size, 1000);
+  assert.equal(bookFromMarketPayload({ book: catalog }, "XDX/XRP").bids.length, 1);
+  assert.equal(bookFromMarketPayload({ pairs: [], books: {} }, "XDX/XRP").bids.length, 0);
+});
 
 test("normalizeOrderbookPair maps quote aliases onto featured and detected AMM pairs", () => {
   assert.equal(normalizeOrderbookPair("XRP"), "XDX/XRP");
@@ -215,6 +238,19 @@ test("pickNativeBookRow does not keep an empty latest snapshot", () => {
   );
 });
 
+test("bookHasTape counts AMM rows so an empty catalog cannot wipe XSQUAD", () => {
+  const amm = {
+    pair: "XDX/XSQUAD",
+    bids: [{ price: 0.00019, base_size: 1200, source: "amm" }],
+    asks: [],
+  };
+  assert.equal(bookHasTape(amm), true);
+  assert.equal(bookHasTape(emptyOrderbook("XDX/XSQUAD")), false);
+  const held = keepLastGoodBook(amm, emptyOrderbook("XDX/XSQUAD"), "XDX/XSQUAD");
+  assert.equal(held.bids[0].base_size, 1200);
+  assert.equal(held.stale, true);
+});
+
 test("keepLastGoodBook holds the previous tape until a new native book arrives", () => {
   const previous = composeAmmBook(
     {
@@ -332,6 +368,120 @@ test("bookHeader uses native DEX bid/ask and only falls mid back to AMM spot", (
   assert.equal(header.mid, 0.000029697395);
   assert.equal(header.mid_usd, 0.00004336);
   assert.equal(header.spread_bps, null);
+});
+
+test("bookHeader reads AMM and bridged levels when the native DEX is empty", () => {
+  const header = bookHeader({
+    best_bid: null,
+    best_ask: null,
+    mid: null,
+    bids: [
+      { price: 0.00000127, base_size: 100, source: "amm" },
+      { price: 0.0000012, base_size: 4000, source: "bridge" },
+    ],
+    asks: [{ price: 0.00000128, base_size: 100, source: "amm" }],
+  });
+  assert.equal(header.best_bid, 0.00000127);
+  assert.equal(header.best_ask, 0.00000128);
+  assert.ok(header.spread_bps > 0);
+  const hybrid = filterBookTape(
+    {
+      best_bid: 0.00000127,
+      best_ask: 0.00000128,
+      bids: [
+        { price: 0.00000127, base_size: 100, source: "amm" },
+        { price: 0.0000012, base_size: 4000, source: "bridge" },
+      ],
+      asks: [{ price: 0.00000128, base_size: 100, source: "amm" }],
+    },
+    "hybrid"
+  );
+  assert.equal(hybrid.best_bid, 0.00000127);
+  assert.equal(hybrid.best_ask, 0.00000128);
+});
+
+test("composeAmmBook keeps a full AMM tape when native DEX already has 20 levels", () => {
+  const bids = Array.from({ length: 20 }, (_, i) => ({
+    price: 0.000031 - i * 0.0000001,
+    base_size: 1000 + i,
+  }));
+  const asks = Array.from({ length: 20 }, (_, i) => ({
+    price: 0.000038 + i * 0.0000001,
+    base_size: 900 + i,
+  }));
+  const book = composeAmmBook(
+    { pair: "XDX/XRP", bids, asks },
+    {
+      reserve_asset: 63_000_000,
+      reserve_currency: 1875,
+      trading_fee: 1000,
+    },
+    "XDX/XRP"
+  );
+  assert.equal(book.bids.filter((row) => row.source === "dex").length, 20);
+  assert.equal(book.asks.filter((row) => row.source === "dex").length, 20);
+  assert.equal(book.bids.filter((row) => row.source === "amm").length, 20);
+  assert.equal(book.asks.filter((row) => row.source === "amm").length, 20);
+  assert.equal(book.amm_implied, true);
+  const dex = filterBookTape(book, "dex");
+  const amm = filterBookTape(book, "amm");
+  assert.equal(dex.bids.length, 20);
+  assert.equal(amm.asks.length, 20);
+});
+
+test("composeAmmBook keeps a worse native offer when bridged XRP already fills 20 levels", () => {
+  const xrpAsks = Array.from({ length: 20 }, (_, i) => ({
+    price: 0.00004 + i * 0.0000001,
+    base_size: 1000 + i,
+    source: "dex",
+  }));
+  const book = composeAmmBook(
+    {
+      pair: "XDX/RLUSD",
+      bids: [],
+      asks: [{ price: 0.03, base_size: 1_000_000, source: "dex" }],
+    },
+    {
+      reserve_asset: 50_000_000,
+      reserve_currency: 2500,
+      trading_fee: 1000,
+    },
+    "XDX/RLUSD",
+    {
+      xrpBook: { pair: "XDX/XRP", bids: [], asks: xrpAsks },
+      quotePerXrp: 2,
+    }
+  );
+  const nativeAsk = book.asks.find((row) => row.source === "dex" && row.base_size === 1_000_000);
+  assert.ok(nativeAsk);
+  assert.equal(nativeAsk.price, 0.03);
+  assert.equal(book.asks.filter((row) => row.source === "bridge").length, 19);
+});
+
+test("composeAmmBook keeps bridged XRP DEX on a pair whose AMM already fills 20 rungs", () => {
+  const xrp = {
+    pair: "XDX/XRP",
+    bids: [{ price: 0.00003, base_size: 4000, source: "dex" }],
+    asks: [{ price: 0.00004, base_size: 2500, source: "dex" }],
+  };
+  const book = composeAmmBook(
+    emptyOrderbook("XDX/XIO"),
+    {
+      reserve_asset: 51_000_000,
+      reserve_currency: 120_000,
+      trading_fee: 1000,
+    },
+    "XDX/XIO",
+    { xrpBook: xrp, quotePerXrp: 2 }
+  );
+  assert.ok(book.bids.some((row) => row.source === "bridge" && row.base_size === 4000));
+  assert.ok(book.asks.some((row) => row.source === "bridge" && row.base_size === 2500));
+  assert.equal(book.bids.filter((row) => row.source === "amm").length, 20);
+  assert.equal(book.asks.filter((row) => row.source === "amm").length, 20);
+  assert.equal(book.dex_present, false);
+  const header = bookHeader({ ...book, best_bid: null, best_ask: null, mid: null });
+  assert.ok(header.best_bid > 0);
+  assert.ok(header.best_ask > 0);
 });
 
 test("order book stamp prefers Worker 2 timestamp, not updated_at", () => {

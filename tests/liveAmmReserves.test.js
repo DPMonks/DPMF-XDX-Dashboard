@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { XDX_ISSUER, XIO_ISSUER } from "../src/constants/ledger.js";
+import { XDX_ISSUER, XIO_ISSUER, XSQUAD_HEX, XSQUAD_ISSUER } from "../src/constants/ledger.js";
 import {
   isTransientXrplError,
   loadLiveAmmReserves,
@@ -18,6 +18,33 @@ function rpcFetch(handler) {
     };
   };
 }
+
+test("loadLiveAmmReserves labels an AMM account by its assets, not XDX/XRP", async () => {
+  const fetchImpl = rpcFetch((method, params) => {
+    assert.equal(method, "amm_info");
+    assert.equal(params.amm_account, "rXsquadAmm");
+    return {
+      amm: {
+        account: "rXsquadAmm",
+        amount: { currency: "XDX", issuer: XDX_ISSUER, value: "1000" },
+        amount2: { currency: XSQUAD_HEX, issuer: XSQUAD_ISSUER, value: "40" },
+        lp_token: {
+          currency: "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          issuer: "rXsquadAmm",
+          value: "80",
+        },
+      },
+    };
+  });
+  const live = await loadLiveAmmReserves(
+    { ammAccount: "rXsquadAmm", fresh: true },
+    { fetchImpl, now: Date.now() }
+  );
+  assert.equal(live.reserve_source, "amm_info");
+  assert.equal(live.pair, "XDX/XSQUAD");
+  assert.equal(live.quote, "XSQUAD");
+  assert.equal(live.reserve_currency, 40);
+});
 
 test("loadLiveAmmReserves reads a new XDX/XIO pool from amm_info by asset pair", async () => {
   const fetchImpl = rpcFetch((method, params) => {

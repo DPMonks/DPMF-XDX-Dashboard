@@ -42,6 +42,7 @@ test("wallet metrics keep fetching while only heavy catalog routes cool down", (
   assert.equal(catalogFetchBlocked("/api/lp-pools", now + 100), false);
   assert.equal(catalogFetchBlocked("/api/wallet/lp/rABC", now + 100), false);
   assert.equal(catalogFetchBlocked("/api/lp-pools/live?pair=XDX/XRP", now + 100), false);
+  assert.equal(catalogFetchBlocked("/api/swap-market?from=XRP&to=RLUSD", now + 100), false);
   assert.equal(catalogFetchBlocked("/api/charts/activity", now + 9_000), false);
   resetCatalogDown();
 });

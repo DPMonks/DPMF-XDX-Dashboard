@@ -41,7 +41,9 @@ import {
   FEATURED_ORDERBOOK_PAIRS,
 } from "../src/orderbook.js";
 import { carryActivityMetrics, issuedActivitySeries } from "../src/activityHistory.js";
-import { inferTradesFromHistory } from "../src/xdxTrades.js";
+import { inferTradesFromHistory, mergeTradePrints } from "../src/xdxTrades.js";
+import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
+import { loadLedgerPoolVolumes, mergeVolumeMaps } from "./ammPoolVolume.js";
 import { loadIssuedHolderHistory } from "./issuedHolderHistory.js";
 import { fillNativeBookFromXrpl, xrplRpc } from "./xrplBookOffers.js";
 import { attachQuoteXrpPrices, loadQuoteXrpRates } from "./quoteXrpMarket.js";
@@ -60,18 +62,23 @@ import {
 } from "../src/wallet/composeWallet.js";
 import {
   loadWalletActivity,
+  loadWalletLpIncome,
   loadWalletBalancesFromLedger,
+  preferPositiveAmount,
   loadWalletLines,
   loadWalletLpFromLedger,
   loadWalletNetworthFromLedger,
   loadWalletOffers,
+  xrpDropsFromAccountInfo,
 } from "./walletLedger.js";
-import { liveCatalogPayload } from "./liveCatalog.js";
+import { knownLivePoolSpecs, liveCatalogPayload, loadLiveMarket } from "./liveCatalog.js";
 import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
 import { catalogHealth } from "./sourceControl.js";
 import { FREE_API_HEADERS } from "./xrplToCatalog.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
-import { loadLiveAmmReserves, loadLiveAmmReservesMany } from "./liveAmmReserves.js";
+import { loadLiveAmmReserves, loadLiveAmmReservesMany, withXrplRetry } from "./liveAmmReserves.js";
+import { loadDirectPairMarket } from "./directPairMarket.js";
+import { canSelect, loadIndexerSchema, peekIndexerSchema, pickColumns } from "./indexerSchema.js";
 
 let pool = null;
 
@@ -114,6 +121,7 @@ const CATALOG = {
     walletOffers: "/api/wallet/offers/:address",
     walletLines: "/api/wallet/lines/:address",
     walletActivity: "/api/wallet/activity/:address",
+    walletLpIncome: "/api/wallet/lp-income/:address",
     walletVotes: "/api/wallet/votes/:address",
     ammGovernance: "/api/amm/governance",
     walletLp: "/api/wallet/lp/:address",
@@ -365,6 +373,11 @@ async function tryQuery(db, sql, params) {
     }
     return { rows: [] };
   }
+}
+
+async function tryQueryIf(db, table, columns, sql, params) {
+  if (!canSelect(peekIndexerSchema(), table, columns)) return { rows: [] };
+  return tryQuery(db, sql, params);
 }
 
 async function lastSameTimeScan(db, table) {
@@ -933,14 +946,18 @@ async function loadLpTrustlineCount(db, pool = "all") {
 async function loadAllLpSupply(db) {
   const lines = await loadAllLpLineStats(db, false);
   if (lines.supply > 0) return lines.supply;
-  const catalog = await tryQuery(
+  const catalog = await tryQueryIf(
     db,
+    "xdx_amm_pools",
+    ["lp_supply"],
     "SELECT COALESCE(SUM(lp_supply::numeric), 0) AS n FROM xdx_amm_pools"
   );
   const catalogSum = Number(catalog.rows[0]?.n || 0);
   if (catalogSum > 0) return catalogSum;
-  const latest = await tryQuery(
+  const latest = await tryQueryIf(
     db,
+    "amm_pool_latest",
+    ["lp_supply"],
     `SELECT COALESCE(SUM(lp_supply::numeric), 0) AS n
      FROM amm_pool_latest
      WHERE pool_name ILIKE 'XDX/%' OR pool_name ILIKE 'XDX-%'`
@@ -960,9 +977,16 @@ async function loadNativeBookRow(db, pair = "XDX/XRP") {
   // Worker 2 writes `timestamp`. Do not SELECT updated_at — that column is
   // missing and tryQuery would swallow the error as an empty book.
   // Pair spellings differ (XDX-XRP, xdx/xrp); match after normalize.
-  const latest = await tryQuery(db, "SELECT payload, pair, timestamp FROM order_book_latest");
-  const history = await tryQuery(
+  const latest = await tryQueryIf(
     db,
+    "order_book_latest",
+    ["payload", "pair", "timestamp"],
+    "SELECT payload, pair, timestamp FROM order_book_latest"
+  );
+  const history = await tryQueryIf(
+    db,
+    "order_book_history",
+    ["payload", "pair", "timestamp"],
     `SELECT payload, pair, timestamp
      FROM order_book_history
      ORDER BY timestamp DESC
@@ -986,10 +1010,6 @@ function rememberGoodBook(pair, book) {
 
 async function withLiveTape(composed, pair, pool, extras = {}) {
   const name = normalizeOrderbookPair(pair);
-  if (composed?.dex_present) {
-    rememberGoodBook(name, composed);
-    return composed;
-  }
   const live = await fillNativeBookFromXrpl(name, pool);
   if (live) {
     const filled = {
@@ -1010,6 +1030,7 @@ async function withLiveTape(composed, pair, pool, extras = {}) {
     rememberGoodBook(name, filled);
     return filled;
   }
+  if (composed?.dex_present) rememberGoodBook(name, composed);
   return keepLastGoodBook(lastGoodBooks.get(name), composed, name);
 }
 
@@ -1088,9 +1109,16 @@ async function loadOrderbooks(db) {
     loadXdxLpPools(db),
     loadAmmReserveIndex(db),
     hydrateAmm(db),
-    tryQuery(db, "SELECT payload, pair, timestamp FROM order_book_latest"),
-    tryQuery(
+    tryQueryIf(
       db,
+      "order_book_latest",
+      ["payload", "pair", "timestamp"],
+      "SELECT payload, pair, timestamp FROM order_book_latest"
+    ),
+    tryQueryIf(
+      db,
+      "order_book_history",
+      ["payload", "pair", "timestamp"],
       `SELECT payload, pair, timestamp
        FROM order_book_history
        ORDER BY timestamp DESC
@@ -1136,26 +1164,57 @@ async function loadOrderbooks(db) {
 
   const poolNames = (lp.pools || []).map((row) => row.pool_name || row.pool);
   const pairs = sortOrderbookPairs([...FEATURED_ORDERBOOK_PAIRS, ...poolNames]);
+  const liveSpecs = knownLivePoolSpecs(lp.pools || []);
+  const lives = await loadLiveAmmReservesMany(
+    liveSpecs.map((spec) => ({
+      ammAccount: spec.ammAccount || spec.amm,
+      pair: spec.pair,
+      quote: spec.quote,
+      issuer: spec.issuer,
+      hex: spec.hex,
+    })),
+    { concurrency: 3, retries: 1, waitMs: 200, deadlineMs: 4500 }
+  );
+  const liveByPair = new Map();
+  liveSpecs.forEach((spec, index) => {
+    liveByPair.set(String(spec.pair || "").toUpperCase(), lives[index]);
+  });
+  const poolFor = (pair) => {
+    const row = (lp.pools || []).find(
+      (item) => normalizeOrderbookPair(item.pool_name || item.pool) === pair
+    );
+    return overlayLiveAmmReserves(row || { pool_name: pair, pool: pair }, liveByPair.get(pair.toUpperCase()));
+  };
   const books = {};
   for (const pair of pairs) {
     const stored = storedByPair.get(pair.toUpperCase()) || emptyOrderbook(pair);
-    const pool = (lp.pools || []).find(
-      (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
-    );
+    const pool = poolFor(pair);
     const composed = await composeStoredBook(stored, pair, reserveIndex, xrpPool, pool);
     books[pair] = {
       ...composed,
       as_of: storedByPair.has(pair.toUpperCase()) ? stored.as_of : null,
-      source: "db",
+      source: pool.reserve_source === "amm_info" ? "hybrid" : "db",
     };
   }
 
+  const xrpPoolRow = poolFor("XDX/XRP");
+  const xrpFilled = await withLiveTape(books["XDX/XRP"], "XDX/XRP", xrpPoolRow);
+  books["XDX/XRP"] = {
+    ...xrpFilled,
+    as_of: xrpFilled.as_of || books["XDX/XRP"]?.as_of || null,
+  };
+
   await Promise.all(
-    FEATURED_ORDERBOOK_PAIRS.map(async (pair) => {
-      const pool = (lp.pools || []).find(
-        (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
-      );
-      const filled = await withLiveTape(books[pair], pair, pool);
+    FEATURED_ORDERBOOK_PAIRS.filter((pair) => pair !== "XDX/XRP").map(async (pair) => {
+      const pool = poolFor(pair);
+      const extras = {
+        xrpBook: books["XDX/XRP"],
+        quotePerXrp: quotePerXrpFromSpots(
+          loadPairReserves(pair, reserveIndex, xrpPool, pool).price || books[pair]?.amm?.price,
+          books["XDX/XRP"]?.amm?.price
+        ),
+      };
+      const filled = await withLiveTape(books[pair], pair, pool, extras);
       books[pair] = {
         ...filled,
         as_of: filled.as_of || books[pair]?.as_of || null,
@@ -1167,9 +1226,7 @@ async function loadOrderbooks(db) {
   const xrpSpot = xrpBook?.amm?.price;
   for (const pair of pairs) {
     if (pair === "XDX/XRP") continue;
-    const pool = (lp.pools || []).find(
-      (row) => normalizeOrderbookPair(row.pool_name || row.pool) === pair
-    );
+    const pool = poolFor(pair);
     const reserves = loadPairReserves(pair, reserveIndex, xrpPool, pool);
     const extras = {
       xrpBook,
@@ -1195,22 +1252,36 @@ async function loadOrderbooks(db) {
 async function loadLpTrustlineChart(db, pool = "all") {
   const pair = normalizeLpPool(pool);
   const where = lpPoolClause(pair);
-  const byScan = await tryQuery(
-    db,
-    `SELECT timestamp,
+  const byScan = pair
+    ? await tryQuery(
+        db,
+        `SELECT timestamp,
             COUNT(*)::int AS trustline_count,
             COUNT(*) FILTER (WHERE ABS(lp_balance::numeric) > 0)::int AS lp_holder_count,
+            COALESCE(SUM(ABS(lp_balance::numeric)), 0) AS lp_supply,
             COALESCE(pool_name, 'XDX/XRP') AS pool_name
      FROM lp_holders_history
      WHERE ${where.sql}
      GROUP BY timestamp, COALESCE(pool_name, 'XDX/XRP')
      ORDER BY timestamp ASC`,
-    where.params
-  );
+        where.params
+      )
+    : await tryQuery(
+        db,
+        `SELECT timestamp,
+            COUNT(*)::int AS trustline_count,
+            COUNT(*) FILTER (WHERE ABS(lp_balance::numeric) > 0)::int AS lp_holder_count,
+            COALESCE(SUM(ABS(lp_balance::numeric)) FILTER (WHERE COALESCE(pool_name, 'XDX/XRP') = 'XDX/XRP'), 0) AS lp_supply,
+            'ALL' AS pool_name
+     FROM lp_holders_history
+     GROUP BY timestamp
+     ORDER BY timestamp ASC`
+      );
   return (byScan.rows || []).map((row) => ({
     timestamp: asIso(row.timestamp) || row.timestamp,
     trustline_count: Number(row.trustline_count || 0),
     lp_holder_count: Number(row.lp_holder_count || 0),
+    lp_supply: Number(row.lp_supply || 0) || null,
     pool_name: row.pool_name || pair || "XDX/XRP",
   }));
 }
@@ -1259,14 +1330,30 @@ async function loadAmmReserveIndex(db) {
 
 async function loadQuoteUsdMap(db, xrpUsd) {
   const prices = { XRP: Number(xrpUsd) || 0 };
-  const latest = await tryQuery(db, "SELECT asset, price_usd FROM price_latest");
+  const latestKey = pickColumns(peekIndexerSchema(), "price_latest", ["asset", "token", "currency"])[0];
+  const latest = latestKey
+    ? await tryQueryIf(
+        db,
+        "price_latest",
+        [latestKey, "price_usd"],
+        `SELECT ${latestKey} AS asset, price_usd FROM price_latest`
+      )
+    : { rows: [] };
   for (const row of latest.rows) {
     const key = String(row.asset || "").toUpperCase();
     const usd = Number(row.price_usd);
     if (key && usd > 0 && !looksLikeXrpUsd(usd)) prices[key] = usd;
     else if (key && usd > 0 && key !== "XDX") prices[key] = usd;
   }
-  const all = await tryQuery(db, "SELECT currency, price_usd FROM price_latest_all");
+  const priceName = pickColumns(peekIndexerSchema(), "price_latest_all", ["currency", "asset"])[0];
+  const all = priceName
+    ? await tryQueryIf(
+        db,
+        "price_latest_all",
+        [priceName, "price_usd"],
+        `SELECT ${priceName} AS currency, price_usd FROM price_latest_all`
+      )
+    : { rows: [] };
   for (const row of all.rows) {
     const key = String(row.currency || "").toUpperCase();
     const usd = Number(row.price_usd);
@@ -1277,20 +1364,33 @@ async function loadQuoteUsdMap(db, xrpUsd) {
 
 const accountCache = new Map();
 
+function emptyWalletAccount(address) {
+  return {
+    account: address,
+    balance_drops: null,
+    owner_count: null,
+    reserve_base_drops: 1_000_000,
+    reserve_inc_drops: 200_000,
+    source: "empty",
+  };
+}
+
 async function loadWalletAccount(address) {
   const key = String(address || "");
   const hit = accountCache.get(key);
   if (hit && Date.now() - hit.at < 20_000) return hit.body;
   try {
     const [info, state] = await Promise.all([
-      xrplRpc("account_info", { account: key, ledger_index: "validated" }),
-      xrplRpc("server_state", {}),
+      withXrplRetry(() => xrplRpc("account_info", { account: key, ledger_index: "validated" })),
+      withXrplRetry(() => xrplRpc("server_state", {})).catch(() => ({})),
     ]);
-    const data = info.account_data || {};
-    const ledger = state.validated_ledger || {};
+    const data = info.account_data || info.result?.account_data || {};
+    const drops = xrpDropsFromAccountInfo(info);
+    if (!(drops > 0)) return emptyWalletAccount(key);
+    const ledger = state.validated_ledger || state.result?.validated_ledger || {};
     const body = {
       account: key,
-      balance_drops: Number(data.Balance || 0),
+      balance_drops: drops,
       owner_count: Number(data.OwnerCount || 0),
       reserve_base_drops: Number(ledger.reserve_base || 1_000_000),
       reserve_inc_drops: Number(ledger.reserve_inc || 200_000),
@@ -1299,14 +1399,7 @@ async function loadWalletAccount(address) {
     accountCache.set(key, { at: Date.now(), body });
     return body;
   } catch {
-    return {
-      account: key,
-      balance_drops: null,
-      owner_count: null,
-      reserve_base_drops: 1_000_000,
-      reserve_inc_drops: 200_000,
-      source: "empty",
-    };
+    return emptyWalletAccount(key);
   }
 }
 
@@ -1463,26 +1556,25 @@ async function loadXdxLpPools(db) {
     return { count: 0, pools: [], catching_up: true, source: "db" };
   }
 
-  const optional = await tryQuery(
-    db,
-    `SELECT amm_account, reserve_quote, reserve_currency
-     FROM xdx_amm_pools`
-  );
-  const lpOptional = await tryQuery(
-    db,
-    `SELECT amm_account, lp_supply FROM xdx_amm_pools`
-  );
+  const extraCols = pickColumns(peekIndexerSchema(), "xdx_amm_pools", [
+    "reserve_quote",
+    "reserve_currency",
+    "lp_supply",
+  ]);
+  const optional = extraCols.length
+    ? await tryQueryIf(
+        db,
+        "xdx_amm_pools",
+        extraCols,
+        `SELECT amm_account, ${extraCols.join(", ")} FROM xdx_amm_pools`
+      )
+    : { rows: [] };
   const optionalByAmm = new Map();
   for (const row of optional.rows) {
     optionalByAmm.set(row.amm_account, {
       quote: Number(row.reserve_quote || row.reserve_currency || 0),
-      lp_supply: null,
+      lp_supply: Number(row.lp_supply || 0) || null,
     });
-  }
-  for (const row of lpOptional.rows) {
-    const current = optionalByAmm.get(row.amm_account) || { quote: 0, lp_supply: null };
-    current.lp_supply = Number(row.lp_supply || 0) || null;
-    optionalByAmm.set(row.amm_account, current);
   }
 
   const reserves = await loadAmmReserveIndex(db);
@@ -1560,9 +1652,23 @@ async function loadXdxLpPools(db) {
     };
   });
 
+  const pairs = pools.map((row) => row.pool_name || row.pool).filter(Boolean);
+  const [freeVolumes, ledgerVolumes] = await Promise.all([
+    loadPoolXdxVolumes({
+      token: { exchXrp: xrpUsd > 0 && xdxUsd > 0 ? xdxUsd / xrpUsd : 0 },
+      reserveXdx: Number(pools[0]?.reserve_asset || 0),
+      reserveXrp: Number(pools[0]?.reserve_currency || 0),
+      xdxUsd,
+      xrpUsd,
+      pairs,
+    }).catch(() => ({})),
+    loadLedgerPoolVolumes(pools).catch(() => ({})),
+  ]);
+  const withVolume = applyPoolVolumes(pools, mergeVolumeMaps(freeVolumes, ledgerVolumes));
+
   return {
-    count: pools.length,
-    pools,
+    count: withVolume.length,
+    pools: withVolume,
     catching_up: false,
     source: "db",
   };
@@ -1717,7 +1823,10 @@ async function tokenBalanceFor(db, address) {
     "SELECT balance FROM token_holders_latest WHERE account = $1 LIMIT 1",
     [address]
   );
-  if (latest.rows[0]) return Number(latest.rows[0].balance || 0);
+  if (latest.rows[0]) {
+    const n = Number(latest.rows[0].balance);
+    return Number.isFinite(n) ? n : null;
+  }
   const history = await tryQuery(
     db,
     `SELECT balance
@@ -1727,7 +1836,9 @@ async function tokenBalanceFor(db, address) {
      LIMIT 1`,
     [address]
   );
-  return Number(history.rows[0]?.balance || 0);
+  if (!history.rows[0]) return null;
+  const n = Number(history.rows[0].balance);
+  return Number.isFinite(n) ? n : null;
 }
 
 let xrpQuote = { at: 0, usd: 0, gbp: 0, eur: 0, jpy: 0 };
@@ -1738,26 +1849,45 @@ function xdxFxFromXrp(xdxUsd, xrpUsd, xrpFx) {
 
 async function loadXrpQuote(db) {
   if (Date.now() - xrpQuote.at < 300_000 && xrpQuote.usd) return xrpQuote;
-  const latest = await tryQuery(
-    db,
-    `SELECT price_usd, price_gbp FROM price_latest
-     WHERE asset IN ('XRP', 'xrp')
+  const latestKey = pickColumns(peekIndexerSchema(), "price_latest", ["asset", "token", "currency"])[0];
+  const latestVals = pickColumns(peekIndexerSchema(), "price_latest", ["price_usd", "price_gbp"]);
+  const latest =
+    latestKey && latestVals.includes("price_usd")
+      ? await tryQueryIf(
+          db,
+          "price_latest",
+          [latestKey, ...latestVals],
+          `SELECT ${latestVals.join(", ")} FROM price_latest
+     WHERE ${latestKey} IN ('XRP', 'xrp')
      ORDER BY timestamp DESC NULLS LAST
      LIMIT 1`
-  );
-  const all = await tryQuery(
-    db,
-    `SELECT price_usd, price_gbp FROM price_latest_all
-     WHERE currency IN ('XRP', 'xrp')
+        )
+      : { rows: [] };
+  const xrpName = pickColumns(peekIndexerSchema(), "price_latest_all", ["currency", "asset"])[0];
+  const xrpVals = pickColumns(peekIndexerSchema(), "price_latest_all", ["price_usd", "price_gbp"]);
+  const all =
+    xrpName && xrpVals.includes("price_usd")
+      ? await tryQueryIf(
+          db,
+          "price_latest_all",
+          [xrpName, ...xrpVals],
+          `SELECT ${xrpVals.join(", ")} FROM price_latest_all
+     WHERE ${xrpName} IN ('XRP', 'xrp')
      ORDER BY timestamp DESC NULLS LAST
      LIMIT 1`
-  );
-  const hist = await tryQuery(
-    db,
-    `SELECT price_usd FROM price_history
-     WHERE asset IN ('XRP', 'xrp')
+        )
+      : { rows: [] };
+  const histKey = pickColumns(peekIndexerSchema(), "price_history", ["asset", "token"])[0];
+  const hist = histKey
+    ? await tryQueryIf(
+        db,
+        "price_history",
+        [histKey, "price_usd"],
+        `SELECT price_usd FROM price_history
+     WHERE ${histKey} IN ('XRP', 'xrp')
      ORDER BY timestamp DESC LIMIT 1`
-  );
+      )
+    : { rows: [] };
   const row = latest.rows[0] || all.rows[0] || {};
   let usd = Number(row.price_usd || hist.rows[0]?.price_usd || 0);
   let gbp = Number(row.price_gbp || 0);
@@ -1785,8 +1915,10 @@ async function loadXrpQuote(db) {
 }
 
 async function loadRecordedXdxUsd(db, xrpUsd) {
-  const latestCol = await tryQuery(
+  const latestCol = await tryQueryIf(
     db,
+    "price_latest",
+    ["xdx_usd"],
     `SELECT xdx_usd FROM price_latest
      ORDER BY timestamp DESC NULLS LAST
      LIMIT 1`
@@ -1797,27 +1929,42 @@ async function loadRecordedXdxUsd(db, xrpUsd) {
   );
   if (fromLatest > 0) return fromLatest;
 
-  const latestAsset = await tryQuery(
-    db,
-    `SELECT price_usd FROM price_latest
-     WHERE asset IN ('XDX', 'xdx')
+  const latestKey = pickColumns(peekIndexerSchema(), "price_latest", ["asset", "token", "currency"])[0];
+  const latestAsset = latestKey
+    ? await tryQueryIf(
+        db,
+        "price_latest",
+        [latestKey, "price_usd"],
+        `SELECT price_usd FROM price_latest
+     WHERE ${latestKey} IN ('XDX', 'xdx')
      ORDER BY timestamp DESC NULLS LAST
      LIMIT 1`
-  );
-  const all = await tryQuery(
-    db,
-    `SELECT price_usd FROM price_latest_all
-     WHERE currency IN ('XDX', 'xdx')
+      )
+    : { rows: [] };
+  const allKey = pickColumns(peekIndexerSchema(), "price_latest_all", ["currency", "asset"])[0];
+  const all = allKey
+    ? await tryQueryIf(
+        db,
+        "price_latest_all",
+        [allKey, "price_usd"],
+        `SELECT price_usd FROM price_latest_all
+     WHERE ${allKey} IN ('XDX', 'xdx')
      ORDER BY timestamp DESC NULLS LAST
      LIMIT 1`
-  );
-  const hist = await tryQuery(
-    db,
-    `SELECT price_usd FROM price_history
-     WHERE asset IN ('XDX', 'xdx')
+      )
+    : { rows: [] };
+  const histKey = pickColumns(peekIndexerSchema(), "price_history", ["asset", "token"])[0];
+  const hist = histKey
+    ? await tryQueryIf(
+        db,
+        "price_history",
+        [histKey, "price_usd"],
+        `SELECT price_usd FROM price_history
+     WHERE ${histKey} IN ('XDX', 'xdx')
      ORDER BY timestamp DESC
      LIMIT 1`
-  );
+      )
+    : { rows: [] };
   return recordedXdxUsdFromPrices(
     {
       xdxUsd:
@@ -1939,24 +2086,35 @@ async function listXdxPools(db) {
 }
 
 async function readAmmTrades(db) {
-  const named = await tryQuery(
-    db,
-    `SELECT timestamp, pool_name, side, amount, xdx, price, account
+  const tradeCols = pickColumns(peekIndexerSchema(), "trades", [
+    "timestamp",
+    "pool_name",
+    "side",
+    "amount",
+    "xdx",
+    "price",
+    "account",
+  ]);
+  const named = tradeCols.includes("timestamp")
+    ? await tryQueryIf(
+        db,
+        "trades",
+        tradeCols,
+        `SELECT ${tradeCols.join(", ")}
      FROM trades
      ORDER BY timestamp DESC
      LIMIT 500`
-  );
-  if (named.rows.length) {
-    return named.rows.map((row) => ({
-      timestamp: row.timestamp,
-      pool: row.pool_name || "XDX/XRP",
-      side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
-      xdx: Number(row.xdx || row.amount || 0),
-      quote: Number(row.quote || 0),
-      price: Number(row.price || 0),
-      account: row.account || null,
-    }));
-  }
+      )
+    : { rows: [] };
+  const namedPrints = named.rows.map((row) => ({
+    timestamp: row.timestamp,
+    pool: row.pool_name || "XDX/XRP",
+    side: String(row.side || "").toLowerCase() === "sell" ? "sell" : "buy",
+    xdx: Number(row.xdx || row.amount || 0),
+    quote: Number(row.quote || 0),
+    price: Number(row.price || 0),
+    account: row.account || null,
+  }));
 
   const history = await tryQuery(
     db,
@@ -1980,7 +2138,7 @@ async function readAmmTrades(db) {
   const rows = [...history.rows, ...latest.rows].sort(
     (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
   );
-  return inferTradesFromHistory(rows);
+  return mergeTradePrints(namedPrints, inferTradesFromHistory(rows));
 }
 
 async function loadCatalogAmmMarketCap(db, xdxUsd) {
@@ -2186,15 +2344,55 @@ function walletLedgerResult(suffix, search = "") {
   if (activity) {
     return loadWalletActivity(decodeURIComponent(activity[1]), fresh).then((body) => ok(body));
   }
+  const lpIncome = String(suffix || "").match(/^wallet\/lp-income\/([^/]+)$/);
+  if (lpIncome) {
+    const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+    let marker = null;
+    const rawMarker = params.get("marker");
+    if (rawMarker) {
+      try {
+        const parsed = JSON.parse(rawMarker);
+        if (parsed && typeof parsed === "object") marker = parsed;
+      } catch {
+        marker = null;
+      }
+    }
+    return loadLiveMarket({ fresh: walletFresh(search) })
+      .catch(() => null)
+      .then((market) =>
+        loadWalletLpIncome(decodeURIComponent(lpIncome[1]), {
+          fresh: walletFresh(search),
+          pair: params.get("pair") || "ALL",
+          marker,
+          pools: market?.pools || [],
+        })
+      )
+      .then((body) => ok(body));
+  }
   const votes = String(suffix || "").match(/^wallet\/votes\/([^/]+)$/);
   if (votes) {
     return loadWalletVotes(decodeURIComponent(votes[1])).then((body) => ok(body));
   }
   if (suffix === "amm/governance") {
     const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
-    return loadPoolGovernance(params.get("pair") || "XDX/XRP", params.get("account") || "").then((body) =>
-      ok(body)
-    );
+    return loadPoolGovernance(params.get("pair") || "XDX/XRP", params.get("account") || "", {
+      issuer: params.get("issuer") || params.get("quote_issuer"),
+      hex: params.get("hex") || params.get("quote_hex"),
+      ammAccount: params.get("amm") || params.get("amm_account"),
+      lpBalance: params.get("lp") || params.get("lp_balance"),
+    }).then((body) => ok(body));
+  }
+  if (suffix === "swap-market") {
+    const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+    return loadDirectPairMarket({
+      from: params.get("from") || params.get("fromId"),
+      to: params.get("to") || params.get("toId"),
+      fromIssuer: params.get("fromIssuer") || params.get("from_issuer"),
+      toIssuer: params.get("toIssuer") || params.get("to_issuer"),
+      fromHex: params.get("fromHex") || params.get("from_hex"),
+      toHex: params.get("toHex") || params.get("to_hex"),
+      fresh: params.get("fresh") === "1",
+    }).then((body) => ok(body));
   }
   if (suffix === "lp-pools/live") {
     const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
@@ -2213,9 +2411,22 @@ function walletLedgerResult(suffix, search = "") {
   }
   const balances = String(suffix || "").match(/^(?:wallet\/)?balances\/([^/]+)$/);
   if (balances) {
-    return loadWalletBalancesFromLedger(decodeURIComponent(balances[1]), {
-      fresh: walletFresh(search),
-    }).then((body) => ok(body));
+    const address = decodeURIComponent(balances[1]);
+    return (async () => {
+      const body = await loadWalletBalancesFromLedger(address, {
+        fresh: walletFresh(search),
+      });
+      if (!(Number(body.xdx) > 0) && hasIndexerDatabase()) {
+        try {
+          const fromDb = await tokenBalanceFor(getPool(), address);
+          const merged = preferPositiveAmount(body.xdx, fromDb);
+          if (merged != null) body.xdx = merged;
+        } catch {
+          // live total stands
+        }
+      }
+      return ok(body);
+    })();
   }
   const walletLp = String(suffix || "").match(/^wallet\/lp\/([^/]+)$/);
   if (walletLp) {
@@ -2260,6 +2471,7 @@ export async function readIndexerDb(suffix, search = "") {
 
   const db = getPool();
   if (!db) return null;
+  await loadIndexerSchema(db);
 
   const params = searchParams(search);
   const limit = Math.min(Number(params.get("limit") || 200) || 200, 2000);
@@ -2515,8 +2727,10 @@ export async function readIndexerDb(suffix, search = "") {
     const wallet = suffix.match(/^(?:wallet\/)?balances\/([^/]+)$/);
     if (wallet) {
       const address = decodeURIComponent(wallet[1]);
-      const xrp = await tryQuery(
+      const xrp = await tryQueryIf(
         db,
+        "xrp_balances_latest",
+        ["balance"],
         "SELECT balance FROM xrp_balances_latest WHERE account = $1 LIMIT 1",
         [address]
       );
@@ -2527,15 +2741,18 @@ export async function readIndexerDb(suffix, search = "") {
         [address]
       );
       let xrpAmt = xrp.rows[0] != null ? Number(xrp.rows[0].balance) : null;
-      if (!Number.isFinite(xrpAmt) || xrpAmt === 0) {
+      if (!(xrpAmt > 0)) {
         const live = await loadWalletAccount(address);
-        if (Number.isFinite(Number(live?.balance_drops))) {
-          xrpAmt = Number(live.balance_drops) / 1_000_000;
+        const liveDrops = Number(live?.balance_drops);
+        if (live?.source === "xrpl" && liveDrops > 0) {
+          xrpAmt = liveDrops / 1_000_000;
+        } else if (!(xrpAmt > 0)) {
+          xrpAmt = null;
         }
       }
       return ok({
         xrp: Number.isFinite(xrpAmt) ? xrpAmt : null,
-        xdx: xdxBalance,
+        xdx: Number(xdxBalance) > 0 ? Number(xdxBalance) : xdxBalance,
         lp: Number(lp.rows[0]?.lp_balance || 0),
         source: "db",
         ...(Number.isFinite(xrpAmt) ? { balance_drops: Math.round(xrpAmt * 1_000_000) } : {}),
@@ -2587,35 +2804,58 @@ export async function readIndexerDb(suffix, search = "") {
     const spark = suffix.match(/^sparkline\/([^/]+)$/);
     if (spark) {
       const asset = decodeURIComponent(spark[1]);
-      const result = await tryQuery(
-        db,
-        `SELECT timestamp, price_usd
+      const sparkKey = pickColumns(peekIndexerSchema(), "price_history", ["asset", "token"])[0];
+      const result = sparkKey
+        ? await tryQueryIf(
+            db,
+            "price_history",
+            [sparkKey, "timestamp", "price_usd"],
+            `SELECT timestamp, price_usd
          FROM price_history
-         WHERE asset = $1
+         WHERE ${sparkKey} = $1
          ORDER BY timestamp DESC
          LIMIT 50`,
-        [asset]
-      );
+            [asset]
+          )
+        : { rows: [] };
       return withLiveCatalog(suffix, result.rows.reverse(), search);
     }
 
     if (suffix === "chart/candles" || suffix === "charts/candles") {
-      const history = await tryQuery(
-        db,
-        `SELECT timestamp, asset, price_usd
+      const candleKey = pickColumns(peekIndexerSchema(), "price_history", ["asset", "token"])[0];
+      const history = candleKey
+        ? await tryQueryIf(
+            db,
+            "price_history",
+            [candleKey, "timestamp", "price_usd"],
+            `SELECT timestamp, ${candleKey} AS asset, price_usd
          FROM price_history
-         WHERE asset IN ('XDX', 'xdx', 'XRP', 'xrp')
+         WHERE ${candleKey} IN ('XDX', 'xdx', 'XRP', 'xrp')
          ORDER BY timestamp ASC
          LIMIT 20000`
-      );
-      const amm = await tryQuery(
+          )
+        : { rows: [] };
+      const ammWithSupply = await tryQueryIf(
         db,
-        `SELECT timestamp, pool_name, reserve_asset, reserve_currency, price
+        "amm_pool_history",
+        ["timestamp", "pool_name", "reserve_asset", "reserve_currency", "price", "lp_supply"],
+        `SELECT timestamp, pool_name, reserve_asset, reserve_currency, price, lp_supply
          FROM amm_pool_history
          WHERE pool_name IN ('XDX/XRP', 'XDX/RLUSD')
          ORDER BY timestamp ASC
          LIMIT 20000`
       );
+      const amm =
+        ammWithSupply.rows?.length || ammWithSupply.ok
+          ? ammWithSupply
+          : await tryQuery(
+              db,
+              `SELECT timestamp, pool_name, reserve_asset, reserve_currency, price
+         FROM amm_pool_history
+         WHERE pool_name IN ('XDX/XRP', 'XDX/RLUSD')
+         ORDER BY timestamp ASC
+         LIMIT 20000`
+            );
       return withLiveCatalog(
         suffix,
         {

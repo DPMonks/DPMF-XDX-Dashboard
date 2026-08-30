@@ -27,6 +27,12 @@ export function pageSlice(rows, page, pageSize = LIST_PAGE_SIZE) {
   };
 }
 
+export function resetScrollTop(node) {
+  if (!node || typeof node.scrollTop !== "number") return false;
+  node.scrollTop = 0;
+  return true;
+}
+
 export function shouldFetchMoreRows(loaded, pageSize = LIST_PAGE_SIZE, knownTotal = null) {
   const have = Number(loaded) || 0;
   if (have <= 0) return false;

@@ -1,4 +1,5 @@
 import {
+  pairFromRow,
   RLUSD_HEX,
   RLUSD_ISSUER,
   XDX_HEX,
@@ -8,7 +9,7 @@ import {
   XSQUAD_HEX,
   XSQUAD_ISSUER,
 } from "../constants/ledger.js";
-import { activityFromAmmVoteTx, pairFromVoteAssets } from "./ammVote.js";
+import { activityFromAmmVoteTx, pairFromVoteAssets, quoteTickerFromCurrency } from "./ammVote.js";
 
 export function amountAsIssue(amount) {
   if (amount == null || typeof amount === "string") return { currency: "XRP" };
@@ -40,6 +41,11 @@ export function rippleIso(seconds, fallback) {
   return null;
 }
 
+export function printableTicker(value) {
+  const text = String(value || "").trim();
+  return /^[A-Z0-9.$]{2,20}$/i.test(text) ? text.toUpperCase() : "";
+}
+
 export function currencyCode(value) {
   const raw = String(value || "").trim();
   if (!raw || raw.toUpperCase() === "XRP") return "XRP";
@@ -47,6 +53,8 @@ export function currencyCode(value) {
   if (/^[A-Z0-9]{3}$/.test(upper)) return upper;
   const known = KNOWN.find((row) => row.hex === upper || row.code === upper);
   if (known) return known.code;
+  const fromQuote = printableTicker(quoteTickerFromCurrency(raw));
+  if (fromQuote) return fromQuote;
   if (/^[A-F0-9]{40}$/.test(upper)) {
     const chars = [];
     for (let i = 0; i < 40; i += 2) {
@@ -54,9 +62,48 @@ export function currencyCode(value) {
       if (!code) break;
       chars.push(String.fromCharCode(code));
     }
-    return chars.join("") || upper;
+    return printableTicker(chars.join("")) || upper;
   }
-  return upper;
+  return printableTicker(upper) || upper;
+}
+
+export function displayTrustlinePair(row = {}, pools = []) {
+  const hex = String(row.currency || row.lp_currency || "")
+    .replace(/^0x/i, "")
+    .toUpperCase();
+  const issuer = String(row.issuer || "").trim();
+  const ticker = printableTicker(quoteTickerFromCurrency(row.currency, row.issuer) || row.currency);
+  if (ticker === "XDX") return "XDX";
+  if (ticker && ticker !== "XRP" && !/^[A-F0-9]{40}$/.test(ticker)) return `XDX/${ticker}`;
+
+  const named = String(row.pair || "").trim().toUpperCase().replace(/\s+/g, "");
+  if (named === "XDX") return "XDX";
+  if (/^XDX\/[A-Z0-9.$]{2,20}$/.test(named)) return named;
+
+  const fromKnown = pairFromRow({
+    currency: hex,
+    lp_currency: hex,
+    issuer,
+    amm_account: issuer,
+    quote_issuer: issuer,
+  });
+  if (/^XDX\/[A-Z0-9.$]{2,20}$/.test(fromKnown)) return fromKnown;
+
+  for (const pool of Array.isArray(pools) ? pools : []) {
+    const poolHex = String(pool.lp_currency || pool.lp_currency_hex || "")
+      .replace(/^0x/i, "")
+      .toUpperCase();
+    const amm = String(pool.amm_account || pool.amm || "").trim();
+    if ((hex && poolHex === hex) || (issuer && amm && issuer.toLowerCase() === amm.toLowerCase())) {
+      const pair = String(pool.pool || pool.pair || pool.pool_name || "")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "")
+        .replace(/-/g, "/");
+      if (/^XDX\/[A-Z0-9.$]{2,20}$/.test(pair)) return pair;
+    }
+  }
+  return "";
 }
 
 export function readAmount(value) {
@@ -189,6 +236,122 @@ export function offerStillOnLedger(meta, account) {
   return false;
 }
 
+export function isLpCurrencyHex(value) {
+  return /^03[A-Fa-f0-9]{38}$/.test(String(value || "").trim());
+}
+
+function rippleStateFields(wrap) {
+  const created = wrap?.CreatedNode;
+  const deleted = wrap?.DeletedNode;
+  const modified = wrap?.ModifiedNode;
+  const node = modified || created || deleted;
+  if (!node || node.LedgerEntryType !== "RippleState") return null;
+  return {
+    created: Boolean(created),
+    deleted: Boolean(deleted),
+    node,
+    final: node.FinalFields || node.NewFields || {},
+    prev: node.PreviousFields || {},
+  };
+}
+
+function lpNodeDelta(wrap, account) {
+  const fields = rippleStateFields(wrap);
+  if (!fields) return null;
+  const { created, deleted, final, prev } = fields;
+  const currency = String(final.Balance?.currency || prev.Balance?.currency || "");
+  if (!isLpCurrencyHex(currency)) return null;
+  const high = final.HighLimit || prev.HighLimit || {};
+  const low = final.LowLimit || prev.LowLimit || {};
+  if (
+    account &&
+    !sameWallet(high.issuer, account) &&
+    !sameWallet(low.issuer, account) &&
+    !sameWallet(final.Account, account)
+  ) {
+    return null;
+  }
+  const after = deleted ? 0 : Math.abs(Number(final.Balance?.value));
+  if (!Number.isFinite(after)) return null;
+  const prevHasBalance = prev.Balance != null;
+  const before = created ? 0 : prevHasBalance ? Math.abs(Number(prev.Balance?.value || 0)) : after;
+  const delta = after - (Number.isFinite(before) ? before : after);
+  const amm = sameWallet(high.issuer, account) ? low.issuer : high.issuer;
+  return { currency, amm, delta, after, before };
+}
+
+export function lpDeltaFromMeta(meta, account) {
+  const nodes = Array.isArray(meta?.AffectedNodes) ? meta.AffectedNodes : meta?.meta?.AffectedNodes;
+  let best = 0;
+  for (const wrap of Array.isArray(nodes) ? nodes : []) {
+    const row = lpNodeDelta(wrap, account);
+    if (row && row.delta > best) best = row.delta;
+  }
+  return best > 0 ? best : 0;
+}
+
+export function lpBalanceEventsFromMeta(meta, account) {
+  const nodes = Array.isArray(meta?.AffectedNodes) ? meta.AffectedNodes : meta?.meta?.AffectedNodes;
+  const byHex = new Map();
+  for (const wrap of Array.isArray(nodes) ? nodes : []) {
+    const row = lpNodeDelta(wrap, account);
+    if (!row) continue;
+    const current = byHex.get(row.currency) || { currency: row.currency, amm: row.amm, delta: 0 };
+    current.delta += row.delta;
+    current.amm = current.amm || row.amm;
+    byHex.set(row.currency, current);
+  }
+  return [...byHex.values()].filter((row) => Number.isFinite(row.delta) && Math.abs(row.delta) > 1e-8);
+}
+
+function pairFromLpEvent(tx, event) {
+  if (tx?.TransactionType === "AMMCreate") {
+    return pairFromVoteAssets(amountAsIssue(tx.Amount), amountAsIssue(tx.Amount2));
+  }
+  if (tx?.Asset || tx?.Asset2) return pairFromVoteAssets(tx.Asset, tx.Asset2);
+  return pairFromRow({
+    amm_account: event.amm,
+    lp_currency: event.currency,
+  });
+}
+
+export function lpHistoryFromAccountTx(transactions, address, extra = {}) {
+  const resolvePair = typeof extra.resolvePair === "function" ? extra.resolvePair : pairFromLpEvent;
+  const out = [];
+  for (const row of Array.isArray(transactions) ? transactions : []) {
+    const { tx, meta, hash, timestamp } = unwrapAccountTx(row);
+    const result = meta.TransactionResult || row.TransactionResult || "";
+    if (result && result !== "tesSUCCESS") continue;
+    const events = lpBalanceEventsFromMeta(meta, address || tx?.Account);
+    for (const event of events) {
+      const pair = resolvePair(tx, event) || pairFromLpEvent(tx, event);
+      const side =
+        event.delta < 0 ? "removeLp" : tx?.TransactionType === "AMMCreate" ? "createPool" : "addLp";
+      out.push({
+        account: address || tx?.Account || null,
+        side,
+        pair,
+        pool: pair,
+        lp: Math.abs(event.delta),
+        amm: event.amm || null,
+        lpCurrency: event.currency,
+        timestamp: timestamp || new Date().toISOString(),
+        txid: hash,
+        status: "filled",
+        kind: tx?.TransactionType || "lp",
+      });
+    }
+  }
+  return out.sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
+}
+
+export function lpTokensFromAmmTx(tx, meta, address) {
+  const credited = lpDeltaFromMeta(meta, address || tx?.Account);
+  if (credited > 0) return credited;
+  const requested = Number(tx?.LPTokenOut?.value ?? tx?.LPTokenIn?.value ?? tx?.lp);
+  return Number.isFinite(requested) && requested > 0 ? requested : 0;
+}
+
 export function unwrapAccountTx(row = {}) {
   const tx = row.tx || row.tx_json || row;
   const meta = row.meta || row.metaData || tx.meta || {};
@@ -232,14 +395,19 @@ export function activityFromTrustSetTx(row, address) {
   const result = meta.TransactionResult || row.TransactionResult || "";
   if (result && result !== "tesSUCCESS") return null;
   const limit = tx.LimitAmount || {};
-  const currency = currencyCode(limit.currency);
-  if (!currency || currency === "XRP") return null;
+  const pair = displayTrustlinePair({
+    currency: limit.currency,
+    issuer: limit.issuer,
+  });
+  const currency = pair === "XDX" ? "XDX" : pair.includes("/") ? pair.split("/")[1] : printableTicker(currencyCode(limit.currency));
+  if (!pair && !currency) return null;
+  if (currency === "XRP") return null;
   return {
     account: tx.Account || address,
     side: "trustline",
     kind: "trustline",
-    pair: currency === "XDX" ? "XDX" : `XDX/${currency}`,
-    currency,
+    pair: pair || (currency === "XDX" ? "XDX" : `XDX/${currency}`),
+    currency: currency || pair,
     issuer: limit.issuer || null,
     timestamp: timestamp || new Date().toISOString(),
     txid: hash,
@@ -287,11 +455,13 @@ export function activityFromAmmCreateTx(row, address) {
   const result = meta.TransactionResult || row.TransactionResult || "";
   if (result && result !== "tesSUCCESS") return null;
   const pair = pairFromVoteAssets(amountAsIssue(tx.Amount), amountAsIssue(tx.Amount2));
+  const lp = lpTokensFromAmmTx(tx, meta, address);
   return {
     account: tx.Account || address,
     side: "createPool",
     pair,
     pool: pair,
+    lp: lp > 0 ? lp : null,
     timestamp: timestamp || new Date().toISOString(),
     txid: hash,
     status: "filled",
@@ -305,13 +475,13 @@ export function activityFromAmmLpTx(row, address) {
   const result = meta.TransactionResult || row.TransactionResult || "";
   if (result && result !== "tesSUCCESS") return null;
   const pair = pairFromVoteAssets(tx.Asset, tx.Asset2);
-  const lp = Number(tx.LPTokenIn?.value ?? tx.lp);
+  const lp = lpTokensFromAmmTx(tx, meta, address);
   return {
     account: tx.Account || address,
     side: tx.TransactionType === "AMMDeposit" ? "addLp" : "removeLp",
     pair,
     pool: pair,
-    lp: Number.isFinite(lp) && lp > 0 ? lp : null,
+    lp: lp > 0 ? lp : null,
     timestamp: timestamp || new Date().toISOString(),
     txid: hash,
     status: "filled",
@@ -447,7 +617,9 @@ export function pendingFromExecution(detail = {}, address = "") {
         ? pairFromVoteAssets(amountAsIssue(txjson.Amount), amountAsIssue(txjson.Amount2))
         : pairFromVoteAssets(txjson.Asset, txjson.Asset2);
     const side = type === "AMMCreate" ? "createPool" : type === "AMMDeposit" ? "addLp" : "removeLp";
-    const lp = Number(txjson.LPTokenIn?.value ?? txjson.lp ?? detail.lp);
+    const lp = Number(
+      txjson.LPTokenOut?.value ?? txjson.LPTokenIn?.value ?? txjson.lp ?? detail.lpReceived ?? detail.lp
+    );
     return {
       order: null,
       activity: {

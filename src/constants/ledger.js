@@ -55,7 +55,19 @@ export function xrplToMd5ForLpPool(pool) {
 }
 
 export const XIO_ISSUER = "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU";
+export const XDX_XIO_AMM = "rDJXzsZGACeHGJQYfaudsYshaC5zJxqsHr";
+export const XDX_XIO_LP_HEX = "03E7A465A6E95CDA21E1110056AA51A71FA55CB9";
 export const XSQUAD_ISSUER = "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg";
+export const XDX_XSQUAD_AMM = "rwpht3XDGMhzYmT5V6ZyMyg6Uc37XFLSwv";
+export const XDX_XSQUAD_LP_HEX = "03BA7FDC0F32F83750869CBA241B93F1C66A8EEB";
+
+// 1% XDX platform fee for swaps where neither side is XDX.
+export const XDX_FEE_TREASURY = "rDPMFBANKMexTKkC7e4n3ekD9HfhmWHva8";
+export const XDX_PLATFORM_FEE_PCT = 1;
+
+// Non-XDX swaps require this much LP value in any one of these pools.
+export const SWAP_LP_GOVERNANCE_USD = 10;
+export const SWAP_LP_GOVERNANCE_PAIRS = ["XDX/XRP", "XDX/RLUSD", "XDX/XIO", "XDX/XSQUAD"];
 
 export function asciiCurrencyHex(code) {
   const text = String(code || "");
@@ -86,6 +98,23 @@ export const POOLS = [
     quoteIssuer: RLUSD_ISSUER,
     quoteHex: RLUSD_HEX,
   },
+  {
+    pair: "XDX/XIO",
+    amm: XDX_XIO_AMM,
+    lpHex: XDX_XIO_LP_HEX,
+    asset: "XDX",
+    quote: "XIO",
+    quoteIssuer: XIO_ISSUER,
+  },
+  {
+    pair: "XDX/XSQUAD",
+    amm: XDX_XSQUAD_AMM,
+    lpHex: XDX_XSQUAD_LP_HEX,
+    asset: "XDX",
+    quote: "XSQUAD",
+    quoteIssuer: XSQUAD_ISSUER,
+    quoteHex: XSQUAD_HEX,
+  },
 ];
 
 export function pairFromRow(row = {}) {
@@ -109,13 +138,31 @@ export function pairFromRow(row = {}) {
     .join(" ")
     .toUpperCase();
 
-  if (haystack.includes(XDX_RLUSD_AMM.toUpperCase()) || haystack.includes(XDX_RLUSD_LP_HEX)) {
+  const quoteHint = [row.quote, row.quote_hex, row.quote_issuer, row.asset2]
+    .filter(Boolean)
+    .join(" ")
+    .toUpperCase();
+  const look = `${haystack} ${quoteHint}`;
+
+  if (look.includes(XDX_RLUSD_AMM.toUpperCase()) || look.includes(XDX_RLUSD_LP_HEX)) {
     return "XDX/RLUSD";
   }
-  if (haystack.includes(XDX_XRP_AMM.toUpperCase()) || haystack.includes(XDX_XRP_LP_HEX)) {
+  if (look.includes(XDX_XRP_AMM.toUpperCase()) || look.includes(XDX_XRP_LP_HEX)) {
     return "XDX/XRP";
   }
-  if (haystack.includes("RLUSD") || haystack.includes(RLUSD_HEX)) {
+  if (look.includes(XDX_XIO_AMM.toUpperCase()) || look.includes(XDX_XIO_LP_HEX)) {
+    return "XDX/XIO";
+  }
+  if (look.includes(XDX_XSQUAD_AMM.toUpperCase()) || look.includes(XDX_XSQUAD_LP_HEX)) {
+    return "XDX/XSQUAD";
+  }
+  if (look.includes(XSQUAD_ISSUER.toUpperCase()) || look.includes(XSQUAD_HEX) || look.includes("XSQUAD")) {
+    return "XDX/XSQUAD";
+  }
+  if (look.includes(XIO_ISSUER.toUpperCase()) || look.includes(XIO_HEX) || /(^|\s)XIO(\s|$)/.test(look)) {
+    return "XDX/XIO";
+  }
+  if (look.includes("RLUSD") || look.includes(RLUSD_HEX)) {
     return "XDX/RLUSD";
   }
 
@@ -123,6 +170,15 @@ export function pairFromRow(row = {}) {
   if (amm && String(amm).length >= 8) {
     const text = String(amm);
     return `XDX/${text.slice(0, 4)}…${text.slice(-4)}`;
+  }
+  const lpHex = String(row.lp_currency || row.lp_currency_hex || "").replace(/^0x/i, "").toUpperCase();
+  if (
+    /^03[A-F0-9]{38}$/.test(lpHex) &&
+    lpHex !== XDX_XRP_LP_HEX &&
+    lpHex !== XDX_RLUSD_LP_HEX &&
+    lpHex !== XDX_XIO_LP_HEX
+  ) {
+    return "";
   }
   return "XDX/XRP";
 }

@@ -17,6 +17,7 @@ import {
   hasAssetLine,
   hasXdxLine,
   issuedBalance,
+  preferWalletLines,
   ratioDeltaPct,
   resolveCreateQuote,
 } from "../wallet/ammCreate";
@@ -37,30 +38,34 @@ import BrandSelect from "./BrandSelect";
 import WalletModal from "./WalletModal";
 
 function mergeWalletLines(balances, lines) {
+  const raw = (balances && balances.raw) || {};
   return {
     ...(balances || {}),
     raw: {
-      ...((balances && balances.raw) || {}),
-      lines: Array.isArray(lines) ? lines : [],
+      ...raw,
+      lines: preferWalletLines(lines, raw),
     },
   };
 }
 
-async function loadCreatePoolAssets(account) {
+async function loadCreatePoolAssets(account, extra = {}) {
   const [balances, lines, accountInfo] = await Promise.all([
     getWalletBalances(account).catch(() => ({})),
-    getWalletLines(account).catch(() => []),
+    getWalletLines(account, extra).catch(() => []),
     getWalletAccount(account).catch(() => ({})),
   ]);
   const drops = Number(accountInfo?.balance_drops);
   const liveXrp = Number.isFinite(drops) ? drops / 1_000_000 : null;
-  return mergeWalletLines(
-    {
-      ...balances,
-      xrp: Number.isFinite(Number(balances.xrp)) && Number(balances.xrp) > 0 ? Number(balances.xrp) : liveXrp,
-    },
-    lines
-  );
+  return {
+    ...mergeWalletLines(
+      {
+        ...balances,
+        xrp: Number.isFinite(Number(balances.xrp)) && Number(balances.xrp) > 0 ? Number(balances.xrp) : liveXrp,
+      },
+      lines
+    ),
+    lines: Array.isArray(lines) ? lines : [],
+  };
 }
 
 export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }) {
@@ -80,7 +85,10 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
 
   const account = liveWalletAddress(walletAddress);
   const signedIn = Boolean(account);
-  const options = useMemo(() => createQuoteOptions(pools, balances.raw), [pools, balances.raw]);
+  const options = useMemo(
+    () => createQuoteOptions(pools, balances.raw, balances.lines),
+    [pools, balances.raw, balances.lines]
+  );
   const selected = options.find((row) => row.id === quoteId) || options[0];
   const existing = existingPoolForQuote(pools, selected?.ticker || selected?.id || quoteId);
   const quote = useMemo(
@@ -144,11 +152,11 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
 
   useEffect(() => {
     if (quoteTouchedRef.current) return undefined;
-    const next = defaultCreateQuoteId(pools, balances.raw);
+    const next = defaultCreateQuoteId(pools, balances.raw, balances.lines);
     if (!next || next === quoteId) return undefined;
     const timer = window.setTimeout(() => setQuoteId(next), 0);
     return () => window.clearTimeout(timer);
-  }, [pools, quoteId, balances.raw]);
+  }, [pools, quoteId, balances.raw, balances.lines]);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,13 +178,23 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
       return () => window.clearTimeout(timer);
     }
     let cancelled = false;
-    loadCreatePoolAssets(account)
-      .then((next) => {
-        if (!cancelled) setBalances(next || {});
-      })
-      .catch(() => {});
+    function pull(extra = {}) {
+      loadCreatePoolAssets(account, extra)
+        .then((next) => {
+          if (!cancelled) setBalances(next || {});
+        })
+        .catch(() => {});
+    }
+    pull();
+    function onRefresh() {
+      pull({ fresh: true });
+    }
+    window.addEventListener("dpmf-wallet-refresh", onRefresh);
+    window.addEventListener(WALLET_EVENTS.signedIn, onRefresh);
     return () => {
       cancelled = true;
+      window.removeEventListener("dpmf-wallet-refresh", onRefresh);
+      window.removeEventListener(WALLET_EVENTS.signedIn, onRefresh);
     };
   }, [account]);
 
@@ -280,7 +298,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
   }[blocker];
 
   return (
-    <section className="dashboard-card neon-card create-pool-card">
+    <section className="dashboard-card neon-card create-pool-card" id="create-pool">
       <div className="create-pool-head">
         <div>
           <h2 className="card-title">{t.createPoolTitle}</h2>
@@ -313,7 +331,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
                 setFormError("");
               }}
               ariaLabel={t.createPoolSecondary}
-              searchable={options.length > 6}
+              searchable={options.length > 4}
               placeholder={t.searchPair || t.createPoolSecondary}
             />
           </label>

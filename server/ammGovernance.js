@@ -1,6 +1,8 @@
 import { xrplRpc } from "./xrplBookOffers.js";
+import { mapLimit } from "./liveAmmReserves.js";
 import {
   activityFromAmmVoteTx,
+  attachVoteTimestamps,
   governanceFromAmmInfo,
   quoteIdFromName,
   quoteIssue,
@@ -20,18 +22,31 @@ function cached(key, loader) {
   });
 }
 
-export async function loadPoolGovernance(pair, address = "", lpBalance = 0) {
+export async function loadPoolGovernance(pair, address = "", extra = {}) {
   const name = String(pair || "XDX/XRP").replace(/\s+/g, "").toUpperCase() || "XDX/XRP";
-  const quote = { id: quoteIdFromName(name), currency: quoteIdFromName(name) };
-  return cached(`gov:${name}:${address || "-"}`, async () => {
+  const lpBalance = typeof extra === "number" ? extra : Number(extra?.lpBalance ?? extra?.lp ?? 0) || 0;
+  const quoteId = quoteIdFromName(name);
+  const quote = {
+    id: quoteId,
+    currency: extra?.currency || extra?.hex || extra?.quote_hex || quoteId,
+    issuer: extra?.issuer || extra?.quote_issuer,
+    hex: extra?.hex || extra?.quote_hex,
+  };
+  const ammAccount = String(extra?.ammAccount || extra?.amm || extra?.amm_account || "").trim();
+  return cached(`gov:${name}:${address || "-"}:${quote.issuer || ""}:${ammAccount}`, async () => {
     try {
-      const result = await xrplRpc("amm_info", {
-        asset: xdxIssue(),
-        asset2: quoteIssue(quote),
-        ledger_index: "validated",
-      });
+      const asset2 = quoteIssue(quote);
+      const unresolvedIssued = quoteId !== "XRP" && asset2.currency === "XRP";
+      const result = await xrplRpc(
+        "amm_info",
+        unresolvedIssued && ammAccount
+          ? { amm_account: ammAccount, ledger_index: "validated" }
+          : { asset: xdxIssue(), asset2, ledger_index: "validated" }
+      );
+      const gov = governanceFromAmmInfo(result, { address, pair: name, lpBalance });
       return {
-        ...governanceFromAmmInfo(result, { address, pair: name, lpBalance }),
+        ...gov,
+        voteSlots: await datedVoteSlots(gov.voteSlots, name),
         source: "xrpl",
       };
     } catch {
@@ -43,6 +58,17 @@ export async function loadPoolGovernance(pair, address = "", lpBalance = 0) {
   });
 }
 
+async function datedVoteSlots(slots = [], pair = "XDX/XRP") {
+  const rows = (Array.isArray(slots) ? slots : []).map((row) => ({ ...row, pair: row.pair || pair }));
+  const accounts = [...new Set(rows.map((row) => String(row.account || "").trim()).filter(Boolean))];
+  if (!accounts.length) return rows;
+  const lists = await mapLimit(accounts, 3, async (account) => {
+    const body = await loadWalletVotes(account).catch(() => ({ activity: [] }));
+    return Array.isArray(body?.activity) ? body.activity : [];
+  });
+  return attachVoteTimestamps(rows, lists.flat());
+}
+
 export async function loadWalletVotes(address) {
   const name = String(address || "").trim();
   if (!name) return { account: null, activity: [], source: "empty" };
@@ -52,7 +78,7 @@ export async function loadWalletVotes(address) {
         account: name,
         ledger_index_min: -1,
         ledger_index_max: -1,
-        limit: 40,
+        limit: 80,
         binary: false,
         forward: false,
       });

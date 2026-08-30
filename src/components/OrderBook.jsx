@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { getOrderbook, getOrderbooks } from "../api/indexer";
 import {
+  bookFromMarketPayload,
+  bookHasTape,
   bookHeader,
-  emptyOrderbook,
   FEATURED_ORDERBOOK_PAIRS,
+  filterBookTape,
   filterOrderbookPairs,
   mergeOrderbookPayloads,
   normalizeOrderbookPair,
@@ -111,12 +113,10 @@ export default function OrderBook() {
         getOrderbooks(),
       ]);
       if (cancelled) return;
+      const catalog = all.status === "fulfilled" ? all.value : null;
+      const single = one.status === "fulfilled" ? one.value : null;
       const next =
-        all.status === "fulfilled"
-          ? all.value
-          : one.status === "fulfilled"
-            ? one.value
-            : null;
+        catalog && single ? mergeOrderbookPayloads(catalog, single) : catalog || single;
       if (next) {
         setBooks((current) => mergeOrderbookPayloads(current, next));
         setError(null);
@@ -140,13 +140,18 @@ export default function OrderBook() {
     [pairs, query]
   );
 
-  const book = useMemo(() => {
+  const rawBook = useMemo(() => {
     const name = normalizeOrderbookPair(pair);
-    return books?.books?.[name] || books?.books?.[pair] || emptyOrderbook(name);
+    return bookFromMarketPayload(books, name);
   }, [books, pair]);
-
-  const bidRows = useMemo(() => padOrderbookLevels(book.bids || []), [book]);
-  const askRows = useMemo(() => padOrderbookLevels(book.asks || []), [book]);
+  const book = useMemo(() => filterBookTape(rawBook, "hybrid"), [rawBook]);
+  const dexBook = useMemo(() => filterBookTape(rawBook, "dex"), [rawBook]);
+  const ammBook = useMemo(() => filterBookTape(rawBook, "amm"), [rawBook]);
+  const bidRows = useMemo(() => padOrderbookLevels(dexBook.bids || []), [dexBook]);
+  const askRows = useMemo(() => padOrderbookLevels(dexBook.asks || []), [dexBook]);
+  const ammBidRows = useMemo(() => padOrderbookLevels(ammBook.bids || []), [ammBook]);
+  const ammAskRows = useMemo(() => padOrderbookLevels(ammBook.asks || []), [ammBook]);
+  const showAmmFirst = !bookHasTape(dexBook) && bookHasTape(ammBook);
 
   if (!books && !error) {
     return (
@@ -186,6 +191,7 @@ export default function OrderBook() {
             </button>
           ))}
         </div>
+        <p className="orderbook-unit">{t.orderbookUnit} {quote}</p>
         <div className="orderbook-search-wrap">
           <input
             type="search"
@@ -210,9 +216,7 @@ export default function OrderBook() {
             </ul>
           ) : null}
         </div>
-        <p className="orderbook-unit">{t.orderbookUnit} {quote}</p>
       </div>
-
       <dl className="orderbook-header">
         <div>
           <dt>{t.bestBid}</dt>
@@ -236,9 +240,25 @@ export default function OrderBook() {
         </div>
       </dl>
 
-      <div className="orderbook-board">
-        <BookSide title={t.bids} rows={bidRows} side="bid" locale={locale} t={t} />
-        <BookSide title={t.asks} rows={askRows} side="ask" locale={locale} t={t} />
+      <div className="orderbook-boards">
+        {(showAmmFirst
+          ? [
+              ["amm", t.orderbookTapeAmm || "AMM", ammBidRows, ammAskRows],
+              ["dex", t.orderbookTapeDex || "XDX book", bidRows, askRows],
+            ]
+          : [
+              ["dex", t.orderbookTapeDex || "XDX book", bidRows, askRows],
+              ["amm", t.orderbookTapeAmm || "AMM", ammBidRows, ammAskRows],
+            ]
+        ).map(([key, title, bids, asks]) => (
+          <section key={key} className="orderbook-panel" aria-label={title}>
+            <h3 className="orderbook-panel-title">{title}</h3>
+            <div className="orderbook-board">
+              <BookSide title={t.bids} rows={bids} side="bid" locale={locale} t={t} />
+              <BookSide title={t.asks} rows={asks} side="ask" locale={locale} t={t} />
+            </div>
+          </section>
+        ))}
       </div>
 
       {book.amm_implied ? (

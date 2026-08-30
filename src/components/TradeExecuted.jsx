@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useI18n } from "../i18n/useI18n";
 import { formatToken } from "../utils/format";
 import { executionReceipt, formatReceiptHash } from "../wallet/executionReceipt";
+import { explainTradeFailure } from "../wallet/tradeFailure";
 import { ackTradeNotice, peekTradeNotice, rememberTradeNotice } from "../wallet/tradeNotice";
 import { getLedgerTx } from "../xaman/xamanClient";
 
@@ -23,10 +24,7 @@ function titleFor(t, notice) {
 }
 
 function hintFor(t, notice) {
-  if (notice.kind === "failed") {
-    const code = notice.engineResult ? ` ${notice.engineResult}.` : "";
-    return `${t.tradeFailedHint}${code}`;
-  }
+  if (notice.kind === "failed") return t.tradeFailedHint;
   if (notice.kind === "unconfirmed") return t.tradeUnconfirmedHint;
   const type = notice.txjson?.TransactionType;
   if (type === "AMMWithdraw") return t.lpRemovedHint;
@@ -110,6 +108,7 @@ export default function TradeExecuted() {
   const received = formatSide(receipt.received, locale);
   const hash = receipt.txid ? formatReceiptHash(receipt.txid) : "";
   const tone = detail.kind === "failed" ? "is-failed" : detail.kind === "unconfirmed" ? "is-unconfirmed" : "is-ok";
+  const failure = detail.kind === "failed" ? explainTradeFailure(detail, t) : null;
 
   return createPortal(
     <div
@@ -170,6 +169,16 @@ export default function TradeExecuted() {
         <button type="button" className="connect-wallet-btn" onClick={close}>
           {t.close || t.ok || "Close"}
         </button>
+        {failure ? (
+          <div className="xdx-swap-rec trade-fail-rec">
+            <div className="xdx-swap-tip-scan" aria-hidden="true" />
+            <p className="xdx-swap-tip-kicker">{failure.title}</p>
+            <p>{failure.why}</p>
+            <p className="xdx-swap-tip-kicker trade-fail-fix-kicker">{failure.fixTitle}</p>
+            <p>{failure.fix}</p>
+            {failure.code ? <p className="trade-fail-code">{failure.code}</p> : null}
+          </div>
+        ) : null}
       </div>
     </div>,
     document.body

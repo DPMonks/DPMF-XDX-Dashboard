@@ -19,7 +19,10 @@ import {
   estimatedCreateLp,
   estimatedPoolValueXrp,
   existingPoolForQuote,
+  issuedBalance,
   hasAssetLine,
+  normalizeWalletLines,
+  preferWalletLines,
   ratioDeltaPct,
 } from "../src/wallet/ammCreate.js";
 import { feeUnitsFromPercent } from "../src/wallet/ammVote.js";
@@ -104,6 +107,46 @@ test("existing pool detection skips XDX/XRP and prefers a trustline quote", () =
   assert.ok(!options.some((row) => row.id === "XSQUAD"));
 });
 
+test("normalizeWalletLines reads account_lines and ignores a wallet envelope", () => {
+  const xio = { currency: "XIO", issuer: XIO_ISSUER, ticker: "XIO", balance: "4" };
+  assert.deepEqual(normalizeWalletLines({ account: "rA", lines: [xio], source: "xrpl" }), [xio]);
+  assert.deepEqual(normalizeWalletLines({ account: "rA", source: "empty" }), []);
+  assert.deepEqual(normalizeWalletLines([xio, { account: "rA" }]), [xio]);
+  assert.deepEqual(
+    preferWalletLines([], { lines: [xio, { currency: "USD", issuer: "rUsd", ticker: "USD", balance: "1" }] }).map(
+      (row) => row.ticker
+    ),
+    ["XIO", "USD"]
+  );
+});
+
+test("create-pool picker lists every IOU from a live wallet balances payload", () => {
+  const raw = {
+    account: "rDPMFBANKMexTKkC7e4n3ekD9HfhmWHva8",
+    xdx: 3004952684.620968,
+    rlusd: 127.29,
+    source: "xrpl",
+    lines: [
+      { currency: RLUSD_HEX, ticker: "RLUSD", issuer: RLUSD_ISSUER, balance: "127.29", lp: false },
+      { currency: "XIO", ticker: "XIO", issuer: XIO_ISSUER, balance: "4200", lp: false },
+      { currency: XSQUAD_HEX, ticker: "XSQUAD", issuer: XSQUAD_ISSUER, balance: "37140", lp: false },
+      { currency: "USD", ticker: "USD", issuer: "rhub8VRN55s94qWKDv6jmDy1pUykJzF3wq", balance: "0.005", lp: false },
+      { currency: "ETH", ticker: "ETH", issuer: "rcA8X3TVMST1n3CJeAdGk1RdRCHii7N2h", balance: "0", lp: false },
+      { currency: "OVO", ticker: "OVO", issuer: "r3jQzqfGVagsWNbSxMJpQV8VK7jHHmdv5j", balance: "1", lp: false },
+      { currency: "03BCD44104644B711C58CD14CD13CBA65757CFBE", ticker: "LP", issuer: "rAmm", balance: "1", lp: true },
+      { currency: "XDX", ticker: "XDX", issuer: XDX_ISSUER, balance: "9", lp: false },
+    ],
+  };
+  const options = createQuoteOptions([{ pool: "XDX/XRP" }, { pool: "XDX/XIO" }], raw);
+  assert.deepEqual(
+    options.map((row) => row.ticker),
+    ["XRP", "RLUSD", "XIO", "XSQUAD", "USD", "ETH", "OVO"]
+  );
+  assert.equal(options.find((row) => row.ticker === "XIO").exists, true);
+  assert.equal(options.find((row) => row.ticker === "OVO").exists, false);
+  assert.ok(!options.some((row) => row.ticker === "XDX" || row.ticker === "LP"));
+});
+
 test("secondary quotes come from wallet trustlines, never a hardcoded catalogue", () => {
   const empty = createQuoteOptions([{ pool: "XDX/XRP" }]);
   assert.deepEqual(empty.map((row) => row.id), ["XRP"]);
@@ -138,6 +181,20 @@ test("secondary picker lists every account_lines trustline as a singular asset",
   assert.equal(usd.length, 2);
   assert.ok(usd.every((row) => row.id.startsWith("USD:")));
   assert.ok(usd.every((row) => row.label.startsWith("USD · ")));
+});
+
+test("create pool options and balances see hex IOUs such as USDC", () => {
+  const usdcHex = "5553444300000000000000000000000000000000";
+  const usdcIssuer = "rUSDCIssuer11111111111111111111111";
+  const raw = {
+    lines: [{ currency: usdcHex, issuer: usdcIssuer, ticker: "USDC", balance: "12.5" }],
+  };
+  const options = createQuoteOptions([], raw);
+  assert.ok(options.some((row) => row.ticker === "USDC"));
+  assert.equal(
+    issuedBalance(raw, { issuer: usdcIssuer, currency: "USDC", hex: usdcHex, id: "USDC" }),
+    12.5
+  );
 });
 
 test("deposit ratio warns when the mark is 20 percent off", () => {

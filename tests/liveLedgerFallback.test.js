@@ -4,16 +4,31 @@ import {
   XDX_ISSUER,
   XDX_XRP_AMM,
   XDX_XRP_LP_HEX,
+  XSQUAD_HEX,
+  XSQUAD_ISSUER,
 } from "../src/constants/ledger.js";
 import {
   iouFromGatewayBalances,
   lpHoldingsFromLines,
   loadWalletBalancesFromLedger,
+  loadWalletLpFromLedger,
+  preferPositiveAmount,
   rlusdBalanceFromLines,
   xdxBalanceFromLines,
+  xrpDropsFromAccountInfo,
 } from "../server/walletLedger.js";
+import { lpHeldForPair } from "../src/xaman/tradeTx.js";
 import { liveCatalogPayload } from "../server/liveCatalog.js";
 import { RLUSD_HEX, RLUSD_ISSUER } from "../src/constants/ledger.js";
+
+test("xrpDropsFromAccountInfo ignores missing or zero Balance", () => {
+  assert.equal(xrpDropsFromAccountInfo({ account_data: { Balance: "25000000" } }), 25_000_000);
+  assert.equal(xrpDropsFromAccountInfo({ result: { account_data: { Balance: "1000000" } } }), 1_000_000);
+  assert.equal(xrpDropsFromAccountInfo({ account_data: {} }), null);
+  assert.equal(xrpDropsFromAccountInfo({ account_data: { Balance: "0" } }), null);
+  assert.equal(xrpDropsFromAccountInfo({}), null);
+  assert.equal(xrpDropsFromAccountInfo(null), null);
+});
 
 test("XDX and LP holdings are read from account_lines", () => {
   assert.equal(
@@ -43,6 +58,95 @@ test("XDX and LP holdings are read from account_lines", () => {
   assert.equal(lps.length, 1);
   assert.equal(lps[0].lp_balance, 3.25);
   assert.equal(lps[0].amm_account, XDX_XRP_AMM);
+});
+
+test("preferPositiveAmount keeps a catalog XDX total when the live read is zero", () => {
+  assert.equal(preferPositiveAmount(0, 3004952684.62), 3004952684.62);
+  assert.equal(preferPositiveAmount(null, 12.5), 12.5);
+  assert.equal(preferPositiveAmount(88, 0), 88);
+  assert.equal(preferPositiveAmount(null, null), null);
+});
+
+test("live wallet balances take XDX from gateway_balances when account_lines miss", async () => {
+  const fetchImpl = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    if (body.method === "account_info") {
+      return {
+        ok: true,
+        json: async () => ({
+          result: { status: "success", account_data: { Balance: "25000000", OwnerCount: 4 } },
+        }),
+      };
+    }
+    if (body.method === "gateway_balances") {
+      return {
+        ok: true,
+        json: async () => ({
+          result: { assets: { [XDX_ISSUER]: [{ currency: "XDX", value: "1500.25" }] } },
+        }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ result: { status: "success", lines: [] } }),
+    };
+  };
+  const snap = await loadWalletBalancesFromLedger("rWallet111111111111111111111111111", {
+    fetchImpl,
+    fresh: true,
+  });
+  assert.equal(snap.xdx, 1500.25);
+  assert.equal(snap.xrp, 25);
+});
+
+test("live wallet balances retry account_info and do not store a failed XRP lookup as zero", async () => {
+  let infoHits = 0;
+  const fetchImpl = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    if (body.method === "account_info") {
+      infoHits += 1;
+      if (infoHits < 2) return { ok: false, status: 429, json: async () => ({}) };
+      return {
+        ok: true,
+        json: async () => ({
+          result: { status: "success", account_data: { Balance: "18500000", OwnerCount: 3 } },
+        }),
+      };
+    }
+    return { ok: true, json: async () => ({ result: { status: "success", lines: [] } }) };
+  };
+  const snap = await loadWalletBalancesFromLedger("rWallet111111111111111111111111111", {
+    fetchImpl,
+    fresh: true,
+  });
+  assert.equal(infoHits, 2);
+  assert.equal(snap.xrp, 18.5);
+  assert.equal(snap.balance_drops, 18_500_000);
+});
+
+test("a missing account_info leaves XRP unknown instead of zero", async () => {
+  const fetchImpl = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    if (body.method === "account_info") {
+      return { ok: true, json: async () => ({ result: { status: "error", error: "actNotFound" } }) };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        result: {
+          status: "success",
+          lines: [{ account: XDX_ISSUER, currency: "XDX", balance: "88" }],
+        },
+      }),
+    };
+  };
+  const snap = await loadWalletBalancesFromLedger("rWalletMissingXrp11111111111111111", {
+    fetchImpl,
+    fresh: true,
+  });
+  assert.equal(snap.xdx, 88);
+  assert.equal(snap.xrp, null);
+  assert.equal(snap.balance_drops, null);
 });
 
 test("live wallet balances prefer the XRPL account and XDX line", async () => {
@@ -81,6 +185,9 @@ test("live wallet balances prefer the XRPL account and XDX line", async () => {
   assert.equal(snap.xdx, 88);
   assert.equal(snap.rlusd, 3);
   assert.equal(snap.balance_drops, 25_000_000);
+  assert.equal(snap.lines.length, 1);
+  assert.equal(snap.lines[0].ticker, "RLUSD");
+  assert.equal(snap.lines[0].issuer, RLUSD_ISSUER);
 });
 
 test("a down database still has a live token and price payload", async () => {
@@ -180,4 +287,101 @@ test("a down database still has a live token and price payload", async () => {
   const lpChart = await liveCatalogPayload("charts/lp-holders", { fetchImpl, fresh: true, now });
   assert.ok(Array.isArray(lpChart));
   assert.equal(lpChart[0].lp_holder_count, 58);
+});
+
+test("wallet LP from ledger keeps XDX/XSQUAD tokens off the XDX/XRP pair", async () => {
+  const xsquadAmm = "rXsquadAmm11111111111111111111111";
+  const xsquadLp = "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const fetchImpl = async (url, options) => {
+    if (options?.body) {
+      const body = JSON.parse(options.body);
+      if (body.method === "account_lines") {
+        return {
+          ok: true,
+          json: async () => ({
+            result: {
+              status: "success",
+              lines: [
+                { account: xsquadAmm, currency: xsquadLp, balance: "88.5" },
+                { account: XDX_XRP_AMM, currency: XDX_XRP_LP_HEX, balance: "4" },
+              ],
+            },
+          }),
+        };
+      }
+      if (body.method === "amm_info") {
+        const account = body.params?.[0]?.amm_account;
+        if (account === xsquadAmm) {
+          return {
+            ok: true,
+            json: async () => ({
+              result: {
+                amm: {
+                  account: xsquadAmm,
+                  amount: { currency: "XDX", issuer: XDX_ISSUER, value: "1000" },
+                  amount2: { currency: XSQUAD_HEX, issuer: XSQUAD_ISSUER, value: "40" },
+                  lp_token: { currency: xsquadLp, issuer: xsquadAmm, value: "200" },
+                },
+              },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            result: {
+              amm: {
+                account: XDX_XRP_AMM,
+                amount: { currency: "XDX", issuer: XDX_ISSUER, value: "50000" },
+                amount2: "2000000",
+                lp_token: { currency: XDX_XRP_LP_HEX, issuer: XDX_XRP_AMM, value: "1000" },
+              },
+            },
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ result: { status: "success" } }) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  const body = await loadWalletLpFromLedger("rWallet111111111111111111111111111", {
+    fetchImpl,
+    fresh: true,
+  });
+  const xsquad = body.positions.find((row) => row.pool === "XDX/XSQUAD");
+  const xrp = body.positions.find((row) => row.pool === "XDX/XRP");
+  assert.equal(xsquad?.lp_balance, 88.5);
+  assert.equal(xrp?.lp_balance, 4);
+  assert.equal(lpHeldForPair(body.positions, "XDX/XRP", "XRP"), 4);
+  assert.equal(lpHeldForPair(body.positions, "XDX/XSQUAD", "XSQUAD"), 88.5);
+});
+
+test("wallet LP from ledger keeps the XDX/XRP line when live AMM lookup fails", async () => {
+  const fetchImpl = async (_url, options) => {
+    if (options?.body) {
+      const body = JSON.parse(options.body);
+      if (body.method === "account_lines") {
+        return {
+          ok: true,
+          json: async () => ({
+            result: {
+              status: "success",
+              lines: [{ account: XDX_XRP_AMM, currency: XDX_XRP_LP_HEX, balance: "9.5" }],
+            },
+          }),
+        };
+      }
+      if (body.method === "amm_info") {
+        return { ok: false, status: 500, json: async () => ({ error: "timeout" }) };
+      }
+      return { ok: true, json: async () => ({ result: { status: "success" } }) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  const body = await loadWalletLpFromLedger("rWallet111111111111111111111111111", {
+    fetchImpl,
+    fresh: true,
+  });
+  assert.equal(body.positions[0]?.pool, "XDX/XRP");
+  assert.equal(body.positions[0]?.lp_balance, 9.5);
 });
