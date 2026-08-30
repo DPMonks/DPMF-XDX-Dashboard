@@ -39,6 +39,7 @@ import {
   FEATURED_ORDERBOOK_PAIRS,
 } from "../orderbook";
 import { composeWalletSnapshot, emptyWalletSnapshot } from "../wallet/composeWallet";
+import { composeLedgerQuoteMark, tradableQuoteIds } from "../wallet/quoteMarker";
 import { normalizeWalletLines } from "../wallet/ammCreate";
 
 export { INDEXER_ORIGIN };
@@ -334,10 +335,10 @@ export async function getOverview() {
   return api.overview();
 }
 
-export async function getAmm() {
+export async function getAmm(opts = {}) {
   const [body, prices, flows] = await Promise.all([
-    api.lpPools().catch(() => ({ pools: [], catching_up: true })),
-    api.prices().catch(() => ({})),
+    api.lpPools(opts).catch(() => ({ pools: [], catching_up: true })),
+    api.prices(opts).catch(() => ({})),
     getXdxFlows().catch(() => []),
   ]);
   const xdxUsd = numberOrNull(prices?.xdxUsd ?? prices?.recorded_price);
@@ -455,19 +456,71 @@ function ingestOrderbooks(body, pairHint = "XDX/XRP") {
   return lastOrderbooks;
 }
 
-export async function getOrderbook(pair = "XDX/XRP") {
+export async function getOrderbook(pair = "XDX/XRP", opts = {}) {
   const name = normalizeOrderbookPair(pair);
   try {
-    return ingestOrderbooks(await api.orderbook(name), name);
+    return ingestOrderbooks(await api.orderbook(name, opts), name);
   } catch {
     if (lastOrderbooks) return lastOrderbooks;
     throw new Error("Waiting for XRPL book_offers on this pair.");
   }
 }
 
-export async function getOrderbooks() {
+/**
+ * Fresh ledger mark for the opposing asset when the trade box opens.
+ * Uses this pair's live orderbook mid (DEX + AMM implied) first, then this
+ * pair's AMM reserves, then a USD/XRP cross. No hardcoded XIO/RLUSD/XSQUAD
+ * rates. The indexer already talks to XRPL — no extra indexer agent is required.
+ */
+export async function getQuoteMark(quoteId) {
+  const id = String(quoteId || "XRP").toUpperCase();
+  const payload = await getQuoteMarks([id]);
+  const mark = payload.marks[id] || markForQuote(id, payload.pools, payload.prices, null);
+  return { ...mark, pools: payload.pools, prices: payload.prices };
+}
+
+function markForQuote(id, pools, prices, books) {
+  const pair = `XDX/${id}`;
+  const list = Array.isArray(pools) ? pools : [];
+  const pool =
+    list.find((row) => String(row.pool || row.pool_name || "").toUpperCase() === pair) || null;
+  const book = books?.books?.[pair] || null;
+  return {
+    ...composeLedgerQuoteMark({
+      quoteId: id,
+      pool,
+      prices,
+      bookMid: book?.mid ?? null,
+      dexPresent: Boolean(book?.dex_present),
+    }),
+    bookMid: book?.mid ?? null,
+    dexPresent: Boolean(book?.dex_present),
+  };
+}
+
+/**
+ * Detect a live ledger mark for every XDX tradable quote on the platform
+ * (featured pairs plus whatever AMM pools the indexer currently lists).
+ */
+export async function getQuoteMarks(extraIds = []) {
+  const fresh = { cache: false };
+  const [pools, prices, books] = await Promise.all([
+    getAmm(fresh).catch(() => []),
+    getPrices(fresh).catch(() => ({})),
+    getOrderbooks(fresh).catch(() => null),
+  ]);
+  const list = Array.isArray(pools) ? pools : [];
+  const ids = tradableQuoteIds(list, extraIds);
+  const marks = {};
+  for (const id of ids) {
+    marks[id] = markForQuote(id, list, prices, books);
+  }
+  return { pools: list, prices, marks };
+}
+
+export async function getOrderbooks(opts = {}) {
   try {
-    return ingestOrderbooks(await api.orderbooks());
+    return ingestOrderbooks(await api.orderbooks(opts));
   } catch {
     if (lastOrderbooks) return lastOrderbooks;
     throw new Error("Waiting for XRPL book_offers on this pair.");
@@ -961,8 +1014,8 @@ export async function getWalletRank(address) {
   return numberOrNull(body?.rank);
 }
 
-export async function getPrices() {
-  const prices = fillMissingXdxFiat(await api.prices().catch(() => ({})));
+export async function getPrices(opts = {}) {
+  const prices = fillMissingXdxFiat(await api.prices(opts).catch(() => ({})));
   if (!pricesNeedFiat(prices)) return prices;
   try {
     return fillMissingXdxFiat(applyXrplToPrices(prices, await fetchXrplToToken()));

@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getAmm, getLiveLpReserves, getPrices, getWalletAccount, getWalletBalances, getWalletLines, getWalletLp } from "../api/indexer";
+import {
+  getLiveLpReserves,
+  getQuoteMarks,
+  getWalletAccount,
+  getWalletBalances,
+  getWalletLines,
+  getWalletLp,
+} from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -116,6 +123,7 @@ export default function TradePanel({
   const [quoteLineReady, setQuoteLineReady] = useState(false);
   const [formError, setFormError] = useState("");
   const [prices, setPrices] = useState(() => priceBookFromPools(initialPools));
+  const [ledgerMarks, setLedgerMarks] = useState({});
   const [loadedFor, setLoadedFor] = useState("");
   const startRef = useRef(start);
   const resumeOnceRef = useRef(false);
@@ -183,11 +191,22 @@ export default function TradePanel({
     !(isSingleLp && singleAsset === "xdx");
   const reserves = useMemo(() => poolReserves(pools, quote, liveReserves), [pools, quote, liveReserves]);
   const implied = poolPrice(reserves.base, reserves.quote);
-  const markerPx = xdxQuoteSpot({ quoteId, prices, pool: reserves });
+  const liveMark = ledgerMarks[quoteId] || null;
+  const markerPx =
+    Number(liveMark?.xdxPerQuote) > 0
+      ? Number(liveMark.xdxPerQuote)
+      : xdxQuoteSpot({
+          quoteId,
+          prices,
+          pool: reserves,
+          bookMid: liveMark?.bookMid,
+          dexPresent: liveMark?.dexPresent,
+        });
+  const headerSpot = quoteId === "XRP" && Number(spotPrice) > 0 ? Number(spotPrice) : 0;
   const px =
     orderType === "limit" && Number(price) > 0
       ? Number(price)
-      : markerPx || implied || Number(spotPrice) || 0;
+      : markerPx || (quoteId === "XRP" ? implied || headerSpot : 0);
   const quoteReserve = reserves.quote;
   const linked = linkedDepositAmounts({
     editedSide,
@@ -317,24 +336,25 @@ export default function TradePanel({
   useEffect(() => {
     if (!action) return undefined;
     let cancelled = false;
-    getPrices()
-      .then((nextPrices) => {
-        if (cancelled) return;
-        setPrices((current) =>
-          priceBookFromPools([], { ...current, ...normalizePriceBook(nextPrices || {}) })
-        );
-      })
-      .catch(() => {});
     Promise.all([
-      getAmm().catch(() => []),
+      getQuoteMarks([quoteId]).catch(() => null),
       account ? getWalletLp(account).catch(() => []) : [],
       account ? getWalletLines(account).catch(() => []) : [],
       account ? getWalletBalances(account).catch(() => ({})) : {},
       account ? getWalletAccount(account).catch(() => ({})) : {},
-    ]).then(([nextPools, nextLp, nextLines, nextHold, nextAccount]) => {
+    ]).then(([payload, nextLp, nextLines, nextHold, nextAccount]) => {
       if (cancelled) return;
-      setPools(Array.isArray(nextPools) ? nextPools : []);
-      setPrices((current) => priceBookFromPools(nextPools, current));
+      const nextPools = Array.isArray(payload?.pools) ? payload.pools : [];
+      if (payload) {
+        setLedgerMarks(payload.marks || {});
+        if (nextPools.length) setPools(nextPools);
+        setPrices((current) =>
+          priceBookFromPools(nextPools, {
+            ...current,
+            ...normalizePriceBook(payload.prices || {}),
+          })
+        );
+      }
       const rows = Array.isArray(nextLp) ? nextLp : [];
       setWalletLp(rows);
       setWalletLines(Array.isArray(nextLines) ? nextLines : []);
