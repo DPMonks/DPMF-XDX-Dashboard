@@ -113,6 +113,14 @@ export function preferredWalletPair(names = [], current = "") {
   return list[0] || "XDX/XRP";
 }
 
+export function walletXdxPairs(lp = []) {
+  return sortWalletPairs(
+    (Array.isArray(lp) ? lp : [])
+      .filter((row) => isXdxAmmPair(row) && (num(row.lp_balance ?? row.lp) || 0) > 0)
+      .map((row) => row.pool || row.pool_name || row.pair)
+  );
+}
+
 export function normalizeWalletPair(value) {
   const raw = String(value || "")
     .trim()

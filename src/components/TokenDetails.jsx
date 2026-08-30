@@ -9,6 +9,7 @@ import {
   shortAddress,
 } from "../utils/format";
 import { changeDirection } from "../utils/valueFlash";
+import { keepLastGoodTokenDetails } from "../tokenDetails";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
 
@@ -64,14 +65,16 @@ export default function TokenDetails() {
       try {
         const next = await getTokenDetails((partial) => {
           if (!cancelled) {
-            lastGood.current = partial;
-            setData(partial);
+            const merged = keepLastGoodTokenDetails(lastGood.current, partial);
+            lastGood.current = merged;
+            setData(merged);
             setError(null);
           }
         });
         if (!cancelled) {
-          lastGood.current = next;
-          setData(next);
+          const merged = keepLastGoodTokenDetails(lastGood.current, next);
+          lastGood.current = merged;
+          setData(merged);
           setError(null);
         }
       } catch (err) {

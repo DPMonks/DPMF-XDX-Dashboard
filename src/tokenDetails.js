@@ -21,6 +21,40 @@ function countOf(value, fallback) {
   return fallback ?? null;
 }
 
+const KEEP_MARK_KEYS = new Set([
+  "price",
+  "xdxUsd",
+  "recorded_price",
+  "xdxPerXrp",
+  "xdx_per_xrp",
+  "xrplMarketCap",
+  "circulatingMarketCap",
+  "ammMarketCap",
+]);
+
+function hasTokenMark(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0;
+}
+
+export function keepLastGoodTokenDetails(current, next) {
+  if (!next || typeof next !== "object") return current || next || null;
+  if (!current || typeof current !== "object") return next;
+  const hollow =
+    next.holders == null &&
+    next.trustlines == null &&
+    !hasTokenMark(next.recorded_price) &&
+    !hasTokenMark(next.xdxUsd);
+  if (hollow) return current;
+  const merged = { ...current };
+  for (const [key, value] of Object.entries(next)) {
+    if (value == null || value === "") continue;
+    if (KEEP_MARK_KEYS.has(key) && !hasTokenMark(value) && hasTokenMark(current[key])) continue;
+    merged[key] = value;
+  }
+  return merged;
+}
+
 export function composeTokenDetails({
   overview = {},
   prices = {},

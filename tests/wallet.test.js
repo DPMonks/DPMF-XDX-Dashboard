@@ -11,6 +11,7 @@ import {
   normalizeWalletPair,
   preferredWalletPair,
   sortWalletPairs,
+  walletXdxPairs,
   supplyShares,
   tradingFeeRate,
   ammFeePercent,
@@ -64,6 +65,13 @@ test("xrpReserveBreakdown prefers ledger drops and does not reserve more than th
   });
   assert.equal(missingLedger.balance, 18.5);
   assert.equal(missingLedger.spendable, 16.7);
+
+  const zeroDrops = xrpReserveBreakdown({
+    balance: 57.1375,
+    balanceDrops: 0,
+    ownerCount: 4,
+  });
+  assert.equal(zeroDrops.balance, 57.1375);
 });
 
 test("xrpBarPercents keeps total XRP as a full reference bar", () => {
@@ -101,6 +109,27 @@ test("preferredWalletPair always defaults to XDX/XRP when that pool is held", ()
   assert.equal(preferredWalletPair(["XDX/USDC", "XDX/XRP"], "XDX/XRP"), "XDX/XRP");
   assert.equal(preferredWalletPair(["XDX/USDC", "XDX/XRP"], "XDX/USDC"), "XDX/USDC");
   assert.equal(preferredWalletPair(["XDX/USDC"], ""), "XDX/USDC");
+});
+
+test("composeWalletSnapshot adds XDX line positions the LP API omitted", () => {
+  const snap = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 10, xdx: 1000 },
+    lpRows: [{ pool_name: "XDX/XRP", lp_balance: 100 }],
+    lines: [
+      { currency: "03BCD44104644B711C58CD14CD13CBA65757CFBE", issuer: "rLbBzF9oxntVf4XxcyakNKJTci4yqSmQUu", balance: "20", lp: true },
+      { currency: "03CCC22222222222222222222222222222222222", issuer: "rXioAmm111111111111111111111111111", balance: "5", lp: true },
+    ],
+    pools: [
+      { pool_name: "XDX/XRP", lp_supply: 1000, reserve_asset: 50_000, reserve_currency: 2 },
+      { pool_name: "XDX/RLUSD", lp_supply: 200, reserve_asset: 8000, reserve_currency: 10, amm_account: "rLbBzF9oxntVf4XxcyakNKJTci4yqSmQUu", lp_currency: "03BCD44104644B711C58CD14CD13CBA65757CFBE" },
+      { pool_name: "XDX/XIO", lp_supply: 50, reserve_asset: 2000, reserve_currency: 1, amm_account: "rXioAmm111111111111111111111111111", lp_currency: "03CCC22222222222222222222222222222222222" },
+      { pool_name: "SOLO/XRP", lp_supply: 10, reserve_asset: 1, reserve_currency: 1, amm_account: "rOther", lp_currency: "03AAA11111111111111111111111111111111111" },
+    ],
+  });
+  assert.deepEqual(walletXdxPairs(snap.lp), ["XDX/XRP", "XDX/RLUSD", "XDX/XIO"]);
+  assert.equal(snap.lp.find((row) => row.pool === "XDX/XIO").lp_balance, 5);
+  assert.ok(!snap.lp.some((row) => String(row.pool).includes("SOLO")));
 });
 
 test("xdxFiatValues keeps USD and GBP from recorded prices", () => {
@@ -375,6 +404,89 @@ test("preferFilledWalletSnapshot keeps last XDX when a refresh returns zero", ()
   const other = emptyWalletSnapshot("rOther");
   assert.equal(preferFilledWalletSnapshot(filled, other).address, "rOther");
   assert.equal(preferFilledWalletSnapshot(filled, other).filled, false);
+});
+
+test("preferFilledWalletSnapshot keeps last balances when a refresh is hollow", () => {
+  const filled = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 57.1375, xdx: 3_004_952_684.62, rlusd: 127.3 },
+    prices: { xdxUsd: 0.0000469, xrpUsd: 1.48 },
+    token: { circulating: 10_000_000_000 },
+    rank: 1,
+  });
+  const hollow = emptyWalletSnapshot("rExample");
+  const kept = preferFilledWalletSnapshot(filled, hollow);
+  assert.equal(kept.filled, true);
+  assert.equal(kept.holdings.xdx, filled.holdings.xdx);
+  assert.equal(kept.holdings.xrp, filled.holdings.xrp);
+  assert.equal(kept.holdings.rlusd, filled.holdings.rlusd);
+  assert.equal(kept.xdx.usd, filled.xdx.usd);
+  assert.equal(kept.rank, 1);
+
+  const next = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 60, xdx: 3_100_000_000, rlusd: 130 },
+    prices: { xdxUsd: 0.00005, xrpUsd: 1.5 },
+    token: { circulating: 10_000_000_000 },
+    rank: 1,
+  });
+  const updated = preferFilledWalletSnapshot(filled, next);
+  assert.equal(updated.holdings.xrp, 60);
+  assert.equal(updated.holdings.rlusd, 130);
+
+  const other = emptyWalletSnapshot("rOther");
+  assert.equal(preferFilledWalletSnapshot(filled, other).address, "rOther");
+  assert.equal(preferFilledWalletSnapshot(filled, other).filled, false);
+
+  const zeroed = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 0, xdx: 3_004_952_684.62, rlusd: 0 },
+    account: { balance_drops: 0 },
+    prices: { xdxUsd: 0.0000469, xrpUsd: 1.48 },
+    token: { circulating: 10_000_000_000 },
+  });
+  const held = preferFilledWalletSnapshot(filled, zeroed);
+  assert.equal(held.holdings.xrp, filled.holdings.xrp);
+  assert.equal(held.xrp.balance, filled.xrp.balance);
+  assert.equal(held.holdings.rlusd, filled.holdings.rlusd);
+});
+
+test("preferFilledWalletSnapshot keeps last LP earnings when a refresh returns zeros", () => {
+  const filled = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 57.1375, xdx: 3_004_952_684.62, rlusd: 127.3 },
+    prices: { xdxUsd: 0.0000469, xrpUsd: 1.48 },
+    token: { circulating: 10_000_000_000 },
+    flows: [{ pool: "XDX/XRP", xdx: 100, quote: 0.003, timestamp: Date.now() }],
+    lpRows: [
+      {
+        pool: "XDX/XRP",
+        lp_balance: 10,
+        lp_share_percent: 4,
+      },
+    ],
+  });
+  filled.fees = {
+    ...filled.fees,
+    earnings: {
+      ...filled.fees.earnings,
+      xrp24h: 0.0034,
+      xrp24hUsd: 0.005,
+      usd24h: 0.01,
+      usd7d: 0.07,
+    },
+  };
+  const next = composeWalletSnapshot({
+    address: "rExample",
+    balances: { xrp: 57.1375, xdx: 3_004_952_684.62, rlusd: 127.3 },
+    prices: { xdxUsd: 0.0000469, xrpUsd: 1.48 },
+    token: { circulating: 10_000_000_000 },
+  });
+  const kept = preferFilledWalletSnapshot(filled, next);
+  assert.equal(kept.holdings.xdx, filled.holdings.xdx);
+  assert.equal(kept.fees.earnings.usd24h, 0.01);
+  assert.equal(kept.fees.earnings.xrp24h, 0.0034);
+  assert.equal(kept.lp.length, 1);
 });
 
 test("composeWalletSnapshot stays blank until an address is signed in", () => {

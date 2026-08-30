@@ -22,7 +22,7 @@ import {
   withdrawQuoteLabel,
   preferFilledWalletSnapshot,
   preferredWalletPair,
-  sortWalletPairs,
+  walletXdxPairs,
   xrpBarPercents,
 } from "../wallet/composeWallet";
 import { formatFeePercent } from "../wallet/ammVote";
@@ -594,7 +594,7 @@ export default function ConnectedWallet() {
       if (cancelled) return;
       setSnap((current) => preferFilledWalletSnapshot(current, next));
       setPair((current) => {
-        const pairs = next.lp.map((row) => row.pool);
+        const pairs = walletXdxPairs(next.lp);
         if (!pairs.length) return current;
         return preferredWalletPair(pairs, current);
       });
@@ -647,7 +647,7 @@ export default function ConnectedWallet() {
 
   const view = walletAddress ? snap : emptyWalletSnapshot(null);
   const empty = !view.signedIn || !view.filled;
-  const pools = sortWalletPairs(view.lp.map((row) => row.pool));
+  const pools = walletXdxPairs(view.lp);
   const selected = normalizeWalletPair(pair);
   const position = useMemo(
     () => view.lp.find((row) => normalizeWalletPair(row.pool) === selected) || null,
