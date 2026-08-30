@@ -42,17 +42,19 @@ function scrollToDeck(id) {
   window.setTimeout(() => obs.disconnect(), 2500);
 }
 
-export default function SiteJump() {
+export default function SiteJump({ ids = SITE_JUMP_IDS } = {}) {
   const { t } = useI18n();
   const uid = useId().replace(/:/g, "");
   const boxRef = useRef(null);
+  const deckKey = (Array.isArray(ids) && ids.length ? ids : SITE_JUMP_IDS).join(",");
+  const decks = deckKey.split(",");
   const [open, setOpen] = useState(false);
   const [locking, setLocking] = useState("");
   const [active, setActive] = useState(() =>
-    typeof window === "undefined" ? SITE_JUMP_IDS[0] : readJumpHash(window.location.hash) || SITE_JUMP_IDS[0]
+    typeof window === "undefined" ? decks[0] : readJumpHash(window.location.hash) || decks[0]
   );
   const [travel, setTravel] = useState(0);
-  const items = siteJumpItems(t);
+  const items = siteJumpItems(t).filter((row) => decks.includes(row.id));
   const here = items.find((row) => row.id === active) || items[0];
 
   useEffect(() => {
@@ -75,7 +77,7 @@ export default function SiteJump() {
     let frame = 0;
     function read() {
       frame = 0;
-      const next = sectionAtLockLine(SITE_JUMP_IDS, lockOffset());
+      const next = sectionAtLockLine(deckKey.split(","), lockOffset());
       const max = document.documentElement.scrollHeight - window.innerHeight;
       setActive((current) => (current === next ? current : next));
       setTravel(pageTravelPercent(window.scrollY, max));
@@ -93,7 +95,7 @@ export default function SiteJump() {
       window.cancelAnimationFrame(boot);
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [deckKey]);
 
   useEffect(() => {
     const want = readJumpHash(window.location.hash);
@@ -112,7 +114,9 @@ export default function SiteJump() {
     setLocking(id);
     setActive(id);
     setOpen(false);
-    if (window.history?.replaceState) window.history.replaceState(null, "", `#${id}`);
+    if (window.history?.replaceState) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${id}`);
+    }
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => scrollToDeck(id));
     });

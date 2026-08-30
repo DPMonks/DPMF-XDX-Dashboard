@@ -126,12 +126,15 @@ function recommendationCopy(rec, t, impactText) {
   return "";
 }
 
-export default function XdxSwapPanel() {
+export default function XdxSwapPanel({ lockedPair } = {}) {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
   const account = liveWalletAddress(walletAddress);
-  const [fromId, setFromId] = useState("XRP");
-  const [toId, setToId] = useState("XDX");
+  const lockedQuote = String(lockedPair || "").includes("/")
+    ? String(lockedPair).split("/")[1]
+    : "";
+  const [fromId, setFromId] = useState(lockedQuote && lockedQuote !== "XRP" ? "XDX" : "XRP");
+  const [toId, setToId] = useState(lockedQuote && lockedQuote !== "XRP" ? lockedQuote : "XDX");
   const [amount, setAmount] = useState("");
   const [routingMode, setRoutingMode] = useState("smart");
   const [acceptedRecKey, setAcceptedRecKey] = useState("");
@@ -222,6 +225,17 @@ export default function XdxSwapPanel() {
       window.removeEventListener("dpmf-wallet-refresh", loadWallet);
     };
   }, [account]);
+
+  useEffect(() => {
+    if (!lockedQuote) return;
+    if (lockedQuote === "XRP") {
+      setFromId("XRP");
+      setToId("XDX");
+      return;
+    }
+    setFromId("XDX");
+    setToId(lockedQuote);
+  }, [lockedQuote]);
 
   useEffect(() => {
     let cancelled = false;

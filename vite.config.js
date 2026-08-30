@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { attachIndexerProxy } from "./server/attachProxy.js";
@@ -13,6 +16,9 @@ import {
   xummHeaders,
 } from "./api/xaman/_xumm.js";
 import { applySecurityHeaders } from "./src/security/headers.js";
+import { ammShareMeta, ogAmmSlugFromPath, poolCardSvg, requestOrigin as shareOrigin, rewriteAmmHtml } from "./server/ammOg.js";
+import { readAmmRoute } from "./src/ammPage.js";
+import { loadLiveAmmReserves } from "./server/liveAmmReserves.js";
 
 function xamanDevPlugin() {
   const middleware = async (req, res, next) => {
@@ -164,6 +170,50 @@ function securityHeadersPlugin() {
   };
 }
 
+function ammSharePlugin() {
+  const indexFile = join(dirname(fileURLToPath(import.meta.url)), "index.html");
+  const handle = (server) => {
+    server.middlewares.use(async (req, res, next) => {
+      const pathOnly = String(req.url || "").split("?")[0];
+      const ogPair = ogAmmSlugFromPath(pathOnly);
+      if (ogPair) {
+        const live = await loadLiveAmmReserves({ pair: ogPair, quote: ogPair.split("/")[1] }).catch(() => ({}));
+        res.statusCode = 200;
+        res.setHeader("content-type", "image/svg+xml; charset=utf-8");
+        res.end(poolCardSvg(live, ogPair));
+        return;
+      }
+      const pair = readAmmRoute(pathOnly);
+      if (!pair || req.method !== "GET") {
+        next();
+        return;
+      }
+      try {
+        const live = await loadLiveAmmReserves({ pair, quote: pair.split("/")[1] }).catch(() => ({}));
+        const raw = await server.transformIndexHtml(req.url, readFileSync(indexFile, "utf8"));
+        const html = rewriteAmmHtml(
+          raw,
+          ammShareMeta({
+            origin: shareOrigin(req, "http://127.0.0.1:5173"),
+            pair,
+            pool: live,
+          })
+        );
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end(html);
+      } catch {
+        next();
+      }
+    });
+  };
+  return {
+    name: "amm-share",
+    configureServer: handle,
+    configurePreviewServer: handle,
+  };
+}
+
 function indexerDevProxy() {
   return {
     name: "indexer-dev-proxy",
@@ -182,7 +232,7 @@ export default defineConfig(({ mode }) => {
   indexerOrigin(env);
   return {
     envPrefix: ["VITE_", "NEXT_PUBLIC_"],
-    plugins: [securityHeadersPlugin(), react(), xamanDevPlugin(env), indexerDevProxy()],
+    plugins: [securityHeadersPlugin(), react(), xamanDevPlugin(env), ammSharePlugin(), indexerDevProxy()],
     server: {
       host: true,
       port: 5173,

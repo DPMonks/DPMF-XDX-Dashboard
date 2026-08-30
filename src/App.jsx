@@ -9,6 +9,7 @@ import { useI18n } from "./i18n/useI18n";
 import TokenDetails from "./components/TokenDetails";
 import RichList from "./components/RichList";
 import AmmCard from "./components/AmmCard";
+import AmmPage from "./components/AmmPage";
 import CreatePoolCard from "./components/CreatePoolCard";
 import VotingContainer from "./components/governance/VotingContainer";
 import OrderBook from "./components/OrderBook";
@@ -18,7 +19,7 @@ import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
 import { handshake } from "./api";
-import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp, getWalletLp } from "./api/indexer";
+import { INDEXER_ORIGIN, discoverLiveAmmPool, getAmm, getTopHolders, getTopLp, getWalletLp } from "./api/indexer";
 import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 import { useWallet } from "./context/useWallet";
@@ -33,6 +34,7 @@ import {
 import {
   applySignedLpOwner,
   isLpPoolTrade,
+  mergeAmmPoolLists,
   rememberSignedLpOverlay,
   signedLpAccount,
   tradePoolHint,
@@ -45,6 +47,7 @@ import {
   lpHeldForPair,
   normalizeTradeRequest,
 } from "./xaman/tradeTx";
+import { ammPageTitle, openAmmPage, readAmmRoute } from "./ammPage";
 
 const TradingChart = lazy(() => import("./components/TradingChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
@@ -68,6 +71,9 @@ export default function App() {
   const [errors, setErrors] = useState({});
   const [link, setLink] = useState({ status: "connecting" });
   const [tradeAction, setTradeAction] = useState(null);
+  const [ammPair, setAmmPair] = useState(() =>
+    typeof window === "undefined" ? "" : readAmmRoute(window.location.pathname, window.location.search)
+  );
 
   const paintLp = useCallback((rows, meta) => {
     const overlay = lpOverlayRef.current;
@@ -346,6 +352,115 @@ export default function App() {
   }, []);
 
   const linkState = interfaceLinkState(link, t);
+  const openPoolPage = useCallback((pool) => {
+    const pair = String(pool?.pool || pool?.pool_name || "").replace(/\s+/g, "").toUpperCase();
+    if (!pair) return;
+    openAmmPage(pair);
+    setAmmPair(pair);
+  }, []);
+
+  useEffect(() => {
+    function sync() {
+      setAmmPair(readAmmRoute(window.location.pathname, window.location.search));
+    }
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+
+  useEffect(() => {
+    document.title = ammPair ? ammPageTitle(ammPair) : t.title;
+  }, [ammPair, t.title]);
+
+  useEffect(() => {
+    if (!ammPair) return undefined;
+    const have = ammData.some(
+      (row) =>
+        String(row.pool || row.pool_name || "")
+          .replace(/\s+/g, "")
+          .toUpperCase() === ammPair
+    );
+    if (have) return undefined;
+    let cancelled = false;
+    discoverLiveAmmPool(ammPair)
+      .then((hit) => {
+        if (cancelled || !hit) return;
+        setAmmData((current) => mergeAmmPoolLists(current, [hit]));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [ammPair, ammData]);
+
+  const tradeHandlers = {
+    onAddLiquidity: (pool) =>
+      openTrade({
+        action: "addLp",
+        pair: pool.pool || pool.pool_name,
+        quote: pool.quote,
+        quote_issuer: pool.quote_issuer,
+        quote_hex: pool.quote_hex,
+        amm: pool.amm_account,
+        lp_currency: pool.lp_currency,
+      }),
+    onRemoveLiquidity: (pool) =>
+      openTrade({
+        action: "removeLp",
+        pair: pool.pool || pool.pool_name,
+        quote: pool.quote,
+        quote_issuer: pool.quote_issuer,
+        quote_hex: pool.quote_hex,
+        amm: pool.amm_account,
+        lp_currency: pool.lp_currency,
+      }),
+  };
+
+  if (ammPair) {
+    const pool =
+      ammData.find(
+        (row) =>
+          String(row.pool || row.pool_name || "")
+            .replace(/\s+/g, "")
+            .toUpperCase() === ammPair
+      ) || { pool: ammPair, pool_name: ammPair, quote: ammPair.split("/")[1] };
+    return (
+      <>
+        <AmmPage
+          pair={ammPair}
+          pool={pool}
+          pools={ammData}
+          ammLoading={ammLoading}
+          errors={errors}
+          lpHolders={lpHolders}
+          lpLoading={lpLoading}
+          lpFreshness={lpFreshness}
+          onJoinExisting={openTrade}
+          onCreated={refreshLists}
+          {...tradeHandlers}
+        />
+        {tradeAction ? (
+          <TradePanel
+            key={tradeAction.openId || `${tradeAction.action}-${tradeAction.quote}`}
+            action={tradeAction.action}
+            initialQuote={tradeAction.quote}
+            initialAmount={tradeAction.amount}
+            quoteExtra={tradeAction}
+            initialPools={ammData}
+            resumeUuid={tradeAction.resumeUuid}
+            resumeTxjson={tradeAction.resumeTxjson}
+            onClose={(next) => {
+              if (next?.action) {
+                setTradeAction({ ...normalizeTradeRequest(next), openId: Date.now() });
+                return;
+              }
+              setTradeAction(null);
+            }}
+          />
+        ) : null}
+        <TradeExecuted />
+      </>
+    );
+  }
 
   return (
     <div className="dashboard-container">
@@ -459,28 +574,8 @@ export default function App() {
             pools={ammData}
             loading={ammLoading}
             error={errors.amm}
-            onAddLiquidity={(pool) =>
-              openTrade({
-                action: "addLp",
-                pair: pool.pool || pool.pool_name,
-                quote: pool.quote,
-                quote_issuer: pool.quote_issuer,
-                quote_hex: pool.quote_hex,
-                amm: pool.amm_account,
-                lp_currency: pool.lp_currency,
-              })
-            }
-            onRemoveLiquidity={(pool) =>
-              openTrade({
-                action: "removeLp",
-                pair: pool.pool || pool.pool_name,
-                quote: pool.quote,
-                quote_issuer: pool.quote_issuer,
-                quote_hex: pool.quote_hex,
-                amm: pool.amm_account,
-                lp_currency: pool.lp_currency,
-              })
-            }
+            onOpenPool={openPoolPage}
+            {...tradeHandlers}
           />
         </section>
 

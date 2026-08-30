@@ -21,6 +21,7 @@ import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../char
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { fullViewPriceHeight } from "../chart/fullView";
 import { quotePerXdx } from "../chart/pairQuote";
+import { normalizeOrderbookPair } from "../orderbook";
 import {
   ammRebalanceTrail,
   arbitrageWindow,
@@ -112,10 +113,10 @@ function poolForPair(pools, pair) {
   );
 }
 
-export default function HybridChart() {
+export default function HybridChart({ lockedPair } = {}) {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
-  const [pair, setPair] = useState("XDX/RLUSD");
+  const [pair, setPair] = useState(lockedPair || "XDX/RLUSD");
   const [timeframe, setTimeframe] = useState(DEFAULT_INTERVAL);
   const [tool, setTool] = useState("cursor");
   const [drawColor, setDrawColor] = useState("#3d8bff");
@@ -151,6 +152,10 @@ export default function HybridChart() {
   const [priceShift, setPriceShift] = useState(0);
   const [loadedBars, setLoadedBars] = useState(() => visibleBarsForInterval(DEFAULT_INTERVAL) + CHART_MA_PAD);
   const [seriesMeta, setSeriesMeta] = useState({ len: 0, head: 0 });
+  useEffect(() => {
+    if (lockedPair) setPair(normalizeOrderbookPair(lockedPair));
+  }, [lockedPair]);
+
   const windowKey = `${pair}:${timeframe}`;
   const [activeWindow, setActiveWindow] = useState(windowKey);
   const phone = isPhoneDevice();
@@ -516,12 +521,20 @@ export default function HybridChart() {
       ) : null}
       <div className="hybrid-topbar">
         <div className="hybrid-pairs" role="tablist">
-          {CHART_PAIRS.map((name) => (
+          {(lockedPair
+            ? [normalizeOrderbookPair(lockedPair)]
+            : CHART_PAIRS.includes(pair)
+              ? CHART_PAIRS
+              : [...CHART_PAIRS, pair]
+          ).map((name) => (
             <button
               key={name}
               type="button"
               className={pair === name ? "pair-chip active" : "pair-chip"}
-              onClick={() => setPair(name)}
+              onClick={() => {
+                if (lockedPair) return;
+                setPair(name);
+              }}
             >
               {name}
             </button>

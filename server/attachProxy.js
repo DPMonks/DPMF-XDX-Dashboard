@@ -28,6 +28,7 @@ function readJsonBody(req) {
 export function suffixFromPath(pathOnly) {
   if (pathOnly.startsWith("/api/xaman")) return null;
   if (pathOnly.startsWith("/api/chart")) return null;
+  if (pathOnly.startsWith("/api/og-amm")) return null;
   if (pathOnly === "/handshake") return "handshake";
   if (pathOnly.startsWith("/cluster/")) return pathOnly.slice(1);
   if (pathOnly === "/health") return "health";

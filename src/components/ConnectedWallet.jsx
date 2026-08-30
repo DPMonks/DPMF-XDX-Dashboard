@@ -577,11 +577,15 @@ function WalletEarnBeam({ fees, locale, t, empty }) {
   );
 }
 
-export default function ConnectedWallet() {
+export default function ConnectedWallet({ lockedPair } = {}) {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
   const [snap, setSnap] = useState(() => emptyWalletSnapshot(null));
-  const [pair, setPair] = useState("XDX/XRP");
+  const [pair, setPair] = useState(lockedPair || "XDX/XRP");
+
+  useEffect(() => {
+    if (lockedPair) setPair(lockedPair);
+  }, [lockedPair]);
 
   useEffect(() => {
     if (!walletAddress) return undefined;
@@ -594,6 +598,7 @@ export default function ConnectedWallet() {
       if (cancelled) return;
       setSnap((current) => preferFilledWalletSnapshot(current, next));
       setPair((current) => {
+        if (lockedPair) return lockedPair;
         const pairs = next.lp.map((row) => row.pool);
         if (!pairs.length) return current;
         return preferredWalletPair(pairs, current);
@@ -716,7 +721,7 @@ export default function ConnectedWallet() {
             <span className="sr-only">{t.pair}</span>
             <select
               value={pair}
-              disabled={empty || !pools.length}
+              disabled={empty || !pools.length || Boolean(lockedPair)}
               onChange={(event) => setPair(event.target.value)}
             >
               {pools.length ? (

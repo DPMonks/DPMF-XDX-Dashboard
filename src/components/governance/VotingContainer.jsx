@@ -22,14 +22,14 @@ import PoolSelector from "./PoolSelector";
 import VoteHistory from "./VoteHistory";
 import VotePanel from "./VotePanel";
 
-export default function VotingContainer() {
+export default function VotingContainer({ lockedPair } = {}) {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
   const signedAccount = liveWalletAddress(walletAddress);
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
   const [pools, setPools] = useState([]);
   const [lpRows, setLpRows] = useState([]);
-  const [pair, setPair] = useState("XDX/XRP");
+  const [pair, setPair] = useState(lockedPair || "XDX/XRP");
   const [gov, setGov] = useState(null);
   const [history, setHistory] = useState([]);
   const [assetHistory, setAssetHistory] = useState([]);
@@ -47,6 +47,10 @@ export default function VotingContainer() {
     return names.map((name) => ({ id: name, label: name }));
   }, [pools, lpRows, history, pair]);
   const eligible = held > 0 || Number(gov?.lpBalance) > 0 || Boolean(gov?.eligible);
+
+  useEffect(() => {
+    if (lockedPair) setPair(normalizeVotePair(lockedPair));
+  }, [lockedPair]);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,6 +190,9 @@ export default function VotingContainer() {
         </p>
       </header>
 
+      {lockedPair ? (
+        <p className="governance-wallet">{pair}</p>
+      ) : (
       <PoolSelector
         value={pair}
         options={options}
@@ -196,6 +203,7 @@ export default function VotingContainer() {
         }}
         ariaLabel={t.votePool}
       />
+      )}
       <GovernanceDataPanel data={gov} locale={locale} t={t} />
       <VotePanel
         fee={fee}
