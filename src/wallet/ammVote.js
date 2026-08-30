@@ -123,9 +123,13 @@ export function quoteTickerFromCurrency(code, issuer = "") {
   if (raw === RLUSD_HEX || raw === "RLUSD") return "RLUSD";
   if (raw === "XIO" || raw === XIO_HEX || who === XIO_ISSUER) return "XIO";
   if (raw === XSQUAD_HEX || raw === "XSQUAD" || who === XSQUAD_ISSUER) return "XSQUAD";
-  if (/^[A-Z0-9.$]{2,12}$/.test(raw)) return raw;
+  const compact = raw.replace(/\s+/g, "");
+  if (/^[A-Z0-9.$]{2,20}$/.test(compact)) return compact;
   if (/^[A-F0-9]{40}$/.test(raw)) {
-    const ascii = hexToAscii(raw).replace(/\0+$/g, "").trim();
+    const ascii = hexToAscii(raw)
+      .replace(/\0+$/g, "")
+      .replace(/\s+/g, "")
+      .trim();
     if (/^[A-Za-z0-9.$]{2,20}$/.test(ascii)) return ascii.toUpperCase();
   }
   return "";

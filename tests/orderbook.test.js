@@ -56,7 +56,8 @@ test("normalizeOrderbookPair maps quote aliases onto featured and detected AMM p
   assert.equal(normalizeOrderbookPair("XIO"), "XDX/XIO");
   assert.equal(normalizeOrderbookPair("xsquad"), "XDX/XSQUAD");
   assert.equal(normalizeOrderbookPair("SOLO"), "XDX/SOLO");
-  assert.equal(normalizeOrderbookPair("XDX/POWDER KEG"), "XDX/POWDER KEG");
+  assert.equal(normalizeOrderbookPair("XDX/POWDER KEG"), "XDX/POWDERKEG");
+  assert.equal(normalizeOrderbookPair("xdx/$cameltoe"), "XDX/$CAMELTOE");
 });
 
 test("sortOrderbookPairs keeps XRP, RLUSD, XIO, XSQUAD first", () => {
@@ -76,7 +77,7 @@ test("collectPairOptions pins XDX/XRP and featured AMMs at the top", () => {
     "XDX/XIO",
     "XDX/XSQUAD",
     "XDX/SOLO",
-    "XDX/AiCat",
+    "XDX/AICAT",
   ]);
 });
 

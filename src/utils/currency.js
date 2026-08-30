@@ -18,8 +18,9 @@ export function decodeCurrency(code) {
         .map((byte) => String.fromCharCode(Number.parseInt(byte, 16)))
         .join("")
         .replace(/[^\u0020-\u007E]/g, "")
+        .replace(/\s+/g, "")
         .trim();
-      if (/^[A-Z0-9]{3,}$/i.test(text)) return text.toUpperCase();
+      if (/^[A-Z0-9.$]{2,}$/i.test(text)) return text.toUpperCase();
     }
   }
 

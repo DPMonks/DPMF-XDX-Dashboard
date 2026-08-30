@@ -37,6 +37,8 @@ import {
 import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
 import { loadLedgerPoolVolumes, mergeVolumeMaps } from "./ammPoolVolume.js";
 import { QUOTE_ASSETS } from "../src/xaman/tradeTx.js";
+import { isXdxAmmPair } from "../src/wallet/lpIncome.js";
+import { discoverXdxAmmSpecs } from "./xdxAmmDiscover.js";
 
 export function knownLivePoolSpecs(extra = []) {
   const specs = [];
@@ -45,7 +47,7 @@ export function knownLivePoolSpecs(extra = []) {
     const pair = String(spec.pair || "")
       .replace(/\s+/g, "")
       .toUpperCase();
-    if (!/^XDX\/[A-Z0-9]{2,12}$/.test(pair) || seen.has(pair)) return;
+    if (!isXdxAmmPair(pair) || seen.has(pair)) return;
     seen.add(pair);
     specs.push({
       ...spec,
@@ -79,10 +81,11 @@ export function knownLivePoolSpecs(extra = []) {
     add({
       pair: row.pool_name || row.pool || row.pair,
       quote: row.quote,
-      amm: row.amm_account || row.amm,
-      ammAccount: row.amm_account || row.amm,
-      issuer: row.quote_issuer,
-      hex: row.quote_hex,
+      amm: row.amm_account || row.amm || row.ammAccount,
+      ammAccount: row.amm_account || row.amm || row.ammAccount,
+      issuer: row.quote_issuer || row.issuer,
+      hex: row.quote_hex || row.hex,
+      lpHex: row.lpHex || row.lp_currency || row.lp_currency_hex,
     });
   }
   return specs;
@@ -240,7 +243,8 @@ export async function loadLiveMarket(options = {}) {
     loadIssuerBlackholeLive(options),
     loadXrplToLpCounts({ ...options, pool: "all" }).catch(() => null),
   ]);
-  const liveSpecs = knownLivePoolSpecs();
+  const discovered = await discoverXdxAmmSpecs(options).catch(() => []);
+  const liveSpecs = knownLivePoolSpecs(discovered);
   const lives = await loadLiveAmmReservesMany(
     liveSpecs.map((spec) => ({
       ammAccount: spec.ammAccount || spec.amm,
@@ -249,7 +253,11 @@ export async function loadLiveMarket(options = {}) {
       issuer: spec.issuer,
       hex: spec.hex,
     })),
-    options
+    {
+      ...options,
+      concurrency: options.concurrency || 4,
+      deadlineMs: options.deadlineMs || 12_000,
+    }
   );
   const xrpPool = lives[liveSpecs.findIndex((spec) => spec.pair === "XDX/XRP")] || lives[0] || {};
   const rlusdPool = lives.find((row) => String(row?.pair || "").includes("RLUSD")) || lives[1] || {};

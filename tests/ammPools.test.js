@@ -286,3 +286,27 @@ test("known live pool specs include featured XDX quotes, not only XRP and RLUSD"
   const squad = knownLivePoolSpecs().find((row) => row.pair === "XDX/XSQUAD");
   assert.equal(squad.ammAccount || squad.amm, "rwpht3XDGMhzYmT5V6ZyMyg6Uc37XFLSwv");
 });
+
+test("known live pool specs keep dollar and spaced on-ledger quote names", () => {
+  const specs = knownLivePoolSpecs([
+    {
+      pair: "XDX/$CAMELTOE",
+      quote: "$CAMELTOE",
+      ammAccount: "rB6NGNJi2XMvYhubxN3SaJGrFKE2SBYh3N",
+      issuer: "rM1BJWAQ3hfCStboh4wCXTnGyHqcAvJZy3",
+      hex: "2443616D656C546F650000000000000000000000",
+    },
+    {
+      pair: "XDX/POWDERKEG",
+      quote: "POWDERKEG",
+      amm_account: "rDuJ2NF7kAvioLhy2DfqSevnYhARfoj84y",
+    },
+  ]);
+  const pairs = specs.map((row) => row.pair);
+  assert.ok(pairs.includes("XDX/$CAMELTOE"));
+  assert.ok(pairs.includes("XDX/POWDERKEG"));
+  assert.equal(
+    specs.find((row) => row.pair === "XDX/$CAMELTOE").ammAccount,
+    "rB6NGNJi2XMvYhubxN3SaJGrFKE2SBYh3N"
+  );
+});

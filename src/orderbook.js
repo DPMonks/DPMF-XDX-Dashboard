@@ -66,10 +66,10 @@ export function normalizeOrderbookPair(value) {
   if (upper === "XIO" || upper === "XDX/XIO") return "XDX/XIO";
   if (upper === "XSQUAD" || upper === "XDX/XSQUAD") return "XDX/XSQUAD";
   if (upper.startsWith("XDX/")) {
-    const quote = spaced.slice(spaced.indexOf("/") + 1).trim();
+    const quote = upper.slice(upper.indexOf("/") + 1).replace(/\s+/g, "");
     return quote ? `XDX/${quote}` : "XDX/XRP";
   }
-  if (spaced && !spaced.includes("/")) return `XDX/${spaced}`;
+  if (spaced && !spaced.includes("/")) return `XDX/${spaced.replace(/\s+/g, "").toUpperCase()}`;
   return "XDX/XRP";
 }
 
