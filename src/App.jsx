@@ -9,26 +9,54 @@ import { useI18n } from "./i18n/useI18n";
 import TokenDetails from "./components/TokenDetails";
 import RichList from "./components/RichList";
 import AmmCard from "./components/AmmCard";
+import CreatePoolCard from "./components/CreatePoolCard";
 import VotingContainer from "./components/governance/VotingContainer";
 import OrderBook from "./components/OrderBook";
+import XdxSwapPanel from "./components/XdxSwapPanel";
+import SiteJump from "./components/SiteJump";
 import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
 import Skeleton from "./components/Skeleton";
 import { handshake } from "./api";
-import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp } from "./api/indexer";
+import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp, getWalletLp } from "./api/indexer";
 import { interfaceLinkState } from "./utils/interfaceLink";
 import { XDX_TOTAL_SUPPLY } from "./constants/ledger";
 import { useWallet } from "./context/useWallet";
 import { liveWalletAddress } from "./wallet/walletStorage";
-import { WALLET_EVENTS, gateUnsignedTrade } from "./xaman/tradeTx";
+import { claimExecutedTrade } from "./xaman/claimSignIn";
+import {
+  clearXamanReturn,
+  discardStalePendingTrade,
+  peekPendingPayload,
+  shouldAutoClaimPendingTrade,
+} from "./xaman/payloadResume";
+import {
+  applySignedLpOwner,
+  isLpPoolTrade,
+  rememberSignedLpOverlay,
+  signedLpAccount,
+  tradePoolHint,
+} from "./ammPools";
+import { preferLiveOwnerRows } from "./todayOwners";
+import {
+  WALLET_EVENTS,
+  executionBelongsToOpenTrade,
+  gateUnsignedTrade,
+  lpHeldForPair,
+  normalizeTradeRequest,
+} from "./xaman/tradeTx";
 
 const TradingChart = lazy(() => import("./components/TradingChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
+const TokenDetailsChart = lazy(() => import("./components/TokenDetailsChart"));
 
 export default function App() {
   const { t } = useI18n();
   const { walletAddress } = useWallet();
   const pendingTradeRef = useRef(null);
+  const lpOverlayRef = useRef(null);
+  const [lpFocusPair, setLpFocusPair] = useState(null);
+  const [lpFocusAt, setLpFocusAt] = useState(0);
   const [holders, setHolders] = useState([]);
   const [holderFreshness, setHolderFreshness] = useState(null);
   const [holdersLoading, setHoldersLoading] = useState(true);
@@ -40,6 +68,23 @@ export default function App() {
   const [errors, setErrors] = useState({});
   const [link, setLink] = useState({ status: "connecting" });
   const [tradeAction, setTradeAction] = useState(null);
+
+  const paintLp = useCallback((rows, meta) => {
+    const overlay = lpOverlayRef.current;
+    const incoming = Array.isArray(rows) ? rows : [];
+    const applied = overlay
+      ? applySignedLpOwner(incoming, overlay.detail, overlay.account)
+      : incoming;
+    setLpHolders((prev) => (overlay ? applied : preferLiveOwnerRows(prev, applied)));
+    if (meta) setLpFreshness(meta);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const embedded = window.self !== window.top;
+    document.documentElement.classList.toggle("is-embedded", embedded);
+    return () => document.documentElement.classList.remove("is-embedded");
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,13 +130,12 @@ export default function App() {
       try {
         const nextLp = await getTopLp((rows, meta) => {
           if (!cancelled) {
-            setLpHolders(rows);
-            if (meta) setLpFreshness(meta);
+            paintLp(rows, meta);
             setLpLoading(false);
           }
         });
         if (!cancelled) {
-          setLpHolders(nextLp);
+          paintLp(nextLp);
           setErrors((current) => ({ ...current, lp: undefined }));
         }
         return null;
@@ -121,7 +165,7 @@ export default function App() {
 
     async function load() {
       const hsPromise = handshake();
-      hsPromise.then((hs) => applyLink(hs));
+      hsPromise.then((hs) => applyLink(hs)).catch(() => {});
 
       const [holderErr, lpErr, ammErr] = await Promise.all([
         loadHolders(),
@@ -140,13 +184,36 @@ export default function App() {
       }
     }
 
-    load();
-    const id = setInterval(load, 60000);
+    load().catch(() => {});
+    const id = setInterval(() => {
+      load().catch(() => {});
+    }, 60000);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, []);
+  }, [paintLp]);
+
+  const refreshLists = useCallback(() => {
+    getAmm()
+      .then((next) => setAmmData(Array.isArray(next) ? next : []))
+      .catch(() => {});
+    getTopHolders((rows, meta) => {
+      setHolders(rows);
+      if (meta) setHolderFreshness(meta);
+    })
+      .then((rows) => {
+        if (rows) setHolders(rows);
+      })
+      .catch(() => {});
+    getTopLp((rows, meta) => {
+      paintLp(rows, meta);
+    })
+      .then((rows) => {
+        if (rows) paintLp(rows);
+      })
+      .catch(() => {});
+  }, [paintLp]);
 
   const openTrade = useCallback((detail) => {
     const live = liveWalletAddress(walletAddress);
@@ -158,6 +225,7 @@ export default function App() {
       return;
     }
     pendingTradeRef.current = null;
+    discardStalePendingTrade({ force: true });
     setTradeAction({ ...gated.trade, openId: Date.now() });
   }, [walletAddress]);
 
@@ -168,40 +236,138 @@ export default function App() {
     function onSignedIn() {
       const pending = pendingTradeRef.current;
       pendingTradeRef.current = null;
-      if (pending) setTradeAction({ ...pending, openId: Date.now() });
+      if (!pending) return;
+      discardStalePendingTrade({ force: true });
+      setTradeAction({ ...pending, openId: Date.now() });
     }
     function onSignInCancelled() {
       pendingTradeRef.current = null;
     }
+    function onTradePending(event) {
+      const detail = event?.detail || {};
+      setTradeAction((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          activeUuid: detail.uuid || current.activeUuid || null,
+          signMarker: detail.signMarker || current.signMarker || null,
+        };
+      });
+    }
+    function onTradeExecuted(event) {
+      const detail = event?.detail || {};
+      setTradeAction((current) => {
+        if (!current) return null;
+        if (!executionBelongsToOpenTrade(current, detail)) return current;
+        if (current.action === "xdxPlatformFee" && current.nextTrade) {
+          return { ...normalizeTradeRequest(current.nextTrade), openId: Date.now() };
+        }
+        return null;
+      });
+      if (isLpPoolTrade(detail)) {
+        const account = signedLpAccount(detail, liveWalletAddress(walletAddress));
+        const pair = tradePoolHint(detail);
+        setLpHolders((rows) => {
+          const painted = rememberSignedLpOverlay(rows, detail, account);
+          lpOverlayRef.current = painted.overlay;
+          return painted.rows;
+        });
+        if (pair) {
+          setLpFocusPair(pair);
+          setLpFocusAt(Date.now());
+        }
+        if (account && pair) {
+          getWalletLp(account, { fresh: true })
+            .then((positions) => {
+              const held = lpHeldForPair(positions, pair, pair.split("/")[1]);
+              if (!(held > 0)) return;
+              const nextDetail = { ...detail, lpHeld: held };
+              lpOverlayRef.current = { detail: nextDetail, account };
+              setLpHolders((rows) => applySignedLpOwner(rows, nextDetail, account));
+            })
+            .catch(() => {});
+        }
+      }
+      refreshLists();
+    }
     window.addEventListener("dpmf-open-trade", onOpen);
+    window.addEventListener(WALLET_EVENTS.tradePending, onTradePending);
+    window.addEventListener("dpmf-trade-executed", onTradeExecuted);
     window.addEventListener(WALLET_EVENTS.signedIn, onSignedIn);
     window.addEventListener(WALLET_EVENTS.signInCancelled, onSignInCancelled);
     return () => {
       window.removeEventListener("dpmf-open-trade", onOpen);
+      window.removeEventListener(WALLET_EVENTS.tradePending, onTradePending);
+      window.removeEventListener("dpmf-trade-executed", onTradeExecuted);
       window.removeEventListener(WALLET_EVENTS.signedIn, onSignedIn);
       window.removeEventListener(WALLET_EVENTS.signInCancelled, onSignInCancelled);
     };
-  }, [openTrade]);
+  }, [openTrade, refreshLists, walletAddress]);
+
+  useEffect(() => {
+    let busy = false;
+    async function claimPendingTrade() {
+      if (busy || !shouldAutoClaimPendingTrade()) return;
+      const record = peekPendingPayload();
+      const uuid = record?.uuid;
+      if (!uuid) return;
+      const trade = normalizeTradeRequest(record.trade);
+      if (trade) {
+        setTradeAction((current) =>
+          current || { ...trade, openId: Date.now(), resumeUuid: record.uuid, resumeTxjson: record.txjson || null }
+        );
+      }
+      busy = true;
+      try {
+        const claimed = await claimExecutedTrade(uuid);
+        if (claimed?.executed) clearXamanReturn();
+      } finally {
+        busy = false;
+      }
+    }
+    const boot = window.setTimeout(() => {
+      claimPendingTrade();
+    }, 0);
+    function wake() {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      window.setTimeout(() => {
+        claimPendingTrade();
+      }, 0);
+    }
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("pageshow", wake);
+    window.addEventListener("focus", wake);
+    return () => {
+      clearTimeout(boot);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("pageshow", wake);
+      window.removeEventListener("focus", wake);
+    };
+  }, []);
 
   const linkState = interfaceLinkState(link, t);
 
   return (
     <div className="dashboard-container">
-      <header className="dashboard-header neon-border">
-        <div className="header-bar">
-          <div className="header-brand">
-            <img src="/favicon.png" alt="" className="header-mark" />
-            <div className="header-brand-copy">
-              <h1 className="dashboard-title">{t.title}</h1>
-              <p className="dashboard-subtitle">{t.subtitle}</p>
+      <div className="site-chrome">
+        <header className="dashboard-header neon-border">
+          <div className="header-bar">
+            <div className="header-brand">
+              <img src="/favicon.png" alt="" className="header-mark" />
+              <div className="header-brand-copy">
+                <h1 className="dashboard-title">{t.title}</h1>
+                <p className="dashboard-subtitle">{t.subtitle}</p>
+              </div>
+            </div>
+            <div className="header-actions">
+              <XdxTrustline />
+              <ConnectWallet />
             </div>
           </div>
-          <div className="header-actions">
-            <XdxTrustline />
-            <ConnectWallet />
-          </div>
-        </div>
-      </header>
+        </header>
+      </div>
+
+      <SiteJump />
 
       <p className={`indexer-source is-${linkState.tone}`} title={INDEXER_ORIGIN}>
         <span className="handshake-dot" aria-hidden="true" />
@@ -210,28 +376,37 @@ export default function App() {
 
       <div className="dashboard-grid">
         <div className="wallet-token-row">
-          <section className="dashboard-card neon-card">
+          <section className="dashboard-card neon-card" id="wallet">
             <h2 className="card-title">{t.connectedWallet}</h2>
             <ConnectedWallet />
           </section>
-          <section className="dashboard-card neon-card">
-            <h2 className="card-title">{t.tokenDetails}</h2>
-            <TokenDetails />
-          </section>
+          <div className="token-details-stack">
+            <section className="dashboard-card neon-card" id="details">
+              <h2 className="card-title">{t.tokenDetails}</h2>
+              <TokenDetails />
+            </section>
+            <section className="dashboard-card neon-card token-details-chart-card">
+              <h2 className="card-title">{t.xdxDetailsChart}</h2>
+              <Suspense fallback={<Skeleton height={260} />}>
+                <TokenDetailsChart />
+              </Suspense>
+            </section>
+          </div>
         </div>
 
-        <section className="dashboard-card neon-card">
+        <section className="dashboard-card neon-card" id="trading">
           <h2 className="card-title">{t.tradingChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
             <TradingChart />
           </Suspense>
-          <div className="orderbook-wrap">
+          <XdxSwapPanel />
+          <div className="orderbook-wrap" id="orderbook">
             <h3 className="card-title orderbook-title">{t.orderbook}</h3>
             <OrderBook />
           </div>
         </section>
 
-        <section className="dashboard-card neon-card">
+        <section className="dashboard-card neon-card" id="activity">
           <h2 className="card-title">{t.activityChart}</h2>
           <Suspense fallback={<Skeleton height={300} />}>
             <ActivityChart />
@@ -239,7 +414,7 @@ export default function App() {
         </section>
 
         <div className="lists-row">
-          <section className="dashboard-card neon-card">
+          <section className="dashboard-card neon-card" id="holders">
             <h2 className="card-title">{t.topHolders}</h2>
             <RichList
               className="is-xdx-owners"
@@ -255,9 +430,10 @@ export default function App() {
             />
           </section>
 
-          <section className="dashboard-card neon-card">
+          <section className="dashboard-card neon-card" id="lp-owners">
             <h2 className="card-title">{t.lpHolders}</h2>
             <RichList
+              className="is-lp-holders"
               rows={lpHolders}
               loading={lpLoading}
               error={errors.lp}
@@ -265,6 +441,8 @@ export default function App() {
               unit="LP"
               showPair
               defaultPair="XDX/XRP"
+              focusPair={lpFocusPair}
+              focusAt={lpFocusAt}
               pairOptions={ammData.map((row) => row.pool_name || row.pool).filter(Boolean)}
               emptyLabel={t.emptyLp}
               searchPlaceholder={t.searchLp}
@@ -273,7 +451,9 @@ export default function App() {
           </section>
         </div>
 
-        <section className="dashboard-card neon-card">
+        <CreatePoolCard pools={ammData} onJoinExisting={openTrade} onCreated={refreshLists} />
+
+        <section className="dashboard-card neon-card amm-pools-card" id="pools">
           <h2 className="card-title">{t.ammPools}</h2>
           <AmmCard
             pools={ammData}
@@ -283,22 +463,28 @@ export default function App() {
               openTrade({
                 action: "addLp",
                 pair: pool.pool || pool.pool_name,
+                quote: pool.quote,
                 quote_issuer: pool.quote_issuer,
                 quote_hex: pool.quote_hex,
+                amm: pool.amm_account,
+                lp_currency: pool.lp_currency,
               })
             }
             onRemoveLiquidity={(pool) =>
               openTrade({
                 action: "removeLp",
                 pair: pool.pool || pool.pool_name,
+                quote: pool.quote,
                 quote_issuer: pool.quote_issuer,
                 quote_hex: pool.quote_hex,
+                amm: pool.amm_account,
+                lp_currency: pool.lp_currency,
               })
             }
           />
         </section>
 
-        <section className="dashboard-card neon-card governance-card">
+        <section className="dashboard-card neon-card governance-card" id="governance">
           <h2 className="card-title">{t.poolGovernance}</h2>
           <VotingContainer />
         </section>
@@ -310,9 +496,18 @@ export default function App() {
           key={tradeAction.openId || `${tradeAction.action}-${tradeAction.quote}`}
           action={tradeAction.action}
           initialQuote={tradeAction.quote}
+          initialAmount={tradeAction.amount}
           quoteExtra={tradeAction}
           initialPools={ammData}
-          onClose={() => setTradeAction(null)}
+          resumeUuid={tradeAction.resumeUuid}
+          resumeTxjson={tradeAction.resumeTxjson}
+          onClose={(next) => {
+            if (next?.action) {
+              setTradeAction({ ...normalizeTradeRequest(next), openId: Date.now() });
+              return;
+            }
+            setTradeAction(null);
+          }}
         />
       ) : null}
       <TradeExecuted />

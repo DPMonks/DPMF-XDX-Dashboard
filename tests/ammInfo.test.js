@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { XDX_ISSUER } from "../src/constants/ledger.js";
-import { issuedAmountValue, poolReservesFromAmmInfo } from "../src/utils/ammInfo.js";
+import { XDX_ISSUER, XSQUAD_HEX, XSQUAD_ISSUER } from "../src/constants/ledger.js";
+import {
+  issuedAmountValue,
+  lpShareAmounts,
+  matchingLiveReserves,
+  overlayLiveAmmReserves,
+  poolReservesFromAmmInfo,
+  previewReserves,
+} from "../src/utils/ammInfo.js";
 
 test("issuedAmountValue reads IOU value and XRP drops", () => {
   assert.equal(issuedAmountValue({ value: "12.5" }), 12.5);
@@ -22,6 +29,102 @@ test("poolReservesFromAmmInfo reads XDX/USDC ledger reserves", () => {
   assert.equal(row.lp_supply, 284023);
   assert.equal(row.reserve_xdx, 80000);
   assert.equal(row.reserve_currency, 250);
+  assert.equal(row.quote_issuer, "rUsdc");
+  assert.equal(row.quote, "USDC");
+});
+
+test("overlayLiveAmmReserves copies live quote issuer and LP identity onto the catalog row", () => {
+  const row = overlayLiveAmmReserves(
+    { pool: "XDX/ETH", quote: "ETH" },
+    {
+      reserve_xdx: 10,
+      reserve_currency: 2,
+      lp_supply: 4,
+      amm_account: "rEthAmm",
+      lp_currency: "03EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+      quote_issuer: "rEthIssuer",
+      quote_hex: "ETH",
+    }
+  );
+  assert.equal(row.quote_issuer, "rEthIssuer");
+  assert.equal(row.quote_hex, "ETH");
+  assert.equal(row.amm_account, "rEthAmm");
+  assert.equal(row.lp_currency, "03EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE");
+});
+
+test("overlayLiveAmmReserves replaces leftover quote reserves and LP supply", () => {
+  const row = overlayLiveAmmReserves(
+    {
+      pool: "XDX/XIO",
+      reserve_xdx: 52286366,
+      reserve_asset: 52286366,
+      reserve_currency: 1947.36782,
+      lp_supply: 220280408.7293996,
+    },
+    {
+      reserve_xdx: 52286366.55495586,
+      reserve_currency: 59.93807084355173,
+      lp_supply: 44936.64667926788,
+      trading_fee: 1000,
+    }
+  );
+  assert.equal(row.reserve_currency, 59.93807084355173);
+  assert.equal(row.lp_supply, 44936.64667926788);
+  assert.equal(row.reserve_source, "amm_info");
+  const share = lpShareAmounts(4493.664667926788, row.reserve_xdx, row.reserve_currency, row.lp_supply);
+  assert.ok(Math.abs(share.quote - 5.993807084355173) < 1e-9);
+});
+
+test("overlayLiveAmmReserves does not keep a leftover quote when live has no quote leftover", () => {
+  const row = overlayLiveAmmReserves(
+    { reserve_xdx: 1000, reserve_currency: 1947.36, lp_supply: 500 },
+    { reserve_xdx: 1000, reserve_currency: 0, lp_supply: 40, trading_fee: 500 }
+  );
+  assert.equal(row.reserve_currency, null);
+  assert.equal(row.lp_supply, 40);
+  assert.equal(row.reserve_source, "amm_info");
+});
+
+test("previewReserves uses live XDX/XIO shares and ignores another pair", () => {
+  const catalog = {
+    pair: "XDX/XIO",
+    reserve_xdx: 52286366,
+    reserve_currency: 1947.36782,
+    lp_supply: 220280408.7293996,
+    trading_fee: 0,
+  };
+  const live = {
+    pair: "XDX/XIO",
+    reserve_xdx: 52286366.55495586,
+    reserve_currency: 59.93807084355173,
+    lp_supply: 44936.64667926788,
+    trading_fee: 1000,
+    reserve_source: "amm_info",
+  };
+  const preview = previewReserves(catalog, live);
+  assert.equal(preview.reserve_source, "amm_info");
+  assert.ok(Math.abs(preview.quote - 59.93807084355173) < 1e-9);
+  const share = lpShareAmounts(4493.664667926788, preview.base, preview.quote, preview.lpSupply);
+  assert.ok(Math.abs(share.quote - 5.993807084355173) < 1e-9);
+  assert.equal(matchingLiveReserves({ ...live, pair: "XDX/XRP" }, "XDX/XIO"), null);
+  const stale = previewReserves(catalog, { ...live, pair: "XDX/XRP" });
+  assert.equal(stale.quote, 1947.36782);
+});
+
+test("poolReservesFromAmmInfo labels XDX/XSQUAD from AMM assets, not XDX/XRP", () => {
+  const row = poolReservesFromAmmInfo({
+    amm: {
+      account: "rXsquadAmm",
+      amount: { currency: "XDX", issuer: XDX_ISSUER, value: "1000" },
+      amount2: { currency: XSQUAD_HEX, issuer: XSQUAD_ISSUER, value: "40" },
+      lp_token: { currency: "03AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", issuer: "rXsquadAmm", value: "80" },
+    },
+  });
+  assert.equal(row.pair, "XDX/XSQUAD");
+  assert.equal(row.quote, "XSQUAD");
+  assert.equal(row.reserve_currency, 40);
+  assert.equal(row.quote_issuer, XSQUAD_ISSUER);
+  assert.equal(row.quote_hex, XSQUAD_HEX);
 });
 
 test("poolReservesFromAmmInfo treats XRP drops as the quote reserve", () => {
@@ -36,4 +139,5 @@ test("poolReservesFromAmmInfo treats XRP drops as the quote reserve", () => {
   assert.equal(row.reserve_asset, 50000);
   assert.equal(row.reserve_quote, 2);
   assert.equal(row.lp_supply, 1000);
+  assert.equal(row.pair, "XDX/XRP");
 });

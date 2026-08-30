@@ -33,4 +33,6 @@ test("pool options force rejectUnauthorized false and drop the URL override", ()
   assert.equal(opts.database, "railway");
   assert.equal(opts.password, "s3cret");
   assert.equal(opts.connectionString, undefined);
+  assert.equal(opts.connectionTimeoutMillis, 2500);
+  assert.equal(opts.max, 2);
 });

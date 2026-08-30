@@ -1,5 +1,6 @@
 import {
   buildXamanPayload,
+  isFreshXamanCreate,
   readJson,
   requestOrigin,
   xamanErrorMessage,
@@ -22,6 +23,14 @@ export default async function handler(req, res) {
       body: JSON.stringify(buildXamanPayload(origin, body.txjson, body.options)),
     });
     const data = await response.json().catch(() => ({}));
+    if (response.ok && !isFreshXamanCreate(data)) {
+      res.status(409).json({
+        error: "Xaman returned a payload that was already signed. Start a new sign.",
+        code: 409,
+        configured: xummConfigured(),
+      });
+      return;
+    }
     if (!response.ok) {
       res.status(response.status).json({
         error: xamanErrorMessage(data),

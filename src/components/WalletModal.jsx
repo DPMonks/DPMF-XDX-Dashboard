@@ -1,5 +1,15 @@
+import { useEffect } from "react";
 import xamanLogo from "../assets/XAMAN.jpg";
-import { isPhoneDevice, xamanAppUrl, xamanSignUrl } from "../xaman/xamanClient";
+import {
+  isInAppBrowser,
+  isPhoneDevice,
+  isTelegramWebView,
+  launchXamanSign,
+  shouldCancelConnectNavigation,
+  xamanAppUrl,
+  xamanSignUrl,
+} from "../xaman/xamanClient";
+import { isXappHost } from "../xaman/xappHost";
 import { useI18n } from "../i18n/useI18n";
 
 export default function WalletModal({
@@ -13,18 +23,34 @@ export default function WalletModal({
   onClose,
 }) {
   const { t } = useI18n();
-  if (!visible) return null;
-
-  const phone = isPhoneDevice();
+  const xapp = isXappHost();
+  const telegram = isTelegramWebView();
+  const phone = isPhoneDevice() || isInAppBrowser();
   const appHref = xamanAppUrl(uuid) || mobileUrl;
-  const webHref = xamanSignUrl(uuid) || mobileUrl;
-  const connectLabel = t.connectXaman || t.openApp;
+  const webHref = xamanSignUrl(uuid);
+  const connectHref = webHref || appHref;
+  const connectLabel = xapp ? t.xappApprove || t.connectXaman || t.openApp : t.connectXaman || t.openApp;
+  const confirming = status === "confirming";
+  const showQr = Boolean(!xapp && qrUrl && status !== "loading" && !confirming);
+  const showConnect = Boolean(!xapp && status !== "loading" && !confirming && (connectHref || uuid));
   const heading =
     status === "loading"
       ? preparingLabel || t.preparing
-      : phone
-        ? connectLabel
-        : scanLabel || t.scan;
+      : confirming
+        ? scanLabel || t.scan
+        : xapp
+          ? connectLabel
+          : showQr
+            ? scanLabel || t.scan
+            : connectLabel;
+
+  useEffect(() => {
+    if (!visible || !xapp || !uuid || status === "loading" || confirming) return undefined;
+    launchXamanSign(uuid);
+    return undefined;
+  }, [visible, xapp, uuid, status, confirming]);
+
+  if (!visible) return null;
 
   function closeOverlay(event) {
     event.preventDefault();
@@ -33,16 +59,15 @@ export default function WalletModal({
   }
 
   function openXamanApp(event) {
-    event.preventDefault();
     event.stopPropagation();
-    if (appHref) window.location.href = appHref;
-  }
-
-  function openXamanWeb(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!webHref) return;
-    window.open(webHref, "_blank", "noopener,noreferrer");
+    if (!uuid && !connectHref) {
+      event.preventDefault();
+      return;
+    }
+    const result = launchXamanSign(uuid);
+    // Telegram already left via openLink. A phone tap must still
+    // follow https://xumm.app/sign so Connect is not a no-op.
+    if (shouldCancelConnectNavigation(result)) event.preventDefault();
   }
 
   return (
@@ -60,24 +85,29 @@ export default function WalletModal({
           {heading}
         </h2>
 
-        {!phone && qrUrl && status !== "loading" ? (
-          <img src={qrUrl} alt={t.xamanQr || t.scan} className="qr-image" />
+        {showQr ? <img src={qrUrl} alt={t.xamanQr || t.scan} className="qr-image" /> : null}
+
+        {xapp && status !== "loading" && !confirming ? (
+          <p className="wallet-modal-hint">{t.xappApproveHint || t.waitingXaman}</p>
         ) : null}
 
-        {phone && status !== "loading" && (appHref || webHref) ? (
+        {showConnect ? (
           <>
-            {appHref ? (
-              <button type="button" className="mobile-link-btn" onClick={openXamanApp}>
-                {connectLabel}
-              </button>
-            ) : null}
-            {webHref ? (
-              <button type="button" className="mobile-link-btn is-web" onClick={openXamanWeb}>
-                {t.openXamanWeb || t.openApp}
-              </button>
-            ) : null}
-            <p className="wallet-modal-hint">{t.waitingXaman}</p>
+            <a
+              className="mobile-link-btn"
+              href={connectHref}
+              target={phone ? undefined : "_blank"}
+              rel="noopener noreferrer"
+              onClick={openXamanApp}
+            >
+              {connectLabel}
+            </a>
+            <p className="wallet-modal-hint">
+              {telegram ? t.waitingXamanTelegram || t.waitingXaman : t.waitingXaman}
+            </p>
           </>
+        ) : !xapp && status !== "loading" && !confirming && showQr ? (
+          <p className="wallet-modal-hint">{t.waitingXaman}</p>
         ) : null}
 
         <button type="button" onClick={onClose} className="cancel-wallet-btn">

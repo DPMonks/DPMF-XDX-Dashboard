@@ -260,6 +260,10 @@ export function detectQuoteUsd({ quoteId, pool, prices, allowImplied = true } = 
   const market = usableMarketQuoteUsd(quoteUsdFromPrices(id, { ...book, ...book.quotes }), { xdxUsd, xrpUsd });
   const fromXrp = usableMarketQuoteUsd(quoteUsdFromXrpRate(id, book, xrpUsd), { xdxUsd, xrpUsd });
   const listed = usableMarketQuoteUsd(pool?.quote_usd ?? pool?.quoteUsd, { xdxUsd, xrpUsd });
+  if (market > 0 && fromXrp > 0) {
+    const ratio = market / fromXrp;
+    if (ratio > 4 || ratio < 0.25) return fromXrp;
+  }
   if (market > 0 && (market >= DUST_QUOTE_USD || !(implied > market * 5))) return market;
   if (fromXrp > 0) return fromXrp;
   if (listed > 0 && !quoteUsdLooksImplied(listed, pool, xdxUsd)) return listed;

@@ -9,6 +9,10 @@ import {
   hasIndexerDatabase,
   readIndexerDb,
 } from "./readIndexerDb.js";
+import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
+import { liveCatalogPayload } from "./liveCatalog.js";
+import { catalogHealth } from "./sourceControl.js";
+import { isAllowedDashboardOrigin } from "../src/security/headers.js";
 
 export { DEFAULT_INDEXER_ORIGIN };
 
@@ -95,6 +99,8 @@ function localDashboardStatus(suffix, extra = {}) {
     lpHoldersCountToday: "/api/lp-holders/count?snapshot=today",
     lpTrustlinesCount: "/api/lp-trustlines/count",
     lpPools: "/api/lp-pools",
+    lpPoolsLive: "/api/lp-pools/live",
+    swapMarket: "/api/swap-market",
     tvlHistory: "/api/charts/tvl",
     holdersHistory: "/api/charts/holders",
     lpHoldersHistory: "/api/charts/lp-holders",
@@ -115,17 +121,23 @@ function localDashboardStatus(suffix, extra = {}) {
   };
 
   if (suffix === "health" || suffix === "health/xrpl") {
+    const health = catalogHealth({
+      postgresDown: database === "error" || database === "auth-failed",
+      dbOk: database === "postgres",
+    });
     return {
       status: 200,
       contentType: "application/json",
       source: "dashboard",
       body: JSON.stringify({
-        status: database === "postgres" ? "ok" : "degraded",
-        source: "dashboard",
+        ...health,
+        source: health.source === "db" ? "dashboard" : health.source,
         database,
         hint,
-        timestamp: new Date().toISOString(),
-        note: "Read-only SELECT on XDX tables. Workers were not started. DATABASE_URL must be on this Preview deploy (not Production-only).",
+        note:
+          health.failover === "active"
+            ? health.note
+            : "Read-only SELECT on XDX tables. Live APIs take over if Railway goes dark.",
       }),
     };
   }
@@ -187,7 +199,14 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
     console.error(dbHint);
   }
 
-  if (method === "GET" && (/^wallet\/(offers|activity|votes)\//.test(suffix) || suffix === "amm/governance")) {
+  if (
+    method === "GET" &&
+    (/^wallet\/(offers|activity|votes|account|balances|lines|lp|lp-income|networth)\//.test(suffix) ||
+      /^balances\//.test(suffix) ||
+      suffix === "amm/governance" ||
+      suffix === "lp-pools/live" ||
+      suffix === "swap-market")
+  ) {
     const ledger = await readIndexerDb(suffix, search);
     if (ledger && ledger.status < 400) return withSource(ledger, "xrpl");
   }
@@ -197,7 +216,10 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
   if (method === "GET" && hasIndexerDatabase()) {
     dbResult = await readIndexerDb(suffix, search);
     if (dbResult && dbResult.status < 400) {
-      return withSource(dbResult, "postgres");
+      const overlaid = await overlayDbResultWithLive(suffix, dbResult, (path) =>
+        liveCatalogPayload(path, { search })
+      );
+      return withSource(overlaid, overlaid.source || "postgres");
     }
     if (dbResult && catalogOrHealth) {
       let parsed;
@@ -214,12 +236,19 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
         hint: parsed.hint || databaseUrlHint(),
       });
     }
+    // Postgres is configured but down. Serve free APIs / last-good instead of 503.
+    if (dbResult && dbResult.status >= 400) {
+      const fallback = await serveCatalogFallback(suffix, (path) => liveCatalogPayload(path, { search }));
+      if (fallback) return withSource(fallback, fallback.source || "xrpl.to");
+      return withSource(dbResult, "postgres");
+    }
   }
 
-  // No postgres:// on this deploy: do not burn Railway Hikari on 429s.
-  // Catalog/health still 200 so the banner can show database=missing.
+  // No postgres:// on this deploy: still serve the free catalog.
   if (!hasIndexerDatabase()) {
     if (catalogOrHealth) return localDashboardStatus(suffix);
+    const fallback = await serveCatalogFallback(suffix, (path) => liveCatalogPayload(path, { search }));
+    if (fallback) return withSource(fallback, fallback.source || "xrpl.to");
     return indexerErrorHint({
       status: 503,
       body: JSON.stringify({ error: "DATABASE_URL missing on this Vercel deploy" }),
@@ -248,10 +277,10 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
   return indexerErrorHint(last);
 }
 
-export function proxyResponseHeaders(last) {
+export function proxyResponseHeaders(last, req) {
   return {
     "content-type": last?.contentType || "application/json",
-    ...proxyCorsHeaders(),
+    ...proxyCorsHeaders(req),
     ...(last?.source ? { "x-dpmf-source": last.source } : {}),
   };
 }
@@ -263,10 +292,15 @@ export function handshakePostBody(incoming) {
   return undefined;
 }
 
-export function proxyCorsHeaders() {
+export function proxyCorsHeaders(req) {
+  const origin = String(req?.headers?.origin || "").trim();
+  const allow = isAllowedDashboardOrigin(origin)
+    ? origin
+    : "https://xdx-exchange.dpmf.technology";
   return {
-    "access-control-allow-origin": "*",
+    "access-control-allow-origin": allow,
     "access-control-allow-methods": "GET,POST,OPTIONS",
     "access-control-allow-headers": "accept,content-type",
+    vary: "Origin",
   };
 }

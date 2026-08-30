@@ -8,6 +8,8 @@ export default function PoolSelector({ value, options, onChange, ariaLabel }) {
         options={options}
         onChange={onChange}
         ariaLabel={ariaLabel}
+        searchable
+        placeholder={ariaLabel}
       />
     </label>
   );

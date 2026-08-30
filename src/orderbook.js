@@ -107,6 +107,23 @@ export function filterOrderbookPairs(pairs, query) {
   });
 }
 
+export function bookFromMarketPayload(payload, pair = "XDX/XRP") {
+  const name = normalizeOrderbookPair(pair);
+  if (!payload || typeof payload !== "object") return emptyOrderbook(name);
+  if (payload.books && typeof payload.books === "object") {
+    const nested =
+      payload.books[name] || payload.books[pair] || payload.books[normalizeOrderbookPair(payload.pair || name)];
+    if (nested && typeof nested === "object") return nested;
+  }
+  if (payload.book && typeof payload.book === "object") {
+    const inner = payload.book;
+    if (inner.books && typeof inner.books === "object") return bookFromMarketPayload(inner, name);
+    if (Array.isArray(inner.bids) || Array.isArray(inner.asks)) return inner;
+  }
+  if (Array.isArray(payload.bids) || Array.isArray(payload.asks)) return payload;
+  return emptyOrderbook(name);
+}
+
 export function emptyOrderbook(pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(pair);
   const quote = name.split("/")[1] || "XRP";
@@ -132,17 +149,17 @@ export function emptyOrderbook(pair = "XDX/XRP") {
   };
 }
 
-function nativeBest(rows, side) {
+function tapeBest(rows, side) {
   const prices = (Array.isArray(rows) ? rows : [])
-    .filter((row) => Number(row?.price) > 0 && !isSyntheticSource(row.source || "dex"))
+    .filter((row) => Number(row?.price) > 0 && !row.placeholder)
     .map((row) => Number(row.price));
   if (!prices.length) return null;
   return side === "ask" ? Math.min(...prices) : Math.max(...prices);
 }
 
 export function bookHeader(book = {}) {
-  const best_bid = Number(book.best_bid) > 0 ? Number(book.best_bid) : nativeBest(book.bids, "bid");
-  const best_ask = Number(book.best_ask) > 0 ? Number(book.best_ask) : nativeBest(book.asks, "ask");
+  const best_bid = Number(book.best_bid) > 0 ? Number(book.best_bid) : tapeBest(book.bids, "bid");
+  const best_ask = Number(book.best_ask) > 0 ? Number(book.best_ask) : tapeBest(book.asks, "ask");
   const mid =
     Number(book.mid) > 0
       ? Number(book.mid)
@@ -159,6 +176,21 @@ export function bookHeader(book = {}) {
         ? Number(book.spread_bps)
         : null;
   return { best_bid, best_ask, mid, mid_usd, spread, spread_bps };
+}
+
+export function filterBookTape(book = {}, mode = "hybrid") {
+  const tape = String(mode || "hybrid").toLowerCase();
+  const keep = (row) => {
+    const source = String(row?.source || "dex").toLowerCase();
+    if (tape === "amm") return source === "amm";
+    if (tape === "dex" || tape === "book") return source === "dex" || source === "bridge";
+    return true;
+  };
+  const bids = (Array.isArray(book.bids) ? book.bids : []).filter(keep);
+  const asks = (Array.isArray(book.asks) ? book.asks : []).filter(keep);
+  const next = { ...book, bids, asks };
+  const header = bookHeader({ ...next, best_bid: null, best_ask: null, mid: null, spread: null, spread_bps: null });
+  return { ...next, ...header };
 }
 
 export function orderBookRowStamp(row = {}) {
@@ -384,10 +416,30 @@ export function bookHasNativeDex(book) {
   return bids.some(isNativeDexRow) || asks.some(isNativeDexRow);
 }
 
+function tapeRowFilled(row) {
+  return Boolean(row) && !row.placeholder && Number(row.price) > 0 && Number(row.base_size) > 0;
+}
+
+export function bookHasTape(book) {
+  if (!book || typeof book !== "object") return false;
+  const bids = Array.isArray(book.bids) ? book.bids : [];
+  const asks = Array.isArray(book.asks) ? book.asks : [];
+  return bids.some(tapeRowFilled) || asks.some(tapeRowFilled);
+}
+
 export function keepLastGoodBook(previous, next, pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(pair || next?.pair || previous?.pair);
   if (bookHasNativeDex(next)) return next;
   if (bookHasNativeDex(previous)) {
+    return {
+      ...previous,
+      pair: name,
+      catching_up: true,
+      stale: true,
+    };
+  }
+  if (bookHasTape(next)) return next;
+  if (bookHasTape(previous)) {
     return {
       ...previous,
       pair: name,
@@ -456,19 +508,35 @@ function priceKey(row) {
   return Number(row?.price).toPrecision(12);
 }
 
-function fillBookSide(dexRows, fillRows, reserveMeta, side) {
-  const native = takeSideLevels(dexRows, side, ORDERBOOK_VISIBLE_LEVELS);
-  if (native.length >= ORDERBOOK_VISIBLE_LEVELS) {
-    return withCumulative(measureAmmAgainstDex(native, reserveMeta, side), side);
-  }
+function extractBridgeSides(body = {}) {
+  const root = body && typeof body === "object" ? body : {};
+  const book = root.book && typeof root.book === "object" ? root.book : root;
+  const keep = (row) => String(row?.source || "").toLowerCase() === "bridge";
+  return {
+    bids: (Array.isArray(book.bids) ? book.bids : []).filter(keep),
+    asks: (Array.isArray(book.asks) ? book.asks : []).filter(keep),
+  };
+}
+
+function mergeDexTape(nativeRows, bridgeRows, reserveMeta, side) {
+  const native = takeSideLevels(nativeRows, side, ORDERBOOK_VISIBLE_LEVELS);
   const seen = new Set(native.map(priceKey));
-  const fillers = takeSideLevels(fillRows, side, ORDERBOOK_VISIBLE_LEVELS)
-    .filter((row) => !seen.has(priceKey(row)))
-    .slice(0, ORDERBOOK_VISIBLE_LEVELS - native.length);
-  return withCumulative(
-    measureAmmAgainstDex(takeSideLevels([...native, ...fillers], side, ORDERBOOK_VISIBLE_LEVELS), reserveMeta, side),
-    side
+  const bridged = takeSideLevels(bridgeRows, side, ORDERBOOK_VISIBLE_LEVELS).filter(
+    (row) => !seen.has(priceKey(row))
   );
+  const merged = [
+    ...native,
+    ...bridged.slice(0, Math.max(0, ORDERBOOK_VISIBLE_LEVELS - native.length)),
+  ];
+  return withCumulative(measureAmmAgainstDex(takeSideLevels(merged, side, merged.length), reserveMeta, side), side);
+}
+
+function ammTape(impliedRows, side) {
+  const rows = takeSideLevels(impliedRows, side, ORDERBOOK_VISIBLE_LEVELS).map((row) => ({
+    ...row,
+    source: row.source || "amm",
+  }));
+  return withCumulative(rows, side);
 }
 
 export function quotePerXrpFromSpots(quoteSpot, xrpSpot) {
@@ -548,20 +616,32 @@ export function composeAmmBook(stored, reserves = {}, pair = "XDX/XRP", extras =
     0;
   const quotePerXrp =
     Number(extras.quotePerXrp) || quotePerXrpFromSpots(spot, xrpSpot);
+  const fromStored = extractBridgeSides(stored);
+  const fromBase = extractBridgeSides(base);
+  const storedBridge =
+    fromStored.bids.length || fromStored.asks.length ? fromStored : fromBase;
   const bridged =
     extras.bridgeBook ||
     (name !== "XDX/XRP"
-      ? projectDexThroughXrp(extras.xrpBook, quotePerXrp)
+      ? extras.xrpBook
+        ? projectDexThroughXrp(extras.xrpBook, quotePerXrp)
+        : storedBridge
       : { bids: [], asks: [] });
 
-  const fillBids = combineOrderbookSide(implied.bids, bridged.bids || [], "bid");
-  const fillAsks = combineOrderbookSide(implied.asks, bridged.asks || [], "ask");
-  const bids = fillBookSide(dexBids, fillBids, reserveMeta, "bid");
-  const asks = fillBookSide(dexAsks, fillAsks, reserveMeta, "ask");
-  const filled = bids.length > dexBids.length || asks.length > dexAsks.length;
+  const dexBidTape = mergeDexTape(dexBids, bridged.bids || [], reserveMeta, "bid");
+  const dexAskTape = mergeDexTape(dexAsks, bridged.asks || [], reserveMeta, "ask");
+  const ammBidTape = ammTape(implied.bids, "bid");
+  const ammAskTape = ammTape(implied.asks, "ask");
+  const bids = [...dexBidTape, ...ammBidTape];
+  const asks = [...dexAskTape, ...ammAskTape];
+  const filled =
+    ammBidTape.length > 0 ||
+    ammAskTape.length > 0 ||
+    dexBidTape.some((row) => row.source === "bridge") ||
+    dexAskTape.some((row) => row.source === "bridge");
   const present = bids.length > 0 || asks.length > 0;
-  const best_bid = bids[0] && Number(bids[0].price) > 0 ? Number(bids[0].price) : null;
-  const best_ask = asks[0] && Number(asks[0].price) > 0 ? Number(asks[0].price) : null;
+  const best_bid = tapeBest(bids, "bid");
+  const best_ask = tapeBest(asks, "ask");
   const mid =
     best_bid > 0 && best_ask > 0
       ? (best_bid + best_ask) / 2

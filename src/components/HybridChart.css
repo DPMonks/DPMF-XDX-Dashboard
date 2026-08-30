@@ -528,23 +528,28 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+}
+
+.hybrid-pairs {
+  gap: 8px;
 }
 
 .hybrid-chart .pair-chip,
 .hybrid-chart .range {
   appearance: none;
   -webkit-appearance: none;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  height: 24px;
-  min-height: 24px;
-  min-width: 36px;
-  padding: 0;
+  height: auto;
+  min-height: 28px;
+  min-width: 0;
+  padding: 6px 14px;
   margin: 0;
-  border-radius: 4px;
-  font-size: 11px;
+  border-radius: 8px;
+  font-size: 12px;
   line-height: 1;
   letter-spacing: 0;
   text-indent: 0;
@@ -753,15 +758,6 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
-}
-
-.hybrid-ma-select.is-elliott .hybrid-ma-select-btn {
-  min-width: 118px;
-  justify-content: space-between;
-}
-
-.hybrid-ma-menu.is-elliott {
-  min-width: 248px;
 }
 
 .hybrid-ma-menu button {
@@ -1066,13 +1062,14 @@
 
 .hybrid-ohlc {
   position: absolute;
-  top: 8px;
-  left: 86px;
+  top: 6px;
+  left: 88px;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 10px;
-  max-width: min(420px, calc(100% - 100px));
-  padding: 6px 8px;
+  align-items: baseline;
+  gap: 4px 8px;
+  max-width: min(520px, calc(100% - 98px));
+  padding: 5px 8px;
   border-radius: 6px;
   background: rgba(7, 7, 8, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1102,12 +1099,15 @@
 
 .hybrid-footer .trade-bar .connect-wallet-btn {
   width: 100%;
+  min-width: 0;
   min-height: 42px;
   height: auto;
-  padding: 0 12px;
+  padding: 8px 10px;
   font-size: 13px;
   justify-content: center;
   text-align: center;
+  white-space: normal;
+  overflow: hidden;
   border: 1px solid var(--dpmf-neon-cyan);
   background: rgba(0, 0, 0, 0.45);
   box-shadow: 0 0 12px rgba(0, 234, 255, 0.28);
@@ -1166,6 +1166,19 @@
   .hybrid-footer .trade-bar,
   .trade-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .hybrid-footer .trade-bar .connect-wallet-btn,
+  .trade-bar .connect-wallet-btn {
+    padding: 8px 6px;
+    font-size: 12px;
+    letter-spacing: 0;
+  }
+
+  .trade-bar .wallet-btn-logo {
+    width: 16px;
+    height: 16px;
   }
 
   .hybrid-body {
@@ -1244,12 +1257,19 @@
 }
 
 @media (pointer: coarse) {
-  .hybrid-chart .range,
-  .hybrid-chart .pair-chip {
+  .hybrid-chart .range {
     height: 44px;
     min-height: 44px;
     min-width: 44px;
     padding: 0;
+    border-radius: 8px;
+  }
+
+  .hybrid-chart .pair-chip {
+    height: auto;
+    min-height: 36px;
+    min-width: 0;
+    padding: 8px 16px;
     border-radius: 8px;
   }
 

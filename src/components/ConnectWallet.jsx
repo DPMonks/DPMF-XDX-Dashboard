@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "../context/useWallet";
 import { shortAddress } from "../utils/format";
-import { claimSignedWallet } from "../xaman/claimSignIn";
-import { clearXamanReturn, peekXamanUuid } from "../xaman/payloadResume";
+import { claimExecutedTrade, claimSignedWallet } from "../xaman/claimSignIn";
+import { clearXamanReturn, peekPendingPayload, peekXamanUuid, shouldAutoClaimPendingTrade } from "../xaman/payloadResume";
 import { liveWalletAddress, resolveNeedSignIn } from "../wallet/walletStorage";
 import { WALLET_EVENTS } from "../xaman/tradeTx";
 import { useXamanPayload } from "../xaman/useXamanPayload";
+import { isXappHost } from "../xaman/xappHost";
 import { useI18n } from "../i18n/useI18n";
 import WalletButton from "./WalletButton";
 import WalletModal from "./WalletModal";
 
 export default function ConnectWallet() {
   const { t } = useI18n();
-  const { walletAddress, connectWallet, disconnectWallet } = useWallet();
+  const { walletAddress, connectWallet, disconnectWallet, xappBooting } = useWallet();
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
   const startRef = useRef(start);
   const resetRef = useRef(reset);
@@ -32,11 +33,24 @@ export default function ConnectWallet() {
   }, [connectWallet]);
 
   const completePendingSignIn = useCallback(async () => {
-    if (liveWalletAddress(walletAddress)) {
-      clearXamanReturn();
+    const pendingRecord = peekPendingPayload();
+    const pending = peekXamanUuid();
+    if (pendingRecord?.watchTrade) {
+      if (!shouldAutoClaimPendingTrade()) return;
+      if (claimingRef.current) return;
+      claimingRef.current = true;
+      try {
+        const claimed = await claimExecutedTrade(pending);
+        if (claimed?.executed) clearXamanReturn();
+      } finally {
+        claimingRef.current = false;
+      }
       return;
     }
-    const pending = peekXamanUuid();
+    if (liveWalletAddress(walletAddress)) {
+      if (!pendingRecord?.watchTrade) clearXamanReturn();
+      return;
+    }
     if (!pending || claimingRef.current) return;
     claimingRef.current = true;
     window.setTimeout(() => setClaiming(true), 0);
@@ -122,7 +136,7 @@ export default function ConnectWallet() {
     <div className="wallet-control">
       <WalletButton
         onClick={startConnection}
-        disabled={waiting}
+        disabled={waiting || (Boolean(xappBooting) && isXappHost())}
         connected={Boolean(walletAddress)}
         address={shortAddress(walletAddress)}
       />
@@ -131,7 +145,7 @@ export default function ConnectWallet() {
         visible={waiting}
         qrUrl={qr}
         mobileUrl={mobileUrl}
-        uuid={uuid || peekXamanUuid()}
+        uuid={uuid}
         status={claiming && status === "idle" ? "loading" : status}
         preparingLabel={t.preparing}
         onClose={cancelSignIn}

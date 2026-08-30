@@ -1,29 +1,49 @@
-import { useEffect, useMemo, useState } from "react";
-import { getConnectedWallet } from "../api/indexer";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getConnectedWallet, loadWalletLpIncomeHistory } from "../api/indexer";
+import { pendingVoteFromExecution } from "../wallet/ammVote";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import {
+  formatEur,
   formatGbp,
+  formatJpy,
   formatNumber,
   formatQuotePerBase,
   formatSharePercent,
   formatSupplySharePercent,
   formatToken,
   formatUsd,
-  formatXrpPrice,
   shortAddress,
 } from "../utils/format";
 import { copyToClipboard } from "../utils/copy";
 import {
   emptyWalletSnapshot,
   normalizeWalletPair,
+  withdrawQuoteLabel,
+  preferFilledWalletSnapshot,
   preferredWalletPair,
   sortWalletPairs,
   xrpBarPercents,
 } from "../wallet/composeWallet";
 import { formatFeePercent } from "../wallet/ammVote";
 import { useMorph } from "../wallet/useMorph";
-import { mergeWalletActivity, mergeWalletOrders, pendingFromExecution } from "../wallet/ledgerOrders";
+import { displayTrustlinePair, mergeWalletActivity, mergeWalletOrders, pendingFromExecution } from "../wallet/ledgerOrders";
+import {
+  INCOME_ALL_PAIRS,
+  INCOME_PAGE_DAYS,
+  isAllIncomePairs,
+  downloadTextFile,
+  incomeDayKeys,
+  incomePairChoices,
+  incomePairTotals,
+  incomeRowsForPair,
+  lpIncomeCsv,
+  mergeFrozenFees,
+  pageLpIncome,
+  readRecordedLpIncome,
+  remapIncomeActivity,
+  writeRecordedLpIncome,
+} from "../wallet/lpIncome";
 
 function XrpColumn({ label, tone, percent, value, locale, empty }) {
   return (
@@ -38,16 +58,17 @@ function XrpColumn({ label, tone, percent, value, locale, empty }) {
 }
 
 function XrpBalanceBars({ xrp, locale, t, empty }) {
-  const spendable = useMorph(empty ? 0 : xrp.spendable);
-  const reserved = useMorph(empty ? 0 : xrp.reserved);
-  const total = useMorph(empty ? 0 : xrp.balance);
+  const unknown = empty || xrp?.balance == null;
+  const spendable = useMorph(unknown ? 0 : xrp.spendable);
+  const reserved = useMorph(unknown ? 0 : xrp.reserved);
+  const total = useMorph(unknown ? 0 : xrp.balance);
   const bars = xrpBarPercents(
     { reserved, spendable, total },
-    !empty
+    !unknown
   );
 
   return (
-    <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
+    <div className={`wallet-panel${unknown ? " is-empty" : " is-filled"}`}>
       <p className="wallet-panel-title is-center">{t.xrpBalance}</p>
       <div className="wallet-xrp-bars">
         <XrpColumn
@@ -56,7 +77,7 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
           percent={bars.reservePct}
           value={reserved}
           locale={locale}
-          empty={empty}
+          empty={unknown}
         />
         <XrpColumn
           label={t.spendableXrp}
@@ -64,7 +85,7 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
           percent={bars.spendPct}
           value={spendable}
           locale={locale}
-          empty={empty}
+          empty={unknown}
         />
         <XrpColumn
           label={t.totalXrp}
@@ -72,7 +93,7 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
           percent={bars.totalPct}
           value={total}
           locale={locale}
-          empty={empty}
+          empty={unknown}
         />
       </div>
     </div>
@@ -80,18 +101,25 @@ function XrpBalanceBars({ xrp, locale, t, empty }) {
 }
 
 function XdxBalancePanel({ xdx, locale, t, empty }) {
+  const rows = [
+    { id: "xdx", label: t.xdx, value: empty ? "—" : formatToken(xdx?.xdx, locale, 2) },
+    { id: "xrp", label: t.xrp, value: empty ? "—" : formatToken(xdx?.xrp, locale, 4) },
+    { id: "rlusd", label: t.rlusd || "RLUSD", value: empty ? "—" : formatToken(xdx?.rlusd, locale, 2) },
+    { id: "usd", label: t.usd, value: empty ? "—" : formatUsd(xdx.usd, locale) },
+    { id: "gbp", label: t.gbp, value: empty ? "—" : formatGbp(xdx.gbp, locale) },
+    { id: "eur", label: t.eur, value: empty ? "—" : formatEur(xdx.eur, locale) },
+    { id: "jpy", label: t.jpy, value: empty ? "—" : formatJpy(xdx.jpy, locale) },
+  ];
   return (
     <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
-      <p className="wallet-panel-title">{t.xdxValue}</p>
+      <p className="wallet-panel-title is-center">{t.xdxValue}</p>
       <dl className="wallet-mini-list">
-        <div>
-          <dt>{t.xdx}</dt>
-          <dd>{empty ? "—" : formatToken(xdx.xdx, locale, 2)}</dd>
-        </div>
-        <div>
-          <dt>{t.xrp}</dt>
-          <dd>{empty ? "—" : formatXrpPrice(xdx.xrp, locale)}</dd>
-        </div>
+        {rows.map((row) => (
+          <div key={row.id}>
+            <dt>{row.label}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        ))}
       </dl>
     </div>
   );
@@ -105,41 +133,54 @@ function SupplyShareBars({ supply, locale, t, empty }) {
     ? 0
     : Math.min(100, Math.max(Number(supplyPct) > 0 ? 4 : 0, Number(supplyPct)));
   return (
-    <div className={`wallet-panel${empty ? " is-empty" : " is-filled"}`}>
-      <p className="wallet-panel-title">{t.supplyShare}</p>
+    <div className={`wallet-panel wallet-share${empty ? " is-empty" : " is-filled"}`}>
+      <p className="wallet-panel-title is-center">{t.supplyShare}</p>
       <div className="wallet-micro">
         <span>{t.circulating}</span>
+        <b>{empty ? "—" : formatSharePercent(circ, locale)}</b>
         <span className="wallet-micro-track">
           <i style={{ width: `${circWidth}%` }} />
         </span>
-        <b>{empty ? "—" : formatSharePercent(circ, locale)}</b>
       </div>
       <div className="wallet-micro">
         <span>{t.xdxSupplyShare}</span>
+        <b>{empty ? "—" : formatSupplySharePercent(supplyPct, locale)}</b>
         <span className="wallet-micro-track">
           <i className="is-amm" style={{ width: `${supplyWidth}%` }} />
         </span>
-        <b>{empty ? "—" : formatSupplySharePercent(supplyPct, locale)}</b>
       </div>
       <div className="wallet-micro is-pending">
         <span>{t.borrowed}</span>
-        <span className="wallet-micro-track">
-          <i />
-        </span>
         <b>—</b>
+        <span className="wallet-micro-track">
+          <i style={{ width: 0 }} />
+        </span>
       </div>
       <div className="wallet-micro is-pending">
         <span>{t.lending}</span>
-        <span className="wallet-micro-track">
-          <i />
-        </span>
         <b>—</b>
+        <span className="wallet-micro-track">
+          <i style={{ width: 0 }} />
+        </span>
       </div>
     </div>
   );
 }
 
-function LpInfographic({ position, locale, t, empty }) {
+function PoolWindowValue({ pool, window, locale, empty }) {
+  if (empty || !pool) return "—";
+  const xdx = window === "7d" ? pool.xdx7d : pool.xdx24h;
+  const usd = window === "7d" ? pool.usd7d : pool.usd24h;
+  if (!(Number(xdx) > 0) && !(Number(usd) > 0)) return "—";
+  return (
+    <span className="wallet-lp-earn">
+      <b>{formatToken(xdx, locale, 2)}</b>
+      <i>{formatUsd(usd, locale)}</i>
+    </span>
+  );
+}
+
+function LpInfographic({ position, earn, locale, t, empty }) {
   const share = useMorph(empty ? 0 : position?.lp_share_percent);
   const xdxComp = useMorph(empty ? 0 : position?.composition_xdx_percent);
   const quoteComp = useMorph(empty ? 0 : position?.composition_quote_percent);
@@ -167,11 +208,23 @@ function LpInfographic({ position, locale, t, empty }) {
           <dd>{empty ? "—" : formatToken(position?.withdraw_estimate_xdx, locale, 2)}</dd>
         </div>
         <div>
-          <dt>{t.withdrawQuote}</dt>
+          <dt>{withdrawQuoteLabel(position?.quote, t.withdrawQuote)}</dt>
           <dd>
             {empty
               ? "—"
               : `${formatToken(position?.withdraw_estimate_quote, locale, 4)} ${position?.quote || ""}`.trim()}
+          </dd>
+        </div>
+        <div>
+          <dt>{t.lpFees24h}</dt>
+          <dd>
+            <PoolWindowValue pool={earn} window="24h" locale={locale} empty={empty} />
+          </dd>
+        </div>
+        <div>
+          <dt>{t.lpFees7d}</dt>
+          <dd>
+            <PoolWindowValue pool={earn} window="7d" locale={locale} empty={empty} />
           </dd>
         </div>
       </dl>
@@ -179,25 +232,348 @@ function LpInfographic({ position, locale, t, empty }) {
   );
 }
 
-function LpFeeTracker({ fees, locale, t, empty }) {
-  const blank = empty || fees?.xdx == null;
-  const pct = Number(fees?.pct24h);
+function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook, locale, t, empty }) {
+  const [incomePair, setIncomePair] = useState(INCOME_ALL_PAIRS);
+  const [historyActivity, setHistoryActivity] = useState(null);
+  const [historyDays, setHistoryDays] = useState([]);
+  const [recordedRows] = useState(() => readRecordedLpIncome(address));
+  const [loading, setLoading] = useState(() => Boolean(address) && !empty);
+  const [historyComplete, setHistoryComplete] = useState(false);
+  const [daysShown, setDaysShown] = useState(INCOME_PAGE_DAYS);
+  const [epoch, setEpoch] = useState(0);
+  const cacheRef = useRef(new Map());
+  const sentinelRef = useRef(null);
+  const historyRows = remapIncomeActivity(historyActivity, positions, pools);
+  const pairs = incomePairChoices({ positions });
+  const selectedPair = pairs.includes(incomePair) ? incomePair : INCOME_ALL_PAIRS;
+  const all = incomeRowsForPair({
+    pair: selectedPair,
+    snapshotRows,
+    historyActivity: historyRows,
+    historyDays,
+    recordedRows,
+    positions,
+    pools,
+    prices: priceBook,
+    xdxUsd: priceBook?.xdxUsd,
+    xrpUsd: priceBook?.xrpUsd,
+    rlusdUsd: priceBook?.RLUSD,
+  });
+  const totals = incomePairTotals({
+    pair: selectedPair,
+    positions,
+    pools,
+    activity: historyRows,
+    prices: priceBook,
+    xdxUsd: priceBook?.xdxUsd,
+    xrpUsd: priceBook?.xrpUsd,
+    rlusdUsd: priceBook?.RLUSD,
+  });
+  const allPairs = isAllIncomePairs(selectedPair);
+  const dayCount = incomeDayKeys(all).length;
+  const visible = allPairs ? all : pageLpIncome(all, daysShown);
+  const pagedOut = empty || allPairs || dayCount === 0 || daysShown >= dayCount;
+  const done = pagedOut && !loading && (empty || allPairs || historyComplete);
+
+  useEffect(() => {
+    if (!address || empty) return undefined;
+    const key = address;
+    const cached = cacheRef.current.get(key);
+    if (cached) {
+      setHistoryActivity(cached.activity);
+      setHistoryDays(Array.isArray(cached.days) ? cached.days : []);
+      setHistoryComplete(cached.complete);
+      setLoading(!cached.complete);
+      if (cached.complete) return undefined;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setHistoryComplete(false);
+    loadWalletLpIncomeHistory(address, {
+      fresh: epoch > 0,
+      onPage: (partial) => {
+        if (cancelled) return;
+        cacheRef.current.set(key, partial);
+        setHistoryActivity(partial.activity);
+        setHistoryDays(Array.isArray(partial.days) ? partial.days : []);
+        setHistoryComplete(false);
+      },
+    })
+      .then((result) => {
+        if (cancelled) return;
+        cacheRef.current.set(key, result);
+        setHistoryActivity(result.activity);
+        setHistoryDays(Array.isArray(result.days) ? result.days : []);
+        setHistoryComplete(result.complete);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [address, empty, epoch]);
+
+  useEffect(() => {
+    if (!address) return undefined;
+    function bust() {
+      for (const key of [...cacheRef.current.keys()]) {
+        if (key.startsWith(`${address}:`)) cacheRef.current.delete(key);
+      }
+      setEpoch((current) => current + 1);
+    }
+    window.addEventListener("dpmf-wallet-refresh", bust);
+    window.addEventListener("dpmf-trade-executed", bust);
+    window.addEventListener("dpmf-function-confirmed", bust);
+    return () => {
+      window.removeEventListener("dpmf-wallet-refresh", bust);
+      window.removeEventListener("dpmf-trade-executed", bust);
+      window.removeEventListener("dpmf-function-confirmed", bust);
+    };
+  }, [address]);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || pagedOut) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setDaysShown((current) => current + INCOME_PAGE_DAYS);
+        }
+      },
+      { root: node.parentElement, rootMargin: "24px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [pagedOut, daysShown]);
+
+  function onPairChange(next) {
+    setIncomePair(next);
+    setDaysShown(INCOME_PAGE_DAYS);
+  }
+
+  useEffect(() => {
+    if (!address || empty || !all.length) return;
+    if (allPairs || all.some((row) => row.kind === "hold")) return;
+    writeRecordedLpIncome(address, mergeFrozenFees(readRecordedLpIncome(address), all));
+  }, [address, empty, all, allPairs]);
+
   return (
-    <div className={`wallet-fees${blank ? " is-empty" : " is-filled"}`}>
-      <p className="wallet-fees-label">{t.lpFeeEarnings}</p>
-      <p className="wallet-fees-xdx">{blank ? "—" : `${formatToken(fees.xdx, locale, 4)} ${t.xdx}`}</p>
-      <p className="wallet-fees-usd">{blank ? "—" : formatUsd(fees.usd, locale)}</p>
-      <p className="wallet-fees-pct">
-        {blank || !Number.isFinite(pct) ? (
-          "—"
+    <section className={`wallet-book wallet-income${empty ? " is-empty" : " is-filled"}`}>
+      <div className="wallet-income-head">
+        <h3>{t.lpPassiveIncome || "LP Earning/Passive income"}</h3>
+        <div className="wallet-income-tools">
+          <label className="wallet-lp-select wallet-income-select">
+            <span className="sr-only">{t.incomePairSelect || t.incomePair || "Pair"}</span>
+            <select
+              value={selectedPair}
+              disabled={empty}
+              aria-label={t.incomePairSelect || t.incomePair || "Pair"}
+              onChange={(event) => onPairChange(event.target.value)}
+            >
+              {pairs.map((name) => (
+                <option key={name} value={name}>
+                  {name === INCOME_ALL_PAIRS ? t.incomeAllPairs || "All pairs" : name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="wallet-income-totals">
+            {!allPairs ? (
+              <p className="wallet-income-total" aria-label={t.incomeTotalLp || "Total LP"}>
+                {empty || !(totals.lp > 0) ? (
+                  "—"
+                ) : (
+                  <>
+                    {formatToken(totals.lp, locale, 4)}
+                    <small>{t.incomeLpTokens || "LP"}</small>
+                  </>
+                )}
+              </p>
+            ) : null}
+            <p className="wallet-income-total is-usd" aria-label={t.incomeUsd || "USD"}>
+              {empty || !(totals.usd > 0) ? "—" : formatUsd(totals.usd, locale)}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="copy-btn wallet-income-copy"
+            disabled={empty || !all.length}
+            onClick={() => downloadTextFile("lp-earnings.csv", lpIncomeCsv(all))}
+            aria-label={t.downloadLpIncome || "Download LP earnings"}
+          >
+            {t.copy || "Copy"}
+          </button>
+        </div>
+      </div>
+      {loading ? (
+        <div
+          className="wallet-income-load"
+          role="progressbar"
+          aria-label={t.loadingLpIncome || "Loading LP history"}
+        >
+          <span />
+        </div>
+      ) : null}
+      <div className="wallet-income-scroll">
+        <table className="wallet-income-table">
+          <thead>
+            <tr>
+              <th>{allPairs ? t.incomePair || "Pair" : t.incomeDate || "Date"}</th>
+              <th>{allPairs ? t.incomeLpBalance || "LP Balance" : t.incomeLpAdded || t.incomeLpTokens || "LP"}</th>
+              <th>{t.incomeUsd || "USD"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {empty || !visible.length ? (
+              <tr>
+                <td colSpan={3}>
+                  {empty ? "—" : allPairs ? t.noLpPositions || "No LP positions" : t.noLpIncome || "No LP earnings yet"}
+                </td>
+              </tr>
+            ) : (
+              visible.map((row) => {
+                const amount = Number(row.lpEarned ?? row.lpBalance ?? row.lpTokens);
+                const hold = row.kind === "hold" || allPairs;
+                return (
+                  <tr key={`${row.date || "hold"}-${row.pair}-${amount}`}>
+                    <td>
+                      {hold ? (
+                        <span className="wallet-income-day">{row.pair}</span>
+                      ) : (
+                        <span className="wallet-income-day">{row.date}</span>
+                      )}
+                    </td>
+                    <td className={hold ? "is-lp" : "is-lp-add"}>
+                      {amount > 0 ? (
+                        hold ? (
+                          formatToken(amount, locale, 4)
+                        ) : (
+                          <>
+                            <span className="is-plus">+</span>
+                            <span className="is-add">{formatToken(amount, locale, 4)}</span>
+                          </>
+                        )
+                      ) : (
+                        ""
+                      )}
+                    </td>
+                    <td className="is-earn">{amount > 0 && Number(row.usd) > 0 ? formatUsd(row.usd, locale) : ""}</td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+        {done ? (
+          <p className="wallet-income-end">{empty ? "" : t.incomeEnd || "end"}</p>
         ) : (
-          <>
-            <span className="wallet-fees-pct-value">+{formatSupplySharePercent(pct, locale)}</span>
-            <span className="wallet-fees-pct-range">{t.lpFees24h}</span>
-          </>
+          <div ref={sentinelRef} className="wallet-income-more" aria-hidden="true" />
         )}
-      </p>
+      </div>
+    </section>
+  );
+}
+
+function earnText(value, format, empty) {
+  if (empty || value == null || !Number.isFinite(Number(value))) return "—";
+  return format(Number(value));
+}
+
+function earnAmount(amount, usd, locale, digits, empty) {
+  return {
+    amount: earnText(amount, (n) => formatToken(n, locale, digits), empty),
+    usd: earnText(usd, (n) => formatUsd(n, locale), empty),
+  };
+}
+
+function WalletEarnCell({ label, rows, empty, className = "", usdOnly = false, t }) {
+  return (
+    <div
+      className={`wallet-earn-cell${empty ? " is-empty" : " is-filled"}${usdOnly ? " is-usd-only" : ""}${className ? ` ${className}` : ""}`}
+    >
+      <p className="wallet-earn-label">{label}</p>
+      <div className="wallet-earn-grid">
+        <p className="wallet-earn-row is-head">
+          <span className="wallet-earn-range" aria-hidden="true" />
+          {usdOnly ? null : <span className="wallet-earn-col-lp">{t?.incomeLpTokens || "LP"}</span>}
+          <span className="wallet-earn-col-usd">{t?.incomeUsd || "USD"}</span>
+        </p>
+        {rows.map((row) => (
+          <p key={row.range} className="wallet-earn-row">
+            <span className="wallet-earn-range">{row.range}</span>
+            {usdOnly ? (
+              <b className="wallet-earn-usd">{row.amount}</b>
+            ) : (
+              <>
+                <b className="wallet-earn-lp">{row.amount}</b>
+                <i className="wallet-earn-usd">{row.usd}</i>
+              </>
+            )}
+          </p>
+        ))}
+      </div>
     </div>
+  );
+}
+
+function WalletEarnBeam({ fees, locale, t, empty }) {
+  const earn = fees?.earnings || {};
+  const xrp24 = earnAmount(earn.xrp24h, earn.xrp24hUsd, locale, 4, empty);
+  const xrp7 = earnAmount(earn.xrp7d, earn.xrp7dUsd, locale, 4, empty);
+  const xdx24 = earnAmount(earn.xdx24h, earn.xdx24hUsd, locale, 2, empty);
+  const xdx7 = earnAmount(earn.xdx7d, earn.xdx7dUsd, locale, 2, empty);
+  const rlusd24 = earnAmount(earn.rlusd24h, earn.rlusd24hUsd, locale, 4, empty);
+  const rlusd7 = earnAmount(earn.rlusd7d, earn.rlusd7dUsd, locale, 4, empty);
+  return (
+    <section className="wallet-earn-board" aria-label={t.lpFeeEarnings}>
+      <h3 className="wallet-earn-title">{t.lpFeeEarnings}</h3>
+      <div className="wallet-earn-beam">
+        <WalletEarnCell
+          className="wallet-earn-xrp"
+          label={t.xrp}
+          empty={empty}
+          t={t}
+          rows={[
+            { range: t.lpFees24h, amount: xrp24.amount, usd: xrp24.usd },
+            { range: t.lpFees7d, amount: xrp7.amount, usd: xrp7.usd },
+          ]}
+        />
+        <WalletEarnCell
+          className="wallet-earn-xdx"
+          label={t.xdx}
+          empty={empty}
+          t={t}
+          rows={[
+            { range: t.lpFees24h, amount: xdx24.amount, usd: xdx24.usd },
+            { range: t.lpFees7d, amount: xdx7.amount, usd: xdx7.usd },
+          ]}
+        />
+        <WalletEarnCell
+          className="wallet-earn-rlusd"
+          label={t.rlusd || "RLUSD"}
+          empty={empty}
+          t={t}
+          rows={[
+            { range: t.lpFees24h, amount: rlusd24.amount, usd: rlusd24.usd },
+            { range: t.lpFees7d, amount: rlusd7.amount, usd: rlusd7.usd },
+          ]}
+        />
+        <WalletEarnCell
+          className="wallet-earn-total"
+          label={t.totalEarnings}
+          empty={empty}
+          usdOnly
+          t={t}
+          rows={[
+            { range: t.lpFees24h, amount: earnText(earn.usd24h, (n) => formatUsd(n, locale), empty) },
+            { range: t.lpFees7d, amount: earnText(earn.usd7d, (n) => formatUsd(n, locale), empty) },
+          ]}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -211,47 +587,61 @@ export default function ConnectedWallet() {
     if (!walletAddress) return undefined;
     let cancelled = false;
 
-    async function load() {
-      const next = await getConnectedWallet(walletAddress).catch(() =>
+    async function load(fresh = false) {
+      const next = await getConnectedWallet(walletAddress, { fresh }).catch(() =>
         emptyWalletSnapshot(walletAddress)
       );
       if (cancelled) return;
-      setSnap(next);
-      setPair((current) =>
-        preferredWalletPair(
-          next.lp.map((row) => row.pool),
-          current
-        )
-      );
+      setSnap((current) => preferFilledWalletSnapshot(current, next));
+      setPair((current) => {
+        const pairs = next.lp.map((row) => row.pool);
+        if (!pairs.length) return current;
+        return preferredWalletPair(pairs, current);
+      });
     }
 
     load();
+    const retries = [];
+    retries.push(window.setTimeout(() => load(false), 800));
+    retries.push(window.setTimeout(() => load(true), 2800));
     const id = setInterval(load, 30000);
-    function onRefresh() {
-      load();
+    function refreshConfirmed() {
+      load(true);
+      retries.push(window.setTimeout(() => load(true), 2500));
+      retries.push(window.setTimeout(() => load(true), 8000));
     }
-    window.addEventListener("dpmf-wallet-refresh", onRefresh);
-    function onTrade(event) {
-      const pending = pendingFromExecution(event.detail, walletAddress);
-      if (!pending) {
-        load();
-        return;
-      }
+    function applyPending(detail) {
+      const pending =
+        pendingFromExecution(detail, walletAddress) || pendingVoteFromExecution(detail, walletAddress);
+      if (!pending) return;
       setSnap((current) => ({
         ...current,
         signedIn: true,
         filled: true,
         orders: mergeWalletOrders(pending.order ? [pending.order] : [], current.orders || []),
-        activity: mergeWalletActivity(pending.activity ? [pending.activity] : [], current.activity || []).slice(0, 3),
+        activity: mergeWalletActivity(pending.activity ? [pending.activity] : [], current.activity || []).slice(
+          0,
+          3
+        ),
       }));
-      load();
     }
+    function onRefresh() {
+      load(true);
+    }
+    function onTrade(event) {
+      applyPending(event.detail);
+      refreshConfirmed();
+    }
+    window.addEventListener("dpmf-wallet-refresh", onRefresh);
     window.addEventListener("dpmf-trade-executed", onTrade);
+    window.addEventListener("dpmf-function-confirmed", onTrade);
     return () => {
       cancelled = true;
       clearInterval(id);
+      for (const timer of retries) window.clearTimeout(timer);
       window.removeEventListener("dpmf-wallet-refresh", onRefresh);
       window.removeEventListener("dpmf-trade-executed", onTrade);
+      window.removeEventListener("dpmf-function-confirmed", onTrade);
     };
   }, [walletAddress]);
 
@@ -263,24 +653,30 @@ export default function ConnectedWallet() {
     () => view.lp.find((row) => normalizeWalletPair(row.pool) === selected) || null,
     [view.lp, selected]
   );
-  const mid = Number(view.book?.mid);
-  const own = snap.orders[0];
-  const fromMid =
-    own && mid > 0 ? (Math.abs(Number(own.price) - mid) / mid) * 100 : null;
-
   return (
     <div className="connected-wallet">
       <header className="wallet-hero">
         <div className="wallet-hero-brand">
           <img src="/favicon.png" alt="" className="wallet-mark" />
-          <div>
+          <div className="wallet-hero-copy">
             <p className="wallet-hero-label">{t.xdxValue}</p>
+            <p className={`wallet-hero-qty${empty ? " is-empty" : " is-filled"}`}>
+              {empty ? "—" : `${formatToken(view.xdx.xdx, locale, 2)} ${t.xdx}`}
+            </p>
             <p className={`wallet-hero-usd${empty ? " is-empty" : " is-filled"}`}>
               {empty ? "—" : formatUsd(view.xdx.usd, locale)}
             </p>
-            <p className={`wallet-hero-gbp${empty ? " is-empty" : " is-filled"}`}>
-              {empty ? "—" : formatGbp(view.xdx.gbp, locale)}
-            </p>
+            <div className="wallet-hero-fx">
+              <p className={`wallet-hero-gbp${empty ? " is-empty" : " is-filled"}`}>
+                {empty ? "—" : formatGbp(view.xdx.gbp, locale)}
+              </p>
+              <p className={`wallet-hero-eur${empty ? " is-empty" : " is-filled"}`}>
+                {empty ? "—" : formatEur(view.xdx.eur, locale)}
+              </p>
+              <p className={`wallet-hero-jpy${empty ? " is-empty" : " is-filled"}`}>
+                {empty ? "—" : formatJpy(view.xdx.jpy, locale)}
+              </p>
+            </div>
           </div>
         </div>
         {walletAddress ? (
@@ -298,17 +694,19 @@ export default function ConnectedWallet() {
                 ? "—"
                 : `#${formatNumber(view.rank, locale, { maximumFractionDigits: 0 })}`}
             </p>
-            <LpFeeTracker fees={view.fees} locale={locale} t={t} empty={empty} />
           </div>
         ) : (
           <p className="wallet-hero-hint">{t.connectWalletHint}</p>
         )}
       </header>
 
-      <div className="wallet-infographics">
-        <XrpBalanceBars xrp={view.xrp} locale={locale} t={t} empty={empty} />
-        <XdxBalancePanel xdx={view.xdx} locale={locale} t={t} empty={empty} />
-        <SupplyShareBars supply={view.supply} locale={locale} t={t} empty={empty} />
+      <div className="wallet-balance-stack">
+        <WalletEarnBeam fees={view.fees} locale={locale} t={t} empty={empty} />
+        <div className="wallet-infographics">
+          <XrpBalanceBars xrp={view.xrp} locale={locale} t={t} empty={empty} />
+          <XdxBalancePanel xdx={view.xdx} locale={locale} t={t} empty={empty} />
+          <SupplyShareBars supply={view.supply} locale={locale} t={t} empty={empty} />
+        </div>
       </div>
 
       <section className="wallet-lp">
@@ -333,44 +731,26 @@ export default function ConnectedWallet() {
             </select>
           </label>
         </div>
-        <LpInfographic position={position} locale={locale} t={t} empty={empty || !position} />
+        <LpInfographic
+          position={position}
+          earn={view.fees?.earnings?.pools?.[selected]}
+          locale={locale}
+          t={t}
+          empty={empty || !position}
+        />
       </section>
 
-      <section className={`wallet-book${empty ? " is-empty" : " is-filled"}`}>
-        <h3>{t.orderbook}</h3>
-        <ul>
-          <li>
-            <i className={own ? "is-on" : ""} />
-            {t.topOfBook}
-            <b>{empty || !own ? "—" : formatQuotePerBase(own.price, locale, "XRP")}</b>
-          </li>
-          <li>
-            <i />
-            {t.fromMid}
-            <b>{empty || fromMid == null ? "—" : formatSharePercent(fromMid, locale)}</b>
-          </li>
-          <li>
-            <i />
-            {t.matchedAt}
-            <b>
-              {empty || !view.activity[0]?.price
-                ? "—"
-                : formatQuotePerBase(view.activity[0].price, locale, "XRP")}
-            </b>
-          </li>
-          <li>
-            {t.ammDepthShort}
-            <span className="wallet-micro-track is-inline">
-              <i
-                className="is-amm"
-                style={{
-                  width: empty ? 0 : `${Math.min(100, Number(view.book?.ammDepth) > 0 ? 40 : 0)}%`,
-                }}
-              />
-            </span>
-          </li>
-        </ul>
-      </section>
+      <WalletIncomePanel
+        key={walletAddress || "out"}
+        address={walletAddress}
+        snapshotRows={view.income}
+        positions={view.lp}
+        pools={view.pools}
+        priceBook={view.priceBook}
+        locale={locale}
+        t={t}
+        empty={!walletAddress}
+      />
 
       <section className={`wallet-activity${empty ? " is-empty" : " is-filled"}`}>
         <h3>{t.recentActivity}</h3>
@@ -383,9 +763,24 @@ export default function ConnectedWallet() {
                   ? (t.votedOnPool || "Voted on {pair} — {fee} fee")
                       .replace("{pair}", row.pair || "")
                       .replace("{fee}", formatFeePercent(row.feePercent, locale))
-                  : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
-                      row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""
-                    }`}
+                  : row.side === "createPool"
+                    ? (t.createdPoolActivity || "Created {pair} pool").replace("{pair}", row.pair || "")
+                    : row.side === "addLp"
+                      ? (t.addedLpActivity || "Added LP to {pair}").replace("{pair}", row.pair || "")
+                      : row.side === "removeLp"
+                        ? (t.removedLpActivity || "Removed {amount} LP from {pair}")
+                            .replace("{amount}", row.lp != null ? formatNumber(row.lp, locale, { maximumFractionDigits: 4 }) : "")
+                            .replace("{pair}", row.pair || "")
+                            .replace(/\s+/g, " ")
+                            .trim()
+                        : row.side === "trustline"
+                          ? (t.trustlineActivity || "Added {asset} trustline").replace(
+                              "{asset}",
+                              displayTrustlinePair(row, view.pools) || row.pair || t.xdx
+                            )
+                          : `${row.side === "sell" ? t.sell : t.buy} ${formatNumber(row.xdx, locale)} XDX${
+                              row.price ? ` @ ${formatQuotePerBase(row.price, locale, "XRP")}` : ""
+                            }`}
             </li>
           ))}
         </ol>

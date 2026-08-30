@@ -1,6 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getQuoteMarks, getWalletBalances, getWalletLp } from "../api/indexer";
+import {
+  getLiveLpReserves,
+  getQuoteMarks,
+  getWalletAccount,
+  getWalletBalances,
+  getWalletLines,
+  getWalletLp,
+} from "../api/indexer";
 import { useWallet } from "../context/useWallet";
 import { useI18n } from "../i18n/useI18n";
 import { useXamanPayload } from "../xaman/useXamanPayload";
@@ -9,13 +16,24 @@ import {
   ammDepositTx,
   ammWithdrawTx,
   expectedLpTokens,
+  expectedSingleLpTokens,
+  expectedSingleWithdraw,
+  extraTrustLinesNeeded,
+  hasLpRow,
+  hasLpTrustline,
+  hasQuoteTrustline,
+  lpTrustSetTxjson,
   notifyWalletRefresh,
+  crossAssetSwapTxjson,
   offerCreateBuyXdx,
   offerCreateSellXdx,
   poolForQuote,
+  quoteHintsFromLines,
   quoteChoices,
   quoteIdFromPair,
   quoteTrustSetTxjson,
+  shouldAskLpTrustline,
+  shouldAskQuoteTrustline,
   resolveQuote,
   expectedWithdraw,
   poolPrice,
@@ -27,13 +45,18 @@ import {
   sanitizeQtyInput,
   tradeSides,
   tradeTotal,
+  unusedXrpCoversLines,
   xdxUnitUsd,
 } from "../xaman/tradeTx";
+import { walletAvailableAmounts } from "../wallet/composeWallet";
 import { xdxQuoteSpot } from "../wallet/quoteMarker";
 import { formatPoolPct, normalizePriceBook, priceBookFromPools } from "../utils/poolSplit";
+import { previewReserves } from "../utils/ammInfo";
 import { formatToken, formatUsd } from "../utils/format";
 import { shortAddress } from "../utils/format";
+import { isConsumedUuid, isPayloadUuid, peekPendingPayload } from "../xaman/payloadResume";
 import { liveWalletAddress } from "../wallet/walletStorage";
+import { xdxPlatformFeeTxjson } from "../swap/platformFee";
 import BrandSelect from "./BrandSelect";
 import WalletModal from "./WalletModal";
 
@@ -44,31 +67,31 @@ function poolRowForQuote(pools, quote) {
   );
 }
 
-function poolReserves(pools, quote) {
-  const row = poolRowForQuote(pools, quote);
-  const pair = String(quote?.pair || poolForQuote(quote).pair || "XDX/XRP").toUpperCase();
-  return {
-    pair,
-    base: Number(row?.reserve_xdx ?? row?.reserve_asset ?? 0),
-    quote: Number(row?.reserve_currency ?? 0),
-    lpSupply: Number(row?.lp_supply ?? 0),
-    issuer: row?.quote_issuer || null,
-    hex: row?.quote_hex || null,
-    xdxUsd: Number(row?.xdxUsd || 0),
-    quoteUsd: Number(row?.quote_usd || 0),
-    quoteName: row?.quote || pair.split("/")[1] || "XRP",
-    reserve_xdx: Number(row?.reserve_xdx ?? row?.reserve_asset ?? 0),
-    reserve_asset: Number(row?.reserve_xdx ?? row?.reserve_asset ?? 0),
-    reserve_currency: Number(row?.reserve_currency ?? 0),
-  };
+function poolReserves(pools, quote, live = null) {
+  const row = poolRowForQuote(pools, quote) || {};
+  const pair = String(quote?.pair || poolForQuote(quote, pools, live).pair || "XDX/XRP").toUpperCase();
+  return previewReserves(
+    {
+      ...row,
+      pair,
+      tradingFee: row.trading_fee,
+      issuer: row.quote_issuer,
+      hex: row.quote_hex,
+      quoteName: row.quote || pair.split("/")[1] || "XRP",
+    },
+    live
+  );
 }
 
 export default function TradePanel({
   action,
   initialQuote = "XRP",
-  quoteExtra,
+  initialAmount = "",
+  quoteExtra = {},
   initialPools = [],
   spotPrice = 0,
+  resumeUuid = "",
+  resumeTxjson = null,
   onClose,
   onSigned,
 }) {
@@ -77,39 +100,96 @@ export default function TradePanel({
   const { qr, mobileUrl, uuid, status, error, start, reset } = useXamanPayload();
   const [quoteId, setQuoteId] = useState(() => quoteIdFromPair(initialQuote || "XRP"));
   const [orderType, setOrderType] = useState("market");
-  const [amount, setAmount] = useState(() => (action === "addLp" || action === "removeLp" ? "" : "100000"));
+  const [lpMode, setLpMode] = useState("double");
+  const [singleAsset, setSingleAsset] = useState("xdx");
+  const [amount, setAmount] = useState(() => {
+    if (action === "addLp" || action === "removeLp") return "";
+    if (initialAmount && Number(initialAmount) > 0) return String(initialAmount);
+    if (action === "xdxPlatformFee" || action === "crossSwap") return "";
+    return "100000";
+  });
   const [quoteQty, setQuoteQty] = useState("");
   const [editedSide, setEditedSide] = useState("xdx");
   const [price, setPrice] = useState(spotPrice > 0 ? String(spotPrice) : "");
   const [lpAmount, setLpAmount] = useState("");
   const [walletLp, setWalletLp] = useState([]);
+  const [walletLines, setWalletLines] = useState([]);
+  const [walletHold, setWalletHold] = useState({});
+  const [walletAccount, setWalletAccount] = useState({});
   const [pools, setPools] = useState(() => (Array.isArray(initialPools) ? initialPools : []));
+  const [liveReserves, setLiveReserves] = useState(null);
   const [lineHint, setLineHint] = useState("");
+  const [lpLineReady, setLpLineReady] = useState(false);
+  const [quoteLineReady, setQuoteLineReady] = useState(false);
   const [formError, setFormError] = useState("");
   const [prices, setPrices] = useState(() => priceBookFromPools(initialPools));
   const [ledgerMarks, setLedgerMarks] = useState({});
+  const [loadedFor, setLoadedFor] = useState("");
+  const startRef = useRef(start);
+  const resumeOnceRef = useRef(false);
+  const filledPairRef = useRef("");
 
   const matched = poolRowForQuote(pools, { pair: `XDX/${quoteId}` });
-  const quote = useMemo(
-    () =>
-      resolveQuote(quoteId, {
-        ...quoteExtra,
-        quote_issuer: quoteExtra?.quoteIssuer || matched?.quote_issuer,
-        quote_hex: quoteExtra?.quoteHex || matched?.quote_hex,
-      }),
-    [quoteId, quoteExtra, matched]
-  );
+  const quote = useMemo(() => {
+    const resolved = resolveQuote(quoteId, {
+      ...quoteExtra,
+      quote_issuer: quoteExtra?.quoteIssuer || matched?.quote_issuer,
+      quote_hex: quoteExtra?.quoteHex || matched?.quote_hex,
+      currency: matched?.quote && !String(matched.quote).includes("/") ? matched.quote : quoteExtra?.quote,
+      amm: quoteExtra?.amm || matched?.amm_account,
+      lp_currency: quoteExtra?.lpCurrency || matched?.lp_currency,
+    });
+    if (resolved.issuer) return resolved;
+    const hinted = quoteHintsFromLines(walletLines, resolved);
+    if (!hinted.issuer) return resolved;
+    return { ...resolved, issuer: hinted.issuer, hex: hinted.hex || resolved.hex };
+  }, [quoteId, quoteExtra, matched, walletLines]);
   const quoteIssuer = quote.issuer || "";
   const quoteHex = quote.hex || "";
   const quotePair = quote.pair || "";
   const isLp = action === "addLp" || action === "removeLp";
+  const isPlatformFee = action === "xdxPlatformFee";
+  const isCrossSwap = action === "crossSwap";
+  const isAutoSign = isPlatformFee || isCrossSwap;
   const account = liveWalletAddress(walletAddress);
   const signedIn = Boolean(account);
-  const needTrust =
-    Boolean(quote.issuer) &&
-    !lineHint.includes(String(quote.currency || "").toUpperCase()) &&
-    !lineHint.includes(String(quote.issuer || "").toUpperCase());
-  const reserves = useMemo(() => poolReserves(pools, quote), [pools, quote]);
+  const lpSpec = useMemo(
+    () =>
+      poolForQuote(quote, pools, {
+        ...liveReserves,
+        amm_account: liveReserves?.amm_account || quote.amm || matched?.amm_account,
+        lp_currency: liveReserves?.lp_currency || quote.lpCurrency || matched?.lp_currency,
+      }),
+    [quote, pools, liveReserves, matched]
+  );
+  const haveLpLine =
+    lpLineReady ||
+    hasLpTrustline(walletLines, lpSpec) ||
+    hasLpRow(walletLp, quotePair, quoteId, lpSpec) ||
+    lpHeldForPair(walletLp, quotePair, quoteId, lpSpec) > 0;
+  const walletReady = !signedIn || loadedFor === `${account || ""}:${action || ""}:${quoteId}`;
+  const haveQuoteLine =
+    quoteLineReady ||
+    hasQuoteTrustline(walletLines, quote) ||
+    lineHint.includes(String(quote.hex || "").toUpperCase()) ||
+    lineHint.includes(String(quote.issuer || "").toUpperCase()) ||
+    lineHint.includes(String(quote.currency || "").toUpperCase());
+  const needLpLine =
+    action === "removeLp" &&
+    signedIn &&
+    shouldAskLpTrustline({ loaded: walletReady, haveLine: haveLpLine, spec: lpSpec });
+  const isSingleLp = isLp && lpMode === "single";
+  const isSingleRemove = action === "removeLp" && lpMode === "single";
+  const needQuoteTrust =
+    !isPlatformFee &&
+    shouldAskQuoteTrustline({
+      loaded: walletReady,
+      haveLine: haveQuoteLine,
+      haveLp: isLp && haveLpLine,
+      quote,
+    }) &&
+    !(isSingleLp && singleAsset === "xdx");
+  const reserves = useMemo(() => poolReserves(pools, quote, liveReserves), [pools, quote, liveReserves]);
   const implied = poolPrice(reserves.base, reserves.quote);
   const liveMark = ledgerMarks[quoteId] || null;
   const markerPx =
@@ -127,93 +207,209 @@ export default function TradePanel({
     orderType === "limit" && Number(price) > 0
       ? Number(price)
       : markerPx || (quoteId === "XRP" ? implied || headerSpot : 0);
+  const quoteReserve = reserves.quote;
   const linked = linkedDepositAmounts({
     editedSide,
     amount,
     quoteQty,
     price: px,
     reserveBase: reserves.base,
-    reserveQuote: reserves.quote,
+    reserveQuote: quoteReserve,
     preferMark: !isLp,
   });
   const total = tradeTotal(linked.xdx || amount, px);
-  const quoteHint = predictedQuoteOut(linked.xdx || amount, px, reserves.base, reserves.quote, {
+  const quoteHint = predictedQuoteOut(linked.xdx || amount, px, reserves.base, quoteReserve, {
     preferMark: !isLp,
   });
   const shownAmount = linked.xdxInput;
   const shownQuoteQty = linked.quoteInput;
-  const lpHint = expectedLpTokens(linked.xdx || amount, reserves.base, reserves.lpSupply);
-  const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
-  const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices, allowImplied: false });
-  const withdraw = expectedWithdraw(lpAmount || amount, reserves.base, reserves.quote, reserves.lpSupply);
   const typedXdx = Number(amount) || 0;
   const typedQuote = Number(quoteQty) || 0;
-  const deposit = depositValueSplit({
-    xdxAmount: action === "removeLp" ? withdraw.base : typedXdx,
-    quoteAmount: action === "removeLp" ? withdraw.quote : typedQuote,
-    xdxUsd,
-    quoteUsd,
-  });
+  const addXdx = isSingleLp ? (singleAsset === "xdx" ? typedXdx : 0) : linked.xdx || typedXdx;
+  const addQuote = isSingleLp
+    ? singleAsset === "quote"
+      ? typedQuote
+      : 0
+    : linked.quote || Number(shownQuoteQty) || Number(quoteHint) || 0;
+  const lpHint = isSingleLp
+    ? expectedSingleLpTokens(
+        singleAsset === "quote" ? addQuote : addXdx,
+        singleAsset === "quote" ? quoteReserve : reserves.base,
+        reserves.lpSupply
+      )
+    : expectedLpTokens(addXdx || amount, reserves.base, reserves.lpSupply);
+  const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
+  const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices, allowImplied: false });
+  const withdrawLp = lpAmount || amount;
+  const doubleWithdraw = expectedWithdraw(withdrawLp, reserves.base, reserves.quote, reserves.lpSupply);
+  const singleOut = isSingleRemove
+    ? expectedSingleWithdraw(
+        withdrawLp,
+        singleAsset === "quote" ? quoteReserve : reserves.base,
+        reserves.lpSupply,
+        reserves.tradingFee
+      )
+    : 0;
+  const withdraw = isSingleRemove
+    ? {
+        base: singleAsset === "xdx" ? singleOut : 0,
+        quote: singleAsset === "quote" ? singleOut : 0,
+      }
+    : doubleWithdraw;
+  const deposit = isSingleLp
+    ? {
+        xdxPct: singleAsset === "xdx" ? 100 : 0,
+        quotePct: singleAsset === "quote" ? 100 : 0,
+        measured: isSingleRemove
+          ? singleOut > 0
+          : (singleAsset === "xdx" ? typedXdx : typedQuote) > 0,
+        total: isSingleRemove
+          ? singleOut * (singleAsset === "quote" ? quoteUsd : xdxUsd)
+          : singleAsset === "xdx"
+            ? typedXdx * xdxUsd
+            : typedQuote * quoteUsd,
+      }
+    : depositValueSplit({
+        xdxAmount: action === "removeLp" ? withdraw.base : typedXdx,
+        quoteAmount: action === "removeLp" ? withdraw.quote : typedQuote,
+        xdxUsd,
+        quoteUsd,
+      });
   const splitReady = Boolean(deposit.measured);
-  const lpHeld = lpHeldForPair(walletLp, quotePair, quoteId);
+  const lpHeld = lpHeldForPair(walletLp, quotePair, quoteId, lpSpec);
+  const available = walletAvailableAmounts({
+    balances: walletHold,
+    account: walletAccount,
+    lines: walletLines,
+    quote,
+  });
+  const lineCover = unusedXrpCoversLines({
+    spendable: available.xrp,
+    total:
+      Number(walletHold.xrp) > 0
+        ? Number(walletHold.xrp)
+        : Number(walletAccount.balance_drops) > 0
+          ? Number(walletAccount.balance_drops) / 1_000_000
+          : walletHold.xrp,
+    account: walletAccount,
+    extraLines: extraTrustLinesNeeded({
+      needLpLine,
+      needQuoteTrust,
+      action,
+      haveLpLine,
+    }),
+  });
   const sides = tradeSides({
     action,
-    amount: linked.xdx || amount,
-    quoteQty: linked.quote || shownQuoteQty || quoteHint,
+    amount: isPlatformFee || isCrossSwap ? amount : action === "addLp" ? addXdx : linked.xdx || amount,
+    quoteQty: isCrossSwap ? quoteExtra?.receive : action === "addLp" ? addQuote : linked.quote || shownQuoteQty || quoteHint,
     quoteLabel: quote.label,
+    fromLabel: quoteExtra?.fromId || quote.label,
+    toLabel: quoteExtra?.toId || quote.label,
     total,
     lpAmount: lpAmount || amount,
     lpOut: lpHint,
     withdraw,
+    singleAsset: isSingleRemove ? singleAsset : undefined,
   });
   const titles = {
     buy: t.buyXdx,
     sell: t.sellXdx,
     addLp: t.addLiquidity,
     removeLp: t.removeLiquidity,
+    xdxPlatformFee: t.xdxPlatformFee || "1% XDX fee",
+    crossSwap: t.crossSwapTitle || "Swap",
   };
+  const fromQuote = resolveQuote(quoteExtra?.fromId || quoteId, {
+    quoteIssuer: quoteExtra?.fromIssuer,
+    quoteHex: quoteExtra?.fromHex,
+  });
+  const toQuote = resolveQuote(quoteExtra?.toId || quoteId, {
+    quoteIssuer: quoteExtra?.toIssuer || quote.issuer,
+    quoteHex: quoteExtra?.toHex || quote.hex,
+  });
+
+  useEffect(() => {
+    startRef.current = start;
+  }, [start]);
 
   useEffect(() => {
     if (!action) return undefined;
     let cancelled = false;
-    getQuoteMarks([quoteId])
-      .then((payload) => {
-        if (cancelled || !payload) return;
+    Promise.all([
+      getQuoteMarks([quoteId]).catch(() => null),
+      account ? getWalletLp(account).catch(() => []) : [],
+      account ? getWalletLines(account).catch(() => []) : [],
+      account ? getWalletBalances(account).catch(() => ({})) : {},
+      account ? getWalletAccount(account).catch(() => ({})) : {},
+    ]).then(([payload, nextLp, nextLines, nextHold, nextAccount]) => {
+      if (cancelled) return;
+      const nextPools = Array.isArray(payload?.pools) ? payload.pools : [];
+      if (payload) {
         setLedgerMarks(payload.marks || {});
-        if (Array.isArray(payload.pools)) setPools(payload.pools);
+        if (nextPools.length) setPools(nextPools);
         setPrices((current) =>
-          priceBookFromPools(payload.pools || [], {
+          priceBookFromPools(nextPools, {
             ...current,
             ...normalizePriceBook(payload.prices || {}),
           })
         );
-      })
-      .catch(() => {});
-    if (account) {
-      getWalletLp(account)
-        .then((nextLp) => {
-          if (cancelled) return;
-          const rows = Array.isArray(nextLp) ? nextLp : [];
-          setWalletLp(rows);
-          if (action === "removeLp") {
-            const have = lpHeldForPair(rows, quotePair, quoteId);
-            if (have > 0) setLpAmount((current) => current || String(have));
-          }
-        })
-        .catch(() => {});
-    }
-    if (account && quoteIssuer) {
-      getWalletBalances(account)
-        .then((balances) => {
-          if (cancelled) return;
-          setLineHint(JSON.stringify(balances.raw || {}).toUpperCase());
-        })
-        .catch(() => {});
-    }
+      }
+      const rows = Array.isArray(nextLp) ? nextLp : [];
+      setWalletLp(rows);
+      setWalletLines(Array.isArray(nextLines) ? nextLines : []);
+      setWalletHold(nextHold && typeof nextHold === "object" ? nextHold : {});
+      setWalletAccount(nextAccount && typeof nextAccount === "object" ? nextAccount : {});
+      setLineHint(JSON.stringify(nextHold?.raw || {}).toUpperCase());
+      setLoadedFor(`${account || ""}:${action || ""}:${quoteId}`);
+      if (action === "removeLp") {
+        const spec = poolForQuote(
+          resolveQuote(quoteId, { quote_issuer: quoteIssuer, quote_hex: quoteHex }),
+          nextPools
+        );
+        const have = lpHeldForPair(rows, quotePair, quoteId, spec);
+        const switched = filledPairRef.current !== quotePair;
+        filledPairRef.current = quotePair;
+        if (switched) setLpAmount(have > 0 ? String(have) : "");
+        else if (have > 0) setLpAmount((current) => current || String(have));
+      }
+    });
     return () => {
       cancelled = true;
     };
   }, [account, action, quoteHex, quoteId, quoteIssuer, quotePair]);
+
+  useEffect(() => {
+    if (action !== "addLp" && action !== "removeLp") return undefined;
+    let cancelled = false;
+    const pair = quotePair || `XDX/${quoteId}`;
+    function pull() {
+      getLiveLpReserves({
+        pair,
+        ammAccount:
+          quoteId === "XRP" || pair === "XDX/XRP"
+            ? lpSpec.amm || matched?.amm_account
+            : matched?.amm_account || quote.amm || lpSpec.amm,
+        quote: quoteId,
+        issuer: quoteIssuer,
+        hex: quoteHex,
+      })
+        .then((live) => {
+          if (cancelled) return;
+          setLiveReserves(live ? { ...live, pair } : { pair, empty: true });
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setLiveReserves((current) => (current?.pair === pair ? current : { pair, empty: true }));
+        });
+    }
+    pull();
+    const timer = window.setInterval(pull, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [action, quotePair, quoteId, quoteIssuer, quoteHex, quote.amm, lpSpec.amm, matched?.amm_account]);
 
   function close() {
     reset();
@@ -228,6 +424,19 @@ export default function TradePanel({
   }
 
   function buildTx() {
+    if (action === "xdxPlatformFee") {
+      return xdxPlatformFeeTxjson({ account, xdx: amount });
+    }
+    if (action === "crossSwap") {
+      return crossAssetSwapTxjson({
+        account,
+        fromQuote,
+        toQuote,
+        sendMax: amount,
+        deliver: quoteExtra?.receive,
+        routingMode: quoteExtra?.routingMode,
+      });
+    }
     if (action === "buy") {
       return offerCreateBuyXdx({
         account,
@@ -235,6 +444,7 @@ export default function TradePanel({
         xdx: linked.xdx || amount,
         cost: linked.quote || shownQuoteQty || total,
         market: orderType === "market",
+        routingMode: quoteExtra?.routingMode,
       });
     }
     if (action === "sell") {
@@ -244,21 +454,60 @@ export default function TradePanel({
         xdx: linked.xdx || amount,
         proceeds: linked.quote || shownQuoteQty || total,
         market: orderType === "market",
+        routingMode: quoteExtra?.routingMode,
       });
     }
     if (action === "addLp") {
       return ammDepositTx({
         account,
         quote,
-        xdx: linked.xdx || amount,
-        quoteQty: linked.quote || shownQuoteQty || quoteHint || total,
+        xdx: addXdx,
+        quoteQty: addQuote,
+        mode: lpMode,
+        singleAsset,
       });
     }
     return ammWithdrawTx({
       account,
       quote,
       lpAmount: lpAmount || amount,
+      pools,
+      live: liveReserves,
+      mode: lpMode,
+      singleAsset: isSingleRemove ? singleAsset : undefined,
     });
+  }
+
+  function tradeIntent() {
+    return {
+      action,
+      quote: quoteId,
+      quoteIssuer: quote.issuer || null,
+      quoteHex: quote.hex || null,
+      pair: quote.pair || `XDX/${quoteId}`,
+      ...(isLp ? { lpMode, singleAsset: isSingleLp ? singleAsset : undefined } : {}),
+      ...(!isLp ? { amount: Number((isAutoSign ? amount : linked.xdx) || amount) || 0 } : {}),
+      ...(action === "addLp"
+        ? { amount: addXdx, quoteQty: addQuote, lpOut: Number(lpHint) || 0 }
+        : {}),
+      ...(action === "removeLp"
+        ? { lpAmount: Number(withdrawLp) || 0, withdraw }
+        : {}),
+      ...(isPlatformFee
+        ? { amount: Number(amount) || 0, feeUsd: quoteExtra?.feeUsd || null, nextTrade: quoteExtra?.nextTrade || null }
+        : {}),
+      ...(isCrossSwap
+        ? {
+            fromId: quoteExtra?.fromId || null,
+            toId: quoteExtra?.toId || quoteId,
+            fromIssuer: quoteExtra?.fromIssuer || null,
+            fromHex: quoteExtra?.fromHex || null,
+            toIssuer: quoteExtra?.toIssuer || quote.issuer || null,
+            toHex: quoteExtra?.toHex || quote.hex || null,
+            receive: Number(quoteExtra?.receive) || 0,
+          }
+        : {}),
+    };
   }
 
   function signIn() {
@@ -279,11 +528,44 @@ export default function TradePanel({
       signIn();
       return;
     }
-    if (needTrust && quote.issuer) {
+    if (!lineCover.ok) {
+      setFormError(
+        (t.tradeNeedLineReserve || "")
+          .replace("{pair}", quotePair || `XDX/${quoteId}` || "this pair")
+          .replace("{amount}", formatToken(lineCover.need, locale, 4))
+      );
+      return;
+    }
+    if (needLpLine) {
+      const line = lpTrustSetTxjson(account, lpSpec);
+      if (!line) {
+        setFormError(t.needLpTrustline);
+        return;
+      }
+      start({
+        body: { txjson: line },
+        trade: tradeIntent(),
+        onExecuted: () => {
+          setLpLineReady(true);
+          notifyWalletRefresh();
+          getWalletLines(account, { fresh: true })
+            .then((rows) => setWalletLines(Array.isArray(rows) ? rows : []))
+            .catch(() => {});
+        },
+        onFailed: () => {
+          setFormError(t.lpTrustlineError);
+        },
+        errorMessage: t.lpTrustlineError,
+      });
+      return;
+    }
+    if (needQuoteTrust && quote.issuer) {
       const line = quoteTrustSetTxjson(account, quote);
       start({
         body: { txjson: line },
-        onSigned: () => {
+        trade: tradeIntent(),
+        onExecuted: () => {
+          setQuoteLineReady(true);
           setLineHint((current) => `${current} ${quote.currency} ${quote.issuer}`.toUpperCase());
           notifyWalletRefresh();
         },
@@ -291,8 +573,31 @@ export default function TradePanel({
       });
       return;
     }
-    const qty = Number(action === "removeLp" ? lpAmount || amount : linked.xdx || amount);
-    if (!(qty > 0)) {
+    const removeQty = Number(lpAmount || amount);
+    const tradeQty = Number(linked.xdx || amount);
+    if (action === "removeLp" && !(removeQty > 0)) {
+      setFormError(t.tradeNeedAmount);
+      return;
+    }
+    if (isSingleRemove && !(singleOut > 0)) {
+      setFormError(t.tradeNeedAmount);
+      return;
+    }
+    if (action === "removeLp" && !isSingleRemove && (!(withdraw.base > 0) || !(withdraw.quote > 0))) {
+      setFormError(t.lpTooSmall || t.tradeNeedAmount);
+      return;
+    }
+    if (action === "addLp") {
+      const haveDeposit = isSingleLp
+        ? singleAsset === "quote"
+          ? addQuote > 0
+          : addXdx > 0
+        : addXdx > 0 && addQuote > 0;
+      if (!haveDeposit) {
+        setFormError(t.tradeNeedAmount);
+        return;
+      }
+    } else if (action !== "removeLp" && !(Number(isAutoSign ? amount : tradeQty) > 0)) {
       setFormError(t.tradeNeedAmount);
       return;
     }
@@ -300,27 +605,103 @@ export default function TradePanel({
       setFormError(t.tradeNeedTrustline);
       return;
     }
-    if (action === "addLp" && !(linked.quote > 0)) {
-      setFormError(t.tradeNeedAmount);
-      return;
-    }
-    if (!isLp && !(px > 0)) {
+    if (!isLp && !isAutoSign && !(px > 0)) {
       setFormError(t.tradeNeedPrice);
       return;
     }
+    if (isPlatformFee) {
+      const feeTx = xdxPlatformFeeTxjson({ account, xdx: amount });
+      if (!feeTx) {
+        if (quoteExtra?.nextTrade) onClose(quoteExtra.nextTrade);
+        else setFormError(t.tradeNeedAmount);
+        return;
+      }
+    }
     start({
       body: { txjson: buildTx() },
+      trade: tradeIntent(),
       onSigned: () => {
         notifyWalletRefresh();
       },
       onExecuted: () => {
         notifyWalletRefresh();
         onSigned?.();
+        if (isPlatformFee && quoteExtra?.nextTrade) {
+          onClose(quoteExtra.nextTrade);
+          return;
+        }
         onClose();
+      },
+      onFailed: (detection) => {
+        setFormError(
+          `${t.tradeFailed}${detection?.engineResult ? ` · ${detection.engineResult}` : ""}`
+        );
       },
       errorMessage: t.tradeSignError,
     });
   }
+
+  useEffect(() => {
+    const id = String(resumeUuid || "").trim();
+    const pending = peekPendingPayload();
+    if (
+      !isPayloadUuid(id) ||
+      isConsumedUuid(id) ||
+      pending?.signState === "executed" ||
+      (pending?.uuid && pending.uuid !== id) ||
+      !signedIn ||
+      resumeOnceRef.current
+    ) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      if (resumeOnceRef.current) return;
+      resumeOnceRef.current = true;
+      startRef.current({
+        resumeUuid: id,
+        body: { txjson: resumeTxjson || { TransactionType: action === "addLp" ? "AMMDeposit" : action === "removeLp" ? "AMMWithdraw" : "Payment" } },
+        trade: {
+          action,
+          quote: quoteId,
+          quoteIssuer: quoteIssuer || null,
+          quoteHex: quoteHex || null,
+          pair: quotePair || `XDX/${quoteId}`,
+        },
+        onSigned: () => {
+          notifyWalletRefresh();
+        },
+        onExecuted: () => {
+          notifyWalletRefresh();
+          onSigned?.();
+          if (action === "xdxPlatformFee" && quoteExtra?.nextTrade) {
+            onClose(quoteExtra.nextTrade);
+            return;
+          }
+          onClose();
+        },
+        onFailed: (detection) => {
+          setFormError(
+            `${t.tradeFailed}${detection?.engineResult ? ` · ${detection.engineResult}` : ""}`
+          );
+        },
+        errorMessage: t.tradeSignError,
+      });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [
+    action,
+    onClose,
+    onSigned,
+    quoteHex,
+    quoteId,
+    quoteIssuer,
+    quotePair,
+    resumeTxjson,
+    resumeUuid,
+    signedIn,
+    t.tradeFailed,
+    t.tradeSignError,
+  ]);
 
   if (!action) return null;
 
@@ -335,14 +716,28 @@ export default function TradePanel({
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id="trade-panel-title" className="modal-title">
-          {titles[action] || t.tradeActions}
+          {needLpLine ? t.lpTrustline : titles[action] || t.tradeActions}
         </h2>
         {signedIn ? (
           <p className="trade-panel-account">{shortAddress(account)}</p>
         ) : (
           <p className="trade-panel-hint">{t.signInToTrade}</p>
         )}
+        {needLpLine ? <p className="trade-panel-hint">{t.needLpTrustline}</p> : null}
+        {isPlatformFee ? (
+          <>
+            <p className="trade-panel-hint">{t.swapPlatformFeeHint}</p>
+            <p className="trade-panel-account">{formatToken(amount, locale, 6)} XDX</p>
+          </>
+        ) : null}
+        {isCrossSwap ? (
+          <p className="trade-panel-hint">
+            {`${quoteExtra?.fromId || ""} → ${quoteExtra?.toId || quoteId}`}
+          </p>
+        ) : null}
 
+        {isAutoSign ? null : (
+        <>
         <label className="trade-field">
           {t.tradePair}
           <BrandSelect
@@ -353,6 +748,8 @@ export default function TradePanel({
               setQuoteQty("");
               setEditedSide("xdx");
               setPrice("");
+              setLpLineReady(false);
+              setQuoteLineReady(false);
             }}
             ariaLabel={t.tradePair}
             searchable
@@ -360,7 +757,72 @@ export default function TradePanel({
           />
         </label>
 
-        {!isLp ? (
+        {isLp ? (
+          <>
+            <div
+              className="tabs trade-lp-mode"
+              role="tablist"
+              aria-label={action === "removeLp" ? t.lpWithdrawMode || t.lpDepositMode : t.lpDepositMode}
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={lpMode === "double"}
+                className={`tab${lpMode === "double" ? " active" : ""}`}
+                onClick={() => setLpMode("double")}
+              >
+                {t.lpDoubleSided}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={lpMode === "single"}
+                className={`tab${lpMode === "single" ? " active" : ""}`}
+                onClick={() => {
+                  setLpMode("single");
+                  setSingleAsset(editedSide === "quote" ? "quote" : "xdx");
+                }}
+              >
+                {t.lpSingleSided}
+              </button>
+            </div>
+            {isSingleLp ? (
+              <>
+                <div className="tabs trade-lp-asset" role="tablist" aria-label={t.lpSingleAsset}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={singleAsset === "xdx"}
+                    className={`tab${singleAsset === "xdx" ? " active" : ""}`}
+                    onClick={() => {
+                      setSingleAsset("xdx");
+                      setEditedSide("xdx");
+                    }}
+                  >
+                    XDX
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={singleAsset === "quote"}
+                    className={`tab${singleAsset === "quote" ? " active" : ""}`}
+                    onClick={() => {
+                      setSingleAsset("quote");
+                      setEditedSide("quote");
+                    }}
+                  >
+                    {quote.label}
+                  </button>
+                </div>
+                <p className="trade-panel-hint trade-lp-hint">
+                  {action === "removeLp" ? t.lpSingleRemoveHint || t.lpSingleHint : t.lpSingleHint}
+                </p>
+              </>
+            ) : null}
+          </>
+        ) : null}
+
+        {needLpLine ? null : !isLp ? (
           <label className="trade-field">
             {t.tradeOrderType}
             <BrandSelect
@@ -378,6 +840,8 @@ export default function TradePanel({
           </label>
         ) : null}
 
+        {needLpLine ? null : (
+        <>
         {action === "removeLp" ? (
           <label className="trade-field">
             {t.tradeLpTokens}
@@ -396,7 +860,7 @@ export default function TradePanel({
               <span className="trade-lp-disconnected">{t.walletNotConnected}</span>
             )}
           </label>
-        ) : (
+        ) : isSingleLp && singleAsset === "quote" ? null : (
           <label className="trade-field">
             {t.xdxAmount}
             <input
@@ -415,13 +879,23 @@ export default function TradePanel({
               }}
             />
             {action === "addLp" ? (
-              <span className="trade-field-usd">
-                {xdxUsd > 0 && typedXdx > 0 ? formatUsd(typedXdx * xdxUsd, locale) : "—"}
-              </span>
+              <>
+                <span className="trade-field-usd">
+                  {xdxUsd > 0 && typedXdx > 0 ? formatUsd(typedXdx * xdxUsd, locale) : "—"}
+                </span>
+                <span className="trade-field-usd">
+                  {(t.createPoolAvailable || "Available {amount} {asset}")
+                    .replace(
+                      "{amount}",
+                      signedIn && available.xdx != null ? formatToken(available.xdx, locale, 6) : "—"
+                    )
+                    .replace("{asset}", "XDX")}
+                </span>
+              </>
             ) : null}
           </label>
         )}
-        {action === "removeLp" ? (
+        {action === "removeLp" && (!isSingleRemove || singleAsset === "xdx") ? (
           <label className="trade-field">
             {t.xdxAmount}
             <input type="text" readOnly value={formatToken(withdraw.base, locale, 6)} />
@@ -472,7 +946,15 @@ export default function TradePanel({
             </div>
           </div>
         ) : null}
-        {action !== "removeLp" ? (
+        {action === "removeLp" && (!isSingleRemove || singleAsset === "quote") ? (
+          <label className="trade-field">
+            {quote.label}
+            <input type="text" readOnly value={formatToken(withdraw.quote, locale, 6)} />
+            <span className="trade-field-usd">
+              {quoteUsd > 0 ? formatUsd(withdraw.quote * quoteUsd, locale) : "—"}
+            </span>
+          </label>
+        ) : isSingleLp && singleAsset === "xdx" ? null : (
           <label className="trade-field">
             {quote.label}
             <input
@@ -491,18 +973,20 @@ export default function TradePanel({
               }}
             />
             {action === "addLp" ? (
-              <span className="trade-field-usd">
-                {quoteUsd > 0 && typedQuote > 0 ? formatUsd(typedQuote * quoteUsd, locale) : "—"}
-              </span>
+              <>
+                <span className="trade-field-usd">
+                  {quoteUsd > 0 && typedQuote > 0 ? formatUsd(typedQuote * quoteUsd, locale) : "—"}
+                </span>
+                <span className="trade-field-usd">
+                  {(t.createPoolAvailable || "Available {amount} {asset}")
+                    .replace(
+                      "{amount}",
+                      signedIn && available.quote != null ? formatToken(available.quote, locale, 6) : "—"
+                    )
+                    .replace("{asset}", quote.label)}
+                </span>
+              </>
             ) : null}
-          </label>
-        ) : (
-          <label className="trade-field">
-            {quote.label}
-            <input type="text" readOnly value={formatToken(withdraw.quote, locale, 6)} />
-            <span className="trade-field-usd">
-              {quoteUsd > 0 ? formatUsd(withdraw.quote * quoteUsd, locale) : "—"}
-            </span>
           </label>
         )}
 
@@ -539,14 +1023,33 @@ export default function TradePanel({
             <dd>~{LEDGER_FEE_XRP} XRP</dd>
           </div>
         </dl>
+        </>
+        )}
+        </>
+        )}
 
-        {needTrust && quote.issuer && signedIn ? <p className="trade-panel-hint">{t.tradeNeedTrustline}</p> : null}
+        {needLpLine ? null : needQuoteTrust && quote.issuer && signedIn ? (
+          <p className="trade-panel-hint">{t.tradeNeedTrustline}</p>
+        ) : null}
+        {signedIn && !lineCover.ok ? (
+          <p className="trade-panel-hint">
+            {(t.tradeNeedLineReserve || "")
+              .replace("{pair}", quotePair || `XDX/${quoteId}`)
+              .replace("{amount}", formatToken(lineCover.need, locale, 4))}
+          </p>
+        ) : null}
         {formError ? <p className="wallet-error">{formError}</p> : null}
         {error ? <p className="wallet-error">{error}</p> : null}
 
         <div className="trade-panel-actions">
           <button type="button" className="connect-wallet-btn" onClick={submit}>
-            {!signedIn ? t.signInToTrade : needTrust && quote.issuer ? t.xdxTrustline : t.tradeSign}
+            {!signedIn
+              ? t.signInToTrade
+              : needLpLine
+                ? t.lpTrustline
+                : needQuoteTrust && quote.issuer
+                  ? t.quoteTrustline.replace("{asset}", quote.label)
+                  : t.tradeSign}
           </button>
           <button type="button" className="cancel-wallet-btn" onClick={close}>
             {t.cancel}
@@ -554,13 +1057,31 @@ export default function TradePanel({
         </div>
       </div>
       <WalletModal
-        visible={status === "loading" || status === "waiting"}
+        visible={status === "loading" || status === "waiting" || status === "confirming"}
         qrUrl={qr}
         mobileUrl={mobileUrl}
         uuid={uuid}
         status={status}
-        preparingLabel={t.preparingTrade}
-        scanLabel={t.scanTrade}
+        preparingLabel={
+          needLpLine
+            ? t.preparingLpTrustline
+            : needQuoteTrust && quote.issuer
+              ? t.preparingTrustline
+              : t.preparingTrade
+        }
+        scanLabel={
+          status === "confirming"
+            ? needLpLine
+              ? t.confirmingLpTrustline
+              : needQuoteTrust && quote.issuer
+                ? t.confirmingTrustline
+                : t.confirmingTrade
+            : needLpLine
+              ? t.scanLpTrustline
+              : needQuoteTrust && quote.issuer
+                ? t.scanTrustline
+                : t.scanTrade
+        }
         onClose={reset}
       />
     </div>,

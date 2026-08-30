@@ -33,6 +33,11 @@ export default function WalletButton({
         if (event.button) return;
         fire(event);
       }}
+      onTouchEnd={(event) => {
+        if (disabled) return;
+        if (event.cancelable) event.preventDefault();
+        fire(event);
+      }}
       onClick={fire}
       disabled={disabled}
       title={title || (connected ? t.disconnect : t.connectWallet)}
