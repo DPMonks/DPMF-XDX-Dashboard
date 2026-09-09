@@ -415,6 +415,7 @@ function classifyAimQuestion(raw) {
   const q = String(raw || "").toLowerCase();
   const agentMatch = q.match(/\bagent\s*([1-5])\b/) || q.match(/\ba([1-5])\b/);
   if (agentMatch) return { intent: "agent", agentNum: agentMatch[1] };
+  if (/^(hi|hello|hey|yo|gm|good (morning|afternoon|evening))\b/i.test(q) || /\b(hi|hello|hey)\b[,!.]?\s*(commander)?\s*$/i.test(q)) return { intent: "greeting" };
   if (/\b(help|what can you|commands|how (do|to) ask)\b/.test(q)) return { intent: "help" };
   if (/\b(xio|xsquad|xdx)\b/.test(q) || /\b(native|dpmf asset|our token)\b/.test(q)) {
     return { intent: "assets" };
@@ -588,7 +589,13 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null) {
   const base = String(process.env.AIM_LLM_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.x.ai/v1")
     .trim()
     .replace(/\/$/, "");
-  const model = String(process.env.AIM_LLM_MODEL || process.env.XAI_MODEL || "grok-2-latest").trim();
+  const isGemini = /generativelanguage\.googleapis\.com/i.test(base);
+  // Gemini retired gemini-2.0-flash; prefer env, else a current flash id on Gemini, else grok default.
+  const model = String(
+    process.env.AIM_LLM_MODEL ||
+      process.env.XAI_MODEL ||
+      (isGemini ? "gemini-3.6-flash" : "grok-2-latest")
+  ).trim();
   const compact = {
     commander: scrubValue(ctx.heartbeats?.find((h) => h.agent_id === "commander") || null),
     agents: (ctx.heartbeats || [])
@@ -610,14 +617,14 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null) {
     web_search: scrubValue(web),
   };
   const system = `You are Commander on the XDX Exchange AI-Matrix dashboard.
-Speak as Commander: concise, confident, dynamic. Never reuse a canned one-liner. Never use em dashes (—) or en dashes (–); use periods or commas.
-Answer from the provided live context + general XRPL knowledge. Prefer concrete numbers from the context.
-Default stance is neutral data analysis (ledger, pools, agents, indexer).
-When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
+Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
+Speak as Commander: concise, confident. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas.
+Answer the question asked. Prefer concrete numbers from the live context (pools, ledger, agents). If the data is missing, say what is missing in one short line, then the best next ask.
+Greetings get one short acknowledgement plus one useful live fact, then stop.
+Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
 Observe-only: do not claim trades executed, do not request seeds/keys, do not reveal wallet addresses or agent role codenames.
-If you scanned txs, give a brief summary and a clear opinion grounded in the counts/types you saw.
-If web_search is present, use it for live outside knowledge and cite it briefly; prefer those sources over guessing.
-Keep replies under 120 words. Replies are ephemeral (no chat history).
+If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing.
+Keep replies under 80 words unless the user asks for detail. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
 
   const ctrl = new AbortController();
@@ -631,7 +638,7 @@ Reply in language/locale: ${lang || "en"}. If that is not English, write the ent
       },
       body: JSON.stringify({
         model,
-        temperature: 0.9,
+        temperature: 0.4,
         messages: [
           { role: "system", content: system },
           {
@@ -686,6 +693,23 @@ function answerAimQuestion(question, ctx, scan) {
       "Pulling current signals.",
     ])
   );
+
+    if (classified.intent === "greeting") {
+    const hb = ctx.heartbeats || [];
+    const commander = hb.find((h) => h.agent_id === "commander");
+    const agents = hb.filter((h) => h.agent_id !== "commander");
+    const active = agents.filter((h) => String(h.status || "").toLowerCase() !== "offline").length;
+    const top = ctx.pools?.top || ctx.pools?.rows?.[0];
+    const topLabel = top ? `${top.asset || top.base || "pool"}` : null;
+    const lines = [
+      "Commander here.",
+      commander ? `Looping, online.` : null,
+      agents.length ? `${active}/${agents.length} agents active.` : null,
+      topLabel ? `Top pool signal: ${topLabel}.` : null,
+      "Ask a direct question when ready.",
+    ].filter(Boolean);
+    return { type: "commander_answer", intent: "greeting", text: lines.join(" ") };
+  }
 
   if (classified.intent === "help") {
     push("Ask about status, Agent 1–5, pools, XRPL txs/ledger, indexer, DPMF, or natives XDX/XIO/XSQUAD.");
