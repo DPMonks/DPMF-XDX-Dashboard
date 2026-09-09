@@ -416,6 +416,7 @@ function classifyAimQuestion(raw) {
   const agentMatch = q.match(/\bagent\s*([1-5])\b/) || q.match(/\ba([1-5])\b/);
   if (agentMatch) return { intent: "agent", agentNum: agentMatch[1] };
   if (/^(hi|hello|hey|yo|gm|good (morning|afternoon|evening))\b/i.test(q) || /\b(hi|hello|hey)\b[,!.]?\s*(commander)?\s*$/i.test(q)) return { intent: "greeting" };
+  if (/\b(what (is|are) (this|xdx|the exchange|the platform|the dashboard|ai[- ]?matrix)|what do you (do|call this)|who are you)\b/i.test(q)) return { intent: "identity" };
   if (/\b(help|what can you|commands|how (do|to) ask)\b/.test(q)) return { intent: "help" };
   if (/\b(xio|xsquad|xdx)\b/.test(q) || /\b(native|dpmf asset|our token)\b/.test(q)) {
     return { intent: "assets" };
@@ -621,6 +622,7 @@ Be direct. Lead with the answer in the first sentence. Do not open with filler l
 Speak as Commander: concise, confident. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas.
 Answer the question asked. Prefer concrete numbers from the live context (pools, ledger, agents). If the data is missing, say what is missing in one short line, then the best next ask.
 Greetings get one short acknowledgement plus one useful live fact, then stop.
+If asked what this is, what the exchange is, what this platform/dashboard is, or what XDX Exchange is: say it is the XDX Exchange Operational Intelligence Interface (AI-Matrix observe layer). Keep that name exact.
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
 Observe-only: do not claim trades executed, do not request seeds/keys, do not reveal wallet addresses or agent role codenames.
 If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing.
@@ -686,6 +688,32 @@ function answerAimQuestion(question, ctx, scan) {
     if (s) lines.push(s);
   };
 
+  if (classified.intent === "greeting") {
+    const active = looping;
+    const topName = agent2Pools?.top_pool || (ctx.pools?.top?.[0]?.name) || null;
+    return {
+      type: "commander_answer",
+      intent: "greeting",
+      text: [
+        "Commander here.",
+        commander ? "Looping." : null,
+        agents.length ? `${active}/${agents.length} agents active.` : null,
+        topName ? `Top pool: ${topName}.` : null,
+        "Ask a direct question when ready.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    };
+  }
+
+  if (classified.intent === "identity") {
+    return {
+      type: "commander_answer",
+      intent: "identity",
+      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, or XRPL context anytime.",
+    };
+  }
+
   push(
     pickLine(seed, [
       "Commander here. Fresh read.",
@@ -693,23 +721,6 @@ function answerAimQuestion(question, ctx, scan) {
       "Pulling current signals.",
     ])
   );
-
-    if (classified.intent === "greeting") {
-    const hb = ctx.heartbeats || [];
-    const commander = hb.find((h) => h.agent_id === "commander");
-    const agents = hb.filter((h) => h.agent_id !== "commander");
-    const active = agents.filter((h) => String(h.status || "").toLowerCase() !== "offline").length;
-    const top = ctx.pools?.top || ctx.pools?.rows?.[0];
-    const topLabel = top ? `${top.asset || top.base || "pool"}` : null;
-    const lines = [
-      "Commander here.",
-      commander ? `Looping, online.` : null,
-      agents.length ? `${active}/${agents.length} agents active.` : null,
-      topLabel ? `Top pool signal: ${topLabel}.` : null,
-      "Ask a direct question when ready.",
-    ].filter(Boolean);
-    return { type: "commander_answer", intent: "greeting", text: lines.join(" ") };
-  }
 
   if (classified.intent === "help") {
     push("Ask about status, Agent 1–5, pools, XRPL txs/ledger, indexer, DPMF, or natives XDX/XIO/XSQUAD.");

@@ -2,7 +2,7 @@ import { normalizeLang } from "./aimLocale";
 
 const VOICE_PREF_KEY = "aim.commander.voiceOn";
 
-/** Locked premium target: sample 3b3c — Ryan deep + brisk (Edge TTS). */
+/** Locked premium target: sample 3b3c. Ryan deep + brisk (Edge TTS). */
 export const COMMANDER_VOICE_TARGET = {
   id: "3b3c-deep-brisk",
   engine: "edge-tts-universal",
@@ -54,15 +54,100 @@ export function writeVoicePref(on) {
 }
 
 let currentAudio = null;
+let revealRaf = 0;
+let revealTimer = 0;
 
-function speakBrowserFallback(text, lang) {
+function clearRevealLoops() {
+  if (revealRaf) {
+    cancelAnimationFrame(revealRaf);
+    revealRaf = 0;
+  }
+  if (revealTimer) {
+    clearInterval(revealTimer);
+    revealTimer = 0;
+  }
+}
+
+function emitProgress(onProgress, chars, total) {
+  if (typeof onProgress !== "function") return;
+  const n = Math.max(0, Math.min(total, chars | 0));
+  onProgress({ chars: n, total, ratio: total ? n / total : 1 });
+}
+
+/** Soft typewriter when there is no audio clock (voice off / unknown duration). */
+function runTimedReveal(text, onProgress, onDone, { msPerChar = 28 } = {}) {
+  clearRevealLoops();
+  const total = String(text || "").length;
+  let i = 0;
+  emitProgress(onProgress, 0, total);
+  revealTimer = window.setInterval(() => {
+    i = Math.min(total, i + 1);
+    emitProgress(onProgress, i, total);
+    if (i >= total) {
+      clearRevealLoops();
+      if (typeof onDone === "function") onDone();
+    }
+  }, Math.max(12, msPerChar));
+}
+
+function syncAudioReveal(audio, text, onProgress, onDone) {
+  clearRevealLoops();
+  const total = String(text || "").length;
+  const tick = () => {
+    if (!currentAudio || currentAudio !== audio) return;
+    const dur = audio.duration;
+    if (Number.isFinite(dur) && dur > 0) {
+      const ratio = Math.min(1, Math.max(0, audio.currentTime / dur));
+      emitProgress(onProgress, Math.floor(ratio * total), total);
+    }
+    if (!audio.paused && !audio.ended) {
+      revealRaf = requestAnimationFrame(tick);
+    }
+  };
+  const start = () => {
+    emitProgress(onProgress, 0, total);
+    revealRaf = requestAnimationFrame(tick);
+  };
+  if (audio.readyState >= 1 && Number.isFinite(audio.duration)) start();
+  else audio.addEventListener("loadedmetadata", start, { once: true });
+
+  audio.addEventListener(
+    "ended",
+    () => {
+      clearRevealLoops();
+      emitProgress(onProgress, total, total);
+      if (typeof onDone === "function") onDone();
+    },
+    { once: true }
+  );
+}
+
+function speakBrowserFallback(text, lang, onProgress, onDone) {
   const synth = window.speechSynthesis;
-  if (!synth || !text) return;
-  const utter = new SpeechSynthesisUtterance(String(text).slice(0, 1400));
+  if (!synth || !text) {
+    runTimedReveal(text, onProgress, onDone);
+    return;
+  }
+  const line = String(text);
+  const utter = new SpeechSynthesisUtterance(line.slice(0, 1400));
   utter.rate = 1.08;
   utter.pitch = 0.82;
   utter.volume = 1;
   utter.lang = normalizeLang(lang);
+  const total = line.length;
+  emitProgress(onProgress, 0, total);
+  utter.onboundary = (ev) => {
+    if (typeof ev.charIndex === "number") {
+      emitProgress(onProgress, Math.min(total, ev.charIndex + (ev.charLength || 1)), total);
+    }
+  };
+  utter.onend = () => {
+    emitProgress(onProgress, total, total);
+    if (typeof onDone === "function") onDone();
+  };
+  utter.onerror = () => {
+    runTimedReveal(line, onProgress, onDone, { msPerChar: 22 });
+  };
   const applyVoice = () => {
     const voice = pickCommanderVoice(synth.getVoices(), lang);
     if (voice) {
@@ -84,13 +169,23 @@ function speakBrowserFallback(text, lang) {
   }
 }
 
-/** Prefer server Edge TTS (3b3c). Fall back to browser voice if speak API fails. */
-export async function speakCommander(text, { voiceOn = true, lang = "en" } = {}) {
-  if (!voiceOn || typeof window === "undefined") return;
+/**
+ * Prefer server Edge TTS (3b3c). Fall back to browser voice if speak API fails.
+ * onProgress({ chars, total, ratio }) fires as speech advances so UI can type in sync.
+ */
+export async function speakCommander(text, { voiceOn = true, lang = "en", onProgress, onDone } = {}) {
   const line = String(text || "").trim();
-  if (!line) return;
+  if (!line || typeof window === "undefined") {
+    if (typeof onDone === "function") onDone();
+    return { mode: "none" };
+  }
 
   stopCommanderSpeech();
+
+  if (!voiceOn) {
+    runTimedReveal(line, onProgress, onDone, { msPerChar: 16 });
+    return { mode: "typewriter" };
+  }
 
   try {
     const res = await fetch("/api/aim/speak", {
@@ -105,15 +200,20 @@ export async function speakCommander(text, { voiceOn = true, lang = "en" } = {})
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     currentAudio = audio;
-    audio.onended = () => {
+    syncAudioReveal(audio, line, onProgress, () => {
       URL.revokeObjectURL(url);
       if (currentAudio === audio) currentAudio = null;
+      if (typeof onDone === "function") onDone();
+    });
+    audio.onended = () => {
+      /* ended also handled in syncAudioReveal */
     };
     await audio.play();
-    return;
+    return { mode: "edge" };
   } catch (err) {
     console.warn("[AIM] Edge speak failed, browser fallback", err?.message || err);
-    speakBrowserFallback(line, lang);
+    speakBrowserFallback(line, lang, onProgress, onDone);
+    return { mode: "browser" };
   }
 }
 
@@ -121,9 +221,9 @@ export function aimVoiceEngineLabel() {
   return COMMANDER_VOICE_TARGET.id;
 }
 
-
 export function stopCommanderSpeech() {
   if (typeof window === "undefined") return;
+  clearRevealLoops();
   try {
     window.speechSynthesis?.cancel();
   } catch {

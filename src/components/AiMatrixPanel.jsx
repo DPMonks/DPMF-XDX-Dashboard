@@ -100,18 +100,57 @@ export default function AiMatrixPanel() {
     const message = text.trim();
     if (!message || busy) return;
     setBusy(true);
-    setLocalChat((rows) => [...rows, { role: "you", text: message, at: new Date().toISOString() }]);
+    const thinkingId = `thinking-${Date.now()}`;
+    setLocalChat((rows) => [
+      ...rows,
+      { role: "you", text: message, at: new Date().toISOString() },
+      {
+        id: thinkingId,
+        role: "commander",
+        text: "Composing…",
+        at: new Date().toISOString(),
+        pending: true,
+        reveal: 11,
+      },
+    ]);
     setText("");
     try {
       const out = await postAimChat(message, { lang: langPref === "auto" ? "auto" : effectiveLang });
       const reply = out.reply?.body?.text || "Queued.";
       const replyLang = out.lang || effectiveLang;
-      setLocalChat((rows) => [...rows, { role: "commander", text: reply, at: new Date().toISOString(), lang: replyLang }]);
-      await speakCommander(reply, { voiceOn, lang: replyLang });
+      const replyId = `cmd-${Date.now()}`;
+      setLocalChat((rows) => [
+        ...rows.filter((r) => r.id !== thinkingId),
+        {
+          id: replyId,
+          role: "commander",
+          text: reply,
+          at: new Date().toISOString(),
+          lang: replyLang,
+          reveal: 0,
+          speaking: true,
+        },
+      ]);
+      await speakCommander(reply, {
+        voiceOn,
+        lang: replyLang,
+        onProgress: ({ chars }) => {
+          setLocalChat((rows) =>
+            rows.map((r) => (r.id === replyId ? { ...r, reveal: chars, speaking: true } : r))
+          );
+        },
+        onDone: () => {
+          setLocalChat((rows) =>
+            rows.map((r) =>
+              r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r
+            )
+          );
+        },
+      });
       await refresh();
     } catch (err) {
       setLocalChat((rows) => [
-        ...rows,
+        ...rows.filter((r) => r.id !== thinkingId),
         { role: "system", text: err.message || "Chat failed", at: new Date().toISOString() },
       ]);
     } finally {
@@ -215,15 +254,28 @@ export default function AiMatrixPanel() {
         <section className="aim-chat neon-inset">
           <h3>Commander chat</h3>
           <div className="aim-chat-log">
-            {localChat.map((m, i) => (
-              <div key={`local-${i}`} className={`aim-bubble is-${m.role}`}>
-                <small>
-                  {m.role === "you" ? "You" : m.role === "commander" ? "Commander" : "System"}
-                  {m.lang ? ` · ${m.lang}` : ""}
-                </small>
-                <p>{m.text}</p>
-              </div>
-            ))}
+            {localChat.map((m, i) => {
+              const full = m.text || "";
+              const revealed =
+                typeof m.reveal === "number" ? full.slice(0, Math.max(0, m.reveal)) : full;
+              const showCaret = m.role === "commander" && (m.speaking || m.pending);
+              return (
+                <div
+                  key={m.id || `local-${i}`}
+                  className={`aim-bubble is-${m.role}${m.speaking ? " is-speaking" : ""}${m.pending ? " is-pending" : ""}`}
+                >
+                  <small>
+                    {m.role === "you" ? "You" : m.role === "commander" ? "Commander" : "System"}
+                    {m.lang ? ` · ${m.lang}` : ""}
+                    {m.speaking ? " · live" : ""}
+                  </small>
+                  <p>
+                    {revealed}
+                    {showCaret ? <span className="aim-speak-caret" aria-hidden="true" /> : null}
+                  </p>
+                </div>
+              );
+            })}
             {!localChat.length ? (
               <p className="aim-empty">No chat yet. Ask about status, pools, XRPL txs, or market context.</p>
             ) : null}

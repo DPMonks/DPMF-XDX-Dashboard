@@ -125,3 +125,24 @@
 .aim-lang-option.is-active {
   box-shadow: inset 2px 0 0 #67e8f9;
 }
+
+.aim-bubble.is-speaking {
+  box-shadow: 0 0 0 1px rgba(103, 232, 249, 0.35), 0 0 18px rgba(34, 211, 238, 0.12);
+}
+.aim-bubble.is-pending {
+  opacity: 0.72;
+  font-style: italic;
+}
+.aim-speak-caret {
+  display: inline-block;
+  width: 0.45ch;
+  height: 1em;
+  margin-left: 0.1ch;
+  vertical-align: -0.12em;
+  background: #67e8f9;
+  box-shadow: 0 0 8px rgba(103, 232, 249, 0.8);
+  animation: aim-caret-blink 0.9s steps(1) infinite;
+}
+@keyframes aim-caret-blink {
+  50% { opacity: 0; }
+}
