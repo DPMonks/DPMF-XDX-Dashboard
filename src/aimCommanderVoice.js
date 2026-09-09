@@ -12,6 +12,10 @@ export const COMMANDER_VOICE_TARGET = {
   style: "natural British male",
 };
 
+/** Tiny silent wav used to unlock autoplay during a user gesture (Send / Voice on). */
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+
 export function pickCommanderVoice(voices, lang = "en") {
   const list = Array.isArray(voices) ? voices : [];
   if (!list.length) return null;
@@ -53,9 +57,52 @@ export function writeVoicePref(on) {
   }
 }
 
-let currentAudio = null;
+let sharedAudio = null;
+let currentObjectUrl = null;
 let revealRaf = 0;
 let revealTimer = 0;
+let lastEngine = "none";
+
+function getSharedAudio() {
+  if (typeof window === "undefined") return null;
+  if (!sharedAudio) {
+    sharedAudio = new Audio();
+    sharedAudio.preload = "auto";
+  }
+  return sharedAudio;
+}
+
+/**
+ * Call synchronously from a user gesture (Send click / Voice on).
+ * Browsers drop autoplay permission after long awaits (LLM chat); this keeps Edge N1 playable.
+ */
+export function unlockCommanderAudio() {
+  if (typeof window === "undefined") return;
+  const audio = getSharedAudio();
+  if (!audio) return;
+  try {
+    audio.muted = true;
+    audio.src = SILENT_WAV;
+    const p = audio.play();
+    if (p && typeof p.then === "function") {
+      p.then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.muted = false;
+      }).catch(() => {
+        audio.muted = false;
+      });
+    } else {
+      audio.muted = false;
+    }
+  } catch {
+    try {
+      audio.muted = false;
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
 function clearRevealLoops() {
   if (revealRaf) {
@@ -74,7 +121,6 @@ function emitProgress(onProgress, chars, total) {
   onProgress({ chars: n, total, ratio: total ? n / total : 1 });
 }
 
-/** Soft typewriter when there is no audio clock (voice off / unknown duration). */
 function runTimedReveal(text, onProgress, onDone, { msPerChar = 28 } = {}) {
   clearRevealLoops();
   const total = String(text || "").length;
@@ -94,7 +140,7 @@ function syncAudioReveal(audio, text, onProgress, onDone) {
   clearRevealLoops();
   const total = String(text || "").length;
   const tick = () => {
-    if (!currentAudio || currentAudio !== audio) return;
+    if (!sharedAudio || sharedAudio !== audio) return;
     const dur = audio.duration;
     if (Number.isFinite(dur) && dur > 0) {
       const ratio = Math.min(1, Math.max(0, audio.currentTime / dur));
@@ -111,15 +157,89 @@ function syncAudioReveal(audio, text, onProgress, onDone) {
   if (audio.readyState >= 1 && Number.isFinite(audio.duration)) start();
   else audio.addEventListener("loadedmetadata", start, { once: true });
 
-  audio.addEventListener(
-    "ended",
-    () => {
-      clearRevealLoops();
-      emitProgress(onProgress, total, total);
-      if (typeof onDone === "function") onDone();
-    },
-    { once: true }
-  );
+  const finish = () => {
+    clearRevealLoops();
+    emitProgress(onProgress, total, total);
+    if (currentObjectUrl) {
+      try {
+        URL.revokeObjectURL(currentObjectUrl);
+      } catch {
+        /* ignore */
+      }
+      currentObjectUrl = null;
+    }
+    if (typeof onDone === "function") onDone();
+  };
+  audio.addEventListener("ended", finish, { once: true });
+}
+
+function speakLangForEdge(lang) {
+  const n = normalizeLang(lang || "en");
+  // Keep English on Ryan GB path even when locale is bare "en".
+  if (n === "en" || n.startsWith("en-")) return n === "en" ? "en-GB" : n;
+  return n;
+}
+
+/**
+ * Prefer server Edge TTS (N1). Browser speechSynthesis is last resort only if speak API fails.
+ * Never swap to browser when Edge MP3 was fetched but autoplay blocked — that sounded like a "default" voice.
+ */
+export async function speakCommander(text, { voiceOn = true, lang = "en", onProgress, onDone } = {}) {
+  const line = String(text || "").trim();
+  if (!line || typeof window === "undefined") {
+    lastEngine = "none";
+    if (typeof onDone === "function") onDone();
+    return { mode: "none", engine: lastEngine };
+  }
+
+  stopCommanderSpeech({ keepShared: true });
+
+  if (!voiceOn) {
+    lastEngine = "typewriter";
+    runTimedReveal(line, onProgress, onDone, { msPerChar: 16 });
+    return { mode: "typewriter", engine: lastEngine };
+  }
+
+  let edgeBlob = null;
+  let voiceHeader = "";
+  try {
+    const res = await fetch("/api/aim/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify({ text: line.slice(0, 1400), lang: speakLangForEdge(lang) }),
+    });
+    if (!res.ok) throw new Error(`speak ${res.status}`);
+    const type = res.headers.get("content-type") || "";
+    if (!type.includes("audio")) throw new Error("not audio");
+    voiceHeader = res.headers.get("x-aim-voice") || COMMANDER_VOICE_TARGET.id;
+    edgeBlob = await res.blob();
+    if (!edgeBlob || edgeBlob.size < 64) throw new Error("empty audio");
+  } catch (err) {
+    console.warn("[AIM] Edge speak API failed", err?.message || err);
+    lastEngine = "browser-fallback";
+    // Only now use browser TTS — API itself failed.
+    speakBrowserFallback(line, lang, onProgress, onDone);
+    return { mode: "browser", engine: lastEngine, error: String(err?.message || err) };
+  }
+
+  const audio = getSharedAudio();
+  const url = URL.createObjectURL(edgeBlob);
+  currentObjectUrl = url;
+  try {
+    audio.pause();
+    audio.muted = false;
+    audio.src = url;
+    syncAudioReveal(audio, line, onProgress, onDone);
+    await audio.play();
+    lastEngine = voiceHeader || COMMANDER_VOICE_TARGET.id;
+    return { mode: "edge", engine: lastEngine };
+  } catch (err) {
+    console.warn("[AIM] Edge MP3 play blocked; not using browser default", err?.message || err);
+    // Do NOT fall back to browser default — keep typewriter + expose engine miss.
+    lastEngine = "edge-blocked";
+    runTimedReveal(line, onProgress, onDone, { msPerChar: 18 });
+    return { mode: "edge-blocked", engine: lastEngine, error: String(err?.message || err) };
+  }
 }
 
 function speakBrowserFallback(text, lang, onProgress, onDone) {
@@ -133,7 +253,7 @@ function speakBrowserFallback(text, lang, onProgress, onDone) {
   utter.rate = 1.0;
   utter.pitch = 1.0;
   utter.volume = 1;
-  utter.lang = normalizeLang(lang);
+  utter.lang = speakLangForEdge(lang);
   const total = line.length;
   emitProgress(onProgress, 0, total);
   utter.onboundary = (ev) => {
@@ -149,7 +269,7 @@ function speakBrowserFallback(text, lang, onProgress, onDone) {
     runTimedReveal(line, onProgress, onDone, { msPerChar: 22 });
   };
   const applyVoice = () => {
-    const voice = pickCommanderVoice(synth.getVoices(), lang);
+    const voice = pickCommanderVoice(synth.getVoices(), "en-GB");
     if (voice) {
       utter.voice = voice;
       if (voice.lang) utter.lang = voice.lang;
@@ -169,59 +289,11 @@ function speakBrowserFallback(text, lang, onProgress, onDone) {
   }
 }
 
-/**
- * Prefer server Edge TTS (N1 natural). Fall back to browser voice if speak API fails.
- * onProgress({ chars, total, ratio }) fires as speech advances so UI can type in sync.
- */
-export async function speakCommander(text, { voiceOn = true, lang = "en", onProgress, onDone } = {}) {
-  const line = String(text || "").trim();
-  if (!line || typeof window === "undefined") {
-    if (typeof onDone === "function") onDone();
-    return { mode: "none" };
-  }
-
-  stopCommanderSpeech();
-
-  if (!voiceOn) {
-    runTimedReveal(line, onProgress, onDone, { msPerChar: 16 });
-    return { mode: "typewriter" };
-  }
-
-  try {
-    const res = await fetch("/api/aim/speak", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
-      body: JSON.stringify({ text: line.slice(0, 1400), lang: normalizeLang(lang) }),
-    });
-    if (!res.ok) throw new Error(`speak ${res.status}`);
-    const type = res.headers.get("content-type") || "";
-    if (!type.includes("audio")) throw new Error("not audio");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    currentAudio = audio;
-    syncAudioReveal(audio, line, onProgress, () => {
-      URL.revokeObjectURL(url);
-      if (currentAudio === audio) currentAudio = null;
-      if (typeof onDone === "function") onDone();
-    });
-    audio.onended = () => {
-      /* ended also handled in syncAudioReveal */
-    };
-    await audio.play();
-    return { mode: "edge" };
-  } catch (err) {
-    console.warn("[AIM] Edge speak failed, browser fallback", err?.message || err);
-    speakBrowserFallback(line, lang, onProgress, onDone);
-    return { mode: "browser" };
-  }
-}
-
 export function aimVoiceEngineLabel() {
-  return COMMANDER_VOICE_TARGET.id;
+  return lastEngine || COMMANDER_VOICE_TARGET.id;
 }
 
-export function stopCommanderSpeech() {
+export function stopCommanderSpeech({ keepShared = false } = {}) {
   if (typeof window === "undefined") return;
   clearRevealLoops();
   try {
@@ -229,13 +301,23 @@ export function stopCommanderSpeech() {
   } catch {
     /* ignore */
   }
-  if (currentAudio) {
+  if (sharedAudio) {
     try {
-      currentAudio.pause();
-      currentAudio.src = "";
+      sharedAudio.pause();
+      if (!keepShared) {
+        sharedAudio.removeAttribute("src");
+        sharedAudio.load();
+      }
     } catch {
       /* ignore */
     }
-    currentAudio = null;
+  }
+  if (currentObjectUrl) {
+    try {
+      URL.revokeObjectURL(currentObjectUrl);
+    } catch {
+      /* ignore */
+    }
+    currentObjectUrl = null;
   }
 }

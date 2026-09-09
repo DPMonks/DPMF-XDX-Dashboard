@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
-import { readVoicePref, speakCommander, stopCommanderSpeech, writeVoicePref } from "../aimCommanderVoice";
+import { aimVoiceEngineLabel, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
 
 function ago(iso) {
   if (!iso) return "—";
@@ -75,6 +75,7 @@ export default function AiMatrixPanel() {
       const next = !prev;
       writeVoicePref(next);
       if (!next) stopCommanderSpeech();
+      else unlockCommanderAudio();
       return next;
     });
   }
@@ -100,6 +101,7 @@ export default function AiMatrixPanel() {
     const message = text.trim();
     if (!message || busy) return;
     setBusy(true);
+    if (voiceOn) unlockCommanderAudio();
     const thinkingId = `thinking-${Date.now()}`;
     setLocalChat((rows) => [
       ...rows,
@@ -131,7 +133,7 @@ export default function AiMatrixPanel() {
           speaking: true,
         },
       ]);
-      await speakCommander(reply, {
+      const spoken = await speakCommander(reply, {
         voiceOn,
         lang: replyLang,
         onProgress: ({ chars }) => {
@@ -147,6 +149,13 @@ export default function AiMatrixPanel() {
           );
         },
       });
+      setLocalChat((rows) =>
+        rows.map((r) =>
+          r.id === replyId
+            ? { ...r, voiceEngine: spoken?.engine || aimVoiceEngineLabel() }
+            : r
+        )
+      );
       await refresh();
     } catch (err) {
       setLocalChat((rows) => [
@@ -267,6 +276,7 @@ export default function AiMatrixPanel() {
                   <small>
                     {m.role === "you" ? "You" : m.role === "commander" ? "Commander" : "System"}
                     {m.lang ? ` · ${m.lang}` : ""}
+                    {m.voiceEngine ? ` · ${m.voiceEngine}` : ""}
                     {m.speaking ? " · live" : ""}
                   </small>
                   <p>
