@@ -1,5 +1,3 @@
-import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
-
 /** Locked sample 3b3c. */
 export const COMMANDER_EDGE_VOICE = {
   id: "3b3c-deep-brisk",
@@ -27,15 +25,6 @@ const VOICE_BY_LANG = {
   ko: "ko-KR-InJoonNeural",
 };
 
-function escapeXml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
 function pickVoice(lang) {
   const raw = String(lang || "en");
   if (VOICE_BY_LANG[raw]) return VOICE_BY_LANG[raw];
@@ -43,50 +32,25 @@ function pickVoice(lang) {
   return VOICE_BY_LANG[base] || COMMANDER_EDGE_VOICE.voice;
 }
 
-function toSsml(text, { voice, rate, pitch }) {
-  const body = escapeXml(String(text || "").slice(0, 1400));
-  return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-GB">
-  <voice name="${voice}">
-    <prosody rate="${rate}" pitch="${pitch}">${body}</prosody>
-  </voice>
-</speak>`;
-}
-
-async function streamToBuffer(stream) {
-  const chunks = [];
-  for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  return Buffer.concat(chunks);
-}
-
 export async function synthesizeCommanderSpeech(text, { lang = "en" } = {}) {
-  const cleaned = String(text || "").trim();
-  if (!cleaned) {
-    return { ok: false, error: "Text required" };
-  }
+  const cleaned = String(text || "").trim().slice(0, 1400);
+  if (!cleaned) return { ok: false, error: "Text required" };
 
-  const base = pickVoice(lang);
-  // Keep locked 3b3c prosody for English; other langs use mild defaults on their male neural voice.
   const isEn = String(lang || "en").toLowerCase().startsWith("en");
-  const voice = isEn ? COMMANDER_EDGE_VOICE.voice : base;
+  const voice = isEn ? COMMANDER_EDGE_VOICE.voice : pickVoice(lang);
   const rate = isEn ? COMMANDER_EDGE_VOICE.rate : "+2%";
   const pitch = isEn ? COMMANDER_EDGE_VOICE.pitch : "-2Hz";
 
   try {
-    const tts = new MsEdgeTTS();
-    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
-    const ssml = toSsml(cleaned, { voice, rate, pitch });
-    // Prefer SSML if supported; fall back to plain text.
-    let audioStream;
-    if (typeof tts.toStream === "function") {
-      try {
-        ({ audioStream } = await tts.toStream(ssml));
-      } catch {
-        ({ audioStream } = await tts.toStream(cleaned));
-      }
-    } else {
-      return { ok: false, error: "msedge-tts toStream unavailable" };
-    }
-    const buffer = await streamToBuffer(audioStream);
+    const { EdgeTTS } = await import("edge-tts-universal");
+    const tts = new EdgeTTS(cleaned, voice, { rate, pitch });
+    const result = await tts.synthesize();
+    const audio = result?.audio;
+    let buffer;
+    if (Buffer.isBuffer(audio)) buffer = audio;
+    else if (audio instanceof Uint8Array) buffer = Buffer.from(audio);
+    else if (audio?.arrayBuffer) buffer = Buffer.from(await audio.arrayBuffer());
+    else return { ok: false, error: "Unexpected audio payload" };
     if (!buffer.length) return { ok: false, error: "Empty audio" };
     return {
       ok: true,
@@ -126,7 +90,7 @@ export async function aimSpeakPayload(req) {
         ok: false,
         error: "Speech synthesis failed",
         detail: out.error,
-        hint: "Install msedge-tts dependency and redeploy.",
+        hint: "Add dependency edge-tts-universal and redeploy.",
       },
     };
   }

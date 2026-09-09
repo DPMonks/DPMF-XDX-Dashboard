@@ -1,14 +1,4 @@
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "32kb",
-    },
-    responseLimit: false,
-  },
-  maxDuration: 30,
-};
-
-import { aimSpeakPayload } from "../../server/aimSpeak.js";
+export const maxDuration = 30;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -16,6 +6,7 @@ export default async function handler(req, res) {
     return;
   }
   try {
+    const { aimSpeakPayload } = await import("../../server/aimSpeak.js");
     const out = await aimSpeakPayload(req);
     if (out.audio) {
       res.setHeader("Content-Type", out.contentType || "audio/mpeg");
