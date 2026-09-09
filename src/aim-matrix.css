@@ -146,3 +146,18 @@
 @keyframes aim-caret-blink {
   50% { opacity: 0; }
 }
+
+.aim-play-voice {
+  margin-top: 0.45rem;
+  border-radius: 8px;
+  border: 1px solid rgba(103, 232, 249, 0.55);
+  background: rgba(14, 116, 144, 0.45);
+  color: #e0f7ff;
+  padding: 0.35rem 0.7rem;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.18);
+}
+.aim-play-voice:hover {
+  border-color: rgba(165, 243, 252, 0.9);
+}

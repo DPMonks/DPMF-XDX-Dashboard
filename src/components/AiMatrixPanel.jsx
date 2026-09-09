@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
-import { aimVoiceEngineLabel, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
+import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
 
 function ago(iso) {
   if (!iso) return "—";
@@ -152,7 +152,11 @@ export default function AiMatrixPanel() {
       setLocalChat((rows) =>
         rows.map((r) =>
           r.id === replyId
-            ? { ...r, voiceEngine: spoken?.engine || aimVoiceEngineLabel() }
+            ? {
+                ...r,
+                voiceEngine: spoken?.engine || aimVoiceEngineLabel(),
+                needsPlay: !!spoken?.needsPlay,
+              }
             : r
         )
       );
@@ -165,6 +169,37 @@ export default function AiMatrixPanel() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function onPlayVoice(message) {
+    if (!message?.id) return;
+    unlockCommanderAudio();
+    setLocalChat((rows) =>
+      rows.map((r) => (r.id === message.id ? { ...r, speaking: true, needsPlay: false } : r))
+    );
+    await playPendingCommanderAudio({
+      text: message.text || "",
+      onProgress: ({ chars }) => {
+        setLocalChat((rows) =>
+          rows.map((r) => (r.id === message.id ? { ...r, reveal: chars, speaking: true } : r))
+        );
+      },
+      onDone: () => {
+        setLocalChat((rows) =>
+          rows.map((r) =>
+            r.id === message.id
+              ? {
+                  ...r,
+                  reveal: (message.text || "").length,
+                  speaking: false,
+                  voiceEngine: "N1-ryan-natural",
+                  needsPlay: false,
+                }
+              : r
+          )
+        );
+      },
+    });
   }
 
   const agents = data?.agents || [];
@@ -283,6 +318,15 @@ export default function AiMatrixPanel() {
                     {revealed}
                     {showCaret ? <span className="aim-speak-caret" aria-hidden="true" /> : null}
                   </p>
+                  {m.needsPlay ? (
+                    <button
+                      type="button"
+                      className="aim-play-voice"
+                      onClick={() => onPlayVoice(m)}
+                    >
+                      Play voice (N1)
+                    </button>
+                  ) : null}
                 </div>
               );
             })}

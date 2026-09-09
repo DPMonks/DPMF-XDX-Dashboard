@@ -12,10 +12,6 @@ export const COMMANDER_VOICE_TARGET = {
   style: "natural British male",
 };
 
-/** Tiny silent wav used to unlock autoplay during a user gesture (Send / Voice on). */
-const SILENT_WAV =
-  "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
-
 export function pickCommanderVoice(voices, lang = "en") {
   const list = Array.isArray(voices) ? voices : [];
   if (!list.length) return null;
@@ -58,7 +54,9 @@ export function writeVoicePref(on) {
 }
 
 let sharedAudio = null;
+let audioCtx = null;
 let currentObjectUrl = null;
+let pendingObjectUrl = null;
 let revealRaf = 0;
 let revealTimer = 0;
 let lastEngine = "none";
@@ -68,39 +66,37 @@ function getSharedAudio() {
   if (!sharedAudio) {
     sharedAudio = new Audio();
     sharedAudio.preload = "auto";
+    sharedAudio.setAttribute("playsinline", "true");
+    sharedAudio.controls = false;
   }
   return sharedAudio;
 }
 
+function resumeAudioContext() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!audioCtx) audioCtx = new Ctx();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
- * Call synchronously from a user gesture (Send click / Voice on).
- * Browsers drop autoplay permission after long awaits (LLM chat); this keeps Edge N1 playable.
+ * Call synchronously from a user gesture (Send / Voice on / Play).
+ * Do NOT mute the shared element — a stuck muted=true caused silent "success" plays.
  */
 export function unlockCommanderAudio() {
   if (typeof window === "undefined") return;
+  resumeAudioContext();
   const audio = getSharedAudio();
   if (!audio) return;
   try {
-    audio.muted = true;
-    audio.src = SILENT_WAV;
-    const p = audio.play();
-    if (p && typeof p.then === "function") {
-      p.then(() => {
-        audio.pause();
-        audio.currentTime = 0;
-        audio.muted = false;
-      }).catch(() => {
-        audio.muted = false;
-      });
-    } else {
-      audio.muted = false;
-    }
+    audio.muted = false;
+    audio.volume = 1;
   } catch {
-    try {
-      audio.muted = false;
-    } catch {
-      /* ignore */
-    }
+    /* ignore */
   }
 }
 
@@ -154,36 +150,91 @@ function syncAudioReveal(audio, text, onProgress, onDone) {
     emitProgress(onProgress, 0, total);
     revealRaf = requestAnimationFrame(tick);
   };
-  if (audio.readyState >= 1 && Number.isFinite(audio.duration)) start();
+  if (audio.readyState >= 1 && Number.isFinite(audio.duration) && durOk(audio)) start();
   else audio.addEventListener("loadedmetadata", start, { once: true });
 
   const finish = () => {
     clearRevealLoops();
     emitProgress(onProgress, total, total);
-    if (currentObjectUrl) {
-      try {
-        URL.revokeObjectURL(currentObjectUrl);
-      } catch {
-        /* ignore */
-      }
-      currentObjectUrl = null;
-    }
+    revokeUrl(currentObjectUrl);
+    currentObjectUrl = null;
     if (typeof onDone === "function") onDone();
   };
   audio.addEventListener("ended", finish, { once: true });
 }
 
+function durOk(audio) {
+  return Number.isFinite(audio.duration) && audio.duration > 0;
+}
+
+function revokeUrl(url) {
+  if (!url) return;
+  try {
+    URL.revokeObjectURL(url);
+  } catch {
+    /* ignore */
+  }
+}
+
 function speakLangForEdge(lang) {
   const n = normalizeLang(lang || "en");
-  // Keep English on Ryan GB path even when locale is bare "en".
   if (n === "en" || n.startsWith("en-")) return n === "en" ? "en-GB" : n;
   return n;
 }
 
+async function waitCanPlay(audio) {
+  if (audio.readyState >= 3) return;
+  await new Promise((resolve, reject) => {
+    const ok = () => {
+      cleanup();
+      resolve();
+    };
+    const bad = () => {
+      cleanup();
+      reject(new Error("audio error"));
+    };
+    const cleanup = () => {
+      audio.removeEventListener("canplaythrough", ok);
+      audio.removeEventListener("error", bad);
+    };
+    audio.addEventListener("canplaythrough", ok, { once: true });
+    audio.addEventListener("error", bad, { once: true });
+    window.setTimeout(ok, 2500);
+  });
+}
+
 /**
- * Prefer server Edge TTS (N1). Browser speechSynthesis is last resort only if speak API fails.
- * Never swap to browser when Edge MP3 was fetched but autoplay blocked — that sounded like a "default" voice.
+ * Play a previously blocked Edge blob (call from a click on "Play voice").
  */
+export async function playPendingCommanderAudio({ onProgress, onDone, text = "" } = {}) {
+  unlockCommanderAudio();
+  const audio = getSharedAudio();
+  const url = pendingObjectUrl || currentObjectUrl;
+  if (!audio || !url) {
+    if (typeof onDone === "function") onDone();
+    return { mode: "none", engine: "none" };
+  }
+  try {
+    audio.muted = false;
+    audio.volume = 1;
+    if (audio.src !== url) audio.src = url;
+    if (text) syncAudioReveal(audio, text, onProgress, onDone);
+    await waitCanPlay(audio);
+    await audio.play();
+    lastEngine = COMMANDER_VOICE_TARGET.id;
+    pendingObjectUrl = null;
+    return { mode: "edge", engine: lastEngine };
+  } catch (err) {
+    console.warn("[AIM] pending play failed", err?.message || err);
+    runTimedReveal(text || "", onProgress, onDone, { msPerChar: 16 });
+    return { mode: "edge-blocked", engine: "edge-blocked", error: String(err?.message || err) };
+  }
+}
+
+export function hasPendingCommanderAudio() {
+  return Boolean(pendingObjectUrl);
+}
+
 export async function speakCommander(text, { voiceOn = true, lang = "en", onProgress, onDone } = {}) {
   const line = String(text || "").trim();
   if (!line || typeof window === "undefined") {
@@ -193,6 +244,7 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
   }
 
   stopCommanderSpeech({ keepShared: true });
+  unlockCommanderAudio();
 
   if (!voiceOn) {
     lastEngine = "typewriter";
@@ -217,28 +269,44 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
   } catch (err) {
     console.warn("[AIM] Edge speak API failed", err?.message || err);
     lastEngine = "browser-fallback";
-    // Only now use browser TTS — API itself failed.
     speakBrowserFallback(line, lang, onProgress, onDone);
     return { mode: "browser", engine: lastEngine, error: String(err?.message || err) };
   }
 
   const audio = getSharedAudio();
+  revokeUrl(currentObjectUrl);
+  revokeUrl(pendingObjectUrl);
   const url = URL.createObjectURL(edgeBlob);
   currentObjectUrl = url;
+  pendingObjectUrl = url;
+
   try {
     audio.pause();
     audio.muted = false;
+    audio.volume = 1;
     audio.src = url;
-    syncAudioReveal(audio, line, onProgress, onDone);
+    audio.load();
+    syncAudioReveal(audio, line, onProgress, () => {
+      pendingObjectUrl = null;
+      if (typeof onDone === "function") onDone();
+    });
+    await waitCanPlay(audio);
+    resumeAudioContext();
     await audio.play();
     lastEngine = voiceHeader || COMMANDER_VOICE_TARGET.id;
-    return { mode: "edge", engine: lastEngine };
+    pendingObjectUrl = null;
+    return { mode: "edge", engine: lastEngine, needsPlay: false };
   } catch (err) {
-    console.warn("[AIM] Edge MP3 play blocked; not using browser default", err?.message || err);
-    // Do NOT fall back to browser default — keep typewriter + expose engine miss.
+    console.warn("[AIM] Edge MP3 autoplay blocked; keep blob for tap-to-play", err?.message || err);
     lastEngine = "edge-blocked";
+    // Reveal text now; keep pendingObjectUrl for Play voice button.
     runTimedReveal(line, onProgress, onDone, { msPerChar: 18 });
-    return { mode: "edge-blocked", engine: lastEngine, error: String(err?.message || err) };
+    return {
+      mode: "edge-blocked",
+      engine: lastEngine,
+      needsPlay: true,
+      error: String(err?.message || err),
+    };
   }
 }
 
@@ -312,12 +380,10 @@ export function stopCommanderSpeech({ keepShared = false } = {}) {
       /* ignore */
     }
   }
-  if (currentObjectUrl) {
-    try {
-      URL.revokeObjectURL(currentObjectUrl);
-    } catch {
-      /* ignore */
-    }
+  if (!keepShared) {
+    revokeUrl(currentObjectUrl);
+    revokeUrl(pendingObjectUrl);
     currentObjectUrl = null;
+    pendingObjectUrl = null;
   }
 }
