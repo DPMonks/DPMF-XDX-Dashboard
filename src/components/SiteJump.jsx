@@ -96,8 +96,27 @@ export default function SiteJump() {
   }, []);
 
   useEffect(() => {
-    const want = readJumpHash(window.location.hash);
-    if (want) scrollToDeck(want);
+    // Browser reload should land at the top of the page, not restore a deep deck hash
+    // (e.g. #ai-matrix near the bottom). Fresh hash navigations still scroll.
+    try {
+      if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
+    } catch {
+      /* ignore */
+    }
+
+    const nav = performance.getEntriesByType?.("navigation")?.[0];
+    const isReload = nav?.type === "reload" || (typeof performance !== "undefined" && performance.navigation?.type === 1);
+    if (isReload) {
+      if (window.location.hash) {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      setActive(SITE_JUMP_IDS[0]);
+    } else {
+      const want = readJumpHash(window.location.hash);
+      if (want) scrollToDeck(want);
+    }
+
     function onHash() {
       const next = readJumpHash(window.location.hash);
       if (!next) return;

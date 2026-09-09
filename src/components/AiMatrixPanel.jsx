@@ -37,24 +37,10 @@ export default function AiMatrixPanel() {
       setError(err.message || "Failed to load AI-Matrix");
     } finally {
       setLoading(false);
-      // Keep viewport and chat log at the top (Refresh was landing at the bottom).
-      try {
-        const log = document.querySelector(".aim-chat-log");
-        if (log) log.scrollTop = 0;
-        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      } catch {
-        /* ignore */
-      }
     }
   }, []);
 
   useEffect(() => {
-    try {
-      if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
-      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    } catch {
-      /* ignore */
-    }
     refresh();
     const id = window.setInterval(refresh, 30000);
     return () => {
@@ -233,11 +219,11 @@ export default function AiMatrixPanel() {
           </p>
         </div>
         <div className="aim-matrix-actions">
-          <div className="aim-lang">
-            <span className="aim-lang-kicker">XDX · Language</span>
+          <div className="aim-toolbar-item aim-lang">
+            <span className="aim-toolbar-kicker">XDX · Language</span>
             <button
               type="button"
-              className={`aim-lang-btn ${langMenuOpen ? "is-open" : ""}`}
+              className={`aim-toolbar-btn aim-lang-btn ${langMenuOpen ? "is-open" : ""}`}
               onClick={() => setLangMenuOpen((v) => !v)}
               title="Commander reply + voice language"
               aria-haspopup="listbox"
@@ -274,17 +260,28 @@ export default function AiMatrixPanel() {
               </div>
             ) : null}
           </div>
-          <button
-            type="button"
-            className={`aim-toolbar-btn aim-matrix-voice ${voiceOn ? "is-on" : "is-off"}`}
-            onClick={toggleVoice}
-            title={voiceOn ? "Mute Commander voice" : "Enable Commander voice"}
-          >
-            {voiceOn ? "Voice on" : "Voice off"}
-          </button>
-          <button type="button" className="aim-toolbar-btn aim-matrix-refresh" onClick={refresh} disabled={loading}>
-            Refresh
-          </button>
+          <div className="aim-toolbar-item">
+            <span className="aim-toolbar-kicker">Voice</span>
+            <button
+              type="button"
+              className={`aim-toolbar-btn aim-matrix-voice ${voiceOn ? "is-on" : "is-off"}`}
+              onClick={toggleVoice}
+              title={voiceOn ? "Mute Commander voice" : "Enable Commander voice"}
+            >
+              {voiceOn ? "Voice on" : "Voice off"}
+            </button>
+          </div>
+          <div className="aim-toolbar-item">
+            <span className="aim-toolbar-kicker">Status</span>
+            <button
+              type="button"
+              className="aim-toolbar-btn aim-matrix-refresh"
+              onClick={refresh}
+              disabled={loading}
+            >
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 
