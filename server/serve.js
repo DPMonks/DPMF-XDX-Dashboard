@@ -11,6 +11,7 @@ import {
 } from "./proxyIndexer.js";
 import { suffixFromPath } from "./attachProxy.js";
 import { applySecurityHeaders } from "../src/security/headers.js";
+import { handleAimRequest } from "./aimMatrix.js";
 
 const dist = join(fileURLToPath(new URL(".", import.meta.url)), "..", "dist");
 const port = Number(process.env.PORT || 4173);
@@ -53,6 +54,8 @@ const server = createServer(async (req, res) => {
   const url = req.url || "/";
   const pathOnly = url.split("?")[0];
   const suffix = suffixFromPath(pathOnly);
+
+  if (await handleAimRequest(req, res)) return;
 
   if (suffix != null) {
     if (req.method === "OPTIONS") {

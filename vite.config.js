@@ -13,10 +13,12 @@ import {
   xummHeaders,
 } from "./api/xaman/_xumm.js";
 import { applySecurityHeaders } from "./src/security/headers.js";
+import { handleAimRequest } from "./server/aimMatrix.js";
 
 function xamanDevPlugin() {
   const middleware = async (req, res, next) => {
     try {
+      if (await handleAimRequest(req, res)) return;
       const origin = requestOrigin(req);
       if (req.url?.startsWith("/api/xaman/create-payload") && req.method === "POST") {
         const body = await readJson(req);

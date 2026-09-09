@@ -10,6 +10,7 @@ export const SITE_JUMP_IDS = [
   "create-pool",
   "pools",
   "governance",
+  "ai-matrix",
 ];
 
 export function siteJumpItems(t = {}) {
@@ -25,6 +26,7 @@ export function siteJumpItems(t = {}) {
     { id: "create-pool", short: t.jumpCreate || "Create pool", label: t.createPoolTitle || "Create New XDX Pool" },
     { id: "pools", short: t.jumpPools || "AMM pools", label: t.ammPools || "AMM Pools" },
     { id: "governance", short: t.jumpVote || "Vote", label: t.poolGovernance || "Pool Governance Voting" },
+    { id: "ai-matrix", short: t.jumpAim || "AI-Matrix", label: t.aiMatrix || "AI-Matrix" },
   ];
 }
 

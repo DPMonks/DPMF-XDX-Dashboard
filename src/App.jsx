@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
+import "./aim-matrix.css";
 
 import ConnectWallet from "./components/ConnectWallet";
 import TradeExecuted from "./components/TradeExecuted";
@@ -16,6 +17,7 @@ import XdxSwapPanel from "./components/XdxSwapPanel";
 import SiteJump from "./components/SiteJump";
 import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
+import AiMatrixPanel from "./components/AiMatrixPanel";
 import Skeleton from "./components/Skeleton";
 import { handshake } from "./api";
 import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp, getWalletLp } from "./api/indexer";
@@ -487,6 +489,11 @@ export default function App() {
         <section className="dashboard-card neon-card governance-card" id="governance">
           <h2 className="card-title">{t.poolGovernance}</h2>
           <VotingContainer />
+        </section>
+
+        <section className="dashboard-card neon-card aim-matrix-card" id="ai-matrix">
+          <h2 className="card-title">{t.aiMatrix || "AI-Matrix"}</h2>
+          <AiMatrixPanel />
         </section>
       </div>
 
