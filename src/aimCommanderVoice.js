@@ -2,14 +2,14 @@ import { normalizeLang } from "./aimLocale";
 
 const VOICE_PREF_KEY = "aim.commander.voiceOn";
 
-/** Locked premium target: sample 3b3c. Ryan deep + brisk (Edge TTS). */
+/** Locked natural target: N1 Ryan (no pitch/rate warp). */
 export const COMMANDER_VOICE_TARGET = {
-  id: "3b3c-deep-brisk",
+  id: "N1-ryan-natural",
   engine: "edge-tts-universal",
   voice: "en-GB-RyanNeural",
-  rate: "+6%",
-  pitch: "-10Hz",
-  style: "jarvis-adjacent calm British deep brisk",
+  rate: "+0%",
+  pitch: "+0Hz",
+  style: "natural British male",
 };
 
 export function pickCommanderVoice(voices, lang = "en") {
@@ -130,8 +130,8 @@ function speakBrowserFallback(text, lang, onProgress, onDone) {
   }
   const line = String(text);
   const utter = new SpeechSynthesisUtterance(line.slice(0, 1400));
-  utter.rate = 1.08;
-  utter.pitch = 0.82;
+  utter.rate = 1.0;
+  utter.pitch = 1.0;
   utter.volume = 1;
   utter.lang = normalizeLang(lang);
   const total = line.length;
@@ -170,7 +170,7 @@ function speakBrowserFallback(text, lang, onProgress, onDone) {
 }
 
 /**
- * Prefer server Edge TTS (3b3c). Fall back to browser voice if speak API fails.
+ * Prefer server Edge TTS (N1 natural). Fall back to browser voice if speak API fails.
  * onProgress({ chars, total, ratio }) fires as speech advances so UI can type in sync.
  */
 export async function speakCommander(text, { voiceOn = true, lang = "en", onProgress, onDone } = {}) {

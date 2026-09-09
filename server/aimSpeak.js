@@ -1,9 +1,9 @@
-/** Locked sample 3b3c. */
+/** Natural Edge TTS default (N1). Avoid heavy pitch/rate warps — they sound robotic/glitchy. */
 export const COMMANDER_EDGE_VOICE = {
-  id: "3b3c-deep-brisk",
+  id: "N1-ryan-natural",
   voice: "en-GB-RyanNeural",
-  rate: "+6%",
-  pitch: "-10Hz",
+  rate: "+0%",
+  pitch: "+0Hz",
 };
 
 const VOICE_BY_LANG = {
@@ -32,6 +32,54 @@ function pickVoice(lang) {
   return VOICE_BY_LANG[base] || COMMANDER_EDGE_VOICE.voice;
 }
 
+function envVoiceOverride() {
+  const voice = String(process.env.AIM_TTS_VOICE || "").trim();
+  const rate = String(process.env.AIM_TTS_RATE || "").trim() || "+0%";
+  const pitch = String(process.env.AIM_TTS_PITCH || "").trim() || "+0Hz";
+  const id = String(process.env.AIM_TTS_ID || "").trim() || "env-override";
+  if (!voice) return null;
+  return { id, voice, rate, pitch };
+}
+
+/** Optional studio-grade path: OpenAI audio/speech (needs a real OpenAI key, not Gemini). */
+async function synthesizeOpenAiSpeech(cleaned, { lang = "en" } = {}) {
+  const key = String(process.env.AIM_TTS_API_KEY || process.env.OPENAI_TTS_API_KEY || "").trim();
+  if (!key) return { ok: false, error: "AIM_TTS_API_KEY unset" };
+  const model = String(process.env.AIM_TTS_MODEL || "tts-1-hd").trim();
+  const voice = String(process.env.AIM_TTS_OPENAI_VOICE || "onyx").trim();
+  const base = String(process.env.AIM_TTS_BASE_URL || "https://api.openai.com/v1").trim().replace(/\/$/, "");
+  const res = await fetch(`${base}/audio/speech`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      voice,
+      input: cleaned,
+      response_format: "mp3",
+    }),
+  });
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => "")).slice(0, 220);
+    return { ok: false, error: `OpenAI TTS HTTP ${res.status}`, detail };
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (!buf.length) return { ok: false, error: "Empty OpenAI audio" };
+  return {
+    ok: true,
+    contentType: "audio/mpeg",
+    buffer: buf,
+    voice,
+    rate: "n/a",
+    pitch: "n/a",
+    id: `openai-${model}-${voice}`,
+    provider: "openai",
+    lang,
+  };
+}
+
 export async function synthesizeCommanderSpeech(text, { lang = "en" } = {}) {
   const cleaned = String(text || "")
     .replace(/\u2014/g, ". ")
@@ -41,10 +89,20 @@ export async function synthesizeCommanderSpeech(text, { lang = "en" } = {}) {
     .slice(0, 1400);
   if (!cleaned) return { ok: false, error: "Text required" };
 
+  const provider = String(process.env.AIM_TTS_PROVIDER || "edge").trim().toLowerCase();
+  if (provider === "openai" || provider === "openai-hd") {
+    const oai = await synthesizeOpenAiSpeech(cleaned, { lang });
+    if (oai.ok) return oai;
+    // fall through to Edge if OpenAI fails
+  }
+
+  const override = envVoiceOverride();
+  const locked = override || COMMANDER_EDGE_VOICE;
   const isEn = String(lang || "en").toLowerCase().startsWith("en");
-  const voice = isEn ? COMMANDER_EDGE_VOICE.voice : pickVoice(lang);
-  const rate = isEn ? COMMANDER_EDGE_VOICE.rate : "+2%";
-  const pitch = isEn ? COMMANDER_EDGE_VOICE.pitch : "-2Hz";
+  const voice = isEn ? locked.voice : pickVoice(lang);
+  // Keep multilingual mild; English uses natural locked prosody (no deep warp).
+  const rate = isEn ? locked.rate : "+0%";
+  const pitch = isEn ? locked.pitch : "+0Hz";
 
   try {
     const { EdgeTTS } = await import("edge-tts-universal");
@@ -64,7 +122,8 @@ export async function synthesizeCommanderSpeech(text, { lang = "en" } = {}) {
       voice,
       rate,
       pitch,
-      id: COMMANDER_EDGE_VOICE.id,
+      id: locked.id,
+      provider: "edge",
     };
   } catch (error) {
     return { ok: false, error: String(error?.message || error).slice(0, 240) };
@@ -95,7 +154,7 @@ export async function aimSpeakPayload(req) {
         ok: false,
         error: "Speech synthesis failed",
         detail: out.error,
-        hint: "Add dependency edge-tts-universal and redeploy.",
+        hint: "Edge TTS needs edge-tts-universal. For studio voice set AIM_TTS_PROVIDER=openai and AIM_TTS_API_KEY.",
       },
     };
   }
@@ -103,6 +162,12 @@ export async function aimSpeakPayload(req) {
     status: 200,
     audio: out.buffer,
     contentType: out.contentType,
-    meta: { voice: out.voice, rate: out.rate, pitch: out.pitch, id: out.id },
+    meta: {
+      voice: out.voice,
+      rate: out.rate,
+      pitch: out.pitch,
+      id: out.id,
+      provider: out.provider || "edge",
+    },
   };
 }
