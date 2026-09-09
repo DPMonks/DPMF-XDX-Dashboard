@@ -109,6 +109,88 @@ function summarizeIntent(kind, content) {
   return scrubText(kind || "update");
 }
 
+
+const COUNTRY_LANG = {
+  GB: "en-GB", IE: "en-GB", AU: "en", NZ: "en", US: "en", CA: "en",
+  ES: "es", MX: "es", AR: "es", CO: "es", CL: "es", PE: "es",
+  BR: "pt", PT: "pt", FR: "fr", BE: "fr", DE: "de", AT: "de", CH: "de",
+  IT: "it", NL: "nl", PL: "pl", RU: "ru", SA: "ar", AE: "ar", EG: "ar",
+  TR: "tr", IN: "hi", CN: "zh", TW: "zh", HK: "zh", JP: "ja", KR: "ko", SG: "en",
+};
+
+function normalizeAimLang(code) {
+  const raw = String(code || "").trim();
+  if (!raw || raw.toLowerCase() === "auto") return null;
+  if (/^en(-gb)?$/i.test(raw)) return raw.toLowerCase() === "en-gb" ? "en-GB" : "en";
+  return raw.split("-")[0].toLowerCase();
+}
+
+function langFromAcceptLanguage(header) {
+  const first = String(header || "").split(",")[0]?.trim() || "";
+  const tag = first.split(";")[0]?.trim();
+  return normalizeAimLang(tag) || "en";
+}
+
+function langFromCountry(country) {
+  const cc = String(country || "").toUpperCase();
+  return COUNTRY_LANG[cc] || null;
+}
+
+function resolveRequestLang(req, preferred) {
+  const forced = normalizeAimLang(preferred);
+  if (forced) return { lang: forced, source: "user" };
+  const country =
+    req?.headers?.["x-vercel-ip-country"] ||
+    req?.headers?.["cf-ipcountry"] ||
+    req?.headers?.["x-country-code"] ||
+    "";
+  const fromIp = langFromCountry(country);
+  if (fromIp) return { lang: fromIp, source: "ip", country: String(country).toUpperCase() };
+  const fromAccept = langFromAcceptLanguage(req?.headers?.["accept-language"]);
+  return { lang: fromAccept, source: "accept-language" };
+}
+
+export function aimLocalePayload(req) {
+  const resolved = resolveRequestLang(req, null);
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      lang: resolved.lang,
+      source: resolved.source,
+      country: resolved.country || null,
+      voice_target: {
+        id: "3b3c-deep-brisk",
+        voice: "en-GB-RyanNeural",
+        rate: "+6%",
+        pitch: "-10Hz",
+      },
+    },
+  };
+}
+
+async function translateAimText(text, lang) {
+  const target = normalizeAimLang(lang) || "en";
+  if (!text || target === "en" || target === "en-GB") return text;
+  const pair = `en|${target === "zh" ? "zh-CN" : target}`;
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(String(text).slice(0, 450))}&langpair=${encodeURIComponent(pair)}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8_000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) return text;
+    const data = await res.json();
+    const out = scrubText(data?.responseData?.translatedText || "").trim();
+    if (!out || /INVALID/i.test(out)) return text;
+    return out.slice(0, 1200);
+  } catch {
+    return text;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+
 export async function aimStatusPayload() {
   const db = getAimPool();
   if (!db) {
@@ -401,7 +483,7 @@ function summarizeLedger(scan) {
   return `Validated ledger ${scan.ledger_index}: ${scan.tx_count} txs (${top || "no expanded types"}).`;
 }
 
-async function maybeLlmAnswer(question, ctx, scan) {
+async function maybeLlmAnswer(question, ctx, scan, lang = "en") {
   const key =
     process.env.AIM_LLM_API_KEY ||
     process.env.XAI_API_KEY ||
@@ -437,7 +519,8 @@ Default stance is neutral data analysis (ledger, pools, agents, indexer).
 Only apply a DPMF success bias for native assets XDX, XIO, and XSQUAD when the user explicitly asks about DPMF, those assets, or "our"/"native" tokens — otherwise do not push DPMF marketing.
 Observe-only: do not claim trades executed, do not request seeds/keys, do not reveal wallet addresses or agent role codenames.
 If you scanned txs, give a brief summary and a clear opinion grounded in the counts/types you saw.
-Keep replies under 120 words. Replies are ephemeral (no chat history).`;
+Keep replies under 120 words. Replies are ephemeral (no chat history).
+Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 18_000);
@@ -626,6 +709,9 @@ export async function aimChatPayload(req) {
     const text = scrubText(String(body.message || body.text || "").trim()).slice(0, 2000);
     if (!text) return { status: 400, body: { ok: false, error: "Message required" } };
 
+    const resolved = resolveRequestLang(req, body.lang || body.language);
+    const lang = resolved.lang || "en";
+
     // Ephemeral: never insert chat into aim_agent_messages / never cache conversation.
     const classified = classifyAimQuestion(text);
     const ctx = await loadAimChatContext(db);
@@ -638,16 +724,23 @@ export async function aimChatPayload(req) {
       /\b(tx|ledger|on.?chain|opinion|what.*(see|know|think))\b/i.test(text);
 
     const scan = needsLedger ? await scanRecentXrplLedger() : { ok: false, skipped: true };
-    const llm = await maybeLlmAnswer(text, ctx, scan);
-    const reply = llm
+    const llm = await maybeLlmAnswer(text, ctx, scan, lang);
+    let reply = llm
       ? { type: "commander_answer", intent: classified.intent, source: "llm", text: llm }
       : answerAimQuestion(text, ctx, scan);
+
+    if (!llm && lang && lang !== "en" && lang !== "en-GB") {
+      const translated = await translateAimText(reply.text, lang);
+      reply = { ...reply, text: translated, source: reply.source || "heuristic", translated: translated !== reply.text };
+    }
 
     return {
       status: 200,
       body: {
         ok: true,
         ephemeral: true,
+        lang,
+        lang_source: resolved.source,
         reply: {
           from: "commander",
           from_label: "Commander",
@@ -671,6 +764,13 @@ export async function handleAimRequest(req, res) {
 
   if (pathOnly === "/api/aim/status" && method === "GET") {
     const out = await aimStatusPayload();
+    res.statusCode = out.status;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(out.body));
+    return true;
+  }
+  if (pathOnly === "/api/aim/locale" && method === "GET") {
+    const out = aimLocalePayload(req);
     res.statusCode = out.status;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(out.body));

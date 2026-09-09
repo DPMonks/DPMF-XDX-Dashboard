@@ -31,3 +31,24 @@
 @media (max-width: 960px) {
   .aim-agent-strip, .aim-matrix-grid { grid-template-columns: 1fr; }
 }
+
+.aim-matrix-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.aim-matrix-voice, .aim-matrix-refresh, .aim-chat-form button { cursor: pointer; }
+.aim-matrix-voice {
+  border-radius: 10px;
+  border: 1px solid rgba(120,220,255,0.35);
+  background: rgba(14, 116, 144, 0.35);
+  color: inherit;
+  padding: 0.65rem 0.9rem;
+}
+.aim-matrix-voice.is-off { opacity: 0.65; background: rgba(60,60,70,0.45); }
+
+.aim-lang { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; opacity: 0.9; }
+.aim-lang select {
+  border-radius: 10px;
+  border: 1px solid rgba(120,220,255,0.35);
+  background: rgba(0,0,0,0.35);
+  color: inherit;
+  padding: 0.55rem 0.65rem;
+  min-width: 9.5rem;
+}

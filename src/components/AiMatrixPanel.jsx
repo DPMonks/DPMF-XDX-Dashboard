@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAimStatus, postAimChat } from "../api/aim";
+import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
+import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
+import { readVoicePref, speakCommander, stopCommanderSpeech, writeVoicePref } from "../aimCommanderVoice";
 
 function ago(iso) {
   if (!iso) return "—";
@@ -18,6 +20,12 @@ export default function AiMatrixPanel() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [localChat, setLocalChat] = useState([]);
+  const [voiceOn, setVoiceOn] = useState(() => readVoicePref(true));
+  const [langPref, setLangPref] = useState(() => readLangPref());
+  const [suggestedLang, setSuggestedLang] = useState("en");
+  const [langSource, setLangSource] = useState("auto");
+
+  const effectiveLang = langPref === "auto" ? suggestedLang : normalizeLang(langPref);
 
   const refresh = useCallback(async () => {
     try {
@@ -34,8 +42,47 @@ export default function AiMatrixPanel() {
   useEffect(() => {
     refresh();
     const id = window.setInterval(refresh, 30000);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      stopCommanderSpeech();
+    };
   }, [refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const loc = await getAimLocale();
+        if (cancelled) return;
+        setSuggestedLang(normalizeLang(loc.lang || "en"));
+        setLangSource(loc.source || "ip");
+      } catch {
+        if (!cancelled) {
+          const nav = (typeof navigator !== "undefined" && navigator.language) || "en";
+          setSuggestedLang(normalizeLang(nav));
+          setLangSource("browser");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function toggleVoice() {
+    setVoiceOn((prev) => {
+      const next = !prev;
+      writeVoicePref(next);
+      if (!next) stopCommanderSpeech();
+      return next;
+    });
+  }
+
+  function onLangChange(event) {
+    const next = event.target.value || "auto";
+    setLangPref(next);
+    writeLangPref(next);
+  }
 
   async function onSend(event) {
     event.preventDefault();
@@ -45,9 +92,11 @@ export default function AiMatrixPanel() {
     setLocalChat((rows) => [...rows, { role: "you", text: message, at: new Date().toISOString() }]);
     setText("");
     try {
-      const out = await postAimChat(message);
+      const out = await postAimChat(message, { lang: langPref === "auto" ? "auto" : effectiveLang });
       const reply = out.reply?.body?.text || "Queued.";
-      setLocalChat((rows) => [...rows, { role: "commander", text: reply, at: new Date().toISOString() }]);
+      const replyLang = out.lang || effectiveLang;
+      setLocalChat((rows) => [...rows, { role: "commander", text: reply, at: new Date().toISOString(), lang: replyLang }]);
+      speakCommander(reply, { voiceOn, lang: replyLang });
       await refresh();
     } catch (err) {
       setLocalChat((rows) => [
@@ -75,9 +124,29 @@ export default function AiMatrixPanel() {
                 : "Commander offline"}
           </p>
         </div>
-        <button type="button" className="aim-matrix-refresh" onClick={refresh} disabled={loading}>
-          Refresh
-        </button>
+        <div className="aim-matrix-actions">
+          <label className="aim-lang">
+            <span>Language</span>
+            <select value={langPref} onChange={onLangChange} title="Commander reply + voice language">
+              {AIM_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.code === "auto" ? `Auto (${suggestedLang}${langSource ? ` · ${langSource}` : ""})` : l.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className={`aim-matrix-voice ${voiceOn ? "is-on" : "is-off"}`}
+            onClick={toggleVoice}
+            title={voiceOn ? "Mute Commander voice" : "Enable Commander voice"}
+          >
+            {voiceOn ? "Voice on" : "Voice off"}
+          </button>
+          <button type="button" className="aim-matrix-refresh" onClick={refresh} disabled={loading}>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error ? <p className="aim-matrix-error">{error}</p> : null}
@@ -106,7 +175,10 @@ export default function AiMatrixPanel() {
           <div className="aim-chat-log">
             {localChat.map((m, i) => (
               <div key={`local-${i}`} className={`aim-bubble is-${m.role}`}>
-                <small>{m.role === "you" ? "You" : m.role === "commander" ? "Commander" : "System"}</small>
+                <small>
+                  {m.role === "you" ? "You" : m.role === "commander" ? "Commander" : "System"}
+                  {m.lang ? ` · ${m.lang}` : ""}
+                </small>
                 <p>{m.text}</p>
               </div>
             ))}
