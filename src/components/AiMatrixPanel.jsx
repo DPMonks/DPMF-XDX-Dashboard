@@ -61,13 +61,12 @@ export default function AiMatrixPanel() {
 
   const agents = data?.agents || [];
   const movements = data?.movements || [];
-  const busChat = (data?.messages || []).filter((m) => m.topic === "chat");
 
   return (
     <div className="aim-matrix">
       <div className="aim-matrix-head">
         <div>
-          <p className="aim-matrix-kicker">Observe-only · no wallets shown</p>
+          <p className="aim-matrix-kicker">Observe-only · ephemeral chat · no wallets shown</p>
           <p className="aim-matrix-commander">
             {data?.commander
               ? `Commander · ${data.commander.status} · ${ago(data.commander.last_seen_at)}`
@@ -105,25 +104,21 @@ export default function AiMatrixPanel() {
         <section className="aim-chat neon-inset">
           <h3>Commander chat</h3>
           <div className="aim-chat-log">
-            {busChat.map((m) => (
-              <div key={`bus-${m.id}`} className={`aim-bubble is-${m.from === "dashboard" ? "you" : "commander"}`}>
-                <small>{m.from_label || m.from}</small>
-                <p>{m.body?.text || m.body?.instruction || JSON.stringify(m.body)}</p>
-              </div>
-            ))}
             {localChat.map((m, i) => (
               <div key={`local-${i}`} className={`aim-bubble is-${m.role}`}>
                 <small>{m.role === "you" ? "You" : m.role === "commander" ? "Commander" : "System"}</small>
                 <p>{m.text}</p>
               </div>
             ))}
-            {!busChat.length && !localChat.length ? <p className="aim-empty">No chat yet. Ask Commander for status.</p> : null}
+            {!localChat.length ? (
+              <p className="aim-empty">No chat yet. Ask about status, pools, XRPL txs — or DPMF natives if you want that bias.</p>
+            ) : null}
           </div>
           <form className="aim-chat-form" onSubmit={onSend}>
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Message Commander…"
+              placeholder="Ask Commander (not saved)…"
               maxLength={2000}
               disabled={busy}
             />
