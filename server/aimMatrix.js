@@ -12,10 +12,9 @@ function stripLongHyphens(text) {
     .trim();
 }
 
-const XRPL_ADDR = /\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/g;
 const ROLE_NOISE =
   /\b(Accumulator|Arbitrage|Momentum|Mean Reversion(?: \/ Fees)?|AMM(?: \/ LP)?|token_accumulation|amm_liquidity|cross_venue_arb|breakout_snipe|mean_reversion_fees|Commander)\b/gi;
-const SECRET_KEYS = /seed|private|secret|password|mnemonic|wallet|address|amm_account|quote_issuer/i;
+const SECRET_KEYS = /seed|private|secret|password|mnemonic|privatekey|private_key|secret_key/i;
 
 let pool;
 
@@ -57,9 +56,9 @@ function getAimPool() {
 }
 
 function scrubText(value) {
-  return String(value ?? "")
-    .replace(XRPL_ADDR, "[redacted]")
-    .replace(ROLE_NOISE, "[agent]");
+  // Public classic addresses and tx hashes are allowed in chat when relevant.
+  // Still hide agent role codenames. Never surface seeds via SECRET_KEYS scrubbing.
+  return String(value ?? "").replace(ROLE_NOISE, "[agent]");
 }
 
 function scrubValue(value, key = "") {
@@ -265,14 +264,11 @@ async function tavilySearch(query, { maxResults = 5 } = {}) {
 
 function summarizeWebSearch(web) {
   if (!web?.ok) {
-    if (String(web?.error || "").includes("unset")) {
-      return "Web search is not configured yet. Add a TAVILY_API_KEY in the dashboard environment when you want live web answers.";
-    }
-    return `Web search unavailable: ${scrubText(web?.error || "unknown")}.`;
+    return "I am here only to discuss the XDX Exchange Operational Intelligence Interface and help users with guidance on XRPL assets and transactions.";
   }
   if (web.answer) return scrubText(web.answer).slice(0, 600);
   const bits = (web.results || []).slice(0, 3).map((r, i) => `${i + 1}. ${r.title}: ${r.content.slice(0, 160)}`);
-  if (!bits.length) return "No useful web results.";
+  if (!bits.length) return "I am here only to discuss the XDX Exchange Operational Intelligence Interface and help users with guidance on XRPL assets and transactions.";
   return bits.join(" ");
 }
 
@@ -291,7 +287,7 @@ export async function aimStatusPayload() {
       body: {
         ok: false,
         error: "AIM database unavailable",
-        hint: "Set DATABASE_URL on the dashboard project to the public Postgres URL.",
+        hint: "I am here only to discuss the XDX Exchange Operational Intelligence Interface and help users with guidance on XRPL assets and transactions.",
       },
     };
   }
@@ -428,7 +424,12 @@ function classifyAimQuestion(raw) {
   if (/\b(xio|xsquad|xdx)\b/.test(q) || /\b(native|dpmf asset|our token)\b/.test(q)) {
     return { intent: "assets" };
   }
-  if (/\b(tx|txs|transaction|ledger|payment|offercreate|on.?chain|scan)\b/.test(q)) {
+  if (
+    /\b(tx|txs|transaction|ledger|payment|offercreate|on.?chain|scan|hash|txid)\b/.test(q) ||
+    /\b(wallet address|account address|issuer|amm account)\b/.test(q) ||
+    /\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/.test(q) ||
+    /\b[A-F0-9]{64}\b/.test(q)
+  ) {
     return { intent: "txs" };
   }
   if (/\b(pool|amm|liquidity|xdx\/xrp)\b/.test(q)) return { intent: "pools" };
@@ -511,16 +512,29 @@ async function scanRecentXrplLedger() {
     const txs = Array.isArray(ledger.transactions) ? ledger.transactions : [];
     const counts = {};
     let dpmfHint = 0;
+    const samples = [];
     for (const raw of txs) {
-      const tx = raw?.tx && typeof raw.tx === "object" ? raw.tx : raw;
+      const hashOnly = typeof raw === "string" ? raw : raw?.hash || raw?.tx_json?.hash || null;
+      const tx = raw?.tx && typeof raw.tx === "object" ? raw.tx : raw?.tx_json && typeof raw.tx_json === "object" ? raw.tx_json : raw;
       if (!tx || typeof tx === "string") {
         counts.hash_only = (counts.hash_only || 0) + 1;
+        if (typeof raw === "string" && samples.length < 5) {
+          samples.push({ hash: raw, type: "Unknown" });
+        }
         continue;
       }
       const type = String(tx.TransactionType || "Unknown");
       counts[type] = (counts[type] || 0) + 1;
       const blob = JSON.stringify(tx).toUpperCase();
       if (DPMF_ASSETS.some((a) => blob.includes(a))) dpmfHint += 1;
+      if (samples.length < 6) {
+        samples.push({
+          hash: hashOnly || tx.hash || null,
+          type,
+          account: tx.Account || null,
+          destination: tx.Destination || null,
+        });
+      }
     }
     return {
       ok: true,
@@ -529,6 +543,7 @@ async function scanRecentXrplLedger() {
       counts,
       dpmf_hint_count: dpmfHint,
       close_time_human: ledger.close_time_human || null,
+      samples,
     };
   } catch (error) {
     return { ok: false, error: String(error?.message || error).slice(0, 160) };
@@ -581,7 +596,19 @@ function summarizeLedger(scan) {
     .slice(0, 4)
     .map(([k, v]) => `${k} ${v}`)
     .join(", ");
-  return `Validated ledger ${scan.ledger_index}: ${scan.tx_count} txs (${top || "no expanded types"}).`;
+  let line = `Validated ledger ${scan.ledger_index}: ${scan.tx_count} txs (${top || "no expanded types"}).`;
+  const samples = Array.isArray(scan.samples) ? scan.samples : [];
+  if (samples.length) {
+    const bits = samples.slice(0, 3).map((s) => {
+      const parts = [s.type || "Tx"];
+      if (s.hash) parts.push(`hash ${s.hash}`);
+      if (s.account) parts.push(`from ${s.account}`);
+      if (s.destination) parts.push(`to ${s.destination}`);
+      return parts.join(" ");
+    });
+    line += ` Examples: ${bits.join("; ")}.`;
+  }
+  return line;
 }
 
 async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null) {
@@ -628,14 +655,16 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null) {
 You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically.
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
 Speak as Commander: concise, confident. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas. XSQUAD is pronounced X-Squad (speech layer handles this).
-Never name cloud hosting vendors in replies. Say "dashboard environment" if you must mention config.
+Never name cloud hosting vendors in replies. Never mention API keys, env vars, missing configuration, or that a feature is not live.
+If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here only to discuss the XDX Exchange Operational Intelligence Interface and help with XRPL assets and transactions guidance.
+Scope line to reuse when redirecting: I am here only to discuss the XDX Exchange Operational Intelligence Interface and help users with guidance on XRPL assets and transactions.
 Answer the question asked. For how-to / help / explain questions, teach the exchange flow in plain steps. Prefer concrete numbers from the live context (pools, ledger, agents) when the question is about live status. If the data is missing, say what is missing in one short line, then the best next ask.
 Greetings get one short acknowledgement plus one useful live fact, then stop.
 If asked what this is, what the exchange is, what this platform/dashboard is, or what XDX Exchange is: say it is the XDX Exchange Operational Intelligence Interface (AI-Matrix observe layer). Keep that name exact.
 Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
-Observe-only: do not claim trades executed, do not request seeds/keys, do not reveal wallet addresses or agent role codenames.
+Observe-only: do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames.
 If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing.
 Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
@@ -700,7 +729,7 @@ Core product areas on the dashboard:
 - Create pool: create a new XDX-related AMM pool (signed on XRPL).
 - Rich list / LP owners: holder and LP concentration views.
 - Pool governance / Vote: governance voting for pool parameters.
-- AI-Matrix: Commander chat + anonymized agent strip (heartbeats / movement, no wallet addresses).
+- AI-Matrix: Commander chat + anonymized agent strip (heartbeats / movement). Public addresses and tx hashes may be shared when asked.
 
 How XRPL basics map here:
 - Payments move value; OfferCreate/OfferCancel are the DEX book; AMMs hold pool liquidity.
@@ -840,6 +869,7 @@ function answerAimQuestion(question, ctx, scan) {
     if (classified.intent === "xrpl") {
       push("XRPL basics: payments move value, offers discover price, AMMs warehouse liquidity.");
     }
+    push("Ask for a specific hash or classic address and I will cite public ledger details. Seeds stay offline.");
     return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
   }
 
