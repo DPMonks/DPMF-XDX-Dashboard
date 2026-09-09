@@ -33,7 +33,12 @@ function pickVoice(lang) {
 }
 
 export async function synthesizeCommanderSpeech(text, { lang = "en" } = {}) {
-  const cleaned = String(text || "").trim().slice(0, 1400);
+  const cleaned = String(text || "")
+    .replace(/\u2014/g, ". ")
+    .replace(/\u2013/g, "-")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 1400);
   if (!cleaned) return { ok: false, error: "Text required" };
 
   const isEn = String(lang || "en").toLowerCase().startsWith("en");

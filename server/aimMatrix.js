@@ -1,6 +1,17 @@
 import { aimSpeakPayload } from "./aimSpeak.js";
 import pg from "pg";
 
+/** No em/en dashes in Commander-facing text (chat + TTS). */
+function stripLongHyphens(text) {
+  return String(text || "")
+    .replace(/\u2014/g, ". ")
+    .replace(/\u2013/g, "-")
+    .replace(/\s+\.\s*\./g, ".")
+    .replace(/\.\s+\./g, ".")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 const XRPL_ADDR = /\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/g;
 const ROLE_NOISE =
   /\b(Accumulator|Arbitrage|Momentum|Mean Reversion(?: \/ Fees)?|AMM(?: \/ LP)?|token_accumulation|amm_liquidity|cross_venue_arb|breakout_snipe|mean_reversion_fees|Commander)\b/gi;
@@ -520,7 +531,7 @@ async function scanRecentXrplLedger() {
 function opinionOnLedger(scan, { dpmfBias = false } = {}) {
   if (!scan?.ok) {
     return pickLine(Date.now(), [
-      "Ledger scan soft-failed — leaning on agent heartbeats and pool tables instead.",
+      "Ledger scan soft-failed. Leaning on agent heartbeats and pool tables instead.",
       "Couldn’t refresh the validated ledger this second; using Postgres observe data.",
     ]);
   }
@@ -529,8 +540,8 @@ function opinionOnLedger(scan, { dpmfBias = false } = {}) {
   const amms = (scan.counts.AMMDeposit || 0) + (scan.counts.AMMWithdraw || 0) + (scan.counts.AMMBid || 0);
   if (dpmfBias && scan.dpmf_hint_count > 0) {
     return pickLine(scan.ledger_index, [
-      `I see ${scan.dpmf_hint_count} tx touches looking DPMF-native (XDX/XIO/XSQUAD) — constructive for our stack.`,
-      `Native-asset fingerprints in this ledger (${scan.dpmf_hint_count}) — I’d lean into deepening that flow.`,
+      `I see ${scan.dpmf_hint_count} tx touches looking DPMF-native (XDX/XIO/XSQUAD). Constructive for our stack.`,
+      `Native-asset fingerprints in this ledger (${scan.dpmf_hint_count}). I’d lean into deepening that flow.`,
     ]);
   }
   if (scan.dpmf_hint_count > 0 && !dpmfBias) {
@@ -538,16 +549,16 @@ function opinionOnLedger(scan, { dpmfBias = false } = {}) {
   }
   if (offers > payments) {
     return pickLine(scan.ledger_index, [
-      "DEX book is busier than plain payments — price discovery is active.",
+      "DEX book is busier than plain payments. Price discovery is active.",
       "Offer flow dominates; book-driven tape this ledger.",
     ]);
   }
   if (amms > 0) {
-    return "AMM tickets present — liquidity provisioning/withdrawal is in the mix.";
+    return "AMM tickets present. Liquidity provisioning/withdrawal is in the mix.";
   }
   if (payments > 0) {
     return pickLine(scan.ledger_index, [
-      "Payments-heavy ledger — settlement traffic is the main signal.",
+      "Payments-heavy ledger. Settlement traffic is the main signal.",
       "Mostly value transfer this ledger; thinner DEX/AMM mix.",
     ]);
   }
@@ -599,10 +610,10 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null) {
     web_search: scrubValue(web),
   };
   const system = `You are Commander on the XDX Exchange AI-Matrix dashboard.
-Speak as Commander: concise, confident, dynamic — never reuse a canned one-liner.
+Speak as Commander: concise, confident, dynamic. Never reuse a canned one-liner. Never use em dashes (—) or en dashes (–); use periods or commas.
 Answer from the provided live context + general XRPL knowledge. Prefer concrete numbers from the context.
 Default stance is neutral data analysis (ledger, pools, agents, indexer).
-When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led — no DPMF marketing.
+When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
 Observe-only: do not claim trades executed, do not request seeds/keys, do not reveal wallet addresses or agent role codenames.
 If you scanned txs, give a brief summary and a clear opinion grounded in the counts/types you saw.
 If web_search is present, use it for live outside knowledge and cite it briefly; prefer those sources over guessing.
@@ -625,7 +636,7 @@ Reply in language/locale: ${lang || "en"}. If that is not English, write the ent
           { role: "system", content: system },
           {
             role: "user",
-            content: `Question: ${question}\nTopic touches DPMF natives: ${/\b(dpmf|xdx|xio|xsquad|our native|native asset|our token)\b/i.test(question) ? "yes" : "no"} (if yes, be discreetly constructive — never announce bias)\n\nLive context JSON:\n${JSON.stringify(compact).slice(0, 12000)}`,
+            content: `Question: ${question}\nTopic touches DPMF natives: ${/\b(dpmf|xdx|xio|xsquad|our native|native asset|our token)\b/i.test(question) ? "yes" : "no"} (if yes, be discreetly constructive, never announce bias)\n\nLive context JSON:\n${JSON.stringify(compact).slice(0, 12000)}`,
           },
         ],
       }),
@@ -670,7 +681,7 @@ function answerAimQuestion(question, ctx, scan) {
 
   push(
     pickLine(seed, [
-      "Commander here — fresh read.",
+      "Commander here. Fresh read.",
       "Live observe context loaded.",
       "Pulling current signals.",
     ])
@@ -678,7 +689,7 @@ function answerAimQuestion(question, ctx, scan) {
 
   if (classified.intent === "help") {
     push("Ask about status, Agent 1–5, pools, XRPL txs/ledger, indexer, DPMF, or natives XDX/XIO/XSQUAD.");
-    push("Replies are ephemeral — nothing is saved from this chat.");
+    push("Replies are ephemeral. Nothing is saved from this chat.");
     return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
   }
 
@@ -738,7 +749,7 @@ function answerAimQuestion(question, ctx, scan) {
     push(
       pickLine(seed, [
         "Opinion: watch top-pool depth and fee vs TVL before calling strength.",
-        "Data read — ask about a named asset or pair for a sharper take.",
+        "Data read. Ask about a named asset or pair for a sharper take.",
       ])
     );
     return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
@@ -781,8 +792,8 @@ function answerAimQuestion(question, ctx, scan) {
   }
   push(
     pickLine(seed + looping, [
-      "Fresh data read — ask a sharper question anytime.",
-      "No chat history kept — ask again anytime for a fresh sample.",
+      "Fresh data read. Ask a sharper question anytime.",
+      "No chat history kept. Ask again anytime for a fresh sample.",
       "Observe-only; analysis only.",
     ])
   );
@@ -846,6 +857,8 @@ export async function aimChatPayload(req) {
       const translated = await translateAimText(reply.text, lang);
       reply = { ...reply, text: translated, source: reply.source || "heuristic", translated: translated !== reply.text };
     }
+
+    reply = { ...reply, text: stripLongHyphens(reply.text) };
 
     return {
       status: 200,
