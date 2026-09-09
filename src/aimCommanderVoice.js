@@ -108,6 +108,12 @@ function runTimedReveal(text, onProgress, onDone, { msPerChar = 28 } = {}) {
   }, Math.max(12, msPerChar));
 }
 
+function pronounceForSpeech(text) {
+  return String(text || "")
+    .replace(/\bXSQUAD\b/gi, "X Squad")
+    .replace(/\bX-?SQUAD\b/gi, "X Squad");
+}
+
 function speakLangForEdge(lang) {
   const n = normalizeLang(lang || "en");
   if (n === "en" || n.startsWith("en-")) return n === "en" ? "en-GB" : n;
@@ -204,7 +210,7 @@ export async function playPendingCommanderAudio({ onProgress, onDone, text = "" 
  * Fetch Edge N1 MP3 and play via Web Audio (avoids CSP blocking blob: media URLs).
  */
 export async function speakCommander(text, { voiceOn = true, lang = "en", onProgress, onDone } = {}) {
-  const line = String(text || "").trim();
+  const line = pronounceForSpeech(String(text || "")).trim();
   if (!line || typeof window === "undefined") {
     lastEngine = "none";
     if (typeof onDone === "function") onDone();
@@ -272,11 +278,12 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
 
 function speakBrowserFallback(text, lang, onProgress, onDone) {
   const synth = window.speechSynthesis;
-  if (!synth || !text) {
-    runTimedReveal(text, onProgress, onDone);
+  const spoken = pronounceForSpeech(text);
+  if (!synth || !spoken) {
+    runTimedReveal(spoken || text, onProgress, onDone);
     return;
   }
-  const line = String(text);
+  const line = spoken;
   const utter = new SpeechSynthesisUtterance(line.slice(0, 1400));
   utter.rate = 1.0;
   utter.pitch = 1.0;

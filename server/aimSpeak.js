@@ -32,6 +32,14 @@ function pickVoice(lang) {
   return VOICE_BY_LANG[base] || COMMANDER_EDGE_VOICE.voice;
 }
 
+
+/** Spoken forms for tickers/names (display text stays unchanged). */
+function pronounceForSpeech(text) {
+  return String(text || "")
+    .replace(/\bXSQUAD\b/gi, "X Squad")
+    .replace(/\bX-?SQUAD\b/gi, "X Squad");
+}
+
 function envVoiceOverride() {
   const voice = String(process.env.AIM_TTS_VOICE || "").trim();
   const rate = String(process.env.AIM_TTS_RATE || "").trim() || "+0%";
@@ -81,7 +89,7 @@ async function synthesizeOpenAiSpeech(cleaned, { lang = "en" } = {}) {
 }
 
 export async function synthesizeCommanderSpeech(text, { lang = "en" } = {}) {
-  const cleaned = String(text || "")
+  const cleaned = pronounceForSpeech(String(text || ""))
     .replace(/\u2014/g, ". ")
     .replace(/\u2013/g, "-")
     .replace(/\s{2,}/g, " ")
