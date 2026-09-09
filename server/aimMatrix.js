@@ -417,7 +417,14 @@ function classifyAimQuestion(raw) {
   if (agentMatch) return { intent: "agent", agentNum: agentMatch[1] };
   if (/^(hi|hello|hey|yo|gm|good (morning|afternoon|evening))\b/i.test(q) || /\b(hi|hello|hey)\b[,!.]?\s*(commander)?\s*$/i.test(q)) return { intent: "greeting" };
   if (/\b(what (is|are) (this|xdx|the exchange|the platform|the dashboard|ai[- ]?matrix)|what do you (do|call this)|who are you)\b/i.test(q)) return { intent: "identity" };
-  if (/\b(help|what can you|commands|how (do|to) ask)\b/.test(q)) return { intent: "help" };
+  if (
+    /\b(help|what can you|commands|how (do|to) (ask|use|work|trade|swap|connect)|explain|guide|tutorial|faq)\b/.test(q) ||
+    /\bhow (does|do|is|can)\b/.test(q) ||
+    /\bwhat (is|are|does)\b.*\b(swap|pool|amm|trust ?line|wallet|order ?book|governance|vote|agent|commander|ai[- ]?matrix|exchange)\b/.test(q) ||
+    /\b(where|how) (do i|to)\b/.test(q)
+  ) {
+    return { intent: "help" };
+  }
   if (/\b(xio|xsquad|xdx)\b/.test(q) || /\b(native|dpmf asset|our token)\b/.test(q)) {
     return { intent: "assets" };
   }
@@ -617,16 +624,20 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null) {
     ledger_scan: scrubValue(scan),
     web_search: scrubValue(web),
   };
-  const system = `You are Commander on the XDX Exchange AI-Matrix dashboard.
+  const system = `You are Commander on the XDX Exchange Operational Intelligence Interface (AI-Matrix).
+You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically.
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
 Speak as Commander: concise, confident. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas. XSQUAD is pronounced X-Squad (speech layer handles this).
-Answer the question asked. Prefer concrete numbers from the live context (pools, ledger, agents). If the data is missing, say what is missing in one short line, then the best next ask.
+Never name cloud hosting vendors in replies. Say "dashboard environment" if you must mention config.
+Answer the question asked. For how-to / help / explain questions, teach the exchange flow in plain steps. Prefer concrete numbers from the live context (pools, ledger, agents) when the question is about live status. If the data is missing, say what is missing in one short line, then the best next ask.
 Greetings get one short acknowledgement plus one useful live fact, then stop.
 If asked what this is, what the exchange is, what this platform/dashboard is, or what XDX Exchange is: say it is the XDX Exchange Operational Intelligence Interface (AI-Matrix observe layer). Keep that name exact.
+Exchange help knowledge (use when relevant):
+${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
 Observe-only: do not claim trades executed, do not request seeds/keys, do not reveal wallet addresses or agent role codenames.
 If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing.
-Keep replies under 80 words unless the user asks for detail. Replies are ephemeral (no chat history).
+Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
 
   const ctrl = new AbortController();
@@ -670,6 +681,81 @@ function wantsDpmfBias(question, classified) {
   const q = String(question || "");
   if (classified?.intent === "assets") return true;
   return /\b(dpmf|xdx|xio|xsquad|our native|native asset|our token)\b/i.test(q);
+}
+
+
+const EXCHANGE_HELP_KB = `
+XDX Exchange Operational Intelligence Interface (this site):
+- Live XRPL-native exchange UI for XDX and related natives (XIO, XSQUAD). Commander is the AI-Matrix help + observe layer.
+- Chat with Commander is ephemeral (not saved). Voice can read replies aloud.
+- AI-Matrix Agents 1-5 are observe-only in Phase 1 (no live trading from those workers). They watch pools/ledger for readiness.
+
+Core product areas on the dashboard:
+- Wallet / Connect: connect with Xaman (XUMM) to sign XRPL transactions.
+- Trust line: set a TrustSet for XDX (and other IOUs) before you can hold or receive that token.
+- Smart Swap: swap between assets using AMM pools; non-XDX pairs may include platform fee rules and LP governance checks.
+- Trading chart / Activity: market visuals for XDX.
+- Order book: XRPL DEX book for the selected pair.
+- AMM pools: list of XDX pools (e.g. XDX/XRP, XDX/RLUSD, XDX/XIO, XDX/XSQUAD) with depth and LP info.
+- Create pool: create a new XDX-related AMM pool (signed on XRPL).
+- Rich list / LP owners: holder and LP concentration views.
+- Pool governance / Vote: governance voting for pool parameters.
+- AI-Matrix: Commander chat + anonymized agent strip (heartbeats / movement, no wallet addresses).
+
+How XRPL basics map here:
+- Payments move value; OfferCreate/OfferCancel are the DEX book; AMMs hold pool liquidity.
+- IOUs need a trust line to the issuer. XDX issuer is the on-ledger issuer configured for this exchange.
+- XSQUAD is pronounced X-Squad.
+
+Safety:
+- Never share seeds or private keys. Commander will not ask for them.
+- Do not claim agents executed trades while read-only observe mode is on.
+- Prefer concrete steps: Connect wallet -> Trust line (if needed) -> Swap or book trade -> confirm in Xaman.
+`.trim();
+
+function helpAnswerForQuestion(question) {
+  const q = String(question || "").toLowerCase();
+  const bits = [];
+  const add = (s) => {
+    if (s) bits.push(s);
+  };
+
+  if (/\b(swap|smart swap|trade|exchange)\b/.test(q)) {
+    add("Smart Swap routes through XDX AMM pools on XRPL. Connect wallet, set any needed trust line, pick the pair, review the quote, then sign in Xaman.");
+  }
+  if (/\b(trust|trustline|trust line)\b/.test(q)) {
+    add("A trust line lets your account hold an IOU like XDX. Open Trust line, set the XDX limit, sign the TrustSet. Without it, inbound XDX can fail.");
+  }
+  if (/\b(wallet|connect|xaman|xumm)\b/.test(q)) {
+    add("Use Connect wallet with Xaman to authorize XRPL actions. Keep seeds offline. This chat never needs your seed.");
+  }
+  if (/\b(pool|amm|liquidity|lp)\b/.test(q)) {
+    add("AMM pools warehouse liquidity (for example XDX/XRP). View them under AMM pools. Create pool starts a new pool via a signed XRPL flow. LP owners shows who holds LP tokens.");
+  }
+  if (/\b(order ?book|dex|offer)\b/.test(q)) {
+    add("The order book is the XRPL DEX for the pair: OfferCreate adds liquidity/orders, OfferCancel removes them. It sits beside AMM pricing.");
+  }
+  if (/\b(govern|vote|voting)\b/.test(q)) {
+    add("Pool governance lets eligible LP participants vote on pool parameters. Open Vote / governance on the dashboard and sign votes in Xaman when prompted.");
+  }
+  if (/\b(agent|commander|ai[- ]?matrix|matrix)\b/.test(q)) {
+    add("AI-Matrix is the observe layer: Commander answers live status and help questions. Agents 1-5 show anonymized heartbeats and movement. Phase 1 is read-only. Chat is ephemeral.");
+  }
+  if (/\b(xdx|xio|xsquad|dpmf|native)\b/.test(q)) {
+    add("Natives on this interface include XDX, XIO, and XSQUAD (say X-Squad). Ask about a named pair or pool for a sharper live read.");
+  }
+  if (/\b(fee|platform fee)\b/.test(q)) {
+    add("Some non-XDX swaps apply a platform fee per exchange rules. Check the swap quote before you sign.");
+  }
+
+  if (!bits.length) {
+    add("I am Commander on the XDX Exchange Operational Intelligence Interface. I can explain wallet connect, trust lines, Smart Swap, AMM pools, order book, governance, and AI-Matrix observe mode.");
+    add("Ask a focused how-to, for example how to swap XDX, how trust lines work, or what AI-Matrix agents do.");
+  } else {
+    add("Ask a follow-up if you want step-by-step for one screen.");
+  }
+  add("Replies are ephemeral. Nothing is saved from this chat.");
+  return bits.join(" ");
 }
 
 function answerAimQuestion(question, ctx, scan) {
@@ -723,9 +809,7 @@ function answerAimQuestion(question, ctx, scan) {
   );
 
   if (classified.intent === "help") {
-    push("Ask about status, Agent 1–5, pools, XRPL txs/ledger, indexer, DPMF, or natives XDX/XIO/XSQUAD.");
-    push("Replies are ephemeral. Nothing is saved from this chat.");
-    return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
+    return { type: "commander_answer", intent: "help", text: helpAnswerForQuestion(question) };
   }
 
   if (dpmfBias) {

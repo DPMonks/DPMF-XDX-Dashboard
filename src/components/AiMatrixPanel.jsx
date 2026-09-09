@@ -350,7 +350,7 @@ export default function AiMatrixPanel() {
               );
             })}
             {!localChat.length ? (
-              <p className="aim-empty">No chat yet. Ask about status, pools, XRPL txs, or market context.</p>
+              <p className="aim-empty">No chat yet. Ask how the exchange works, or about status, pools, swaps, trust lines, or XRPL context.</p>
             ) : null}
           </div>
           <form className="aim-chat-form" onSubmit={onSend}>
