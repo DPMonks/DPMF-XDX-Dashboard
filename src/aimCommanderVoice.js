@@ -5,7 +5,7 @@ const VOICE_PREF_KEY = "aim.commander.voiceOn";
 /** Locked premium target: sample 3b3c — Ryan deep + brisk (Edge TTS). */
 export const COMMANDER_VOICE_TARGET = {
   id: "3b3c-deep-brisk",
-  engine: "msedge-tts",
+  engine: "edge-tts-universal",
   voice: "en-GB-RyanNeural",
   rate: "+6%",
   pitch: "-10Hz",
@@ -111,10 +111,16 @@ export async function speakCommander(text, { voiceOn = true, lang = "en" } = {})
     };
     await audio.play();
     return;
-  } catch {
+  } catch (err) {
+    console.warn("[AIM] Edge speak failed, browser fallback", err?.message || err);
     speakBrowserFallback(line, lang);
   }
 }
+
+export function aimVoiceEngineLabel() {
+  return COMMANDER_VOICE_TARGET.id;
+}
+
 
 export function stopCommanderSpeech() {
   if (typeof window === "undefined") return;
