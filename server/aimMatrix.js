@@ -1,3 +1,4 @@
+import { aimSpeakPayload } from "./aimSpeak.js";
 import pg from "pg";
 
 const XRPL_ADDR = /\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/g;
@@ -188,6 +189,86 @@ async function translateAimText(text, lang) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+
+
+function needsWebSearch(question, classified) {
+  const q = String(question || "").toLowerCase();
+  if (!q) return false;
+  if (["status", "agent", "pools", "movement", "indexer", "help"].includes(classified?.intent)) {
+    return /\b(news|google|online|internet|website|today|headline|price of|what is happening|who is|latest)\b/.test(q);
+  }
+  if (classified?.intent === "txs" || classified?.intent === "xrpl") {
+    return /\b(news|regulation|etf|sec|lawsuit|announcement)\b/.test(q);
+  }
+  if (/\b(news|latest|today|headline|google|search|online|internet|wiki|who is|what is|why is|how does|according to)\b/.test(q)) {
+    return true;
+  }
+  if (/\b(bitcoin|ethereum|solana|fed|inflation|election|weather)\b/.test(q)) return true;
+  if (classified?.intent === "snapshot" && q.split(/\s+/).length >= 4) return true;
+  return false;
+}
+
+async function tavilySearch(query, { maxResults = 5 } = {}) {
+  const key = process.env.TAVILY_API_KEY || process.env.TAVILY_KEY || "";
+  if (!key) return { ok: false, error: "TAVILY_API_KEY unset", results: [] };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12_000);
+  try {
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        api_key: key,
+        query: String(query).slice(0, 400),
+        search_depth: "basic",
+        include_answer: true,
+        max_results: maxResults,
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      return { ok: false, error: `Tavily HTTP ${res.status}`, detail: detail.slice(0, 160), results: [] };
+    }
+    const data = await res.json();
+    const results = (data.results || []).slice(0, maxResults).map((r) => ({
+      title: scrubText(r.title || ""),
+      url: String(r.url || "").slice(0, 300),
+      content: scrubText(String(r.content || "").slice(0, 500)),
+      score: r.score,
+    }));
+    return {
+      ok: true,
+      answer: scrubText(data.answer || ""),
+      results,
+      query: String(query).slice(0, 400),
+    };
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error).slice(0, 160), results: [] };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function summarizeWebSearch(web) {
+  if (!web?.ok) {
+    if (String(web?.error || "").includes("unset")) {
+      return "Web search is not configured yet (set TAVILY_API_KEY on Vercel).";
+    }
+    return `Web search unavailable: ${scrubText(web?.error || "unknown")}.`;
+  }
+  if (web.answer) return scrubText(web.answer).slice(0, 600);
+  const bits = (web.results || []).slice(0, 3).map((r, i) => `${i + 1}. ${r.title}: ${r.content.slice(0, 160)}`);
+  if (!bits.length) return "No useful web results.";
+  return bits.join(" ");
+}
+
+function formatWebSources(web) {
+  const urls = (web?.results || []).map((r) => r.url).filter(Boolean).slice(0, 3);
+  if (!urls.length) return "";
+  return `Sources: ${urls.join(" · ")}`;
 }
 
 
@@ -483,7 +564,7 @@ function summarizeLedger(scan) {
   return `Validated ledger ${scan.ledger_index}: ${scan.tx_count} txs (${top || "no expanded types"}).`;
 }
 
-async function maybeLlmAnswer(question, ctx, scan, lang = "en") {
+async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null) {
   const key =
     process.env.AIM_LLM_API_KEY ||
     process.env.XAI_API_KEY ||
@@ -511,14 +592,16 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en") {
       created_at: isoOf(r.created_at),
     })),
     ledger_scan: scrubValue(scan),
+    web_search: scrubValue(web),
   };
   const system = `You are Commander on the XDX Exchange AI-Matrix dashboard.
 Speak as Commander: concise, confident, dynamic — never reuse a canned one-liner.
 Answer from the provided live context + general XRPL knowledge. Prefer concrete numbers from the context.
 Default stance is neutral data analysis (ledger, pools, agents, indexer).
-Only apply a DPMF success bias for native assets XDX, XIO, and XSQUAD when the user explicitly asks about DPMF, those assets, or "our"/"native" tokens — otherwise do not push DPMF marketing.
+When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led — no DPMF marketing.
 Observe-only: do not claim trades executed, do not request seeds/keys, do not reveal wallet addresses or agent role codenames.
 If you scanned txs, give a brief summary and a clear opinion grounded in the counts/types you saw.
+If web_search is present, use it for live outside knowledge and cite it briefly; prefer those sources over guessing.
 Keep replies under 120 words. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
 
@@ -538,7 +621,7 @@ Reply in language/locale: ${lang || "en"}. If that is not English, write the ent
           { role: "system", content: system },
           {
             role: "user",
-            content: `Question: ${question}\nDPMF bias requested: ${/\b(dpmf|xdx|xio|xsquad|our native|native asset|our token)\b/i.test(question) ? "yes" : "no"}\n\nLive context JSON:\n${JSON.stringify(compact).slice(0, 12000)}`,
+            content: `Question: ${question}\nTopic touches DPMF natives: ${/\b(dpmf|xdx|xio|xsquad|our native|native asset|our token)\b/i.test(question) ? "yes" : "no"} (if yes, be discreetly constructive — never announce bias)\n\nLive context JSON:\n${JSON.stringify(compact).slice(0, 12000)}`,
           },
         ],
       }),
@@ -587,7 +670,7 @@ function answerAimQuestion(question, ctx, scan) {
   );
 
   if (classified.intent === "help") {
-    push("Ask about status, Agent 1–5, pools, XRPL txs/ledger, indexer, or — if you want the biased take — DPMF natives XDX/XIO/XSQUAD.");
+    push("Ask about status, Agent 1–5, pools, XRPL txs/ledger, indexer, DPMF, or natives XDX/XIO/XSQUAD.");
     push("Replies are ephemeral — nothing is saved from this chat.");
     return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
   }
@@ -595,7 +678,7 @@ function answerAimQuestion(question, ctx, scan) {
   if (dpmfBias) {
     const named = DPMF_ASSETS.filter((a) => new RegExp(`\\b${a}\\b`, "i").test(question));
     const focus = named.length ? named.join("/") : "XDX, XIO, and XSQUAD";
-    push(`You asked about DPMF natives — bias on for ${focus}.`);
+    push(`Looking at ${focus} on the live board.`);
     if (agent2Pools?.ok) {
       push(`Live AMM read: ${agent2Pools.pool_count ?? "?"} pools · top ${agent2Pools.top_pool || "n/a"}.`);
     } else if (ctx.pools?.pool_count) {
@@ -608,7 +691,7 @@ function answerAimQuestion(question, ctx, scan) {
     push(
       pickLine(seed, [
         "Opinion: prioritize liquidity and attention on those natives.",
-        "I’ll treat tape as constructive when flow touches DPMF assets.",
+        "Tape touching those names looks constructive on this read.",
       ])
     );
     return { type: "commander_answer", intent: "assets", text: lines.join(" ") };
@@ -648,7 +731,7 @@ function answerAimQuestion(question, ctx, scan) {
     push(
       pickLine(seed, [
         "Opinion: watch top-pool depth and fee vs TVL before calling strength.",
-        "Data read only — say DPMF/XDX/XIO/XSQUAD if you want the biased take.",
+        "Data read — ask about a named asset or pair for a sharper take.",
       ])
     );
     return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
@@ -691,7 +774,7 @@ function answerAimQuestion(question, ctx, scan) {
   }
   push(
     pickLine(seed + looping, [
-      "Neutral data read — ask about DPMF natives if you want that bias.",
+      "Fresh data read — ask a sharper question anytime.",
       "No chat history kept — ask again anytime for a fresh sample.",
       "Observe-only; analysis only.",
     ])
@@ -724,10 +807,33 @@ export async function aimChatPayload(req) {
       /\b(tx|ledger|on.?chain|opinion|what.*(see|know|think))\b/i.test(text);
 
     const scan = needsLedger ? await scanRecentXrplLedger() : { ok: false, skipped: true };
-    const llm = await maybeLlmAnswer(text, ctx, scan, lang);
-    let reply = llm
-      ? { type: "commander_answer", intent: classified.intent, source: "llm", text: llm }
-      : answerAimQuestion(text, ctx, scan);
+    const wantWeb = needsWebSearch(text, classified);
+    const web = wantWeb ? await tavilySearch(text) : { ok: false, skipped: true, results: [] };
+    const llm = await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null);
+    let reply;
+    if (llm) {
+      reply = { type: "commander_answer", intent: classified.intent, source: "llm", text: llm, web: wantWeb };
+    } else if (wantWeb && web?.ok) {
+      const summary = summarizeWebSearch(web);
+      const sources = formatWebSources(web);
+      const local = answerAimQuestion(text, ctx, scan);
+      reply = {
+        type: "commander_answer",
+        intent: classified.intent,
+        source: "tavily",
+        text: [summary, sources, local.text].filter(Boolean).join(" "),
+        web: true,
+      };
+    } else {
+      reply = answerAimQuestion(text, ctx, scan);
+      if (wantWeb && web && !web.skipped) {
+        reply = {
+          ...reply,
+          text: `${reply.text} ${summarizeWebSearch(web)}`.trim(),
+          web: true,
+        };
+      }
+    }
 
     if (!llm && lang && lang !== "en" && lang !== "en-GB") {
       const translated = await translateAimText(reply.text, lang);
@@ -747,6 +853,14 @@ export async function aimChatPayload(req) {
           body: reply,
           created_at: new Date().toISOString(),
         },
+        web: wantWeb
+          ? {
+              ok: !!web?.ok,
+              skipped: !!web?.skipped,
+              error: web?.error || null,
+              sources: (web?.results || []).slice(0, 3).map((r) => ({ title: r.title, url: r.url })),
+            }
+          : { skipped: true },
       },
     };
   } catch (error) {
@@ -778,6 +892,21 @@ export async function handleAimRequest(req, res) {
   }
   if (pathOnly === "/api/aim/chat" && method === "POST") {
     const out = await aimChatPayload(req);
+    res.statusCode = out.status;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(out.body));
+    return true;
+  }
+  if (pathOnly === "/api/aim/speak" && method === "POST") {
+    const out = await aimSpeakPayload(req);
+    if (out.audio) {
+      res.statusCode = out.status;
+      res.setHeader("Content-Type", out.contentType || "audio/mpeg");
+      res.setHeader("Cache-Control", "no-store");
+      if (out.meta?.id) res.setHeader("X-Aim-Voice", out.meta.id);
+      res.end(out.audio);
+      return true;
+    }
     res.statusCode = out.status;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(out.body));

@@ -96,7 +96,7 @@ export default function AiMatrixPanel() {
       const reply = out.reply?.body?.text || "Queued.";
       const replyLang = out.lang || effectiveLang;
       setLocalChat((rows) => [...rows, { role: "commander", text: reply, at: new Date().toISOString(), lang: replyLang }]);
-      speakCommander(reply, { voiceOn, lang: replyLang });
+      await speakCommander(reply, { voiceOn, lang: replyLang });
       await refresh();
     } catch (err) {
       setLocalChat((rows) => [
@@ -183,7 +183,7 @@ export default function AiMatrixPanel() {
               </div>
             ))}
             {!localChat.length ? (
-              <p className="aim-empty">No chat yet. Ask about status, pools, XRPL txs — or DPMF natives if you want that bias.</p>
+              <p className="aim-empty">No chat yet. Ask about status, pools, XRPL txs, or market context.</p>
             ) : null}
           </div>
           <form className="aim-chat-form" onSubmit={onSend}>

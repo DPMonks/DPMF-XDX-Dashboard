@@ -2,34 +2,14 @@ import { normalizeLang } from "./aimLocale";
 
 const VOICE_PREF_KEY = "aim.commander.voiceOn";
 
-/** Locked premium target: sample 3b3c — Ryan deep + brisk. */
+/** Locked premium target: sample 3b3c — Ryan deep + brisk (Edge TTS). */
 export const COMMANDER_VOICE_TARGET = {
   id: "3b3c-deep-brisk",
-  engine: "edge-tts",
+  engine: "msedge-tts",
   voice: "en-GB-RyanNeural",
   rate: "+6%",
   pitch: "-10Hz",
   style: "jarvis-adjacent calm British deep brisk",
-};
-
-/** Preferred Edge neural voices by language (for a later /api/aim/speak). */
-export const EDGE_VOICE_BY_LANG = {
-  en: "en-GB-RyanNeural",
-  "en-GB": "en-GB-RyanNeural",
-  es: "es-ES-AlvaroNeural",
-  pt: "pt-BR-AntonioNeural",
-  fr: "fr-FR-HenriNeural",
-  de: "de-DE-ConradNeural",
-  it: "it-IT-DiegoNeural",
-  nl: "nl-NL-MaartenNeural",
-  pl: "pl-PL-MarekNeural",
-  ru: "ru-RU-DmitryNeural",
-  ar: "ar-SA-HamedNeural",
-  tr: "tr-TR-AhmetNeural",
-  hi: "hi-IN-MadhurNeural",
-  zh: "zh-CN-YunxiNeural",
-  ja: "ja-JP-KeitaNeural",
-  ko: "ko-KR-InJoonNeural",
 };
 
 export function pickCommanderVoice(voices, lang = "en") {
@@ -73,18 +53,16 @@ export function writeVoicePref(on) {
   }
 }
 
-/** Browser approx of 3b3c: deep-ish + slightly brisk, language-matched voice. */
-export function speakCommander(text, { voiceOn = true, lang = "en" } = {}) {
-  if (!voiceOn || typeof window === "undefined") return;
+let currentAudio = null;
+
+function speakBrowserFallback(text, lang) {
   const synth = window.speechSynthesis;
   if (!synth || !text) return;
-
   const utter = new SpeechSynthesisUtterance(String(text).slice(0, 1400));
-  utter.rate = 1.08; // ~ +6%
-  utter.pitch = 0.82; // deeper lean
+  utter.rate = 1.08;
+  utter.pitch = 0.82;
   utter.volume = 1;
   utter.lang = normalizeLang(lang);
-
   const applyVoice = () => {
     const voice = pickCommanderVoice(synth.getVoices(), lang);
     if (voice) {
@@ -94,7 +72,6 @@ export function speakCommander(text, { voiceOn = true, lang = "en" } = {}) {
     synth.cancel();
     synth.speak(utter);
   };
-
   const voices = synth.getVoices();
   if (voices?.length) applyVoice();
   else {
@@ -107,7 +84,52 @@ export function speakCommander(text, { voiceOn = true, lang = "en" } = {}) {
   }
 }
 
+/** Prefer server Edge TTS (3b3c). Fall back to browser voice if speak API fails. */
+export async function speakCommander(text, { voiceOn = true, lang = "en" } = {}) {
+  if (!voiceOn || typeof window === "undefined") return;
+  const line = String(text || "").trim();
+  if (!line) return;
+
+  stopCommanderSpeech();
+
+  try {
+    const res = await fetch("/api/aim/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify({ text: line.slice(0, 1400), lang: normalizeLang(lang) }),
+    });
+    if (!res.ok) throw new Error(`speak ${res.status}`);
+    const type = res.headers.get("content-type") || "";
+    if (!type.includes("audio")) throw new Error("not audio");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    currentAudio = audio;
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      if (currentAudio === audio) currentAudio = null;
+    };
+    await audio.play();
+    return;
+  } catch {
+    speakBrowserFallback(line, lang);
+  }
+}
+
 export function stopCommanderSpeech() {
   if (typeof window === "undefined") return;
-  window.speechSynthesis?.cancel();
+  try {
+    window.speechSynthesis?.cancel();
+  } catch {
+    /* ignore */
+  }
+  if (currentAudio) {
+    try {
+      currentAudio.pause();
+      currentAudio.src = "";
+    } catch {
+      /* ignore */
+    }
+    currentAudio = null;
+  }
 }

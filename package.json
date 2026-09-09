@@ -12,6 +12,7 @@
     "start": "node server/serve.js"
   },
   "dependencies": {
+    "edge-tts-universal": "^1.4.0",
     "pg": "^8.23.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
