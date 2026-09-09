@@ -37,10 +37,24 @@ export default function AiMatrixPanel() {
       setError(err.message || "Failed to load AI-Matrix");
     } finally {
       setLoading(false);
+      // Keep viewport and chat log at the top (Refresh was landing at the bottom).
+      try {
+        const log = document.querySelector(".aim-chat-log");
+        if (log) log.scrollTop = 0;
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      } catch {
+        /* ignore */
+      }
     }
   }, []);
 
   useEffect(() => {
+    try {
+      if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    } catch {
+      /* ignore */
+    }
     refresh();
     const id = window.setInterval(refresh, 30000);
     return () => {
@@ -262,13 +276,13 @@ export default function AiMatrixPanel() {
           </div>
           <button
             type="button"
-            className={`aim-matrix-voice ${voiceOn ? "is-on" : "is-off"}`}
+            className={`aim-toolbar-btn aim-matrix-voice ${voiceOn ? "is-on" : "is-off"}`}
             onClick={toggleVoice}
             title={voiceOn ? "Mute Commander voice" : "Enable Commander voice"}
           >
             {voiceOn ? "Voice on" : "Voice off"}
           </button>
-          <button type="button" className="aim-matrix-refresh" onClick={refresh} disabled={loading}>
+          <button type="button" className="aim-toolbar-btn aim-matrix-refresh" onClick={refresh} disabled={loading}>
             Refresh
           </button>
         </div>

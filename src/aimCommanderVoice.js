@@ -17,7 +17,6 @@ export function pickCommanderVoice(voices, lang = "en") {
   if (!list.length) return null;
   const want = normalizeLang(lang);
   const wantBase = want.split("-")[0].toLowerCase();
-
   const score = (v) => {
     const name = `${v.name || ""} ${v.lang || ""}`.toLowerCase();
     const vLang = String(v.lang || "").toLowerCase();
@@ -31,7 +30,6 @@ export function pickCommanderVoice(voices, lang = "en") {
     if (v.localService) s += 2;
     return s;
   };
-
   return [...list].sort((a, b) => score(b) - score(a))[0] || null;
 }
 
@@ -53,50 +51,28 @@ export function writeVoicePref(on) {
   }
 }
 
-let sharedAudio = null;
 let audioCtx = null;
-let currentObjectUrl = null;
-let pendingObjectUrl = null;
+let activeSource = null;
 let revealRaf = 0;
 let revealTimer = 0;
 let lastEngine = "none";
+let pendingBuffer = null; // AudioBuffer ready for tap-to-play
+let pendingText = "";
+let playGen = 0;
 
-function getSharedAudio() {
+function getAudioCtx() {
   if (typeof window === "undefined") return null;
-  if (!sharedAudio) {
-    sharedAudio = new Audio();
-    sharedAudio.preload = "auto";
-    sharedAudio.setAttribute("playsinline", "true");
-    sharedAudio.controls = false;
-  }
-  return sharedAudio;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!audioCtx) audioCtx = new Ctx();
+  return audioCtx;
 }
 
-function resumeAudioContext() {
-  try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    if (!audioCtx) audioCtx = new Ctx();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-  } catch {
-    /* ignore */
-  }
-}
-
-/**
- * Call synchronously from a user gesture (Send / Voice on / Play).
- * Do NOT mute the shared element — a stuck muted=true caused silent "success" plays.
- */
 export function unlockCommanderAudio() {
-  if (typeof window === "undefined") return;
-  resumeAudioContext();
-  const audio = getSharedAudio();
-  if (!audio) return;
-  try {
-    audio.muted = false;
-    audio.volume = 1;
-  } catch {
-    /* ignore */
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  if (ctx.state === "suspended") {
+    ctx.resume().catch(() => {});
   }
 }
 
@@ -132,109 +108,101 @@ function runTimedReveal(text, onProgress, onDone, { msPerChar = 28 } = {}) {
   }, Math.max(12, msPerChar));
 }
 
-function syncAudioReveal(audio, text, onProgress, onDone) {
-  clearRevealLoops();
-  const total = String(text || "").length;
-  const tick = () => {
-    if (!sharedAudio || sharedAudio !== audio) return;
-    const dur = audio.duration;
-    if (Number.isFinite(dur) && dur > 0) {
-      const ratio = Math.min(1, Math.max(0, audio.currentTime / dur));
-      emitProgress(onProgress, Math.floor(ratio * total), total);
-    }
-    if (!audio.paused && !audio.ended) {
-      revealRaf = requestAnimationFrame(tick);
-    }
-  };
-  const start = () => {
-    emitProgress(onProgress, 0, total);
-    revealRaf = requestAnimationFrame(tick);
-  };
-  if (audio.readyState >= 1 && Number.isFinite(audio.duration) && durOk(audio)) start();
-  else audio.addEventListener("loadedmetadata", start, { once: true });
-
-  const finish = () => {
-    clearRevealLoops();
-    emitProgress(onProgress, total, total);
-    revokeUrl(currentObjectUrl);
-    currentObjectUrl = null;
-    if (typeof onDone === "function") onDone();
-  };
-  audio.addEventListener("ended", finish, { once: true });
-}
-
-function durOk(audio) {
-  return Number.isFinite(audio.duration) && audio.duration > 0;
-}
-
-function revokeUrl(url) {
-  if (!url) return;
-  try {
-    URL.revokeObjectURL(url);
-  } catch {
-    /* ignore */
-  }
-}
-
 function speakLangForEdge(lang) {
   const n = normalizeLang(lang || "en");
   if (n === "en" || n.startsWith("en-")) return n === "en" ? "en-GB" : n;
   return n;
 }
 
-async function waitCanPlay(audio) {
-  if (audio.readyState >= 3) return;
+function stopActiveSource() {
+  if (activeSource) {
+    try {
+      activeSource.stop(0);
+    } catch {
+      /* ignore */
+    }
+    try {
+      activeSource.disconnect();
+    } catch {
+      /* ignore */
+    }
+    activeSource = null;
+  }
+}
+
+function syncBufferReveal(ctx, startedAt, duration, text, onProgress, onDone, gen) {
+  clearRevealLoops();
+  const total = String(text || "").length;
+  const tick = () => {
+    if (gen !== playGen) return;
+    const elapsed = Math.max(0, ctx.currentTime - startedAt);
+    const ratio = duration > 0 ? Math.min(1, elapsed / duration) : 1;
+    emitProgress(onProgress, Math.floor(ratio * total), total);
+    if (ratio < 1) revealRaf = requestAnimationFrame(tick);
+  };
+  emitProgress(onProgress, 0, total);
+  revealRaf = requestAnimationFrame(tick);
+}
+
+async function playAudioBuffer(buffer, text, onProgress, onDone) {
+  const ctx = getAudioCtx();
+  if (!ctx || !buffer) throw new Error("no audio context");
+  if (ctx.state === "suspended") await ctx.resume();
+  stopActiveSource();
+  clearRevealLoops();
+  const gen = ++playGen;
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+  activeSource = source;
+  const startedAt = ctx.currentTime;
+  const duration = buffer.duration || 1;
+  syncBufferReveal(ctx, startedAt, duration, text, onProgress, onDone, gen);
   await new Promise((resolve, reject) => {
-    const ok = () => {
-      cleanup();
+    source.onended = () => {
+      if (gen === playGen) {
+        clearRevealLoops();
+        emitProgress(onProgress, String(text || "").length, String(text || "").length);
+        activeSource = null;
+        if (typeof onDone === "function") onDone();
+      }
       resolve();
     };
-    const bad = () => {
-      cleanup();
-      reject(new Error("audio error"));
-    };
-    const cleanup = () => {
-      audio.removeEventListener("canplaythrough", ok);
-      audio.removeEventListener("error", bad);
-    };
-    audio.addEventListener("canplaythrough", ok, { once: true });
-    audio.addEventListener("error", bad, { once: true });
-    window.setTimeout(ok, 2500);
+    try {
+      source.start(0);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
-/**
- * Play a previously blocked Edge blob (call from a click on "Play voice").
- */
+export function hasPendingCommanderAudio() {
+  return Boolean(pendingBuffer);
+}
+
+/** Tap-to-play path (user gesture). */
 export async function playPendingCommanderAudio({ onProgress, onDone, text = "" } = {}) {
   unlockCommanderAudio();
-  const audio = getSharedAudio();
-  const url = pendingObjectUrl || currentObjectUrl;
-  if (!audio || !url) {
+  const line = text || pendingText || "";
+  if (!pendingBuffer) {
     if (typeof onDone === "function") onDone();
     return { mode: "none", engine: "none" };
   }
   try {
-    audio.muted = false;
-    audio.volume = 1;
-    if (audio.src !== url) audio.src = url;
-    if (text) syncAudioReveal(audio, text, onProgress, onDone);
-    await waitCanPlay(audio);
-    await audio.play();
+    await playAudioBuffer(pendingBuffer, line, onProgress, onDone);
     lastEngine = COMMANDER_VOICE_TARGET.id;
-    pendingObjectUrl = null;
-    return { mode: "edge", engine: lastEngine };
+    return { mode: "edge", engine: lastEngine, needsPlay: false };
   } catch (err) {
-    console.warn("[AIM] pending play failed", err?.message || err);
-    runTimedReveal(text || "", onProgress, onDone, { msPerChar: 16 });
-    return { mode: "edge-blocked", engine: "edge-blocked", error: String(err?.message || err) };
+    console.warn("[AIM] pending WebAudio play failed", err?.message || err);
+    lastEngine = "edge-blocked";
+    runTimedReveal(line, onProgress, onDone, { msPerChar: 16 });
+    return { mode: "edge-blocked", engine: lastEngine, needsPlay: true, error: String(err?.message || err) };
   }
 }
 
-export function hasPendingCommanderAudio() {
-  return Boolean(pendingObjectUrl);
-}
-
+/**
+ * Fetch Edge N1 MP3 and play via Web Audio (avoids CSP blocking blob: media URLs).
+ */
 export async function speakCommander(text, { voiceOn = true, lang = "en", onProgress, onDone } = {}) {
   const line = String(text || "").trim();
   if (!line || typeof window === "undefined") {
@@ -243,7 +211,7 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
     return { mode: "none", engine: lastEngine };
   }
 
-  stopCommanderSpeech({ keepShared: true });
+  stopCommanderSpeech({ keepPending: false });
   unlockCommanderAudio();
 
   if (!voiceOn) {
@@ -252,8 +220,8 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
     return { mode: "typewriter", engine: lastEngine };
   }
 
-  let edgeBlob = null;
-  let voiceHeader = "";
+  let voiceHeader = COMMANDER_VOICE_TARGET.id;
+  let arrayBuffer;
   try {
     const res = await fetch("/api/aim/speak", {
       method: "POST",
@@ -264,8 +232,8 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
     const type = res.headers.get("content-type") || "";
     if (!type.includes("audio")) throw new Error("not audio");
     voiceHeader = res.headers.get("x-aim-voice") || COMMANDER_VOICE_TARGET.id;
-    edgeBlob = await res.blob();
-    if (!edgeBlob || edgeBlob.size < 64) throw new Error("empty audio");
+    arrayBuffer = await res.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength < 64) throw new Error("empty audio");
   } catch (err) {
     console.warn("[AIM] Edge speak API failed", err?.message || err);
     lastEngine = "browser-fallback";
@@ -273,33 +241,25 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
     return { mode: "browser", engine: lastEngine, error: String(err?.message || err) };
   }
 
-  const audio = getSharedAudio();
-  revokeUrl(currentObjectUrl);
-  revokeUrl(pendingObjectUrl);
-  const url = URL.createObjectURL(edgeBlob);
-  currentObjectUrl = url;
-  pendingObjectUrl = url;
+  const ctx = getAudioCtx();
+  if (!ctx) {
+    lastEngine = "browser-fallback";
+    speakBrowserFallback(line, lang, onProgress, onDone);
+    return { mode: "browser", engine: lastEngine };
+  }
 
   try {
-    audio.pause();
-    audio.muted = false;
-    audio.volume = 1;
-    audio.src = url;
-    audio.load();
-    syncAudioReveal(audio, line, onProgress, () => {
-      pendingObjectUrl = null;
-      if (typeof onDone === "function") onDone();
-    });
-    await waitCanPlay(audio);
-    resumeAudioContext();
-    await audio.play();
-    lastEngine = voiceHeader || COMMANDER_VOICE_TARGET.id;
-    pendingObjectUrl = null;
+    if (ctx.state === "suspended") await ctx.resume();
+    const buffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    pendingBuffer = buffer;
+    pendingText = line;
+    await playAudioBuffer(buffer, line, onProgress, onDone);
+    lastEngine = voiceHeader;
     return { mode: "edge", engine: lastEngine, needsPlay: false };
   } catch (err) {
-    console.warn("[AIM] Edge MP3 autoplay blocked; keep blob for tap-to-play", err?.message || err);
+    console.warn("[AIM] WebAudio play blocked/failed; keep buffer for tap-to-play", err?.message || err);
     lastEngine = "edge-blocked";
-    // Reveal text now; keep pendingObjectUrl for Play voice button.
+    // Keep pendingBuffer for Play voice button (user gesture).
     runTimedReveal(line, onProgress, onDone, { msPerChar: 18 });
     return {
       mode: "edge-blocked",
@@ -333,9 +293,7 @@ function speakBrowserFallback(text, lang, onProgress, onDone) {
     emitProgress(onProgress, total, total);
     if (typeof onDone === "function") onDone();
   };
-  utter.onerror = () => {
-    runTimedReveal(line, onProgress, onDone, { msPerChar: 22 });
-  };
+  utter.onerror = () => runTimedReveal(line, onProgress, onDone, { msPerChar: 22 });
   const applyVoice = () => {
     const voice = pickCommanderVoice(synth.getVoices(), "en-GB");
     if (voice) {
@@ -361,29 +319,18 @@ export function aimVoiceEngineLabel() {
   return lastEngine || COMMANDER_VOICE_TARGET.id;
 }
 
-export function stopCommanderSpeech({ keepShared = false } = {}) {
+export function stopCommanderSpeech({ keepPending = false } = {}) {
   if (typeof window === "undefined") return;
+  playGen += 1;
   clearRevealLoops();
+  stopActiveSource();
   try {
     window.speechSynthesis?.cancel();
   } catch {
     /* ignore */
   }
-  if (sharedAudio) {
-    try {
-      sharedAudio.pause();
-      if (!keepShared) {
-        sharedAudio.removeAttribute("src");
-        sharedAudio.load();
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  if (!keepShared) {
-    revokeUrl(currentObjectUrl);
-    revokeUrl(pendingObjectUrl);
-    currentObjectUrl = null;
-    pendingObjectUrl = null;
+  if (!keepPending) {
+    pendingBuffer = null;
+    pendingText = "";
   }
 }
