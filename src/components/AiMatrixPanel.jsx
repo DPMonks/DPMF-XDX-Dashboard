@@ -261,7 +261,7 @@ export default function AiMatrixPanel() {
             ) : null}
           </div>
           <div className="aim-toolbar-item">
-            <span className="aim-toolbar-kicker">Voice</span>
+            <span className="aim-toolbar-kicker aim-toolbar-kicker-spacer" aria-hidden="true" />
             <button
               type="button"
               className={`aim-toolbar-btn aim-matrix-voice ${voiceOn ? "is-on" : "is-off"}`}
@@ -272,7 +272,7 @@ export default function AiMatrixPanel() {
             </button>
           </div>
           <div className="aim-toolbar-item">
-            <span className="aim-toolbar-kicker">Status</span>
+            <span className="aim-toolbar-kicker aim-toolbar-kicker-spacer" aria-hidden="true" />
             <button
               type="button"
               className="aim-toolbar-btn aim-matrix-refresh"
