@@ -1,10 +1,4 @@
 import pg from "pg";
-import {
-  hasIndexerDatabase,
-  postgresOutageBody,
-  postgresPoolOptions,
-  postgresTemporarilyDown,
-} from "./readIndexerDb.js";
 
 const XRPL_ADDR = /\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/g;
 const ROLE_NOISE =
@@ -13,9 +7,40 @@ const SECRET_KEYS = /seed|private|secret|password|mnemonic|wallet|address|amm_ac
 
 let pool;
 
+function databaseUrl() {
+  return process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
+}
+
+function hasDatabase() {
+  const raw = databaseUrl();
+  return /^postgres(ql)?:\/\//i.test(raw);
+}
+
+function poolOptions(raw) {
+  let url = String(raw || "");
+  // Match dashboard convention: strip sslmode=require; use soft TLS for Railway proxy.
+  try {
+    const u = new URL(url);
+    if (u.searchParams.get("sslmode") === "require") u.searchParams.delete("sslmode");
+    url = u.toString();
+  } catch {
+    /* keep raw */
+  }
+  const password = process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD || undefined;
+  const opts = {
+    connectionString: url,
+    ssl: { rejectUnauthorized: false },
+    max: 2,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 12_000,
+  };
+  if (password) opts.password = password;
+  return opts;
+}
+
 function getAimPool() {
-  if (!hasIndexerDatabase()) return null;
-  if (!pool) pool = new pg.Pool(postgresPoolOptions(process.env.DATABASE_URL || process.env.POSTGRES_URL || ""));
+  if (!hasDatabase()) return null;
+  if (!pool) pool = new pg.Pool(poolOptions(databaseUrl()));
   return pool;
 }
 
@@ -30,6 +55,7 @@ function scrubValue(value, key = "") {
   if (value == null) return value;
   if (typeof value === "string") return scrubText(value);
   if (typeof value === "number" || typeof value === "boolean") return value;
+  if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) return value.map((v) => scrubValue(v)).filter((v) => v !== undefined);
   if (typeof value === "object") {
     const out = {};
@@ -54,15 +80,33 @@ function agentLabel(agentId) {
 function publicAgentId(agentId) {
   const id = String(agentId || "");
   if (id === "commander") return "commander";
+  if (id === "dashboard") return "dashboard";
   const m = /^agent(\d+)$/i.exec(id);
   return m ? `agent${m[1]}` : "agent";
 }
 
 async function readJson(req) {
+  if (req?.body && typeof req.body === "object") return req.body;
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   if (!chunks.length) return {};
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+function summarizeIntent(kind, content) {
+  if (!content || typeof content !== "object") return scrubText(kind);
+  if (kind === "pools" || content.pools) {
+    const pools = content.pools || content;
+    if (pools.ok) return `Pool scan ok · ${pools.pool_count ?? "?"} pools · top ${pools.top_pool || "n/a"}`;
+    return `Pool scan issue · ${scrubText(pools.error || "unknown")}`;
+  }
+  if (content.indexer?.skipped) return "Observing via private data path";
+  if (content.indexer?.status_code) return `Indexer probe · HTTP ${content.indexer.status_code}`;
+  if (content.last_indexer?.status_code) return `Indexer probe · HTTP ${content.last_indexer.status_code}`;
+  if (content.public?.results) return "Public market ping";
+  if (content.type === "scan_directive") return "Observe-only directive";
+  if (content.type === "ping") return "Peer ping";
+  return scrubText(kind || "update");
 }
 
 export async function aimStatusPayload() {
@@ -73,7 +117,7 @@ export async function aimStatusPayload() {
       body: {
         ok: false,
         error: "AIM database unavailable",
-        hint: "Set DATABASE_URL on the dashboard deploy to the indexer Postgres public URL.",
+        hint: "Set DATABASE_URL on the Vercel dashboard project to the indexer Postgres public URL.",
       },
     };
   }
@@ -133,9 +177,9 @@ export async function aimStatusPayload() {
     const messages = chat.rows
       .map((r) => ({
         id: r.id,
-        from: publicAgentId(r.from_agent) === "agent" ? scrubText(r.from_agent) : publicAgentId(r.from_agent),
-        to: publicAgentId(r.to_agent) === "agent" ? scrubText(r.to_agent) : publicAgentId(r.to_agent),
-        from_label: agentLabel(r.from_agent === "dashboard" ? "dashboard" : r.from_agent),
+        from: publicAgentId(r.from_agent),
+        to: publicAgentId(r.to_agent),
+        from_label: agentLabel(r.from_agent),
         to_label: agentLabel(r.to_agent),
         topic: scrubText(r.topic),
         body: scrubValue(r.body) || {},
@@ -155,36 +199,21 @@ export async function aimStatusPayload() {
       },
     };
   } catch (error) {
-    if (postgresTemporarilyDown(error)) {
-      return { status: 503, body: postgresOutageBody() };
-    }
-    return { status: 500, body: { ok: false, error: "Failed to load AIM status" } };
+    return {
+      status: 500,
+      body: {
+        ok: false,
+        error: "Failed to load AIM status",
+        detail: String(error?.message || error).slice(0, 240),
+      },
+    };
   }
-}
-
-function summarizeIntent(kind, content) {
-  if (!content || typeof content !== "object") return scrubText(kind);
-  if (kind === "pools" || content.pools) {
-    const pools = content.pools || content;
-    if (pools.ok) return `Pool scan ok · ${pools.pool_count ?? "?"} pools · top ${pools.top_pool || "n/a"}`;
-    return `Pool scan issue · ${scrubText(pools.error || "unknown")}`;
-  }
-  if (content.indexer?.skipped) return "Observing via private data path";
-  if (content.indexer?.status_code) return `Indexer probe · HTTP ${content.indexer.status_code}`;
-  if (content.last_indexer?.status_code) return `Indexer probe · HTTP ${content.last_indexer.status_code}`;
-  if (content.public?.results) return "Public market ping";
-  if (content.type === "scan_directive") return "Observe-only directive";
-  if (content.type === "ping") return "Peer ping";
-  return scrubText(kind || "update");
 }
 
 export async function aimChatPayload(req) {
   const db = getAimPool();
   if (!db) {
-    return {
-      status: 503,
-      body: { ok: false, error: "AIM database unavailable" },
-    };
+    return { status: 503, body: { ok: false, error: "AIM database unavailable" } };
   }
   try {
     const body = await readJson(req);
@@ -233,10 +262,10 @@ export async function aimChatPayload(req) {
       },
     };
   } catch (error) {
-    if (postgresTemporarilyDown(error)) {
-      return { status: 503, body: postgresOutageBody() };
-    }
-    return { status: 500, body: { ok: false, error: "Failed to post AIM chat" } };
+    return {
+      status: 500,
+      body: { ok: false, error: "Failed to post AIM chat", detail: String(error?.message || error).slice(0, 240) },
+    };
   }
 }
 
