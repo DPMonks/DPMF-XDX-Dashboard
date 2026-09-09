@@ -565,15 +565,19 @@ function summarizeLedger(scan) {
 }
 
 async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null) {
-  const key =
+  const key = String(
     process.env.AIM_LLM_API_KEY ||
-    process.env.XAI_API_KEY ||
-    process.env.GROK_API_KEY ||
-    process.env.OPENAI_API_KEY ||
-    "";
-  if (!key) return null;
-  const base = (process.env.AIM_LLM_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.x.ai/v1").replace(/\/$/, "");
-  const model = process.env.AIM_LLM_MODEL || process.env.XAI_MODEL || "grok-2-latest";
+      process.env.XAI_API_KEY ||
+      process.env.GROK_API_KEY ||
+      process.env.GEMINI_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      ""
+  ).trim();
+  if (!key) return { ok: false, error: "LLM API key unset (OPENAI_API_KEY / GEMINI_API_KEY)" };
+  const base = String(process.env.AIM_LLM_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.x.ai/v1")
+    .trim()
+    .replace(/\/$/, "");
+  const model = String(process.env.AIM_LLM_MODEL || process.env.XAI_MODEL || "grok-2-latest").trim();
   const compact = {
     commander: scrubValue(ctx.heartbeats?.find((h) => h.agent_id === "commander") || null),
     agents: (ctx.heartbeats || [])
@@ -627,13 +631,16 @@ Reply in language/locale: ${lang || "en"}. If that is not English, write the ent
       }),
       signal: ctrl.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const detail = scrubText(await res.text().catch(() => "")).slice(0, 220);
+      return { ok: false, error: `LLM HTTP ${res.status}`, detail, model, base };
+    }
     const data = await res.json();
     const text = scrubText(data?.choices?.[0]?.message?.content || "").trim();
-    if (!text) return null;
-    return text.slice(0, 1200);
-  } catch {
-    return null;
+    if (!text) return { ok: false, error: "LLM empty content", model, base };
+    return { ok: true, text: text.slice(0, 1200), model, base };
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error).slice(0, 220), model, base };
   } finally {
     clearTimeout(timer);
   }
@@ -811,8 +818,8 @@ export async function aimChatPayload(req) {
     const web = wantWeb ? await tavilySearch(text) : { ok: false, skipped: true, results: [] };
     const llm = await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null);
     let reply;
-    if (llm) {
-      reply = { type: "commander_answer", intent: classified.intent, source: "llm", text: llm, web: wantWeb };
+    if (llm?.ok && llm.text) {
+      reply = { type: "commander_answer", intent: classified.intent, source: "llm", text: llm.text, web: wantWeb, model: llm.model };
     } else if (wantWeb && web?.ok) {
       const summary = summarizeWebSearch(web);
       const sources = formatWebSources(web);
@@ -835,7 +842,7 @@ export async function aimChatPayload(req) {
       }
     }
 
-    if (!llm && lang && lang !== "en" && lang !== "en-GB") {
+    if (!llm?.ok && lang && lang !== "en" && lang !== "en-GB") {
       const translated = await translateAimText(reply.text, lang);
       reply = { ...reply, text: translated, source: reply.source || "heuristic", translated: translated !== reply.text };
     }
@@ -853,6 +860,9 @@ export async function aimChatPayload(req) {
           body: reply,
           created_at: new Date().toISOString(),
         },
+        llm: llm?.ok
+          ? { ok: true, model: llm.model || null }
+          : { ok: false, error: llm?.error || "not used", detail: llm?.detail || null, model: llm?.model || null },
         web: wantWeb
           ? {
               ok: !!web?.ok,
