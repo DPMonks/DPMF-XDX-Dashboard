@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
 import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
@@ -25,6 +25,7 @@ export default function AiMatrixPanel() {
   const [suggestedLang, setSuggestedLang] = useState("en");
   const [langSource, setLangSource] = useState("auto");
   const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const chatLogRef = useRef(null);
 
   const effectiveLang = langPref === "auto" ? suggestedLang : normalizeLang(langPref);
 
@@ -95,6 +96,13 @@ export default function AiMatrixPanel() {
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [langMenuOpen]);
+
+  // Keep the chat log pinned to the newest line while conversation flows / types.
+  useEffect(() => {
+    const el = chatLogRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [localChat]);
 
   async function onSend(event) {
     event.preventDefault();
@@ -308,7 +316,7 @@ export default function AiMatrixPanel() {
       <div className="aim-matrix-grid">
         <section className="aim-chat neon-inset">
           <h3>Commander chat</h3>
-          <div className="aim-chat-log">
+          <div className="aim-chat-log" ref={chatLogRef}>
             {localChat.map((m, i) => {
               const full = m.text || "";
               const revealed =
