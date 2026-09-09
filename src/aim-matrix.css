@@ -43,12 +43,85 @@
 }
 .aim-matrix-voice.is-off { opacity: 0.65; background: rgba(60,60,70,0.45); }
 
-.aim-lang { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; opacity: 0.9; }
-.aim-lang select {
+.aim-lang {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(165, 243, 252, 0.85);
+  position: relative;
+  min-width: 11rem;
+}
+.aim-lang-kicker { opacity: 0.75; }
+.aim-lang-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
   border-radius: 10px;
-  border: 1px solid rgba(120,220,255,0.35);
-  background: rgba(0,0,0,0.35);
-  color: inherit;
+  border: 1px solid rgba(120, 220, 255, 0.4);
+  background:
+    linear-gradient(180deg, rgba(14, 116, 144, 0.35), rgba(8, 24, 40, 0.85));
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.08), inset 0 1px 0 rgba(255,255,255,0.06);
+  color: #e0f7ff;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.aim-lang-btn:hover,
+.aim-lang-btn.is-open {
+  border-color: rgba(103, 232, 249, 0.7);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.22);
+}
+.aim-lang-btn-value { font-size: 0.86rem; font-weight: 600; }
+.aim-lang-chevron {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid rgba(165, 243, 252, 0.9);
+  border-bottom: 2px solid rgba(165, 243, 252, 0.9);
+  transform: rotate(45deg);
+  margin-top: -0.15rem;
+  opacity: 0.85;
+}
+.aim-lang-btn.is-open .aim-lang-chevron { transform: rotate(-135deg); margin-top: 0.15rem; }
+.aim-lang-menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 16rem;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 220, 255, 0.35);
+  background: rgba(6, 14, 26, 0.96);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 0 18px rgba(34, 211, 238, 0.12);
+  padding: 0.35rem;
+}
+.aim-lang-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #d7f6ff;
   padding: 0.55rem 0.65rem;
-  min-width: 9.5rem;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.aim-lang-option:hover,
+.aim-lang-option.is-active {
+  background: rgba(14, 116, 144, 0.4);
+  color: #fff;
+}
+.aim-lang-option.is-active {
+  box-shadow: inset 2px 0 0 #67e8f9;
 }

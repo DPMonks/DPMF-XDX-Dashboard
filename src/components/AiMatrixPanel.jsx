@@ -24,6 +24,7 @@ export default function AiMatrixPanel() {
   const [langPref, setLangPref] = useState(() => readLangPref());
   const [suggestedLang, setSuggestedLang] = useState("en");
   const [langSource, setLangSource] = useState("auto");
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
 
   const effectiveLang = langPref === "auto" ? suggestedLang : normalizeLang(langPref);
 
@@ -78,11 +79,21 @@ export default function AiMatrixPanel() {
     });
   }
 
-  function onLangChange(event) {
-    const next = event.target.value || "auto";
+  function onLangChange(nextCode) {
+    const next = nextCode || "auto";
     setLangPref(next);
     writeLangPref(next);
+    setLangMenuOpen(false);
   }
+
+  useEffect(() => {
+    if (!langMenuOpen) return undefined;
+    function onDoc(event) {
+      if (!event.target?.closest?.(".aim-lang")) setLangMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [langMenuOpen]);
 
   async function onSend(event) {
     event.preventDefault();
@@ -125,16 +136,47 @@ export default function AiMatrixPanel() {
           </p>
         </div>
         <div className="aim-matrix-actions">
-          <label className="aim-lang">
-            <span>Language</span>
-            <select value={langPref} onChange={onLangChange} title="Commander reply + voice language">
-              {AIM_LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code}>
-                  {l.code === "auto" ? `Auto (${suggestedLang}${langSource ? ` · ${langSource}` : ""})` : l.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="aim-lang">
+            <span className="aim-lang-kicker">XDX · Language</span>
+            <button
+              type="button"
+              className={`aim-lang-btn ${langMenuOpen ? "is-open" : ""}`}
+              onClick={() => setLangMenuOpen((v) => !v)}
+              title="Commander reply + voice language"
+              aria-haspopup="listbox"
+              aria-expanded={langMenuOpen}
+            >
+              <span className="aim-lang-btn-value">
+                {langPref === "auto"
+                  ? `Auto (${suggestedLang}${langSource ? ` · ${langSource}` : ""})`
+                  : AIM_LANGUAGES.find((l) => l.code === langPref)?.label || langPref}
+              </span>
+              <span className="aim-lang-chevron" aria-hidden="true" />
+            </button>
+            {langMenuOpen ? (
+              <div className="aim-lang-menu" role="listbox">
+                {AIM_LANGUAGES.map((l) => {
+                  const label =
+                    l.code === "auto"
+                      ? `Auto (${suggestedLang}${langSource ? ` · ${langSource}` : ""})`
+                      : l.label;
+                  const active = langPref === l.code;
+                  return (
+                    <button
+                      key={l.code}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      className={`aim-lang-option ${active ? "is-active" : ""}`}
+                      onClick={() => onLangChange(l.code)}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             className={`aim-matrix-voice ${voiceOn ? "is-on" : "is-off"}`}
