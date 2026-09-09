@@ -266,7 +266,7 @@ async function tavilySearch(query, { maxResults = 5 } = {}) {
 function summarizeWebSearch(web) {
   if (!web?.ok) {
     if (String(web?.error || "").includes("unset")) {
-      return "Web search is not configured yet (set TAVILY_API_KEY on Vercel).";
+      return "Web search is not configured yet. Add a TAVILY_API_KEY in the dashboard environment when you want live web answers.";
     }
     return `Web search unavailable: ${scrubText(web?.error || "unknown")}.`;
   }
@@ -291,7 +291,7 @@ export async function aimStatusPayload() {
       body: {
         ok: false,
         error: "AIM database unavailable",
-        hint: "Set DATABASE_URL on the Vercel dashboard project to the indexer Postgres public URL.",
+        hint: "Set DATABASE_URL on the dashboard project to the public Postgres URL.",
       },
     };
   }
