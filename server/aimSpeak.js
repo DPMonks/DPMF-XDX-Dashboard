@@ -1,4 +1,4 @@
-/** Natural Edge TTS default (N1). Avoid heavy pitch/rate warps — they sound robotic/glitchy. */
+/** Natural Edge TTS default (N1). Avoid heavy pitch/rate warps - they sound robotic/glitchy. */
 export const COMMANDER_EDGE_VOICE = {
   id: "N1-ryan-natural",
   voice: "en-GB-RyanNeural",

@@ -1303,7 +1303,7 @@ export async function aimStatusPayload() {
       forbidden_tools: ["Freeze", "GlobalFreeze", "Clawback", "Blackhole"],
       summary:
         commander?.meta?.desk?.summary ||
-        `Internal desk — ${deskAgents.filter((a) => a.proposal).length}/${Math.max(deskAgents.length, 6)} agents reporting — view only`,
+        `Internal desk - ${deskAgents.filter((a) => a.proposal).length}/${Math.max(deskAgents.length, 6)} agents reporting - view only`,
       high_urgency: high,
       agents: deskAgents,
       chatter: deskMessages,

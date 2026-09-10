@@ -7,9 +7,9 @@ import AimAgentName from "./AimAgentName";
 import { useWallet } from "../context/useWallet";
 
 function ago(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return "—";
+  if (!Number.isFinite(t)) return "-";
   const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
   if (sec < 60) return `${sec}s ago`;
   if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
@@ -241,7 +241,7 @@ export default function AiMatrixPanel() {
       label: aimAgentLabel(id),
       role: aimAgentRole(id),
       identity: aimAgentProfile(id)?.identity || "",
-      status: id === "agent6" ? "booting" : "—",
+      status: id === "agent6" ? "booting" : "-",
       last_seen_at: null,
     };
   });
@@ -415,7 +415,7 @@ export default function AiMatrixPanel() {
               key={agent.id}
               className="aim-agent-chip"
               role="listitem"
-              title={[agent.role || aimAgentRole(agent.id), agent.identity || aimAgentProfile(agent.id)?.identity].filter(Boolean).join(" — ")}
+              title={[agent.role || aimAgentRole(agent.id), agent.identity || aimAgentProfile(agent.id)?.identity].filter(Boolean).join(", ")}
             >
               <header>
                 <div className="aim-agent-head-left">
@@ -427,7 +427,7 @@ export default function AiMatrixPanel() {
               {(agent.role || aimAgentRole(agent.id)) ? (
                 <p className="aim-agent-role">{agent.role || aimAgentRole(agent.id)}</p>
               ) : null}
-              <p>{agent.status || "—"}</p>
+              <p>{agent.status || "-"}</p>
               <small>{ago(agent.last_seen_at)}</small>
               {agent.meta?.pools?.pool_count != null ? (
                 <small className="aim-meta">Pools {agent.meta.pools.pool_count}</small>
@@ -466,7 +466,7 @@ export default function AiMatrixPanel() {
                     <header>
                       <b title={a.role || aimAgentRole(a.id) || undefined}><AimAgentName agentId={a.id} label={a.label || aimAgentLabel(a.id) || a.id} /></b>
                       <span className={`aim-urgency is-${String(prop?.urgency || "none").toLowerCase()}`}>
-                        {prop?.urgency || "—"}
+                        {prop?.urgency || "-"}
                       </span>
                     </header>
                     {(a.role || aimAgentRole(a.id)) ? <small className="aim-desk-role">{a.role || aimAgentRole(a.id)}</small> : null}
@@ -475,7 +475,7 @@ export default function AiMatrixPanel() {
                     {a.usd_mark?.usd_equity != null ? (
                       <small className="aim-desk-usd">
                         USD {Number(a.usd_mark.usd_equity).toFixed(2)}
-                        {a.usd_mark.day_start_usd != null ? ` · day×${a.usd_mark.mult_vs_day_start != null ? Number(a.usd_mark.mult_vs_day_start).toFixed(2) : "—"}` : ""}
+                        {a.usd_mark.day_start_usd != null ? ` · day×${a.usd_mark.mult_vs_day_start != null ? Number(a.usd_mark.mult_vs_day_start).toFixed(2) : "-"}` : ""}
                         
                       </small>
                     ) : null}
