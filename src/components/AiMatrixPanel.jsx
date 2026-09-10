@@ -3,6 +3,7 @@ import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
 import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
 import { AIM_AGENT_IDS, aimAgentLabel, aimAgentRole, aimAgentProfile } from "../aimAgentNames";
+import AimAgentName from "./AimAgentName";
 import { useWallet } from "../context/useWallet";
 
 function ago(iso) {
@@ -324,7 +325,7 @@ export default function AiMatrixPanel() {
               title={[agent.role || aimAgentRole(agent.id), agent.identity || aimAgentProfile(agent.id)?.identity].filter(Boolean).join(" — ")}
             >
               <header>
-                <b>{agent.label || aimAgentLabel(agent.id)}</b>
+                <AimAgentName agentId={agent.id} label={agent.label || aimAgentLabel(agent.id)} stacked />
                 <span className={`aim-dot is-${String(agent.status || "").toLowerCase()}`} />
               </header>
               {(agent.role || aimAgentRole(agent.id)) ? (
@@ -411,7 +412,7 @@ export default function AiMatrixPanel() {
           <ul>
             {movements.slice(0, 16).map((m) => (
               <li key={m.id}>
-                <b>{m.label}</b>
+                <b><AimAgentName label={m.label} agentId={m.agent_id || m.from || m.id} /></b>
                 <span>{m.summary}</span>
                 <small>{ago(m.created_at)}</small>
               </li>
@@ -442,7 +443,7 @@ export default function AiMatrixPanel() {
                 return (
                   <li key={`desk-${a.id}`}>
                     <header>
-                      <b title={a.role || aimAgentRole(a.id) || undefined}>{a.label || aimAgentLabel(a.id) || a.id}</b>
+                      <b title={a.role || aimAgentRole(a.id) || undefined}><AimAgentName agentId={a.id} label={a.label || aimAgentLabel(a.id) || a.id} /></b>
                       <span className={`aim-urgency is-${String(prop?.urgency || "none").toLowerCase()}`}>
                         {prop?.urgency || "—"}
                       </span>
@@ -482,8 +483,8 @@ export default function AiMatrixPanel() {
             <ul>
               {(data?.desk?.chatter || []).slice().reverse().slice(0, 18).map((m) => (
                 <li key={m.id}>
-                  <b>{m.from}</b>
-                  <span>→ {m.to}</span>
+                  <b><AimAgentName agentId={m.from} label={m.from_label || m.from} /></b>
+                  <span>→ <AimAgentName agentId={m.to} label={m.to_label || m.to} /></span>
                   <p>{m.text}</p>
                   <small>{ago(m.created_at)} · {m.topic}</small>
                 </li>

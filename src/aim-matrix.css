@@ -7,7 +7,7 @@
 .aim-matrix-error { color: #ff8f8f; }
 .aim-agent-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.75rem; }
 .aim-agent-chip { border: 1px solid rgba(120, 220, 255, 0.25); border-radius: 12px; padding: 0.75rem; background: rgba(8, 16, 28, 0.55); }
-.aim-agent-chip header { display: flex; justify-content: space-between; align-items: center; }
+.aim-agent-chip header { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.35rem; }
 .aim-agent-chip p { margin: 0.35rem 0; }
 .aim-agent-chip .aim-agent-role { margin: 0.15rem 0 0.1rem; opacity: 0.78; font-size: 0.72rem; letter-spacing: 0.02em; color: #9ef0ff; }
 .aim-desk-book li header .aim-agent-role, .aim-desk-role { display: block; opacity: 0.72; font-size: 0.72rem; color: #9ef0ff; margin-top: 0.1rem; }
@@ -560,4 +560,32 @@ body.aim-drawer-open #root {
   .aim-drawer-panel .aim-matrix-grid {
     grid-template-columns: 1.35fr 1fr;
   }
+}
+
+.aim-agent-name { display: inline; font-weight: 700; line-height: 1.15; }
+.aim-agent-name.is-stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  min-width: 0;
+}
+.aim-agent-title { color: #f5fbff; font-weight: 700; }
+.aim-agent-codename {
+  color: var(--dpmf-neon-violet, #c770ff);
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(199, 112, 255, 0.35);
+}
+.aim-agent-chip header {
+  align-items: flex-start;
+}
+.aim-agent-chip header .aim-agent-name.is-stacked {
+  flex: 1;
+  min-width: 0;
+}
+.aim-moves b .aim-agent-name,
+.aim-desk-book b .aim-agent-name,
+.aim-desk-chatter b .aim-agent-name,
+.aim-desk-chatter span .aim-agent-name {
+  font-weight: 700;
 }
