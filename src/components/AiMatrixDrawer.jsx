@@ -87,14 +87,28 @@ export default function AiMatrixDrawer() {
     if (!mobile) return undefined;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    document.body.classList.add("aim-drawer-open");
     return () => {
       document.body.style.overflow = prev;
+      document.body.classList.remove("aim-drawer-open");
     };
   }, [open]);
 
   function openFromUi() {
-    openAimOverlay();
-    setOpenPanel(true);
+    // Paint closed (off-screen) first, then slide in — avoids a pop-in.
+    setDragging(false);
+    if (open) {
+      openAimOverlay();
+      setOpenPanel(true);
+      return;
+    }
+    setOpen(false);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        openAimOverlay();
+        setOpenPanel(true);
+      });
+    });
   }
 
   function closeFromUi() {

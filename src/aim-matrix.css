@@ -327,7 +327,7 @@
   background: rgba(5, 5, 8, 0.55);
   opacity: 0;
   cursor: pointer;
-  transition: opacity 0.28s ease;
+  transition: opacity 0.48s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 .aim-drawer-root.is-open .aim-drawer-backdrop {
   opacity: 1;
@@ -351,9 +351,12 @@
   border-right: 0;
   background: rgba(8, 10, 18, 0.97);
   box-shadow: -12px 0 40px rgba(0, 0, 0, 0.45), 0 0 28px rgba(0, 234, 255, 0.08);
-  transform: translate3d(104%, 0, 0);
-  opacity: 0.96;
-  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translate3d(100%, 0, 0);
+  opacity: 1;
+  visibility: visible;
+  will-change: transform;
+  backface-visibility: hidden;
+  transition: transform 0.48s cubic-bezier(0.25, 0.8, 0.25, 1);
   overflow: hidden;
   overscroll-behavior: contain;
 }
@@ -437,4 +440,17 @@
 
 .site-jump-grid button.is-overlay em {
   color: rgba(0, 234, 255, 0.9);
+}
+
+body.aim-drawer-open #root {
+  transition: transform 0.48s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transform: translate3d(-12px, 0, 0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .aim-drawer-panel,
+  .aim-drawer-backdrop,
+  body.aim-drawer-open #root {
+    transition-duration: 0.01ms !important;
+  }
+  body.aim-drawer-open #root { transform: none; }
 }
