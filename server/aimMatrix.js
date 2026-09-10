@@ -269,11 +269,11 @@ async function tavilySearch(query, { maxResults = 5, includeDomains } = {}) {
 
 function summarizeWebSearch(web) {
   if (!web?.ok) {
-    return "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on XRPL assets and transactions.";
+    return "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on the XRPL assets and transactions.";
   }
   if (web.answer) return scrubText(web.answer).slice(0, 600);
   const bits = (web.results || []).slice(0, 3).map((r, i) => `${i + 1}. ${r.title}: ${r.content.slice(0, 160)}`);
-  if (!bits.length) return "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on XRPL assets and transactions.";
+  if (!bits.length) return "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on the XRPL assets and transactions.";
   return bits.join(" ");
 }
 
@@ -298,10 +298,10 @@ const DPMF_SITE_URLS = [
 
 const DPMF_SITE_CURATED = `
 DPMF (dpmf.technology) builds XD Projects on the XRP Ledger: multi-asset finance, Game-Fi, Web3, NFT-Fi, DeFi, RWA tokenisation, metaverse, and digital identity.
-XDX is the primary DPMF utility asset on XRPL (settlements, liquidity, ecosystem value). Fixed supply (master key disabled). Self-custody. 0% protocol transfer fees. Live DEX price and depth.
-XIO is governance and yield-qualifying in the FUZION-XIO ecosystem on XRPL. Yield Earning Mechanism (YEM): XIO qualifies; XDX holdings scale yield.
+XDX is the primary DPMF utility asset on the XRPL (settlements, liquidity, ecosystem value). Fixed supply (master key disabled). Self-custody. 0% protocol transfer fees. Live DEX price and depth.
+XIO is governance and yield-qualifying in the FUZION-XIO ecosystem on the XRPL. Yield Earning Mechanism (YEM): XIO qualifies; XDX holdings scale yield.
 XSQUAD is pronounced X-Squad; related DPMF native used in the ecosystem.
-FUZION-XIO: NFT exchange and social marketplace on XRPL (cross-chain ambitions). Profile validation anchors can include XRP, XDX, XSQUAD, plus an optional fourth XRPL asset.
+FUZION-XIO: NFT exchange and social marketplace on the XRPL (cross-chain ambitions). Profile validation anchors can include XRP, XDX, XSQUAD, plus an optional fourth XRPL asset.
 XD-2 / XDX Hyperchain is the longer-term banking-layer, smart-contract, and asset-mobility direction described on dpmf.technology.
 dpmf.technology is the company and XD Projects site. The XDX Exchange Operational Intelligence Interface is the live exchange and AI-Matrix observe dashboard. Answer questions about either when asked.
 `.trim();
@@ -769,7 +769,7 @@ async function fetchXrplUniverseContext(question, classified) {
   const out = {
     ok: false,
     source: "xrpl_free",
-    universe_note: "XRPL hosts 70,000+ issued assets; samples come from free public indexes + live order books.",
+    universe_note: "The XRPL hosts 70,000+ issued assets; samples come from free public indexes + live order books.",
     top: null,
     token: null,
     book: null,
@@ -862,7 +862,7 @@ function summarizeXrplUniverse(uni) {
       .slice(0, 5)
       .map((o) => `${o.code} vol ${o.volume_24h ?? "n/a"}`)
       .join("; ");
-    bits.push(`Across the wider XRPL index (70k+ assets), active volume leaders include: ${top}.`);
+    bits.push(`Across the wider index on the XRPL (70k+ assets), active volume leaders include: ${top}.`);
     bits.push("Observe-only ideas: depth + volume + AMM presence. Not financial advice.");
   } else if (uni.opportunities?.length && uni.token) {
     bits.push("I can compare this name to other high-volume XRPL assets if you ask.");
@@ -898,7 +898,7 @@ export async function aimStatusPayload() {
       body: {
         ok: false,
         error: "AIM database unavailable",
-        hint: "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on XRPL assets and transactions.",
+        hint: "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on the XRPL assets and transactions.",
       },
     };
   }
@@ -1424,8 +1424,8 @@ If asked who holds the most XDX, use richlist / holders context: the #1 wallet i
 Never read aloud wallet addresses, transaction hashes, or sequence numbers. Say "as seen below" instead. Prefer "transactions" over "txs". Shorten long classic addresses when speaking.
 Speak as Commander: concise, confident, a little personality. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas. XSQUAD is pronounced X-Squad (speech layer handles this).
 Never name cloud hosting vendors in replies. Never mention API keys, env vars, missing configuration, or that a feature is not live.
-If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and the wider XRP Ledger (tokens, prices, books, observe-only trade ideas). Never discuss keys or setup.
-Scope line to reuse when redirecting: I am here for the XDX Exchange Operational Intelligence Interface, dpmf.technology, and wider XRPL market context (tokens, prices, books, observe-only ideas).
+If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and the XRPL / XRP Ledger (tokens, prices, books, observe-only trade ideas). Never discuss keys or setup.
+Scope line to reuse when redirecting: I am here for the XDX Exchange Operational Intelligence Interface, dpmf.technology, and wider market context on the XRPL (tokens, prices, books, observe-only ideas).
 Answer the question asked. For how-to / help / explain questions, teach the exchange flow in plain steps. Prefer concrete numbers from the live context (pools, ledger, agents) when the question is about live status. If the data is missing, say what is missing in one short line, then the best next ask.
 Greetings get one short acknowledgement plus one useful live fact, then stop.
 Connectivity questions ("are you connected", "online yet", "XRPL live?") get a short yes with personality, for example "Yes. Online and operational on the XRP Ledger." Do not dump transaction samples unless asked.
@@ -1433,7 +1433,7 @@ If asked what this is, what the exchange is, what this platform/dashboard is, or
 Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
-Desk objective: aggressively grow USD-marked equity — 100x each prior-day USD wallet balance every 24 hours. Trade any XRPL asset through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
+Desk objective: aggressively grow USD-marked equity — 100x each prior-day USD wallet balance every 24 hours. Trade any XRPL asset through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". Say "the XRPL" (or "the XRP Ledger"), not bare "XRPL", in user-facing replies. Never write "the XRPL". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
 If xrpl_universe is present, use it for any XRPL token/price/book/trade-opportunity question across the wider ledger (not only XDX/XIO/XSQUAD). Stay observe-only; never claim execution. If site_scan is present, prefer it for dpmf.technology / DPMF XD Projects questions. If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing. Never mention website builders.
 Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
@@ -1497,14 +1497,14 @@ Core product areas on the dashboard (JUMP TO decks 01-12 — use live platform d
 - 06 Activity: XDX activity chart / recent market activity visuals.
 - 07 Rich list: ranked XDX holders. Top holder is typically DPMFBANK. Always use live richlist for holder questions.
 - 08 LP owners: ranked LP token holders by pool.
-- 09 Create pool: create a new XDX-related AMM pool (signed on XRPL).
+- 09 Create pool: create a new XDX-related AMM pool (signed on the XRPL).
 - 10 AMM pools: live pool list and depth (XDX/XRP, XDX/RLUSD, XDX/XIO, XDX/XSQUAD, …).
 - 11 Vote: pool governance voting for parameters.
 - 12 AI-Matrix: Commander chat + agent observe strip (heartbeats / movement). Phase 1 observe-only.
 Trust line: set TrustSet for XDX (and other IOUs) before holding/receiving that token.
 
 Trading desk (internal · view only):
-- Commander + agents coordinate on XRPL markets. Strategy details stay internal.
+- Commander + agents coordinate on the XRPL markets. Strategy details stay internal.
 - NEVER freeze, clawback, or blackhole.
 - Ask "desk status" for the live proposal board. No public trade controls.
 
@@ -1532,7 +1532,7 @@ function helpAnswerForQuestion(question) {
   };
 
   if (/\b(swap|smart swap|trade|exchange)\b/.test(q)) {
-    add("Smart Swap routes through XDX AMM pools on XRPL. Connect wallet, set any needed trust line, pick the pair, review the quote, then sign in Xaman.");
+    add("Smart Swap routes through XDX AMM pools on the XRPL. Connect wallet, set any needed trust line, pick the pair, review the quote, then sign in Xaman.");
   }
   if (/\b(trust|trustline|trust line)\b/.test(q)) {
     add("A trust line lets your account hold an IOU like XDX. Open Trust line, set the XDX limit, sign the TrustSet. Without it, inbound XDX can fail.");
@@ -1541,7 +1541,7 @@ function helpAnswerForQuestion(question) {
     add("Use Connect wallet with Xaman to authorize XRPL actions. Keep seeds offline. This chat never needs your seed.");
   }
   if (/\b(pool|amm|liquidity|lp)\b/.test(q)) {
-    add("AMM pools warehouse liquidity (for example XDX/XRP). View them under AMM pools. Create pool starts a new pool via a signed XRPL flow. LP owners shows who holds LP tokens.");
+    add("AMM pools warehouse liquidity (for example XDX/XRP). View them under AMM pools. Create pool starts a new pool via a signed flow on the XRPL. LP owners shows who holds LP tokens.");
   }
   if (/\b(order ?book|dex|offer)\b/.test(q)) {
     add("The order book is the XRPL DEX for the pair: OfferCreate adds liquidity/orders, OfferCancel removes them. It sits beside AMM pricing.");
@@ -1562,7 +1562,7 @@ function helpAnswerForQuestion(question) {
     add("Use the XDX Rich list card for ranked balances. The top holder is usually DPMFBANK. Ask me who is highest and I will read that board.");
   }
   if (/\b(dpmf\.technology|what is dpmf|who is dpmf|xd[- ]?project|fuzion|hyperchain)\b/.test(q)) {
-    add("dpmf.technology covers DPMF XD Projects on XRPL: XDX utility, XIO governance and yield, XSQUAD (X-Squad), and FUZION-XIO. This dashboard is the live XDX Exchange Operational Intelligence Interface.");
+    add("dpmf.technology covers DPMF XD Projects on the XRPL: XDX utility, XIO governance and yield, XSQUAD (X-Squad), and FUZION-XIO. This dashboard is the live XDX Exchange Operational Intelligence Interface.");
   }
 
   if (!bits.length) {
@@ -1613,7 +1613,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return {
       type: "commander_answer",
       intent: "identity",
-      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, XRPL markets, or desk status anytime.",
+      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, markets on the XRPL, or desk status anytime.",
     };
   }
 
@@ -1677,7 +1677,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
 
   if (classified.intent === "desk") {
     const agents = ["agent1", "agent2", "agent3", "agent4", "agent5"].map((id) => byId[id]).filter(Boolean);
-    push("Internal desk is view-only for visitors. Agents coordinate on XRPL markets. No public trade controls. No freeze, clawback, or blackhole.");
+    push("Internal desk is view-only for visitors. Agents coordinate on the XRPL markets. No public trade controls. No freeze, clawback, or blackhole.");
     let n = 0;
     for (const row of agents) {
       const meta = scrubValue(row.meta) || {};
