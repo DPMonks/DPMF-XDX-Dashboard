@@ -39,9 +39,9 @@ function pronounceForSpeech(text) {
   const spell = (s) => String(s).split("").join(" ");
   return String(text || "")
     // Tx hashes: speak first 4 hex chars only
-    .replace(/\b([A-Fa-f0-9]{64})\b/g, (_, h) => spell(h.slice(0, 4)))
+    .replace(/\b([A-Fa-f0-9]{64})\b/g, (_, h) => `${spell(h.slice(0, 4))} ...`)
     // Classic addresses: speak first 9 characters only
-    .replace(/\b(r[1-9A-HJ-NP-Za-km-z]{24,34})\b/g, (_, a) => spell(a.slice(0, 9)))
+    .replace(/\b(r[1-9A-HJ-NP-Za-km-z]{24,34})\b/g, (_, a) => `${spell(a.slice(0, 9))} ...`)
     // Ledger / sequence numbers: speak first 4 digits only
     .replace(/\b(?:ledger(?:\s*index)?|ledgerIndex|Ledger)\s*[:=#-]?\s*(\d{4,})\b/gi, (_, n) => spell(String(n).slice(0, 4)))
     .replace(/\b(?:sequence|seq(?:uence)?\.?|Sequence)\s*[:=#-]?\s*(\d+)\b/gi, (_, n) => spell(String(n).slice(0, 4)))
@@ -56,6 +56,27 @@ function pronounceForSpeech(text) {
     .replace(/\bX-?SQUAD\b/gi, "X Squad")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+
+/** Same voice; improve pauses/rhythm via punctuation (no pitch warp, no voice change). */
+function naturalizeSpeechPacing(text) {
+  let s = String(text || "").replace(/\s+/g, " ").trim();
+  if (!s) return s;
+  // Bullets / middle dots → spoken list pauses
+  s = s.replace(/\s*[·•]\s*/g, ", ");
+  // Em/en already stripped elsewhere; soft dashes as brief pauses
+  s = s.replace(/\s+-\s+/g, ", ");
+  // Breath after clause openers
+  s = s.replace(/\b(However|Therefore|Meanwhile|Also|Next|Finally|So)\b\s+/gi, "$1, ");
+  // Long sentences: insert a light pause before joining words if none nearby
+  s = s.replace(/([^,]{48,}?)\s+\b(and|but|so|which|while|because)\b\s+/gi, "$1, $2 ");
+  // Sentence end → short ellipsis pause (Edge treats ... as a beat)
+  s = s.replace(/([.!?])\s+/g, "$1 ... ");
+  // Collapse noisy pause stacks
+  s = s.replace(/(?:\.\.\.\s*){2,}/g, "... ");
+  s = s.replace(/\s{2,}/g, " ").trim();
+  return s;
 }
 
 function envVoiceOverride() {
@@ -107,12 +128,13 @@ async function synthesizeOpenAiSpeech(cleaned, { lang = "en" } = {}) {
 }
 
 export async function synthesizeCommanderSpeech(text, { lang = "en" } = {}) {
-  const cleaned = pronounceForSpeech(String(text || ""))
-    .replace(/\u2014/g, ". ")
-    .replace(/\u2013/g, "-")
-    .replace(/\s{2,}/g, " ")
-    .trim()
-    .slice(0, 1400);
+  const cleaned = naturalizeSpeechPacing(
+    pronounceForSpeech(String(text || ""))
+      .replace(/\u2014/g, ". ")
+      .replace(/\u2013/g, "-")
+      .replace(/\s{2,}/g, " ")
+      .trim()
+  ).slice(0, 1400);
   if (!cleaned) return { ok: false, error: "Text required" };
 
   const provider = String(process.env.AIM_TTS_PROVIDER || "edge").trim().toLowerCase();
