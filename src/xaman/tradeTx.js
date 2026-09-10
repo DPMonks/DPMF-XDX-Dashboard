@@ -553,6 +553,15 @@ export function unusedXrpCoversLines({ spendable, total, account, extraLines = 0
   return { ok: spend + 1e-9 >= need, need, increment, spendable: spend };
 }
 
+
+/** Trust lines with limit 0 cannot receive IOUs — treat as missing. */
+export function lineLimitOk(row, min = 1) {
+  const lim = Number(row?.limit ?? row?.Limit ?? row?.limit_peer ?? 0);
+  return Number.isFinite(lim) && lim >= min;
+}
+
+export const BIG_TRUST_LIMIT = "100000000000000000";
+
 export function lpTrustSetTxjson(account, spec = {}) {
   const currency = isLpCurrency(spec.lpCurrency || spec.currency)
     ? String(spec.lpCurrency || spec.currency).trim().toUpperCase()
@@ -565,7 +574,7 @@ export function lpTrustSetTxjson(account, spec = {}) {
     LimitAmount: {
       currency,
       issuer,
-      value: "100000000000",
+      value: BIG_TRUST_LIMIT,
     },
   };
   if (account) txjson.Account = account;
@@ -577,6 +586,7 @@ export function hasLpTrustline(lines, spec = {}) {
   const issuer = String(spec.amm || spec.issuer || spec.amm_account || "").toUpperCase();
   if (!currency && !issuer) return false;
   return (Array.isArray(lines) ? lines : []).some((row) => {
+    if (!lineLimitOk(row)) return false;
     const who = lineCounterparty(row);
     const codes = lineCurrencyCodes(row);
     const lpLine = Boolean(row?.lp) || codes.some((code) => isLpCurrency(code));
@@ -634,7 +644,7 @@ export function quoteTrustSetTxjson(account, quote) {
     LimitAmount: {
       currency,
       issuer: quote.issuer,
-      value: "100000000000",
+      value: BIG_TRUST_LIMIT,
     },
   };
   if (account) txjson.Account = account;
@@ -647,6 +657,7 @@ export function hasQuoteTrustline(lines, quote = {}) {
   const issuer = String(quote.issuer || "").toUpperCase();
   const wants = [quote.currency, quote.hex, quote.id, quote.label, quoteLedgerCurrency(quote)].filter(Boolean);
   return (Array.isArray(lines) ? lines : []).some((row) => {
+    if (!lineLimitOk(row)) return false;
     const who = lineCounterparty(row);
     if (issuer && who && who !== issuer) return false;
     if (lineCurrencyCodes(row).some((code) => isLpCurrency(code))) return false;

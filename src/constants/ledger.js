@@ -19,7 +19,7 @@ export const XDX_XRP_LP_XRPL_TO_MD5 = "fb3abb3a776efbefe9a558705fe52606";
 
 // tfSetNoRipple — standard IOU trustline so the line cannot ripple.
 export const TF_SET_NO_RIPPLE = 131072;
-export const XDX_TRUST_LIMIT = String(XDX_TOTAL_SUPPLY);
+export const XDX_TRUST_LIMIT = "100000000000000000"; // big limit; never 0
 
 export function xdxTrustSetTxjson(account) {
   const txjson = {
