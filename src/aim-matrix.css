@@ -345,7 +345,7 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: 100%;
+  width: min(560px, 48vw, 100%);
   max-width: 100%;
   display: flex;
   flex-direction: column;
@@ -425,15 +425,19 @@
 
 @media (max-width: 900px) {
   .aim-drawer-panel {
-    width: 100%;
+    width: min(100vw, 100%);
     border-radius: 0;
   }
 }
 
-@media (min-width: 901px) {
+@media (min-width: 901px) and (max-width: 1200px) {
   .aim-drawer-panel {
-    width: 100%;
-    border-radius: 0;
+    width: min(520px, 52vw);
+  }
+}
+@media (min-width: 1201px) {
+  .aim-drawer-panel {
+    width: min(560px, 42vw);
   }
 }
 
@@ -445,7 +449,7 @@
 
 body.aim-drawer-open #root {
   transition: transform 0.48s cubic-bezier(0.25, 0.8, 0.25, 1);
-  transform: translate3d(0, 0, 0);
+  transform: translate3d(-12px, 0, 0);
 }
 @media (prefers-reduced-motion: reduce) {
   .aim-drawer-panel,
@@ -454,4 +458,42 @@ body.aim-drawer-open #root {
     transition-duration: 0.01ms !important;
   }
   body.aim-drawer-open #root { transform: none; }
+}
+
+/* Keep AI-Matrix content inside the side panel (no horizontal slide needed) */
+.aim-drawer-body,
+.aim-drawer-panel .aim-matrix,
+.aim-drawer-panel .aim-matrix-head,
+.aim-drawer-panel .aim-matrix-actions,
+.aim-drawer-panel .aim-agent-strip,
+.aim-drawer-panel .aim-matrix-grid,
+.aim-drawer-panel .aim-chat,
+.aim-drawer-panel .aim-moves,
+.aim-drawer-panel .aim-desk-board,
+.aim-drawer-panel .aim-bubble,
+.aim-drawer-panel .aim-bubble p {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.aim-drawer-panel .aim-matrix,
+.aim-drawer-body {
+  overflow-x: hidden;
+}
+.aim-drawer-panel .aim-bubble p,
+.aim-drawer-panel .aim-chat-log {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+.aim-drawer-panel .aim-agent-strip {
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+}
+.aim-drawer-panel .aim-matrix-grid {
+  grid-template-columns: 1fr;
+}
+@media (min-width: 1100px) {
+  .aim-drawer-panel .aim-matrix-grid {
+    grid-template-columns: 1.35fr 1fr;
+  }
 }
