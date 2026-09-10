@@ -333,7 +333,8 @@ export default function AiMatrixPanel() {
           </div>
           <div className="aim-desk-badges">
             <span className="aim-desk-badge">Phase {data?.desk?.phase || "A"}</span>
-            <span className="aim-desk-badge">Objective: accumulate XRP</span>
+            <span className="aim-desk-badge">Objective: daily USD growth / wallet</span>
+            <span className="aim-desk-badge">Target: mainnet</span>
             <span className="aim-desk-badge is-safe">No public trade controls</span>
             <span className="aim-desk-badge is-safe">No freeze / blackhole</span>
           </div>
@@ -368,7 +369,7 @@ export default function AiMatrixPanel() {
           <div className="aim-desk-chatter">
             <h4>Agent coordination</h4>
             <p className="aim-desk-note">
-              Private desk chatter. Public visitors can watch the team think; they cannot place trades or steer wallets here.
+              Private desk chatter about growing each wallet's USD value by end of day. Public can watch; they cannot place trades or steer wallets here.
             </p>
             <ul>
               {(data?.desk?.chatter || []).slice().reverse().slice(0, 18).map((m) => (
