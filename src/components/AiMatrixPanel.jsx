@@ -230,7 +230,21 @@ export default function AiMatrixPanel() {
     });
   }
 
-  const agents = data?.agents || [];
+  const liveAgents = data?.agents || [];
+  const byId = Object.fromEntries(liveAgents.map((a) => [a.id, a]));
+  // Always show all desk slots (incl. Ghost) even before heartbeat
+  const agents = AIM_AGENT_IDS.map((id) => {
+    const live = byId[id];
+    if (live) return live;
+    return {
+      id,
+      label: aimAgentLabel(id),
+      role: aimAgentRole(id),
+      identity: aimAgentProfile(id)?.identity || "",
+      status: id === "agent6" ? "booting" : "—",
+      last_seen_at: null,
+    };
+  });
   const movements = data?.movements || [];
 
   return (
@@ -395,7 +409,7 @@ export default function AiMatrixPanel() {
 
 
       <div className="aim-agent-strip" role="list">
-        {(agents.length ? agents : AIM_AGENT_IDS.map((id) => ({ id, label: aimAgentLabel(id), role: aimAgentRole(id), identity: aimAgentProfile(id)?.identity || "", status: "—" }))).map(
+        {agents.map(
           (agent) => (
             <article
               key={agent.id}
