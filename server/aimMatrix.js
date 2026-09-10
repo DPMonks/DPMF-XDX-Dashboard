@@ -286,11 +286,11 @@ async function tavilySearch(query, { maxResults = 5, includeDomains } = {}) {
 
 function summarizeWebSearch(web) {
   if (!web?.ok) {
-    return "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on the XRPL assets and transactions.";
+    return "I am here only to discuss the XDX Exchange Operational Intelligence Interface, built by DPMF.Technology, and help users with guidance on the XRPL assets and transactions.";
   }
   if (web.answer) return scrubText(web.answer).slice(0, 600);
   const bits = (web.results || []).slice(0, 3).map((r, i) => `${i + 1}. ${r.title}: ${r.content.slice(0, 160)}`);
-  if (!bits.length) return "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on the XRPL assets and transactions.";
+  if (!bits.length) return "I am here only to discuss the XDX Exchange Operational Intelligence Interface, built by DPMF.Technology, and help users with guidance on the XRPL assets and transactions.";
   return bits.join(" ");
 }
 
@@ -1151,7 +1151,7 @@ export async function aimStatusPayload() {
       body: {
         ok: false,
         error: "AIM database unavailable",
-        hint: "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on the XRPL assets and transactions.",
+        hint: "I am here only to discuss the XDX Exchange Operational Intelligence Interface, built by DPMF.Technology, and help users with guidance on the XRPL assets and transactions.",
       },
     };
   }
@@ -1709,8 +1709,8 @@ If asked who holds the most XDX, use richlist / holders context: the #1 wallet i
 Never read aloud wallet addresses, transaction hashes, or sequence numbers. Say "as seen below" instead. Prefer "transactions" over "txs". Shorten long classic addresses when speaking.
 Speak as Commander: concise, confident, a little personality. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas. XSQUAD is pronounced X-Squad (speech layer handles this).
 Never name cloud hosting vendors in replies. Never mention API keys, env vars, missing configuration, or that a feature is not live.
-If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and the XRPL / XRP Ledger (tokens, prices, books, observe-only trade ideas). Never discuss keys or setup.
-Scope line to reuse when redirecting: I am here for the XDX Exchange Operational Intelligence Interface, dpmf.technology, and wider market context on the XRPL (tokens, prices, books, observe-only ideas).
+If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here to discuss the XDX Exchange Operational Intelligence Interface, built by DPMF.Technology, and the XRPL / XRP Ledger (tokens, prices, books, observe-only trade ideas). Never discuss keys or setup.
+Scope line to reuse when redirecting: I am here for the XDX Exchange Operational Intelligence Interface, built by DPMF.Technology, and wider market context on the XRPL (tokens, prices, books, observe-only ideas).
 Answer the question asked. For how-to / help / explain questions, teach the exchange flow in plain steps. Prefer concrete numbers from the live context (pools, ledger, agents) when the question is about live status. If the data is missing, say what is missing in one short line, then the best next ask.
 Greetings get one short acknowledgement plus one useful live fact, then stop.
 Connectivity questions ("are you connected", "online yet", "XRPL live?") get a short yes with personality, for example "Yes. Online and operational on the XRP Ledger." Do not dump transaction samples unless asked.
@@ -1857,7 +1857,7 @@ function helpAnswerForQuestion(question) {
     add("Use the XDX Rich list card for ranked balances. The top holder is usually DPMFBANK. Ask me who is highest and I will read that board.");
   }
   if (/\b(dpmf\.technology|what is dpmf|who is dpmf|xd[- ]?project|fuzion|hyperchain)\b/.test(q)) {
-    add("dpmf.technology covers DPMF XD Projects on the XRPL: XDX utility, XIO governance and yield, XSQUAD (X-Squad), and FUZION-XIO. This dashboard is the live XDX Exchange Operational Intelligence Interface.");
+    add("DPMF.Technology covers DPMF XD Projects on the XRPL: XDX utility, XIO governance and yield, XSQUAD (X-Squad), and FUZION-XIO. This dashboard is the live XDX Exchange Operational Intelligence Interface, built by DPMF.Technology.");
   }
 
   if (/\b(math|calculate|compound|percent|bps|drawdown|ratio)\b/.test(q)) {
@@ -1911,7 +1911,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return {
       type: "commander_answer",
       intent: "identity",
-      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, markets on the XRPL, or desk status anytime.",
+      text: "This is the XDX Exchange Operational Intelligence Interface, built by DPMF.Technology. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, markets on the XRPL, or desk status anytime.",
     };
   }
 
