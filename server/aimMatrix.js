@@ -632,6 +632,95 @@ function extractClassicAddress(text) {
   return m ? m[0] : null;
 }
 
+
+function resolveChatWallet(text, body = {}) {
+  const fromMsg = extractClassicAddress(text);
+  if (fromMsg) return fromMsg;
+  return (
+    extractClassicAddress(body.wallet) ||
+    extractClassicAddress(body.account) ||
+    extractClassicAddress(body.address) ||
+    null
+  );
+}
+
+function decodeCurrencyCode(raw) {
+  const c = String(raw || "");
+  if (!c) return "?";
+  if (c.length <= 3) return c.toUpperCase();
+  if (/^[A-F0-9]{40}$/i.test(c)) {
+    try {
+      const ascii = Buffer.from(c, "hex").toString("ascii").replace(/\0+$/g, "");
+      if (/^[A-Z0-9]{1,12}$/i.test(ascii)) return ascii.toUpperCase();
+    } catch {
+      /* keep */
+    }
+    return c.slice(0, 8).toUpperCase();
+  }
+  return c.slice(0, 12).toUpperCase();
+}
+
+async function fetchAccountBalances(account) {
+  const acct = String(account || "").trim();
+  if (!/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(acct)) {
+    return { ok: false, error: "need_classic_address", ask: true };
+  }
+  const infoRes = await xrplPublicRpc("account_info", {
+    account: acct,
+    ledger_index: "validated",
+  });
+  if (!infoRes.ok) {
+    return { ok: false, error: infoRes.error || "account_info failed", account: shortAcct(acct) };
+  }
+  const xrpDrops = Number(infoRes.result?.account_data?.Balance || 0);
+  const xrp = Number.isFinite(xrpDrops) ? xrpDrops / 1_000_000 : 0;
+  const linesRes = await xrplPublicRpc("account_lines", {
+    account: acct,
+    ledger_index: "validated",
+    limit: 400,
+  });
+  if (!linesRes.ok) {
+    return {
+      ok: true,
+      account: shortAcct(acct),
+      account_full: acct,
+      xrp,
+      lines: [],
+      note: "XRP read ok; trust lines unavailable right now.",
+      lines_error: linesRes.error || "account_lines failed",
+    };
+  }
+  const issuer = String(process.env.XDX_ISSUER || "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo");
+  const lines = (linesRes.result?.lines || [])
+    .map((row) => {
+      const bal = Number(row.balance || 0);
+      const code = decodeCurrencyCode(row.currency);
+      return {
+        currency: code,
+        issuer: row.account || null,
+        balance: bal,
+        limit: row.limit != null ? Number(row.limit) : null,
+        is_xdx: code === "XDX" && String(row.account || "").toUpperCase() === issuer.toUpperCase(),
+      };
+    })
+    .filter((row) => Number.isFinite(row.balance));
+  const positive = lines
+    .filter((row) => Math.abs(row.balance) > 0)
+    .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+  const xdx = positive.find((row) => row.is_xdx) || lines.find((row) => row.is_xdx) || null;
+  return {
+    ok: true,
+    account: shortAcct(acct),
+    account_full: acct,
+    xrp,
+    xdx,
+    lines: positive.slice(0, 12),
+    line_count: lines.length,
+    note: "Public balances and trust lines only. Seeds stay offline.",
+  };
+}
+
+
 function parseAmountValue(raw) {
   if (raw == null) return 0;
   if (typeof raw === "object") return Number(raw.value || 0) || 0;
@@ -1313,6 +1402,13 @@ function classifyAimQuestion(raw) {
   ) {
     return { intent: "lp_earnings" };
   }
+
+  if (
+    /\b(my (xrp |token |iou )?balance|how much (xrp|xdx|do i (have|hold))|what do i (have|hold)|my (tokens?|holdings?|assets?|balances?))\b/.test(q) ||
+    (/\b(balance|balances|holdings?|trust ?lines?)\b/.test(q) && /\b(my|me|i |wallet|account|connected)\b/.test(q))
+  ) {
+    return { intent: "balance" };
+  }
   if (/\b(lp owners?|lp holders?|liquidity providers?)\b/.test(q)) {
     return { intent: "lp_holders" };
   }
@@ -1801,7 +1897,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return { type: "commander_answer", intent: "connectivity", text: (line + extra).trim() };
   }
 
-  const skipOpener = ["help", "holders", "lp_holders", "lp_earnings", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
+  const skipOpener = ["help", "holders", "lp_holders", "lp_earnings", "balance", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
   if (!skipOpener) {
     push(
       pickLine(seed, [
@@ -2098,9 +2194,20 @@ export async function aimChatPayload(req) {
       classified.intent === "lp_holders" || /\blp (owners?|holders?)\b/i.test(text)
         ? await fetchTopLpHolders({ limit: 8 })
         : null;
+    let accountBalances = null;
+    if (
+      classified.intent === "balance" ||
+      (/\b(my (xrp |token )?balance|balances?|how much (xrp|xdx)|what do i (have|hold)|my (tokens?|holdings?)|trust ?lines?)\b/i.test(text) &&
+        /\b(my|me|i |wallet|account|balance|hold)\b/i.test(text) &&
+        !/\b(lp|pool|liquidity|amm|earn|earning|income|yield)\b/i.test(text))
+    ) {
+      const addr = resolveChatWallet(text, body);
+      if (addr) accountBalances = await fetchAccountBalances(addr);
+      else accountBalances = { ok: false, ask: true, error: "need_classic_address" };
+    }
     let lpEarnings = null;
     if (classified.intent === "lp_earnings" || (/\b(earn|earning|lp income|pool share)\b/i.test(text) && /\b(lp|pool|liquidity|amm)\b/i.test(text))) {
-      const addr = extractClassicAddress(text) || extractClassicAddress(body.wallet || body.account || body.address || "");
+      const addr = resolveChatWallet(text, body);
       const pairHint =
         (String(text).match(/\bXDX\/(XRP|RLUSD|XIO|XSQUAD)\b/i) || [])[0] ||
         (String(text).match(/\b(XRP|RLUSD|XIO|XSQUAD)\b/i) || [])[0] ||
@@ -2134,9 +2241,64 @@ export async function aimChatPayload(req) {
           includeDomains: wantSite ? ["dpmf.technology", "www.dpmf.technology"] : undefined,
         })
       : { ok: false, skipped: true, results: [] };
-    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "lp_earnings", "wallet", "help", "desk", "native_price", "swap", "orderbook", "details"].includes(
+    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "lp_earnings", "balance", "wallet", "help", "desk", "native_price", "swap", "orderbook", "details"].includes(
       classified.intent
     );
+    if (classified.intent === "balance" || accountBalances) {
+      const bits = [];
+      if (accountBalances?.ask || accountBalances?.error === "need_classic_address") {
+        bits.push("Connect your wallet on this exchange (or paste a classic r… address), and I will read public XRP, token balances, and trust lines. I never need your seed.");
+      } else if (accountBalances?.ok) {
+        bits.push(`Public balance read for ${accountBalances.account}: about ${formatXdxAmount(accountBalances.xrp)} XRP.`);
+        if (accountBalances.xdx) {
+          bits.push(`XDX about ${formatXdxAmount(accountBalances.xdx.balance)}.`);
+        }
+        const others = (accountBalances.lines || []).filter((row) => !row.is_xdx).slice(0, 6);
+        if (others.length) {
+          bits.push(
+            "Trust lines / IOUs: " +
+              others
+                .map((row) => `${row.currency} ${formatXdxAmount(row.balance)}`)
+                .join("; ") +
+              "."
+          );
+        } else if (!accountBalances.xdx) {
+          bits.push("No positive IOU balances on the first trust-line page.");
+        }
+        bits.push("Open Connected wallet for live bars and LP income. Seeds stay offline.");
+      } else if (accountBalances) {
+        bits.push("I could not read that account right now. Try again after connect, or use the Connected wallet panel.");
+      }
+      let replyBal = {
+        type: "commander_answer",
+        intent: "balance",
+        source: "platform_ledger",
+        text: stripLongHyphens(bits.join(" ").replace(/\u2014/g, ". ").replace(/\u2013/g, "-")),
+      };
+      if (lang && lang !== "en" && lang !== "en-GB") {
+        const translatedBal = await translateAimText(replyBal.text, lang);
+        replyBal = { ...replyBal, text: stripLongHyphens(translatedBal), translated: translatedBal !== replyBal.text };
+      }
+      replyBal.text = stripLongHyphens(stripSiteNoise(String(replyBal.text || "").replace(/\btxs\b/gi, "transactions")));
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          ephemeral: true,
+          lang,
+          lang_source: resolved.source,
+          reply: {
+            from: "commander",
+            from_label: "Commander",
+            body: replyBal,
+            created_at: new Date().toISOString(),
+          },
+          llm: { ok: false, error: "not used", detail: "balance local", model: null },
+          web: { skipped: true },
+          site: { skipped: true },
+        },
+      };
+    }
     if (classified.intent === "lp_earnings" || lpEarnings) {
       const bits = [];
       if (lpEarnings?.ask || lpEarnings?.error === "need_classic_address") {

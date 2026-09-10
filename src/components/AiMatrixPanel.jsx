@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
 import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
+import { useWallet } from "../context/useWallet";
 
 function ago(iso) {
   if (!iso) return "—";
@@ -14,6 +15,7 @@ function ago(iso) {
 }
 
 export default function AiMatrixPanel() {
+  const { walletAddress } = useWallet();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -71,12 +73,22 @@ export default function AiMatrixPanel() {
     };
   }, []);
 
+  function finishSpeakingRows(rows) {
+    return rows.map((r) =>
+      r.speaking || r.pending
+        ? { ...r, speaking: false, pending: false, reveal: (r.text || "").length }
+        : r
+    );
+  }
+
   function toggleVoice() {
     setVoiceOn((prev) => {
       const next = !prev;
       writeVoicePref(next);
-      if (!next) stopCommanderSpeech();
-      else unlockCommanderAudio();
+      if (!next) {
+        stopCommanderSpeech();
+        setLocalChat((rows) => finishSpeakingRows(rows));
+      } else unlockCommanderAudio();
       return next;
     });
   }
@@ -115,7 +127,7 @@ export default function AiMatrixPanel() {
     }
     const thinkingId = `thinking-${Date.now()}`;
     setLocalChat((rows) => [
-      ...rows,
+      ...finishSpeakingRows(rows),
       { role: "you", text: message, at: new Date().toISOString() },
       {
         id: thinkingId,
@@ -128,7 +140,10 @@ export default function AiMatrixPanel() {
     ]);
     setText("");
     try {
-      const out = await postAimChat(message, { lang: langPref === "auto" ? "auto" : effectiveLang });
+      const out = await postAimChat(message, {
+        lang: langPref === "auto" ? "auto" : effectiveLang,
+        wallet: walletAddress || null,
+      });
       const reply = out.reply?.body?.text || "Queued.";
       const replyLang = out.lang || effectiveLang;
       const replyId = `cmd-${Date.now()}`;
@@ -328,8 +343,14 @@ export default function AiMatrixPanel() {
           <div className="aim-chat-log" ref={chatLogRef}>
             {localChat.map((m, i) => {
               const full = m.text || "";
+              // While speaking/pending, typewriter may be mid-word; once idle always show the full reply
+              // so bubbles never stay truncated (e.g. cut at "conne").
               const revealed =
-                typeof m.reveal === "number" ? full.slice(0, Math.max(0, m.reveal)) : full;
+                m.speaking || m.pending
+                  ? typeof m.reveal === "number"
+                    ? full.slice(0, Math.max(0, m.reveal))
+                    : full
+                  : full;
               const showCaret = m.role === "commander" && (m.speaking || m.pending);
               return (
                 <div
