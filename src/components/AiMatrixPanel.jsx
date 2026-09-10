@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
 import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
+import { AIM_AGENT_IDS, aimAgentLabel, aimAgentRole, aimAgentProfile } from "../aimAgentNames";
 import { useWallet } from "../context/useWallet";
 
 function ago(iso) {
@@ -314,13 +315,21 @@ export default function AiMatrixPanel() {
       {error ? <p className="aim-matrix-error">{error}</p> : null}
 
       <div className="aim-agent-strip" role="list">
-        {(agents.length ? agents : [1, 2, 3, 4, 5].map((n) => ({ id: `agent${n}`, label: `Agent ${n}`, status: "—" }))).map(
+        {(agents.length ? agents : AIM_AGENT_IDS.map((id) => ({ id, label: aimAgentLabel(id), role: aimAgentRole(id), identity: aimAgentProfile(id)?.identity || "", status: "—" }))).map(
           (agent) => (
-            <article key={agent.id} className="aim-agent-chip" role="listitem">
+            <article
+              key={agent.id}
+              className="aim-agent-chip"
+              role="listitem"
+              title={[agent.role || aimAgentRole(agent.id), agent.identity || aimAgentProfile(agent.id)?.identity].filter(Boolean).join(" — ")}
+            >
               <header>
-                <b>{agent.label}</b>
+                <b>{agent.label || aimAgentLabel(agent.id)}</b>
                 <span className={`aim-dot is-${String(agent.status || "").toLowerCase()}`} />
               </header>
+              {(agent.role || aimAgentRole(agent.id)) ? (
+                <p className="aim-agent-role">{agent.role || aimAgentRole(agent.id)}</p>
+              ) : null}
               <p>{agent.status || "—"}</p>
               <small>{ago(agent.last_seen_at)}</small>
               {agent.meta?.pools?.pool_count != null ? (
@@ -433,11 +442,12 @@ export default function AiMatrixPanel() {
                 return (
                   <li key={`desk-${a.id}`}>
                     <header>
-                      <b>{a.label || a.id}</b>
+                      <b title={a.role || aimAgentRole(a.id) || undefined}>{a.label || aimAgentLabel(a.id) || a.id}</b>
                       <span className={`aim-urgency is-${String(prop?.urgency || "none").toLowerCase()}`}>
                         {prop?.urgency || "—"}
                       </span>
                     </header>
+                    {(a.role || aimAgentRole(a.id)) ? <small className="aim-desk-role">{a.role || aimAgentRole(a.id)}</small> : null}
                     <p>{prop?.action || a.skill_summary || a.meta?.skill?.summary || "No proposal yet"}</p>
                     {prop?.pair ? <small>Pair {prop.pair}</small> : null}
                     {a.usd_mark?.usd_equity != null ? (

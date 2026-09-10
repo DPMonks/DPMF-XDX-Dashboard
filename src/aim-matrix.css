@@ -9,6 +9,8 @@
 .aim-agent-chip { border: 1px solid rgba(120, 220, 255, 0.25); border-radius: 12px; padding: 0.75rem; background: rgba(8, 16, 28, 0.55); }
 .aim-agent-chip header { display: flex; justify-content: space-between; align-items: center; }
 .aim-agent-chip p { margin: 0.35rem 0; }
+.aim-agent-chip .aim-agent-role { margin: 0.15rem 0 0.1rem; opacity: 0.78; font-size: 0.72rem; letter-spacing: 0.02em; color: #9ef0ff; }
+.aim-desk-book li header .aim-agent-role, .aim-desk-role { display: block; opacity: 0.72; font-size: 0.72rem; color: #9ef0ff; margin-top: 0.1rem; }
 .aim-agent-chip small { opacity: 0.7; display: block; }
 .aim-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: #6b7280; display: inline-block; }
 .aim-dot.is-looping, .aim-dot.is-online { background: #34d399; box-shadow: 0 0 8px #34d399; }

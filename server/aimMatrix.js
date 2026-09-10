@@ -1,5 +1,6 @@
 import { aimSpeakPayload } from "./aimSpeak.js";
 import pg from "pg";
+import { aimAgentLabel, aimAgentRole, aimAgentProfile, resolveAimAgentId } from "./aimAgentNames.js";
 
 /** No em/en dashes in Commander-facing text (chat + TTS). */
 function stripLongHyphens(text) {
@@ -81,11 +82,21 @@ function scrubValue(value, key = "") {
 }
 
 function agentLabel(agentId) {
-  const id = String(agentId || "");
-  if (id === "commander") return "Commander";
-  if (id === "dashboard") return "You";
-  const m = /^agent(\d+)$/i.exec(id);
-  return m ? `Agent ${m[1]}` : "Agent";
+  return aimAgentLabel(agentId);
+}
+
+function agentRole(agentId) {
+  return aimAgentRole(agentId);
+}
+
+function agentPublicFields(agentId) {
+  const p = aimAgentProfile(agentId) || {};
+  return {
+    label: agentLabel(agentId),
+    shortName: p.shortName || "",
+    role: p.role || "",
+    identity: p.identity || "",
+  };
 }
 
 function publicAgentId(agentId) {
@@ -1165,7 +1176,7 @@ export async function aimStatusPayload() {
       .filter((r) => r.agent_id !== "commander")
       .map((r) => ({
         id: publicAgentId(r.agent_id),
-        label: agentLabel(r.agent_id),
+        ...agentPublicFields(r.agent_id),
         status: scrubText(r.status),
         last_seen_at: r.last_seen_at,
         meta: scrubValue(r.meta) || {},
@@ -1186,6 +1197,7 @@ export async function aimStatusPayload() {
       id: r.id,
       agent: publicAgentId(r.agent_id),
       label: agentLabel(r.agent_id),
+      role: agentRole(r.agent_id),
       kind: scrubText(r.kind),
       summary: summarizeIntent(r.kind, scrubValue(r.content)),
       created_at: r.created_at,
@@ -1212,6 +1224,9 @@ export async function aimStatusPayload() {
       return {
         id: a.id,
         label: a.label,
+        shortName: a.shortName || "",
+        role: a.role || agentRole(a.id),
+        identity: a.identity || "",
         status: a.status,
         last_seen_at: a.last_seen_at,
         skill_summary: meta.skill?.summary || null,
@@ -1345,8 +1360,14 @@ function pickLine(seed, options) {
 
 function classifyAimQuestion(raw) {
   const q = String(raw || "").toLowerCase();
-  const agentMatch = q.match(/\bagent\s*([1-5])\b/) || q.match(/\ba([1-5])\b/);
-  if (agentMatch) return { intent: "agent", agentNum: agentMatch[1] };
+  const nameHit = q.match(/\b(?:agent\s+)?(prime|flux|vector|vortex|echo)\b/) || q.match(/\bagent\s*([1-5])\b/) || q.match(/\ba([1-5])\b/);
+  if (nameHit) {
+    const resolved = resolveAimAgentId(nameHit[1]);
+    if (resolved) {
+      const agentNum = resolved.replace("agent", "");
+      return { intent: "agent", agentNum, agentId: resolved };
+    }
+  }
   if (/^(hi|hello|hey|yo|gm|good (morning|afternoon|evening))\b/i.test(q) || /\b(hi|hello|hey)\b[,!.]?\s*(commander)?\s*$/i.test(q)) return { intent: "greeting" };
   if (
     /\b(connected|connection|online|operational|are you (up|live|ready|online|connected)|is (the )?(xrpl|ledger|ripple|board|exchange|platform) (up|live|online|connected|working)|can you (see|reach|read) (the )?(ledger|xrpl)|hooked up|linked)\b/.test(q)
@@ -1666,7 +1687,7 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
       : null,
   };
   const system = `You are Commander on the XDX Exchange Operational Intelligence Interface (AI-Matrix).
-Personality: calm British desk lead for an advanced XRPL trading team. Your job is to utilise agents 1-5 aggressively to grow USD-marked wallet equity: increase yield by about 20% each day versus the day-start USD mark (compounding daily yield milestone). They may trade any XRPL asset. Start size about 5 XRP per wallet (1 reserve, 4 trade). Dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
+Personality: calm British desk lead for an advanced XRPL trading team. Your job is to utilise Agents Prime, Flux, Vector, Vortex, and Echo aggressively to grow USD-marked wallet equity: increase yield by about 20% each day versus the day-start USD mark (compounding daily yield milestone). They may trade any XRPL asset. Start size about 5 XRP per wallet (1 reserve, 4 trade). Dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
 You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically using the dashboard itself (rich list, LP owners, AMM pools, order book, Smart Swap modes/routing/fees, XDX details, trust lines, AI-Matrix). For LP earnings questions, use public account lines + amm_info pool share; never ask for seeds. Encourage deepening XDX LP, AMMVote, and routing Smart Swap volume through XDX pools to earn more fees. still on-ledger only.
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
 If asked who holds the most XDX, use richlist / holders context: the #1 wallet is typically DPMFBANK (account contains DPMFBANK). Point them to the XDX Rich list card.
@@ -1682,7 +1703,7 @@ If asked what this is, what the exchange is, what this platform/dashboard is, or
 Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
-Desk objective: aggressively grow USD-marked equity. about +20% daily yield versus day-start USD mark (public compounding daily-yield milestone). Trade any XRPL asset through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". Say "the XRPL" (or "the XRP Ledger"), not bare "XRPL", in user-facing replies. Never write "the XRPL". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
+Desk objective: aggressively grow USD-marked equity. about +20% daily yield versus day-start USD mark (public compounding daily-yield milestone). Trade any XRPL asset through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Call agents by public names (Agent Prime, Agent Flux, Agent Vector, Agent Vortex, Agent Echo). Still hide internal strategy type codes. Prefer the word "transactions" over "txs". Say "the XRPL" (or "the XRP Ledger"), not bare "XRPL", in user-facing replies. Never write "the XRPL". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
 If xrpl_universe is present, use it for any XRPL token/price/book/trade-opportunity question across the wider ledger (not only XDX/XIO/XSQUAD). Stay observe-only; never claim execution. If site_scan is present, prefer it for dpmf.technology / DPMF XD Projects questions. If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing. Never mention website builders.
 Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
@@ -1735,7 +1756,7 @@ const EXCHANGE_HELP_KB = `
 XDX Exchange Operational Intelligence Interface (this site):
 - Live XRPL-native exchange UI for XDX and related natives (XIO, XSQUAD). Commander is the AI-Matrix help + observe layer.
 - Chat with Commander is ephemeral (not saved). Voice can read replies aloud.
-- AI-Matrix Agents 1-5 are observe-only in Phase 1 (no live trading from those workers). They watch pools/ledger for readiness.
+- AI-Matrix agents (Prime, Flux, Vector, Vortex, Echo) are observe-only in Phase 1 (no live trading from those workers). They watch pools/ledger for readiness.
 
 Core product areas on the dashboard (JUMP TO decks 01-12. use live platform data for each):
 - 01 Wallet: connect with Xaman (XUMM), see connected account, balances, trust lines. Never speak full addresses; say "as seen below".
@@ -1809,7 +1830,7 @@ function helpAnswerForQuestion(question) {
     add("Pool governance lets eligible LP participants vote on pool parameters. Open Vote / governance on the dashboard and sign votes in Xaman when prompted.");
   }
   if (/\b(agent|commander|ai[- ]?matrix|matrix)\b/.test(q)) {
-    add("AI-Matrix is the observe layer: Commander answers live status and help questions. Agents 1-5 show anonymized heartbeats and movement. Phase 1 is read-only. Chat is ephemeral.");
+    add("AI-Matrix is the observe layer: Commander answers live status and help questions. Agents Prime, Flux, Vector, Vortex, and Echo show anonymized heartbeats and movement. Phase 1 is read-only. Chat is ephemeral.");
   }
   if (/\b(xdx|xio|xsquad|dpmf|native)\b/.test(q)) {
     add("Natives on this interface include XDX, XIO, and XSQUAD (say X-Squad). Ask about a named pair or pool for a sharper live read.");
@@ -1943,7 +1964,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       const p = meta.trade_proposal || {};
       if (p.action) {
         n += 1;
-        push(`${publicAgentId(row.agent_id)}: ${scrubText(p.action)} on ${scrubText(p.pair || "n/a")} (${scrubText(p.urgency || "n/a")}).`);
+        push(`${agentLabel(row.agent_id)}: ${scrubText(p.action)} on ${scrubText(p.pair || "n/a")} (${scrubText(p.urgency || "n/a")}).`);
       }
     }
     if (!n) push("No agent proposals in heartbeats yet. After AIM redeploy they will publish each tick.");
@@ -2069,10 +2090,10 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
   if (classified.intent === "agent") {
     const id = `agent${classified.agentNum}`;
     const row = byId[id];
-    if (!row) push(`Agent ${classified.agentNum} has no heartbeat yet.`);
+    if (!row) push(`${agentLabel(`agent${classified.agentNum}`)} has no heartbeat yet.`);
     else {
       const meta = scrubValue(row.meta) || {};
-      push(`Agent ${classified.agentNum} is ${scrubText(row.status)} (last seen ${agoPhrase(row.last_seen_at)}).`);
+      push(`${agentLabel(`agent${classified.agentNum}`)} is ${scrubText(row.status)} (last seen ${agoPhrase(row.last_seen_at)}).`);
       if (meta.skill?.summary) push(`Skill read: ${scrubText(meta.skill.summary)}.`);
       if (meta.trade_proposal?.action) {
         push(`Desk proposal (not executed): ${scrubText(meta.trade_proposal.action)} on ${scrubText(meta.trade_proposal.pair || "n/a")} · urgency ${scrubText(meta.trade_proposal.urgency || "n/a")}.`);
@@ -2100,7 +2121,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
 
   if (classified.intent === "pools") {
     if (agent2Pools?.ok) {
-      push(`Agent 2: ${agent2Pools.pool_count ?? "?"} AMM pools · top ${agent2Pools.top_pool || "n/a"} (${agoPhrase(agent2.last_seen_at)}).`);
+      push(`${agentLabel("agent2")}: ${agent2Pools.pool_count ?? "?"} AMM pools · top ${agent2Pools.top_pool || "n/a"} (${agoPhrase(agent2.last_seen_at)}).`);
     } else if (ctx.pools?.pool_count != null) {
       const top = (ctx.pools.top || []).slice(0, 3).map((p) => p.name).join(", ");
       push(`Postgres ${ctx.pools.source}: ${ctx.pools.pool_count} pools${top ? ` · ${top}` : ""}.`);
