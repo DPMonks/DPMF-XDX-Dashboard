@@ -556,6 +556,289 @@ async function fetchPlatformMarkets() {
   return out;
 }
 
+
+/** Free public XRPL market layer (no paid keys): XRPSCAN + public rippled RPC. */
+const XRPSCAN_BASE = "https://api.xrpscan.com/api/v1";
+const XRPL_PUBLIC_RPCS = [
+  "https://xrplcluster.com/",
+  "https://s1.ripple.com:51234/",
+  "https://s2.ripple.com:51234/",
+];
+
+function asciiCurrencyToHex(code) {
+  const c = String(code || "").toUpperCase();
+  if (!c) return null;
+  if (/^[A-F0-9]{40}$/i.test(c)) return c.toUpperCase();
+  if (c.length > 3) return null;
+  let hex = Buffer.from(c, "ascii").toString("hex").toUpperCase();
+  return hex.padEnd(40, "0");
+}
+
+function currencyCodeFromToken(tok) {
+  const code = String(tok?.code || "").toUpperCase();
+  if (code && code.length <= 12 && !/^[A-F0-9]{40}$/.test(code)) return code;
+  const hex = String(tok?.currency || "");
+  if (/^[A-F0-9]{40}$/i.test(hex)) {
+    try {
+      const raw = Buffer.from(hex, "hex").toString("ascii").replace(/\0+$/g, "");
+      if (/^[A-Z0-9]{1,12}$/i.test(raw)) return raw.toUpperCase();
+    } catch {
+      /* keep hex */
+    }
+  }
+  return code || hex.slice(0, 8);
+}
+
+async function xrplPublicRpc(method, params = {}) {
+  let last = { ok: false, error: "no rpc" };
+  for (const url of XRPL_PUBLIC_RPCS) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12_000);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ method, params: [params] }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        last = { ok: false, error: `HTTP ${res.status}`, rpc: url };
+        continue;
+      }
+      const data = await res.json();
+      const result = data?.result || {};
+      if (result.status === "error") {
+        last = { ok: false, error: result.error_message || result.error || "xrpl error", rpc: url };
+        continue;
+      }
+      return { ok: true, result, rpc: url };
+    } catch (error) {
+      last = { ok: false, error: String(error?.message || error).slice(0, 160), rpc: url };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return last;
+}
+
+function slimXrpscanToken(tok) {
+  if (!tok || typeof tok !== "object") return null;
+  const metrics = tok.metrics || {};
+  const code = currencyCodeFromToken(tok);
+  return {
+    code,
+    name: tok.meta?.token?.name || code,
+    issuer: tok.issuer || null,
+    currency: tok.currency || asciiCurrencyToHex(code),
+    token: tok.token || (code && tok.issuer ? `${code}.${tok.issuer}` : null),
+    price: Number(tok.price ?? metrics.price) || null,
+    volume_24h: Number(metrics.volume_24h) || null,
+    marketcap: Number(tok.marketcap ?? metrics.marketcap) || null,
+    holders: Number(tok.holders ?? metrics.holders) || null,
+    trustlines: Number(metrics.trustlines) || null,
+    amms: Number(tok.amms) || null,
+    blackholed: !!tok.blackholed,
+    trust_level: tok.meta?.token?.trust_level ?? null,
+    desc: String(tok.meta?.token?.desc || tok.meta?.token?.description || "").slice(0, 280) || null,
+  };
+}
+
+async function fetchXrpscanTokens({ limit = 12, search = "", sort = "volume24h" } = {}) {
+  const q = new URLSearchParams();
+  q.set("limit", String(Math.min(50, Math.max(1, limit))));
+  if (sort) q.set("sort", sort);
+  if (search) {
+    q.set("search", String(search).slice(0, 40));
+    q.set("q", String(search).slice(0, 40));
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12_000);
+  try {
+    const res = await fetch(`${XRPSCAN_BASE}/tokens?${q}`, {
+      headers: { Accept: "application/json", "User-Agent": "DPMF-AIM-Commander/1.0" },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return { ok: false, error: `XRPSCAN HTTP ${res.status}`, tokens: [] };
+    const data = await res.json();
+    const rows = Array.isArray(data) ? data : [];
+    let tokens = rows.map(slimXrpscanToken).filter(Boolean);
+    if (search) {
+      const s = String(search).toUpperCase();
+      const hit = tokens.filter((t) => t.code === s || t.name?.toUpperCase() === s || t.token?.toUpperCase().startsWith(`${s}.`));
+      if (hit.length) tokens = [...hit, ...tokens.filter((t) => !hit.includes(t))];
+    }
+    return { ok: true, source: "xrpscan", tokens: tokens.slice(0, limit), count_hint: "70000+" };
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error).slice(0, 160), tokens: [] };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchXrpscanTokenExact(code, issuer) {
+  if (!code || !issuer) return { ok: false, error: "code and issuer required" };
+  const id = `${String(code).toUpperCase()}.${issuer}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12_000);
+  try {
+    const res = await fetch(`${XRPSCAN_BASE}/token/${encodeURIComponent(id)}`, {
+      headers: { Accept: "application/json", "User-Agent": "DPMF-AIM-Commander/1.0" },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return { ok: false, error: `XRPSCAN HTTP ${res.status}` };
+    const data = await res.json();
+    return { ok: true, source: "xrpscan", token: slimXrpscanToken(data) };
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error).slice(0, 160) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchXrplBookVsXrp(token) {
+  const issuer = token?.issuer;
+  const currency = token?.currency || asciiCurrencyToHex(token?.code);
+  if (!issuer || !currency) return { ok: false, error: "missing currency/issuer" };
+  const asks = await xrplPublicRpc("book_offers", {
+    taker_gets: { currency: "XRP" },
+    taker_pays: { currency, issuer },
+    limit: 5,
+  });
+  const bids = await xrplPublicRpc("book_offers", {
+    taker_gets: { currency, issuer },
+    taker_pays: { currency: "XRP" },
+    limit: 5,
+  });
+  const askOffers = asks.ok ? asks.result?.offers || [] : [];
+  const bidOffers = bids.ok ? bids.result?.offers || [] : [];
+  return {
+    ok: askOffers.length + bidOffers.length > 0,
+    pair: `${token.code || "IOU"}/XRP`,
+    ask_quality: askOffers[0]?.quality || null,
+    bid_quality: bidOffers[0]?.quality || null,
+    ask_count: askOffers.length,
+    bid_count: bidOffers.length,
+    error: asks.ok || bids.ok ? null : asks.error || bids.error,
+  };
+}
+
+async function fetchXrplAmmVsXrp(token) {
+  const issuer = token?.issuer;
+  const currency = token?.currency || asciiCurrencyToHex(token?.code);
+  if (!issuer || !currency) return { ok: false, error: "missing currency/issuer" };
+  const res = await xrplPublicRpc("amm_info", {
+    asset: { currency, issuer },
+    asset2: { currency: "XRP" },
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+  const amm = res.result?.amm || {};
+  return {
+    ok: true,
+    amm_account: amm.account || null,
+    amount: amm.amount || null,
+    amount2: amm.amount2 || null,
+    trading_fee: amm.trading_fee ?? null,
+  };
+}
+
+function extractTokenQuery(question) {
+  const q = String(question || "");
+  // CURRENCY.rIssuer
+  const dotted = q.match(/\b([A-Za-z0-9]{2,12})\.(r[1-9A-HJ-NP-Za-km-z]{24,34})\b/);
+  if (dotted) return { code: dotted[1].toUpperCase(), issuer: dotted[2] };
+  // explicit ticker words, skip natives handled elsewhere when alone with xdx bias
+  const stop = new Set([
+    "THE","AND","FOR","ARE","YOU","CAN","WHAT","PRICE","TOKEN","ABOUT","WITH","FROM","THIS","THAT","HAVE","WILL","XRPL","XRP","LEDGER","TRADE","SWAP","POOL","BOOK","BEST","SHOW","TELL","GIVE","LOOK","FIND","TOP","VOLUME","MARKET","CRYPTO","ASSET","ASSETS","OPPORTUNITY","OPPORTUNITIES",
+  ]);
+  const m = q.match(/\b([A-Z]{3,8}|[A-Za-z]{2,8})\b/g) || [];
+  for (const raw of m) {
+    const code = raw.toUpperCase();
+    if (stop.has(code)) continue;
+    if (["XDX","XIO","XSQUAD"].includes(code)) continue; // natives still ok but prefer dedicated paths
+    if (code.length >= 2 && code.length <= 8) return { code };
+  }
+  return null;
+}
+
+async function fetchXrplUniverseContext(question, classified) {
+  const q = String(question || "");
+  const wantTop =
+    classified?.intent === "xrpl_market" ||
+    classified?.intent === "trade_opp" ||
+    /\b(top|hottest|trending|volume|opportunit|trade idea|what.?s moving|across (the )?ledger)\b/i.test(q);
+  const parsed = extractTokenQuery(q);
+  const out = {
+    ok: false,
+    source: "xrpl_free",
+    universe_note: "XRPL hosts 70,000+ issued assets; samples come from free public indexes + live order books.",
+    top: null,
+    token: null,
+    book: null,
+    amm: null,
+    opportunities: [],
+  };
+
+  if (parsed?.code && parsed?.issuer) {
+    const exact = await fetchXrpscanTokenExact(parsed.code, parsed.issuer);
+    if (exact.ok) out.token = exact.token;
+  }
+  if (!out.token && parsed?.code) {
+    const found = await fetchXrpscanTokens({ limit: 15, search: parsed.code });
+    if (found.ok) {
+      out.top = found;
+      out.token = found.tokens.find((t) => t.code === parsed.code) || found.tokens[0] || null;
+    }
+  }
+  if (wantTop || classified?.intent === "xrpl_market" || classified?.intent === "trade_opp") {
+    const top = await fetchXrpscanTokens({ limit: 12, sort: "volume24h" });
+    if (top.ok) out.top = top;
+  }
+  if (out.token?.issuer) {
+    out.book = await fetchXrplBookVsXrp(out.token);
+    out.amm = await fetchXrplAmmVsXrp(out.token);
+  }
+
+  // Lightweight trade-opportunity shortlist from top volume (non-advice, observe-only)
+  const pool = out.top?.tokens || [];
+  out.opportunities = pool.slice(0, 6).map((t) => ({
+    code: t.code,
+    issuer: t.issuer,
+    price: t.price,
+    volume_24h: t.volume_24h,
+    holders: t.holders,
+    amms: t.amms,
+    note: t.volume_24h && t.amms ? "active volume + AMM presence" : t.volume_24h ? "active volume" : "listed",
+  }));
+  out.ok = !!(out.token || out.top?.ok);
+  return out;
+}
+
+function summarizeXrplUniverse(uni) {
+  if (!uni?.ok) return "Public XRPL market index is soft right now. Ask for a ticker like SOLO or RLUSD and I will recheck.";
+  const bits = [];
+  if (uni.token) {
+    const t = uni.token;
+    bits.push(
+      `${t.code}${t.name && t.name !== t.code ? ` (${t.name})` : ""}: price ${t.price ?? "n/a"} · 24h vol ${t.volume_24h ?? "n/a"} · holders ${t.holders ?? "n/a"} · AMMs ${t.amms ?? "n/a"}.`
+    );
+    if (t.desc) bits.push(t.desc);
+    if (uni.book?.ok) bits.push(`Book ${uni.book.pair}: ask q ${uni.book.ask_quality ?? "n/a"}, bid q ${uni.book.bid_quality ?? "n/a"} (as seen below for full ladder).`);
+    if (uni.amm?.ok) bits.push(`AMM vs XRP readable; fee ${uni.amm.trading_fee ?? "n/a"}.`);
+  }
+  if (uni.opportunities?.length && !uni.token) {
+    const top = uni.opportunities
+      .slice(0, 5)
+      .map((o) => `${o.code} vol ${o.volume_24h ?? "n/a"}`)
+      .join("; ");
+    bits.push(`Across the wider XRPL index (70k+ assets), active volume leaders include: ${top}.`);
+    bits.push("Observe-only ideas: depth + volume + AMM presence. Not financial advice.");
+  } else if (uni.opportunities?.length && uni.token) {
+    bits.push("I can compare this name to other high-volume XRPL assets if you ask.");
+  }
+  return bits.join(" ") || "XRPL market context loaded.";
+}
+
+
 function summarizeHolders(holders) {
   if (!holders?.ok || !holders.top) return "XDX rich list is unavailable right now.";
   const top = holders.top;
@@ -736,6 +1019,18 @@ function classifyAimQuestion(raw) {
     /\b(what is dpmf|who is dpmf|about dpmf|dpmf (company|platform|site|website)|xd[- ]?projects?|fuzion(?:-xio)?|yield earning|\byem\b|hyperchain|xd-?2|synaptrix)\b/.test(q)
   ) {
     return { intent: "dpmf_site" };
+  }
+  if (
+    /\b(trade opportunit|trading opportunit|what.*(buy|trade|moving)|hot(test)? (token|asset)s?|across (the )?(xrpl|ledger)|70,?000|all (xrpl )?tokens|ledger tokens)\b/.test(q)
+  ) {
+    return { intent: "trade_opp" };
+  }
+  if (
+    /\b(token price|price of|how much is|market cap|volume|rlusd|solo|coreum|\$[A-Z]{3,6})\b/.test(q) ||
+    /\b[A-Z]{3,8}\.(r[1-9A-HJ-NP-Za-km-z]{24,34})\b/.test(q) ||
+    (/\b(token|iou|issued asset)\b/.test(q) && /\b(xrpl|ledger|price|trade)\b/.test(q))
+  ) {
+    return { intent: "xrpl_market" };
   }
   if (
     /\b(rich ?list|top holders?|largest holders?|biggest holders?|highest (xdx )?holders?|who(?:'s| is|s)? (the )?(highest|top|biggest|largest).*holder|whale|concentration)\b/.test(q) ||
@@ -944,7 +1239,7 @@ function summarizeLedger(scan) {
   return line;
 }
 
-async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site = null, holders = null, lpHolders = null, markets = null) {
+async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site = null, holders = null, lpHolders = null, markets = null, xrplUniverse = null) {
   const key = String(
     process.env.AIM_LLM_API_KEY ||
       process.env.XAI_API_KEY ||
@@ -986,6 +1281,7 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
     richlist: scrubValue(holders),
     lp_richlist: scrubValue(lpHolders),
     markets: scrubValue(markets),
+    xrpl_universe: scrubValue(xrplUniverse),
     site_scan: site
       ? {
           source: "dpmf.technology",
@@ -1007,8 +1303,8 @@ If asked who holds the most XDX, use richlist / holders context: the #1 wallet i
 Never read aloud wallet addresses, transaction hashes, or sequence numbers. Say "as seen below" instead. Prefer "transactions" over "txs". Shorten long classic addresses when speaking.
 Speak as Commander: concise, confident, a little personality. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas. XSQUAD is pronounced X-Squad (speech layer handles this).
 Never name cloud hosting vendors in replies. Never mention API keys, env vars, missing configuration, or that a feature is not live.
-If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology / DPMF XD Projects, and help with XRPL assets and transactions guidance.
-Scope line to reuse when redirecting: I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on XRPL assets and transactions.
+If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and the wider XRP Ledger (tokens, prices, books, observe-only trade ideas). Never discuss keys or setup.
+Scope line to reuse when redirecting: I am here for the XDX Exchange Operational Intelligence Interface, dpmf.technology, and wider XRPL market context (tokens, prices, books, observe-only ideas).
 Answer the question asked. For how-to / help / explain questions, teach the exchange flow in plain steps. Prefer concrete numbers from the live context (pools, ledger, agents) when the question is about live status. If the data is missing, say what is missing in one short line, then the best next ask.
 Greetings get one short acknowledgement plus one useful live fact, then stop.
 Connectivity questions ("are you connected", "online yet", "XRPL live?") get a short yes with personality, for example "Yes. Online and operational on the XRP Ledger." Do not dump transaction samples unless asked.
@@ -1017,7 +1313,7 @@ Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
 Observe-only: do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
-If site_scan is present, prefer it for dpmf.technology / DPMF XD Projects questions. If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing. Never mention website builders.
+If xrpl_universe is present, use it for any XRPL token/price/book/trade-opportunity question across the wider ledger (not only XDX/XIO/XSQUAD). Stay observe-only; never claim execution. If site_scan is present, prefer it for dpmf.technology / DPMF XD Projects questions. If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing. Never mention website builders.
 Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
 
@@ -1086,6 +1382,11 @@ Core product areas on the dashboard (JUMP TO decks 01-12 — use live platform d
 - 12 AI-Matrix: Commander chat + agent observe strip (heartbeats / movement). Phase 1 observe-only.
 Trust line: set TrustSet for XDX (and other IOUs) before holding/receiving that token.
 
+Wider XRPL markets (free public data):
+- Commander can look up issued assets across the XRPL (70,000+), prices, volume, holders, AMM counts, and XRP books via public indexes + rippled RPC.
+- Observe-only trade ideas: highlight activity (volume, books, AMMs). Never execute. Not financial advice.
+- DPMF natives (XDX/XIO/XSQUAD) still use this exchange board first when asked.
+
 How XRPL basics map here:
 - Payments move value; OfferCreate/OfferCancel are the DEX book; AMMs hold pool liquidity.
 - IOUs need a trust line to the issuer. XDX issuer is the on-ledger issuer configured for this exchange.
@@ -1148,7 +1449,7 @@ function helpAnswerForQuestion(question) {
   return bits.join(" ");
 }
 
-function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpHolders = null, markets = null) {
+function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpHolders = null, markets = null, xrplUniverse = null) {
   const classified = classifyAimQuestion(question);
   const dpmfBias = wantsDpmfBias(question, classified);
   const byId = Object.fromEntries((ctx.heartbeats || []).map((r) => [r.agent_id, r]));
@@ -1211,7 +1512,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return { type: "commander_answer", intent: "connectivity", text: (line + extra).trim() };
   }
 
-  const skipOpener = ["help", "holders", "lp_holders", "dpmf_site", "txs", "xrpl", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
+  const skipOpener = ["help", "holders", "lp_holders", "dpmf_site", "txs", "xrpl", "xrpl_market", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
   if (!skipOpener) {
     push(
       pickLine(seed, [
@@ -1246,6 +1547,14 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       push("LP owners list is unavailable right now. Try the XDX LP Owners card on the dashboard.");
     }
     return { type: "commander_answer", intent: "lp_holders", text: lines.join(" ") };
+  }
+
+  if (classified.intent === "xrpl_market" || classified.intent === "trade_opp") {
+    push(summarizeXrplUniverse(xrplUniverse));
+    if (classified.intent === "trade_opp") {
+      push("Observe-only. I flag activity on the open XRPL; I do not place trades.");
+    }
+    return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
   }
 
   if (classified.intent === "orderbook") {
@@ -1448,6 +1757,12 @@ export async function aimChatPayload(req) {
       ["orderbook", "swap", "chart", "pools", "snapshot", "status", "assets"].includes(classified.intent) ||
       /\b(price|tvl|order ?book|amm|swap|chart)\b/i.test(text);
     const markets = wantMarkets ? await fetchPlatformMarkets() : null;
+    const wantUniverse =
+      classified.intent === "xrpl_market" ||
+      classified.intent === "trade_opp" ||
+      classified.intent === "xrpl" ||
+      /\b(token|price|volume|market|solo|rlusd|iou|opportunit|xrpl asset|across (the )?ledger)\b/i.test(text);
+    const xrplUniverse = wantUniverse ? await fetchXrplUniverseContext(text, classified) : null;
     const wantSite = needsDpmfSite(text, classified) || classified.intent === "dpmf_site";
     const site = wantSite ? await fetchDpmfSiteContext(text) : null;
     const wantWeb = needsWebSearch(text, classified);
@@ -1465,7 +1780,7 @@ export async function aimChatPayload(req) {
     );
     const llm = preferLocal
       ? { ok: false, skipped: true }
-      : await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null, site, holders, lpHolders, markets);
+      : await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null, site, holders, lpHolders, markets, xrplUniverse);
     let reply;
     if (llm?.ok && llm.text) {
       reply = {
@@ -1478,7 +1793,7 @@ export async function aimChatPayload(req) {
         model: llm.model,
       };
     } else if (wantSite && site) {
-      const local = answerAimQuestion(text, ctx, scan, site, holders, lpHolders, markets);
+      const local = answerAimQuestion(text, ctx, scan, site, holders, lpHolders, markets, xrplUniverse);
       const webBit = wantWeb && web?.ok ? [summarizeWebSearch(web), formatWebSources(web)] : [];
       reply = {
         type: "commander_answer",
@@ -1491,7 +1806,7 @@ export async function aimChatPayload(req) {
     } else if (wantWeb && web?.ok) {
       const summary = summarizeWebSearch(web);
       const sources = formatWebSources(web);
-      const local = answerAimQuestion(text, ctx, scan, site, holders, lpHolders, markets);
+      const local = answerAimQuestion(text, ctx, scan, site, holders, lpHolders, markets, xrplUniverse);
       reply = {
         type: "commander_answer",
         intent: classified.intent,
@@ -1500,7 +1815,7 @@ export async function aimChatPayload(req) {
         web: true,
       };
     } else {
-      reply = answerAimQuestion(text, ctx, scan, site, holders, lpHolders, markets);
+      reply = answerAimQuestion(text, ctx, scan, site, holders, lpHolders, markets, xrplUniverse);
       if (wantWeb && web && !web.skipped) {
         reply = {
           ...reply,
