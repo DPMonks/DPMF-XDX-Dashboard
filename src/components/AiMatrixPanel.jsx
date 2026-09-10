@@ -31,6 +31,8 @@ export default function AiMatrixPanel() {
   const [langSource, setLangSource] = useState("auto");
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const chatLogRef = useRef(null);
+  const [movePage, setMovePage] = useState(0);
+  const [moveSwap, setMoveSwap] = useState(false);
 
   const effectiveLang = langPref === "auto" ? suggestedLang : normalizeLang(langPref);
 
@@ -247,6 +249,35 @@ export default function AiMatrixPanel() {
     };
   });
   const movements = data?.movements || [];
+  const MOVE_PAGE_SIZE = 3;
+  const MOVE_HOLD_MS = 1400;
+  const movePool = Array.isArray(movements) ? movements.slice(0, 18) : [];
+  const movePageCount = Math.max(1, Math.ceil(Math.max(movePool.length, 1) / MOVE_PAGE_SIZE));
+  const movePageSafe = movePage % movePageCount;
+  const visibleMoves = movePool.slice(
+    movePageSafe * MOVE_PAGE_SIZE,
+    movePageSafe * MOVE_PAGE_SIZE + MOVE_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setMovePage(0);
+  }, [movePool.length]);
+
+  useEffect(() => {
+    if (movePool.length <= MOVE_PAGE_SIZE) return undefined;
+    let fadeTimer = 0;
+    const tick = window.setInterval(() => {
+      setMoveSwap(true);
+      fadeTimer = window.setTimeout(() => {
+        setMovePage((p) => (p + 1) % Math.ceil(movePool.length / MOVE_PAGE_SIZE));
+        setMoveSwap(false);
+      }, 280);
+    }, MOVE_HOLD_MS);
+    return () => {
+      window.clearInterval(tick);
+      if (fadeTimer) window.clearTimeout(fadeTimer);
+    };
+  }, [movePool.length]);
 
   const commanderStatus = data?.commander
     ? `${data.commander.status} · ${ago(data.commander.last_seen_at)}`
@@ -439,13 +470,22 @@ export default function AiMatrixPanel() {
       </div>
 
 
-      <section className="aim-moves neon-inset">
-        <h3>Recent movement</h3>
-        <ul>
-          {movements.slice(0, 16).map((m) => {
+      <section className="aim-moves neon-inset" aria-live="polite">
+        <div className="aim-moves-head">
+          <h3>Recent movement</h3>
+          {movePool.length > MOVE_PAGE_SIZE ? (
+            <div className="aim-moves-pips" aria-hidden="true">
+              {Array.from({ length: movePageCount }).map((_, i) => (
+                <i key={i} className={i === movePageSafe ? "is-on" : ""} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <ul className={`aim-moves-list${moveSwap ? " is-swap" : ""}`}>
+          {visibleMoves.map((m, idx) => {
             const moveAgentId = m.agent_id || m.from || m.id;
             return (
-              <li key={m.id}>
+              <li key={`${m.id || moveAgentId}-${movePageSafe}-${idx}`} style={{ "--aim-move-i": idx }}>
                 <div className="aim-row-agent">
                   <AimAgentAvatar agentId={moveAgentId} label={m.label} size="sm" />
                   <b><AimAgentName label={m.label} agentId={moveAgentId} /></b>
@@ -455,7 +495,7 @@ export default function AiMatrixPanel() {
               </li>
             );
           })}
-          {!movements.length ? <li className="aim-empty">No movement yet.</li> : null}
+          {!movePool.length ? <li className="aim-empty">No movement yet.</li> : null}
         </ul>
       </section>
 
