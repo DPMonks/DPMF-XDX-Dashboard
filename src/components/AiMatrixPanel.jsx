@@ -427,6 +427,20 @@ export default function AiMatrixPanel() {
                     </header>
                     <p>{prop?.action || a.skill_summary || a.meta?.skill?.summary || "No proposal yet"}</p>
                     {prop?.pair ? <small>Pair {prop.pair}</small> : null}
+                    {a.usd_mark?.usd_equity != null ? (
+                      <small className="aim-desk-usd">
+                        USD {Number(a.usd_mark.usd_equity).toFixed(2)}
+                        {a.usd_mark.day_start_usd != null ? ` · day×${a.usd_mark.mult_vs_day_start != null ? Number(a.usd_mark.mult_vs_day_start).toFixed(2) : "—"}` : ""}
+                        {a.usd_mark.target_100x_usd != null ? ` · 100x@${Number(a.usd_mark.target_100x_usd).toFixed(0)}` : ""}
+                      </small>
+                    ) : null}
+                    {a.last_fill ? (
+                      <small className={`aim-desk-fill ${a.last_fill.submitted ? "is-live" : "is-blocked"}`}>
+                        {a.last_fill.submitted
+                          ? `Fill ${a.last_fill.engine_result || "submitted"} ${a.last_fill.hash ? a.last_fill.hash.slice(0, 8) : ""}`
+                          : `Exec blocked: ${a.last_fill.blocked_by || "gate"}`}
+                      </small>
+                    ) : null}
                     {prop?.xrp_thesis ? <small className="aim-desk-thesis">{prop.xrp_thesis}</small> : null}
                     {Array.isArray(prop?.ledger_tools) && prop.ledger_tools.length ? (
                       <small className="aim-desk-tools">Tools {prop.ledger_tools.slice(0, 6).join(" · ")}</small>

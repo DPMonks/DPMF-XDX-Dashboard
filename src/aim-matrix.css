@@ -240,3 +240,7 @@
 @media (max-width: 900px) {
   .aim-desk-grid { grid-template-columns: 1fr; }
 }
+
+.aim-desk-usd { color: #b8ffd6; }
+.aim-desk-fill.is-live { color: #9ef0ff; }
+.aim-desk-fill.is-blocked { color: #ffc9a8; opacity: 0.9; }

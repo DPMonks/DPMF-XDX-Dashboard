@@ -881,14 +881,14 @@ export async function aimStatusPayload() {
       `SELECT id, agent_id, kind, content, created_at
        FROM aim_agent_memory
        WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','commander')
-         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','desk_book','desk_coordination','xrpl_ledger','xrpl_book','xrpl_amm')
+         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm')
        ORDER BY id DESC
        LIMIT 40`
     );
     const chat = await db.query(
       `SELECT id, from_agent, to_agent, topic, body, created_at
        FROM aim_agent_messages
-       WHERE topic IN ('chat','directive','peer','desk')
+       WHERE topic IN ('chat','directive','peer','desk','arbiter','opportunity')
        ORDER BY id DESC
        LIMIT 40`
     );
@@ -939,12 +939,33 @@ export async function aimStatusPayload() {
     const deskAgents = agents.map((a) => {
       const meta = a.meta || {};
       const prop = meta.trade_proposal || {};
+      const usd = meta.usd_mark || prop.usd_mark || null;
+      const fill = meta.last_fill || prop.exec || null;
       return {
         id: a.id,
         label: a.label,
         status: a.status,
         last_seen_at: a.last_seen_at,
         skill_summary: meta.skill?.summary || null,
+        usd_mark: usd
+          ? {
+              usd_equity: usd.usd_equity,
+              day_start_usd: usd.day_start_usd,
+              mult_vs_day_start: usd.mult_vs_day_start,
+              target_100x_usd: usd.target_100x_usd,
+              mark_mode: scrubText(usd.mark_mode || ""),
+            }
+          : null,
+        last_fill: fill
+          ? {
+              ok: !!fill.ok,
+              submitted: !!fill.submitted,
+              blocked_by: scrubText(fill.blocked_by || ""),
+              hash: scrubText(fill.hash || ""),
+              engine_result: scrubText(fill.engine_result || ""),
+              dry_run: !!fill.dry_run,
+            }
+          : null,
         proposal: prop.action
           ? {
               action: scrubText(prop.action),
@@ -953,7 +974,8 @@ export async function aimStatusPayload() {
               urgency: scrubText(prop.urgency || ""),
               xrp_thesis: scrubText(prop.xrp_thesis || ""),
               ledger_tools: Array.isArray(prop.ledger_tools) ? prop.ledger_tools.map((x) => scrubText(x)).slice(0, 12) : [],
-              executable: false,
+              executable: !!prop.executable,
+              blocked_by: scrubText((prop.exec && prop.exec.blocked_by) || prop.blocked_by || ""),
             }
           : null,
       };
@@ -978,7 +1000,7 @@ export async function aimStatusPayload() {
         created_at: m.created_at,
       }));
     const desk = {
-      phase: commander?.meta?.desk_phase || "A_proposals_only",
+      phase: commander?.meta?.desk_phase || "C_live_usd_100x",
       objective: "daily_usd_growth",
       target: "24h_100x_usd_rolling",
       objective_detail: "Aggressive: 100x each agent wallet prior-day USD mark every 24 hours. Measure in USD; trade any XRPL asset. Start ~5 XRP (1 reserve / 4 trade).",
@@ -1146,7 +1168,7 @@ async function loadAimChatContext(db) {
     `SELECT id, agent_id, kind, content, created_at
      FROM aim_agent_memory
      WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','commander')
-       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','desk_book','desk_coordination','xrpl_ledger','xrpl_book','xrpl_amm')
+       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm')
      ORDER BY id DESC
      LIMIT 12`
   );
@@ -1554,7 +1576,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return {
       type: "commander_answer",
       intent: "identity",
-      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, XRPL markets, or desk proposals anytime. I run the agents to aggressively grow USD wallet equity — 100x each prior day, every 24 hours, any XRPL asset. Proposal-only until mainnet trading is explicitly unlocked.",
+      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, XRPL markets, or desk proposals anytime. I run the agents to aggressively grow USD wallet equity — 100x each prior day, every 24 hours, any XRPL asset. Live desk when unlocked: USD equity, any XRPL asset, 100x prior-day every 24h.",
     };
   }
 
