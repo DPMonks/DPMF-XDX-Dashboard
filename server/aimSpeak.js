@@ -35,10 +35,21 @@ function pickVoice(lang) {
 
 /** Spoken forms for tickers/names (display text stays unchanged). */
 function pronounceForSpeech(text) {
+  const words = { 1: "one", 2: "two", 3: "three", 4: "four", 5: "five" };
   return String(text || "")
-    .replace(/\b[A-Fa-f0-9]{64}\b/g, "as shown here")
+    .replace(/\b[A-Fa-f0-9]{64}\b/g, "as seen below")
+    .replace(/\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/g, "as seen below")
+    .replace(/\b(?:sequence|seq(?:uence)?\.?|Sequence)\s*[:=#-]?\s*\d+\b/gi, "as seen below")
+    .replace(/\bseq(?:uence)?\s+\d+\b/gi, "as seen below")
+    .replace(/\b([1-5])\s*\/\s*([1-5])\b(?:\s*agents?)?/gi, (_, a, b) => {
+      const left = words[a] || a;
+      const right = words[b] || b;
+      return `${left} out of ${right} agents`;
+    })
     .replace(/\bXSQUAD\b/gi, "X Squad")
-    .replace(/\bX-?SQUAD\b/gi, "X Squad");
+    .replace(/\bX-?SQUAD\b/gi, "X Squad")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function envVoiceOverride() {

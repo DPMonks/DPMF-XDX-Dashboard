@@ -683,6 +683,15 @@ function isoOf(value) {
   return Number.isFinite(d.getTime()) ? d.toISOString() : String(value);
 }
 
+function agentsOutOfFive(active, total = 5) {
+  const words = { 1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 0: "zero" };
+  const a = Number(active) || 0;
+  const t = Number(total) || 5;
+  const left = words[a] || String(a);
+  const right = words[t] || String(t);
+  return `${left} out of ${right} agents`;
+}
+
 function agoPhrase(value) {
   const iso = isoOf(value);
   if (!iso) return "unknown";
@@ -1164,7 +1173,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       text: [
         pickLine(Date.now(), ["Commander on deck.", "Commander here. Listening.", "Present."]),
         commander ? "Loop is green." : null,
-        agents.length ? `${active}/${agents.length} agents active.` : null,
+        agents.length ? `${agentsOutOfFive(active, agents.length)} active.` : null,
         topName ? `Top pool ${topName}.` : null,
         "Fire when ready.",
       ]
@@ -1381,7 +1390,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
 
   if (commander) push(`I’m ${scrubText(commander.status)} (seen ${agoPhrase(commander.last_seen_at)}).`);
   else push("Commander heartbeat missing.");
-  push(`${looping}/${agents.length || 5} agents active.`);
+  push(`${agentsOutOfFive(looping, agents.length || 5)} active.`);
   if (agent2Pools?.ok) push(`Pools: ${agent2Pools.pool_count ?? "?"} · top ${agent2Pools.top_pool || "n/a"}.`);
   else if (ctx.pools?.pool_count) push(`Pools table: ${ctx.pools.pool_count}.`);
   if (classified.intent === "status" || classified.intent === "snapshot") {

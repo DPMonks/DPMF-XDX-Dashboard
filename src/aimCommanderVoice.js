@@ -87,32 +87,81 @@ function clearRevealLoops() {
   }
 }
 
+const TX_HASH_RE = /\b[A-Fa-f0-9]{64}\b/g;
+
 function emitProgress(onProgress, chars, total) {
   if (typeof onProgress !== "function") return;
   const n = Math.max(0, Math.min(total, chars | 0));
   onProgress({ chars: n, total, ratio: total ? n / total : 1 });
 }
 
+/** Hash chars are near-instant in the typewriter; normal prose stays readable. */
+function revealWeights(text) {
+  const s = String(text || "");
+  const weights = Array.from(s, () => 1);
+  const mark = (re) => {
+    re.lastIndex = 0;
+    for (const m of s.matchAll(re)) {
+      const start = m.index || 0;
+      for (let i = start; i < start + m[0].length; i += 1) weights[i] = 0.03;
+    }
+  };
+  mark(/\b[A-Fa-f0-9]{64}\b/g);
+  mark(/\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/g);
+  mark(/\b(?:sequence|seq(?:uence)?\.?)\s*[:=#-]?\s*\d+\b/gi);
+  return weights;
+}
+
+function charsForWeightedRatio(weights, ratio) {
+  if (!weights.length) return 0;
+  const totalW = weights.reduce((a, b) => a + b, 0) || 1;
+  let target = Math.max(0, Math.min(1, ratio)) * totalW;
+  let acc = 0;
+  for (let i = 0; i < weights.length; i += 1) {
+    acc += weights[i];
+    if (acc >= target) return i + 1;
+  }
+  return weights.length;
+}
+
 function runTimedReveal(text, onProgress, onDone, { msPerChar = 28 } = {}) {
   clearRevealLoops();
-  const total = String(text || "").length;
+  const s = String(text || "");
+  const total = s.length;
+  const weights = revealWeights(s);
   let i = 0;
   emitProgress(onProgress, 0, total);
   revealTimer = window.setInterval(() => {
-    i = Math.min(total, i + 1);
+    // Burst through hash spans; normal text +1
+    if (i < total && weights[i] < 0.5) {
+      while (i < total && weights[i] < 0.5) i += 1;
+    } else {
+      i = Math.min(total, i + 1);
+    }
     emitProgress(onProgress, i, total);
     if (i >= total) {
       clearRevealLoops();
       if (typeof onDone === "function") onDone();
     }
-  }, Math.max(12, msPerChar));
+  }, Math.max(8, msPerChar));
 }
 
 function pronounceForSpeech(text) {
+  const words = { 1: "one", 2: "two", 3: "three", 4: "four", 5: "five" };
   return String(text || "")
-    .replace(/\b[A-Fa-f0-9]{64}\b/g, "as shown here")
+    .replace(/\b[A-Fa-f0-9]{64}\b/g, "as seen below")
+    .replace(/\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/g, "as seen below")
+    .replace(/\b(?:sequence|seq(?:uence)?\.?|Sequence)\s*[:=#-]?\s*\d+\b/gi, "as seen below")
+    .replace(/\bseq(?:uence)?\s+\d+\b/gi, "as seen below")
+    .replace(/\b([1-5])\s*\/\s*([1-5])\b(?:\s*agents?)?/gi, (_, a, b) => {
+      const left = words[a] || a;
+      const right = words[b] || b;
+      return `${left} out of ${right} agents`;
+    })
     .replace(/\bXSQUAD\b/gi, "X Squad")
-    .replace(/\bX-?SQUAD\b/gi, "X Squad");
+    .replace(/\bX-?SQUAD\b/gi, "X Squad")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function speakLangForEdge(lang) {
@@ -139,12 +188,14 @@ function stopActiveSource() {
 
 function syncBufferReveal(ctx, startedAt, duration, text, onProgress, onDone, gen) {
   clearRevealLoops();
-  const total = String(text || "").length;
+  const s = String(text || "");
+  const total = s.length;
+  const weights = revealWeights(s);
   const tick = () => {
     if (gen !== playGen) return;
     const elapsed = Math.max(0, ctx.currentTime - startedAt);
     const ratio = duration > 0 ? Math.min(1, elapsed / duration) : 1;
-    emitProgress(onProgress, Math.floor(ratio * total), total);
+    emitProgress(onProgress, charsForWeightedRatio(weights, ratio), total);
     if (ratio < 1) revealRaf = requestAnimationFrame(tick);
   };
   emitProgress(onProgress, 0, total);
@@ -196,7 +247,7 @@ export async function playPendingCommanderAudio({ onProgress, onDone, text = "" 
     return { mode: "none", engine: "none" };
   }
   try {
-    await playAudioBuffer(pendingBuffer, line, onProgress, onDone);
+    await playAudioBuffer(pendingBuffer, pronounceForSpeech(line) === line ? line : line, onProgress, onDone);
     lastEngine = COMMANDER_VOICE_TARGET.id;
     return { mode: "edge", engine: lastEngine, needsPlay: false };
   } catch (err) {
@@ -211,8 +262,9 @@ export async function playPendingCommanderAudio({ onProgress, onDone, text = "" 
  * Fetch Edge N1 MP3 and play via Web Audio (avoids CSP blocking blob: media URLs).
  */
 export async function speakCommander(text, { voiceOn = true, lang = "en", onProgress, onDone } = {}) {
-  const line = pronounceForSpeech(String(text || "")).trim();
-  if (!line || typeof window === "undefined") {
+  const display = String(text || "").trim();
+  const spoken = pronounceForSpeech(display).trim();
+  if (!display || typeof window === "undefined") {
     lastEngine = "none";
     if (typeof onDone === "function") onDone();
     return { mode: "none", engine: lastEngine };
@@ -223,7 +275,7 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
 
   if (!voiceOn) {
     lastEngine = "typewriter";
-    runTimedReveal(line, onProgress, onDone, { msPerChar: 16 });
+    runTimedReveal(display, onProgress, onDone, { msPerChar: 16 });
     return { mode: "typewriter", engine: lastEngine };
   }
 
@@ -233,7 +285,7 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
     const res = await fetch("/api/aim/speak", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
-      body: JSON.stringify({ text: line.slice(0, 1400), lang: speakLangForEdge(lang) }),
+      body: JSON.stringify({ text: spoken.slice(0, 1400), lang: speakLangForEdge(lang) }),
     });
     if (!res.ok) throw new Error(`speak ${res.status}`);
     const type = res.headers.get("content-type") || "";
@@ -244,14 +296,14 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
   } catch (err) {
     console.warn("[AIM] Edge speak API failed", err?.message || err);
     lastEngine = "browser-fallback";
-    speakBrowserFallback(line, lang, onProgress, onDone);
+    speakBrowserFallback(display, lang, onProgress, onDone);
     return { mode: "browser", engine: lastEngine, error: String(err?.message || err) };
   }
 
   const ctx = getAudioCtx();
   if (!ctx) {
     lastEngine = "browser-fallback";
-    speakBrowserFallback(line, lang, onProgress, onDone);
+    speakBrowserFallback(display, lang, onProgress, onDone);
     return { mode: "browser", engine: lastEngine };
   }
 
@@ -260,14 +312,14 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
     const buffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
     pendingBuffer = buffer;
     pendingText = line;
-    await playAudioBuffer(buffer, line, onProgress, onDone);
+    await playAudioBuffer(buffer, display, onProgress, onDone);
     lastEngine = voiceHeader;
     return { mode: "edge", engine: lastEngine, needsPlay: false };
   } catch (err) {
     console.warn("[AIM] WebAudio play blocked/failed; keep buffer for tap-to-play", err?.message || err);
     lastEngine = "edge-blocked";
     // Keep pendingBuffer for Play voice button (user gesture).
-    runTimedReveal(line, onProgress, onDone, { msPerChar: 18 });
+    runTimedReveal(display, onProgress, onDone, { msPerChar: 16 });
     return {
       mode: "edge-blocked",
       engine: lastEngine,
@@ -279,47 +331,34 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
 
 function speakBrowserFallback(text, lang, onProgress, onDone) {
   const synth = window.speechSynthesis;
-  const spoken = pronounceForSpeech(text);
+  const display = String(text || "");
+  const spoken = pronounceForSpeech(display);
   if (!synth || !spoken) {
-    runTimedReveal(spoken || text, onProgress, onDone);
+    runTimedReveal(display || spoken, onProgress, onDone, { msPerChar: 16 });
     return;
   }
-  const line = spoken;
-  const utter = new SpeechSynthesisUtterance(line.slice(0, 1400));
-  utter.rate = 1.0;
-  utter.pitch = 1.0;
-  utter.volume = 1;
+  const utter = new SpeechSynthesisUtterance(spoken.slice(0, 1400));
+  utter.rate = 1;
+  utter.pitch = 1;
   utter.lang = speakLangForEdge(lang);
-  const total = line.length;
+  const total = display.length;
+  const weights = revealWeights(display);
   emitProgress(onProgress, 0, total);
   utter.onboundary = (ev) => {
-    if (typeof ev.charIndex === "number") {
-      emitProgress(onProgress, Math.min(total, ev.charIndex + (ev.charLength || 1)), total);
-    }
+    // Drive reveal from speech progress but burst identifiers
+    const approx = Math.min(1, (ev.charIndex + (ev.charLength || 1)) / Math.max(1, spoken.length));
+    emitProgress(onProgress, charsForWeightedRatio(weights, approx), total);
   };
   utter.onend = () => {
     emitProgress(onProgress, total, total);
     if (typeof onDone === "function") onDone();
   };
-  utter.onerror = () => runTimedReveal(line, onProgress, onDone, { msPerChar: 22 });
-  const applyVoice = () => {
-    const voice = pickCommanderVoice(synth.getVoices(), "en-GB");
-    if (voice) {
-      utter.voice = voice;
-      if (voice.lang) utter.lang = voice.lang;
-    }
+  utter.onerror = () => runTimedReveal(display, onProgress, onDone, { msPerChar: 12 });
+  try {
     synth.cancel();
     synth.speak(utter);
-  };
-  const voices = synth.getVoices();
-  if (voices?.length) applyVoice();
-  else {
-    const once = () => {
-      synth.removeEventListener("voiceschanged", once);
-      applyVoice();
-    };
-    synth.addEventListener("voiceschanged", once);
-    window.setTimeout(applyVoice, 250);
+  } catch {
+    runTimedReveal(display, onProgress, onDone, { msPerChar: 12 });
   }
 }
 
