@@ -598,7 +598,7 @@ export async function aimStatusPayload() {
       `SELECT id, agent_id, kind, content, created_at
        FROM aim_agent_memory
        WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','commander')
-         AND kind IN ('observe','pools','inbox','indexer_probe')
+         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','xrpl_ledger','xrpl_book','xrpl_amm')
        ORDER BY id DESC
        LIMIT 40`
     );
@@ -780,7 +780,7 @@ async function loadAimChatContext(db) {
     `SELECT id, agent_id, kind, content, created_at
      FROM aim_agent_memory
      WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','commander')
-       AND kind IN ('observe','pools','inbox','indexer_probe')
+       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','xrpl_ledger','xrpl_book','xrpl_amm')
      ORDER BY id DESC
      LIMIT 12`
   );
@@ -1319,9 +1319,21 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     else {
       const meta = scrubValue(row.meta) || {};
       push(`Agent ${classified.agentNum} is ${scrubText(row.status)} (last seen ${agoPhrase(row.last_seen_at)}).`);
+      if (meta.skill?.summary) push(`Skill read: ${scrubText(meta.skill.summary)}.`);
+      if (meta.holders?.ok) {
+        const label = meta.holders.top_label || "top wallet";
+        push(`Richlist skill: ${label} leads (~${meta.holders.top_balance ?? "n/a"} XDX).`);
+      }
+      if (meta.arb && (meta.arb.gap_bps != null || meta.arb.summary)) {
+        push(`Arb skill: gap ${meta.arb.gap_bps ?? "n/a"} bps (${meta.arb.direction || "n/a"}).`);
+      }
+      if (meta.mean_reversion?.ok || meta.mean_reversion?.spread_bps != null) {
+        push(`Mean-reversion skill: spread ${meta.mean_reversion.spread_bps ?? "n/a"} bps · fee ${meta.mean_reversion.trading_fee ?? "n/a"}.`);
+      }
       if (meta.pools?.ok) push(`Pool scan: ${meta.pools.pool_count ?? "?"} · top ${meta.pools.top_pool || "n/a"}.`);
+      if (meta.xrpl?.ledger_index) push(`Ledger ${meta.xrpl.ledger_index} · ${meta.xrpl.tx_count ?? "?"} txs${meta.xrpl.flow_bias ? ` · ${meta.xrpl.flow_bias}-led` : ""}.`);
       else if (meta.indexer?.status_code) push(`Indexer probe HTTP ${meta.indexer.status_code}.`);
-      else if (meta.indexer?.skipped) push("Using private data path (indexer HTTP skipped).");
+      else if (meta.indexer?.skipped) push("Indexer HTTP skipped; XRPL + Postgres path active.");
     }
     push("Observe-only.");
     return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
@@ -1439,7 +1451,12 @@ export async function aimChatPayload(req) {
           includeDomains: wantSite ? ["dpmf.technology", "www.dpmf.technology"] : undefined,
         })
       : { ok: false, skipped: true, results: [] };
-    const llm = await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null, site, holders, lpHolders, markets);
+    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "wallet", "help"].includes(
+      classified.intent
+    );
+    const llm = preferLocal
+      ? { ok: false, skipped: true }
+      : await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null, site, holders, lpHolders, markets);
     let reply;
     if (llm?.ok && llm.text) {
       reply = {
