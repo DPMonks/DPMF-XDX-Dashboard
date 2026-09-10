@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
 import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
-import { AIM_AGENT_IDS, aimAgentLabel, aimAgentRole, aimAgentProfile } from "../aimAgentNames";
+import { AIM_AGENT_IDS, AIM_COMMANDER_AVATAR, aimAgentLabel, aimAgentRole, aimAgentProfile, aimAgentAvatarSrc } from "../aimAgentNames";
 import AimAgentName from "./AimAgentName";
 import { useWallet } from "../context/useWallet";
 
@@ -330,7 +330,15 @@ export default function AiMatrixPanel() {
 
       <section className="aim-chat neon-inset">
         <div className="aim-chat-head">
-          <div className="aim-commander-avatar" aria-hidden="true" title="Commander image" />
+          <img
+            className="aim-commander-avatar"
+            src={AIM_COMMANDER_AVATAR}
+            alt=""
+            title="Commander"
+            width={44}
+            height={44}
+            decoding="async"
+          />
           <div className="aim-chat-head-copy">
             <h3>Commander chat</h3>
             <p className="aim-commander-status" title="Commander looping and last seen">
@@ -406,7 +414,15 @@ export default function AiMatrixPanel() {
             >
               <header>
                 <div className="aim-agent-head-left">
-                  <span className="aim-agent-logo" aria-hidden="true" data-agent={agent.id} />
+                  <img
+                    className="aim-agent-logo"
+                    src={aimAgentAvatarSrc(agent.id)}
+                    alt=""
+                    data-agent={agent.id}
+                    width={30}
+                    height={30}
+                    decoding="async"
+                  />
                   <AimAgentName agentId={agent.id} label={agent.label || aimAgentLabel(agent.id)} stacked />
                 </div>
                 <span className={`aim-dot is-${String(agent.status || "").toLowerCase()}`} />

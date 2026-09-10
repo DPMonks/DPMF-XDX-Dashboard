@@ -628,7 +628,7 @@ body.aim-drawer-open #root {
 }
 
 
-/* Commander chat head + avatar square placeholder; looping/time to the right of avatar */
+/* Commander chat head + avatar square image; looping/time to the right of avatar */
 .aim-chat-head {
   display: flex;
   align-items: flex-start;
@@ -656,14 +656,15 @@ body.aim-drawer-open #root {
   width: 2.75rem;
   height: 2.75rem;
   border-radius: 8px;
-  border: 1px dashed rgba(120, 220, 255, 0.45);
-  background:
-    linear-gradient(135deg, rgba(14, 116, 144, 0.2), rgba(199, 112, 255, 0.12)),
-    rgba(8, 16, 28, 0.65);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(120, 220, 255, 0.45);
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  background: rgba(8, 16, 28, 0.65);
+  box-shadow: 0 0 12px rgba(0, 234, 255, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
-/* Agent logo circle left of name */
+/* Agent symbol circle left of name */
 .aim-agent-head-left {
   display: flex;
   align-items: flex-start;
@@ -676,11 +677,12 @@ body.aim-drawer-open #root {
   width: 1.85rem;
   height: 1.85rem;
   border-radius: 50%;
-  border: 1px dashed rgba(199, 112, 255, 0.55);
-  background:
-    radial-gradient(circle at 35% 30%, rgba(255,255,255,0.18), transparent 55%),
-    rgba(8, 16, 28, 0.75);
-  box-shadow: 0 0 10px rgba(199, 112, 255, 0.15);
+  border: 1px solid rgba(199, 112, 255, 0.55);
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  background: rgba(8, 16, 28, 0.75);
+  box-shadow: 0 0 10px rgba(199, 112, 255, 0.22);
 }
 .aim-drawer-panel .aim-chat-form {
   max-width: 100%;

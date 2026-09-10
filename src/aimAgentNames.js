@@ -9,45 +9,53 @@ export const AIM_AGENTS = {
     shortName: "Prime",
     role: "Token accumulation",
     identity: "Foundational, decisive, first-layer intelligence.",
+    avatar: "/aim/agent-prime.png",
   },
   agent2: {
     codeName: "Agent Flux",
     shortName: "Flux",
     role: "AMM & LP operations",
     identity: "Fluid, adaptive, equilibrium-driven.",
+    avatar: "/aim/agent-flux.png",
   },
   agent3: {
     codeName: "Agent Vector",
     shortName: "Vector",
     role: "Arbitrage",
     identity: "Directional, fast, precision-focused.",
+    avatar: "/aim/agent-vector.png",
   },
   agent4: {
     codeName: "Agent Vortex",
     shortName: "Vortex",
     role: "Momentum",
     identity: "Accelerating, force-driven, trend-hungry.",
+    avatar: "/aim/agent-vortex.png",
   },
   agent5: {
     codeName: "Agent Echo",
     shortName: "Echo",
     role: "Mean reversion + fee capture",
     identity: "Rhythmic, cyclical, pattern-aware.",
+    avatar: "/aim/agent-echo.png",
   },
   agent6: {
     codeName: "Agent Ghost",
     shortName: "Ghost",
     role: "XRPL observe (Nova / Quill / Cipher)",
     identity: "Quiet, peripheral, opportunity-spotting.",
+    avatar: "/aim/agent-ghost.png",
   },
 };
+
+export const AIM_COMMANDER_AVATAR = "/aim/commander.png";
 
 export const AIM_AGENT_IDS = ["agent1", "agent2", "agent3", "agent4", "agent5", "agent6"];
 
 export function aimAgentProfile(agentId) {
   const id = String(agentId || "").toLowerCase();
   if (id === "commander") {
-    return { codeName: "Commander", shortName: "Commander", role: "Desk lead", identity: "" };
+    return { codeName: "Commander", shortName: "Commander", role: "Desk lead", identity: "", avatar: AIM_COMMANDER_AVATAR };
   }
   if (id === "dashboard") {
     return { codeName: "You", shortName: "You", role: "", identity: "" };
@@ -68,6 +76,16 @@ export function aimAgentShortName(agentId) {
 export function aimAgentRole(agentId) {
   const p = aimAgentProfile(agentId);
   return p?.role || "";
+}
+
+/** Public avatar path for commander or agent1..agent6 (by id or short name). */
+export function aimAgentAvatarSrc(agentIdOrName) {
+  const id = resolveAimAgentId(agentIdOrName);
+  if (id && AIM_AGENTS[id]?.avatar) return AIM_AGENTS[id].avatar;
+  const raw = String(agentIdOrName || "").trim().toLowerCase();
+  if (raw === "commander") return AIM_COMMANDER_AVATAR;
+  const p = aimAgentProfile(raw);
+  return p?.avatar || null;
 }
 
 /** Resolve "prime" / "agent prime" / "agent1" / "1" -> agent1..agent6 */
