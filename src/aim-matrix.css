@@ -1,8 +1,8 @@
-.aim-matrix { display: grid; gap: 1rem; }
+.aim-matrix { display: flex; flex-direction: column; gap: 1rem; }
 .aim-matrix-head { display: flex; flex-direction: column; gap: 0.65rem; align-items: stretch; }
 .aim-matrix-head-main { display: flex; flex-direction: column; gap: 0.55rem; align-items: stretch; }
 .aim-matrix-kicker { margin: 0; opacity: 0.7; font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase; }
-.aim-matrix-commander { margin: 0.25rem 0 0; font-weight: 600; }
+.aim-matrix-commander { margin: 0; font-weight: 600; }
 .aim-matrix-refresh, .aim-chat-form button { cursor: pointer; }
 .aim-matrix-error { color: #ff8f8f; }
 .aim-agent-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
@@ -15,10 +15,13 @@
 .aim-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: #6b7280; display: inline-block; }
 .aim-dot.is-looping, .aim-dot.is-online { background: #34d399; box-shadow: 0 0 8px #34d399; }
 .aim-dot.is-booting { background: #fbbf24; }
-.aim-matrix-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1rem; }
-.aim-chat, .aim-moves { border: 1px solid rgba(120, 220, 255, 0.2); border-radius: 14px; padding: 0.9rem; min-height: 280px; }
-.aim-chat h3, .aim-moves h3 { margin: 0 0 0.75rem; font-size: 1rem; }
-.aim-chat-log { display: grid; gap: 0.55rem; max-height: 320px; overflow: auto; margin-bottom: 0.75rem; }
+.aim-matrix-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.aim-chat { width: 100%; }
+.aim-chat, .aim-moves { border: 1px solid rgba(120, 220, 255, 0.2); border-radius: 14px; padding: 0.9rem; }
+.aim-chat { min-height: 560px; display: flex; flex-direction: column; }
+.aim-moves { min-height: 220px; }
+.aim-moves h3 { margin: 0 0 0.75rem; font-size: 1rem; }
+.aim-chat-log { display: grid; gap: 0.55rem; flex: 1 1 auto; min-height: 420px; max-height: 640px; overflow: auto; margin-bottom: 0.75rem; }
 .aim-bubble {
   border-radius: 10px;
   padding: 0.55rem 0.7rem;
@@ -76,17 +79,17 @@
 .aim-moves li { display: grid; gap: 0.15rem; padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
 .aim-moves small { opacity: 0.65; }
 .aim-empty { opacity: 0.65; }
+
+/* Vertical order on all devices: Commander -> agents -> Recent -> desk */
+.aim-matrix-head { order: 0; }
+.aim-matrix-error { order: 1; }
+.aim-chat { order: 2; }
+.aim-agent-strip { order: 3; }
+.aim-moves { order: 4; }
+.aim-desk-board { order: 5; }
 @media (max-width: 960px) {
-  .aim-matrix {
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
-  }
-  .aim-matrix-head { order: 0; }
-  .aim-matrix-error { order: 1; }
-  .aim-matrix-grid { order: 2; grid-template-columns: 1fr; } /* chat above agents/desk */
-  .aim-agent-strip { order: 3; grid-template-columns: 1fr; }
-  .aim-desk-board { order: 4; }
+  .aim-matrix { gap: 0.85rem; }
+  .aim-agent-strip { grid-template-columns: 1fr; }
   .aim-desk-grid { grid-template-columns: 1fr; }
 }
 
@@ -588,10 +591,12 @@ body.aim-drawer-open #root {
 .aim-drawer-panel .aim-matrix-grid {
   grid-template-columns: 1fr;
 }
-@media (min-width: 1100px) {
-  .aim-drawer-panel .aim-matrix-grid {
-    grid-template-columns: 1.35fr 1fr;
-  }
+.aim-drawer-panel .aim-chat {
+  min-height: 480px;
+}
+.aim-drawer-panel .aim-chat-log {
+  min-height: 320px;
+  max-height: 520px;
 }
 
 .aim-agent-name { display: inline; font-weight: 700; line-height: 1.15; }
@@ -623,14 +628,29 @@ body.aim-drawer-open #root {
 }
 
 
-/* Commander chat head + avatar square placeholder */
+/* Commander chat head + avatar square placeholder; looping/time to the right of avatar */
 .aim-chat-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.65rem;
   margin: 0 0 0.75rem;
 }
-.aim-chat-head h3 { margin: 0; font-size: 1rem; }
+.aim-chat-head-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+.aim-chat-head h3 { margin: 0; font-size: 1rem; line-height: 1.2; }
+.aim-commander-status {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #9ef0ff;
+  opacity: 0.9;
+  letter-spacing: 0.02em;
+}
 .aim-commander-avatar {
   flex: 0 0 auto;
   width: 2.75rem;

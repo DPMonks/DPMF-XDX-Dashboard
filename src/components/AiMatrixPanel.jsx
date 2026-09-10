@@ -247,18 +247,17 @@ export default function AiMatrixPanel() {
   });
   const movements = data?.movements || [];
 
+  const commanderStatus = data?.commander
+    ? `${data.commander.status} · ${ago(data.commander.last_seen_at)}`
+    : loading
+      ? "Connecting…"
+      : "offline";
+
   return (
     <div className="aim-matrix" onPointerDown={() => { if (voiceOn) unlockCommanderAudio(); }}>
       <div className="aim-matrix-head">
         <div className="aim-matrix-head-main">
           <p className="aim-matrix-kicker">Observe-only · ephemeral chat · no wallets shown</p>
-          <p className="aim-matrix-commander">
-            {data?.commander
-              ? `Commander · ${data.commander.status} · ${ago(data.commander.last_seen_at)}`
-              : loading
-                ? "Connecting to Commander…"
-                : "Commander offline"}
-          </p>
         <div className="aim-matrix-actions">
           <div className="aim-toolbar-item aim-lang">
             <span className="aim-toolbar-kicker">XDX · Language</span>
@@ -329,12 +328,16 @@ export default function AiMatrixPanel() {
 
       {error ? <p className="aim-matrix-error">{error}</p> : null}
 
-      <div className="aim-matrix-grid">
-        <section className="aim-chat neon-inset">
-          <div className="aim-chat-head">
-            <div className="aim-commander-avatar" aria-hidden="true" title="Commander image" />
+      <section className="aim-chat neon-inset">
+        <div className="aim-chat-head">
+          <div className="aim-commander-avatar" aria-hidden="true" title="Commander image" />
+          <div className="aim-chat-head-copy">
             <h3>Commander chat</h3>
+            <p className="aim-commander-status" title="Commander looping and last seen">
+              {commanderStatus}
+            </p>
           </div>
+        </div>
           <div className="aim-chat-log" ref={chatLogRef}>
             {localChat.map((m, i) => {
               const full = m.text || "";
@@ -390,23 +393,7 @@ export default function AiMatrixPanel() {
               Send
             </button>
           </form>
-        </section>
-
-        <section className="aim-moves neon-inset">
-          <h3>Recent movement</h3>
-          <ul>
-            {movements.slice(0, 16).map((m) => (
-              <li key={m.id}>
-                <b><AimAgentName label={m.label} agentId={m.agent_id || m.from || m.id} /></b>
-                <span>{m.summary}</span>
-                <small>{ago(m.created_at)}</small>
-              </li>
-            ))}
-            {!movements.length ? <li className="aim-empty">No movement yet.</li> : null}
-          </ul>
-        </section>
-      </div>
-
+      </section>
 
       <div className="aim-agent-strip" role="list">
         {agents.map(
@@ -442,6 +429,20 @@ export default function AiMatrixPanel() {
         )}
       </div>
 
+
+      <section className="aim-moves neon-inset">
+        <h3>Recent movement</h3>
+        <ul>
+          {movements.slice(0, 16).map((m) => (
+            <li key={m.id}>
+              <b><AimAgentName label={m.label} agentId={m.agent_id || m.from || m.id} /></b>
+              <span>{m.summary}</span>
+              <small>{ago(m.created_at)}</small>
+            </li>
+          ))}
+          {!movements.length ? <li className="aim-empty">No movement yet.</li> : null}
+        </ul>
+      </section>
 
       <section className="aim-desk-board neon-inset" aria-label="Internal trading desk">
         <div className="aim-desk-head">
