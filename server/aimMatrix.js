@@ -514,17 +514,28 @@ async function fetchTopLpHolders({ limit = 5 } = {}) {
 
 
 async function fetchPlatformMarkets() {
-  const out = { ok: false, amm: null, orderbook: null };
-  for (const origin of platformOriginCandidates()) {
+  const out = { ok: false, amm: null, orderbook: null, books: {}, details: null };
+  const chartPairs = ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO"];
+  const indexerBases = [
+    process.env.INDEXER_URL,
+    process.env.VITE_INDEXER_URL,
+    ...platformOriginCandidates(),
+  ]
+    .filter(Boolean)
+    .map((u) => String(u).replace(/\/$/, ""));
+  const seen = new Set();
+  const bases = indexerBases.filter((u) => (seen.has(u) ? false : (seen.add(u), true)));
+
+  for (const origin of bases) {
     const base = String(origin).replace(/\/$/, "");
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    const timer = setTimeout(() => ctrl.abort(), 12_000);
     try {
       const [ammRes, bookRes] = await Promise.all([
-        fetch(`${base}/api/amm`, { headers: { Accept: "application/json" }, signal: ctrl.signal }),
-        fetch(`${base}/api/orderbook?pair=XDX/XRP`, { headers: { Accept: "application/json" }, signal: ctrl.signal }),
+        fetch(`${base}/api/amm`, { headers: { Accept: "application/json" }, signal: ctrl.signal }).catch(() => null),
+        fetch(`${base}/api/orderbook?pair=XDX/XRP`, { headers: { Accept: "application/json" }, signal: ctrl.signal }).catch(() => null),
       ]);
-      if (ammRes.ok) {
+      if (ammRes?.ok) {
         const amm = await ammRes.json();
         out.amm = {
           pool: amm.pool || "XDX/XRP",
@@ -533,7 +544,7 @@ async function fetchPlatformMarkets() {
           xrpUsd: amm.xrpUsd ?? null,
         };
       }
-      if (bookRes.ok) {
+      if (bookRes?.ok) {
         const book = await bookRes.json();
         out.orderbook = {
           pair: book.pair || "XDX/XRP",
@@ -545,7 +556,37 @@ async function fetchPlatformMarkets() {
           asks: Array.isArray(book.asks) ? book.asks.length : null,
         };
       }
-      out.ok = !!(out.amm || out.orderbook);
+      // Platform indexer books (same path hybrid chart uses)
+      await Promise.all(
+        chartPairs.map(async (pair) => {
+          const [b, q] = pair.split("/");
+          for (const path of [`/api/book/${b}/${q}`, `/book/${b}/${q}`]) {
+            try {
+              const res = await fetch(`${base}${path}`, {
+                headers: { Accept: "application/json" },
+                signal: ctrl.signal,
+              });
+              if (!res.ok) continue;
+              const data = await res.json();
+              if (data?.error && data?.mid == null && data?.bid == null) continue;
+              out.books[pair] = {
+                pair: data.pair || pair,
+                bid: data.bid ?? null,
+                ask: data.ask ?? null,
+                mid: data.mid ?? null,
+                spread_bps: data.spread_bps ?? null,
+                bid_count: data.bid_count ?? (Array.isArray(data.bids) ? data.bids.length : null),
+                ask_count: data.ask_count ?? (Array.isArray(data.asks) ? data.asks.length : null),
+                source: data.source || "indexer",
+              };
+              break;
+            } catch {
+              /* next path */
+            }
+          }
+        })
+      );
+      out.ok = !!(out.amm || out.orderbook || Object.keys(out.books).length);
       if (out.ok) return out;
     } catch {
       /* try next origin */
@@ -554,6 +595,112 @@ async function fetchPlatformMarkets() {
     }
   }
   return out;
+}
+
+const XDX_POOL_SPECS = [
+  {
+    pair: "XDX/XRP",
+    amm: "rhEwhutV5EyYzTbBYDdK7dHxwdi5omqffB",
+    lpHex: "03970105D80AE3C54085F6E97EE16CEDE6CE8200",
+    asset2: { currency: "XRP" },
+  },
+  {
+    pair: "XDX/RLUSD",
+    amm: "rLbBzF9oxntVf4XxcyakNKJTci4yqSmQUu",
+    lpHex: "03BCD44104644B711C58CD14CD13CBA65757CFBE",
+    asset2: {
+      currency: "524C555344000000000000000000000000000000",
+      issuer: "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+    },
+  },
+  {
+    pair: "XDX/XIO",
+    amm: "rDJXzsZGACeHGJQYfaudsYshaC5zJxqsHr",
+    lpHex: "03E7A465A6E95CDA21E1110056AA51A71FA55CB9",
+    asset2: { currency: "XIO", issuer: "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU" },
+  },
+  {
+    pair: "XDX/XSQUAD",
+    amm: "rwpht3XDGMhzYmT5V6ZyMyg6Uc37XFLSwv",
+    lpHex: "03BA7FDC0F32F83750869CBA241B93F1C66A8EEB",
+    asset2: { currency: "XSQUAD", issuer: "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg" },
+  },
+];
+
+function extractClassicAddress(text) {
+  const m = String(text || "").match(/\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/);
+  return m ? m[0] : null;
+}
+
+function parseAmountValue(raw) {
+  if (raw == null) return 0;
+  if (typeof raw === "object") return Number(raw.value || 0) || 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n / 1_000_000 : 0;
+}
+
+async function fetchLpEarningsForAccount(account, { pairHint = null } = {}) {
+  const acct = String(account || "").trim();
+  if (!/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(acct)) {
+    return { ok: false, error: "need_classic_address", ask: true };
+  }
+  const linesRes = await xrplPublicRpc("account_lines", {
+    account: acct,
+    ledger_index: "validated",
+    limit: 400,
+  });
+  if (!linesRes.ok) {
+    return { ok: false, error: linesRes.error || "account_lines failed", account: shortAcct(acct) };
+  }
+  const lines = linesRes.result?.lines || [];
+  const positions = [];
+  for (const spec of XDX_POOL_SPECS) {
+    if (pairHint && !String(pairHint).toUpperCase().includes(spec.pair.split("/")[1])) {
+      // soft filter. still allow ALL if hint empty
+    }
+    const wantPair = pairHint ? String(pairHint).toUpperCase().replace(/\s+/g, "") : null;
+    if (wantPair && wantPair !== "ALL" && wantPair !== spec.pair && !wantPair.endsWith(spec.pair.split("/")[1])) {
+      continue;
+    }
+    const line = lines.find(
+      (row) =>
+        String(row.currency || "").replace(/^0x/i, "").toUpperCase() === spec.lpHex &&
+        String(row.account || "").toUpperCase() === spec.amm.toUpperCase()
+    );
+    const held = Number(line?.balance || 0);
+    if (!(held > 0)) {
+      positions.push({ pair: spec.pair, lp: 0, share_pct: null, trading_fee: null, ok: false });
+      continue;
+    }
+    const ammRes = await xrplPublicRpc("amm_info", { amm_account: spec.amm });
+    const amm = ammRes.result?.amm || {};
+    const lpToken = amm.lp_token || {};
+    const lpSupply = Number(lpToken.value || 0) || 0;
+    const share = lpSupply > 0 ? (held / lpSupply) * 100 : null;
+    const tradingFee = amm.trading_fee != null ? Number(amm.trading_fee) : null;
+    const feePct = tradingFee != null ? (tradingFee > 20 ? tradingFee / 1000 : tradingFee) : null;
+    positions.push({
+      pair: spec.pair,
+      lp: held,
+      lp_supply: lpSupply || null,
+      share_pct: share,
+      trading_fee: tradingFee,
+      fee_pct_approx: feePct,
+      amount: amm.amount,
+      amount2: amm.amount2,
+      amm: spec.amm,
+      ok: true,
+    });
+  }
+  const held = positions.filter((r) => r.ok && r.lp > 0);
+  return {
+    ok: true,
+    account: shortAcct(acct),
+    account_full: acct,
+    positions: held.length ? held : positions,
+    held_count: held.length,
+    note: "Public LP balance and pool share only. Exact USD fee income needs volume history on the LP income card.",
+  };
 }
 
 
@@ -1160,6 +1307,12 @@ function classifyAimQuestion(raw) {
   ) {
     return { intent: "holders" };
   }
+  if (
+    /\b(how much (am i|are we|is my|do i) earn|lp (earn|income|yield|fees?|share|position)|earning in (the )?(xdx|pool|lp|liquidity)|my (lp|liquidity|pool) (fees?|income|share|position))\b/.test(q) ||
+    (/\b(earn|earning|income|yield)\b/.test(q) && /\b(lp|pool|liquidity|amm)\b/.test(q))
+  ) {
+    return { intent: "lp_earnings" };
+  }
   if (/\b(lp owners?|lp holders?|liquidity providers?)\b/.test(q)) {
     return { intent: "lp_holders" };
   }
@@ -1418,7 +1571,7 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
   };
   const system = `You are Commander on the XDX Exchange Operational Intelligence Interface (AI-Matrix).
 Personality: calm British desk lead for an advanced XRPL trading team. Your job is to utilise agents 1-5 aggressively to grow USD-marked wallet equity: increase yield by about 20% each day versus the day-start USD mark (compounding daily yield milestone). They may trade any XRPL asset. Start size about 5 XRP per wallet (1 reserve, 4 trade). Dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
-You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically using the dashboard itself (rich list, LP owners, AMM pools, order book, Smart Swap, trust lines, AI-Matrix).
+You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically using the dashboard itself (rich list, LP owners, AMM pools, order book, Smart Swap modes/routing/fees, XDX details, trust lines, AI-Matrix). For LP earnings questions, use public account lines + amm_info pool share; never ask for seeds. Encourage deepening XDX LP, AMMVote, and routing Smart Swap volume through XDX pools to earn more fees. still on-ledger only.
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
 If asked who holds the most XDX, use richlist / holders context: the #1 wallet is typically DPMFBANK (account contains DPMFBANK). Point them to the XDX Rich list card.
 Never read aloud wallet addresses, transaction hashes, or sequence numbers. Say "as seen below" instead. Prefer "transactions" over "txs". Shorten long classic addresses when speaking.
@@ -1433,7 +1586,7 @@ If asked what this is, what the exchange is, what this platform/dashboard is, or
 Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
-Desk objective: aggressively grow USD-marked equity — about +20% daily yield versus day-start USD mark (public compounding daily-yield milestone). Trade any XRPL asset through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". Say "the XRPL" (or "the XRP Ledger"), not bare "XRPL", in user-facing replies. Never write "the XRPL". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
+Desk objective: aggressively grow USD-marked equity. about +20% daily yield versus day-start USD mark (public compounding daily-yield milestone). Trade any XRPL asset through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". Say "the XRPL" (or "the XRP Ledger"), not bare "XRPL", in user-facing replies. Never write "the XRPL". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
 If xrpl_universe is present, use it for any XRPL token/price/book/trade-opportunity question across the wider ledger (not only XDX/XIO/XSQUAD). Stay observe-only; never claim execution. If site_scan is present, prefer it for dpmf.technology / DPMF XD Projects questions. If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing. Never mention website builders.
 Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
@@ -1488,12 +1641,13 @@ XDX Exchange Operational Intelligence Interface (this site):
 - Chat with Commander is ephemeral (not saved). Voice can read replies aloud.
 - AI-Matrix Agents 1-5 are observe-only in Phase 1 (no live trading from those workers). They watch pools/ledger for readiness.
 
-Core product areas on the dashboard (JUMP TO decks 01-12 — use live platform data for each):
+Core product areas on the dashboard (JUMP TO decks 01-12. use live platform data for each):
 - 01 Wallet: connect with Xaman (XUMM), see connected account, balances, trust lines. Never speak full addresses; say "as seen below".
-- 02 Details: XDX token details (issuer, supply narrative, on-ledger facts shown on that card).
 - 03 Trade chart: XDX price / trading chart visuals.
-- 04 Smart Swap: swap via XDX AMM pools; review quote; sign in Xaman. Non-XDX pairs may include platform fee / LP governance checks.
-- 05 Order book: live XRPL DEX book for the selected pair (bids/asks, mid, spread). Prefer live orderbook context when asked.
+- 02 Details: XDX token details (issuer as seen on Details, supply, issued-at, AMM/LP context for XDX/XRP, XDX/RLUSD, XDX/XIO, XDX/XSQUAD).
+- 04 Smart Swap: recommended mode is Smart routing. scans AMM pools, order books, multi-hop, auto-bridging, rippling, and trustline conversions; simulates size and picks the best venue. Other modes: AMM only, order book only, multi-hop, rippling, auto-bridging, passive AMM, clawback-safe, no-direct-ripple, limit-quality, partial-payment, cross-currency. Non-XDX↔non-XDX swaps may charge ~1% XDX platform fee and require >=$10 LP in an XDX pool (governance unlock). Trust lines required for IOUs. Sign in Xaman.
+- 05 Order book: platform/indexer hybrid DEX book for chart pairs XDX/RLUSD, XDX/XRP, XRP/RLUSD, XDX/XIO (bids/asks, mid, spread). Prefer live orderbook context when asked.
+- LP earnings: visitors can ask how much they earn in liquidity. Commander looks up public LP balances / pool share / fee context for the connected or stated classic address (never seeds). Point them to Connected wallet + LP income cards.
 - 06 Activity: XDX activity chart / recent market activity visuals.
 - 07 Rich list: ranked XDX holders. Top holder is typically DPMFBANK. Always use live richlist for holder questions.
 - 08 LP owners: ranked LP token holders by pool.
@@ -1531,8 +1685,17 @@ function helpAnswerForQuestion(question) {
     if (s) bits.push(s);
   };
 
-  if (/\b(swap|smart swap|trade|exchange)\b/.test(q)) {
-    add("Smart Swap routes through XDX AMM pools on the XRPL. Connect wallet, set any needed trust line, pick the pair, review the quote, then sign in Xaman.");
+  if (/\b(swap|smart swap|trade|exchange|routing)\b/.test(q)) {
+    add("Smart Swap default is Smart routing: it compares AMM pools, the order book, multi-hop, auto-bridging, and trustline paths for your size, then picks the best fill. You can force AMM-only or order-book-only. Connect wallet, set any needed trust line, review the quote (fees + venue), then sign in Xaman. Non-XDX pairs can add a 1% XDX platform fee and need about $10 LP in an XDX pool to unlock.");
+  }
+  if (/\b(earn|earning|income|fees? (from|in|on)|lp (fee|income|yield|share|position)|how much.*(lp|pool|liquidity))\b/.test(q)) {
+    add("I can estimate LP share and fee context from public ledger data for a classic address. Paste your r… address or connect the wallet on this exchange, then ask how much you earn in a pool like XDX/XRP. Seeds stay offline.");
+  }
+  if (/\b(token details|xdx details|issuer|supply)\b/.test(q)) {
+    add("Open Details (deck 02) for XDX issuer, supply, and pool/LP context. I can also summarise live AMM marks from the platform.");
+  }
+  if (/\b(deepen|ammvote|balanced deposit|harvest|fee vote|route.*xdx pool)\b/.test(q)) {
+    add("To earn more pool fees on-ledger: deepen LP with a balanced deposit, route Smart Swap volume through XDX pools, and use AMMVote when you hold LP to prefer fee settings that fit flow. Still OfferCreate/Payment/AMM* only. never Freeze, Clawback, or blackhole.");
   }
   if (/\b(trust|trustline|trust line)\b/.test(q)) {
     add("A trust line lets your account hold an IOU like XDX. Open Trust line, set the XDX limit, sign the TrustSet. Without it, inbound XDX can fail.");
@@ -1638,7 +1801,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return { type: "commander_answer", intent: "connectivity", text: (line + extra).trim() };
   }
 
-  const skipOpener = ["help", "holders", "lp_holders", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
+  const skipOpener = ["help", "holders", "lp_holders", "lp_earnings", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
   if (!skipOpener) {
     push(
       pickLine(seed, [
@@ -1723,18 +1886,27 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
   }
 
-  if (classified.intent === "orderbook") {
+    if (classified.intent === "orderbook") {
     const book = markets?.orderbook;
-    if (book) {
-      push(`Order book ${book.pair}: mid ${book.mid ?? "n/a"}, bid ${book.best_bid ?? "n/a"}, ask ${book.best_ask ?? "n/a"}.`);
-      push("Open the Order book deck for the full ladder.");
-    } else {
-      push("Open the Order book deck (05) for live bids and asks on the selected pair.");
+    const multi = markets?.books || {};
+    const bits = [];
+    for (const pair of ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO"]) {
+      const row = multi[pair];
+      if (row?.mid != null) bits.push(`${pair} mid ${row.mid}`);
+      else if (row?.bid != null || row?.ask != null) bits.push(`${pair} bid/ask live`);
     }
+    if (bits.length) push(`Platform books: ${bits.join(" · ")}.`);
+    if (book?.mid != null) push(`XDX/XRP board mid about ${book.mid}.`);
+    else if (book?.best_bid != null || book?.best_ask != null) {
+      push(`XDX/XRP book bid ${book.best_bid ?? "n/a"} / ask ${book.best_ask ?? "n/a"}.`);
+    }
+    if (!bits.length && book?.mid == null) push("Platform order book is quiet right now. Open deck 05 for the live tape.");
+    else push("Open the order book panel for full depth on the selected pair.");
     return { type: "commander_answer", intent: "orderbook", text: lines.join(" ") };
   }
   if (classified.intent === "swap") {
-    push("Smart Swap (deck 04) routes through XDX AMM pools. Connect wallet, set any trust line you need, pick the pair, review the quote, then sign in Xaman.");
+    push("Smart Swap (deck 04) defaults to Smart routing: AMM + order book + multi-hop compared for your size. Connect wallet, set trust lines, review venue/fees (non-XDX may add 1% XDX fee + LP unlock), then sign in Xaman.");
+    push("Fee tip: deepen XDX LP, route volume through XDX pools, and AMMVote as an LP when you want fee settings that fit flow.");
     if (markets?.amm?.price != null) push(`Live XDX mark from the board is about ${markets.amm.price}.`);
     return { type: "commander_answer", intent: "swap", text: lines.join(" ") };
   }
@@ -1748,6 +1920,8 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return { type: "commander_answer", intent: "wallet", text: lines.join(" ") };
   }
   if (classified.intent === "details") {
+    push("XDX Details (deck 02): issuer as seen on Details, 10B max supply narrative, and live AMM/LP context for XDX/XRP, XDX/RLUSD, XDX/XIO, XDX/XSQUAD.");
+    if (markets?.amm?.price != null) push(`Live XDX mark about ${markets.amm.price}.`);
     push("Details (deck 02) holds the XDX token facts on this board. Ask a sharper question if you want issuer, supply, or holder concentration tied to Rich list.");
     return { type: "commander_answer", intent: "details", text: lines.join(" ") };
   }
@@ -1924,8 +2098,21 @@ export async function aimChatPayload(req) {
       classified.intent === "lp_holders" || /\blp (owners?|holders?)\b/i.test(text)
         ? await fetchTopLpHolders({ limit: 8 })
         : null;
+    let lpEarnings = null;
+    if (classified.intent === "lp_earnings" || (/\b(earn|earning|lp income|pool share)\b/i.test(text) && /\b(lp|pool|liquidity|amm)\b/i.test(text))) {
+      const addr = extractClassicAddress(text) || extractClassicAddress(body.wallet || body.account || body.address || "");
+      const pairHint =
+        (String(text).match(/\bXDX\/(XRP|RLUSD|XIO|XSQUAD)\b/i) || [])[0] ||
+        (String(text).match(/\b(XRP|RLUSD|XIO|XSQUAD)\b/i) || [])[0] ||
+        null;
+      if (addr) {
+        lpEarnings = await fetchLpEarningsForAccount(addr, { pairHint });
+      } else {
+        lpEarnings = { ok: false, ask: true, error: "need_classic_address" };
+      }
+    }
     const wantMarkets =
-      ["orderbook", "swap", "chart", "pools", "snapshot", "status", "assets", "native_price"].includes(classified.intent) ||
+      ["orderbook", "swap", "chart", "pools", "snapshot", "status", "assets", "native_price", "details", "lp_earnings", "help"].includes(classified.intent) ||
       /\b(price|tvl|order ?book|amm|swap|chart)\b/i.test(text);
     const markets = wantMarkets ? await fetchPlatformMarkets() : null;
     const wantUniverse =
@@ -1947,9 +2134,59 @@ export async function aimChatPayload(req) {
           includeDomains: wantSite ? ["dpmf.technology", "www.dpmf.technology"] : undefined,
         })
       : { ok: false, skipped: true, results: [] };
-    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "wallet", "help", "desk", "native_price"].includes(
+    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "lp_earnings", "wallet", "help", "desk", "native_price", "swap", "orderbook", "details"].includes(
       classified.intent
     );
+    if (classified.intent === "lp_earnings" || lpEarnings) {
+      const bits = [];
+      if (lpEarnings?.ask || lpEarnings?.error === "need_classic_address") {
+        bits.push("Tell me the classic r… address (or connect the wallet on this exchange), and I will read public LP balances and pool share. I never need your seed.");
+      } else if (lpEarnings?.ok) {
+        const held = (lpEarnings.positions || []).filter((r) => r.ok && r.lp > 0);
+        if (!held.length) {
+          bits.push(`No XDX-pool LP tokens visible on ${lpEarnings.account}. If you just deposited, wait a ledger or confirm the pool on deck 10.`);
+        } else {
+          bits.push(`LP read for ${lpEarnings.account}:`);
+          for (const row of held.slice(0, 4)) {
+            const share = row.share_pct != null ? ` ~${Number(row.share_pct).toFixed(4)}% of pool` : "";
+            const fee = row.fee_pct_approx != null ? ` · pool fee ~${Number(row.fee_pct_approx).toFixed(3)}%` : "";
+            bits.push(`${row.pair}: ${formatXdxAmount(row.lp)} LP${share}${fee}.`);
+          }
+          bits.push("Your fee income scales with pool volume times your share. Open Connected wallet / LP income for USD history. Deepen LP or route Smart Swap through XDX pools to earn more fees. on-ledger only.");
+        }
+      } else if (lpEarnings) {
+        bits.push("I could not read LP lines right now. Try again with the classic address, or use the LP income card on the wallet panel.");
+      }
+      let replyLp = {
+        type: "commander_answer",
+        intent: "lp_earnings",
+        source: "platform_ledger",
+        text: stripLongHyphens(bits.join(" ").replace(/\u2014/g, ". ").replace(/\u2013/g, "-")),
+      };
+      if (lang && lang !== "en" && lang !== "en-GB") {
+        const translatedLp = await translateAimText(replyLp.text, lang);
+        replyLp = { ...replyLp, text: stripLongHyphens(translatedLp), translated: translatedLp !== replyLp.text };
+      }
+      replyLp.text = stripLongHyphens(stripSiteNoise(String(replyLp.text || "").replace(/\btxs\b/gi, "transactions")));
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          ephemeral: true,
+          lang,
+          lang_source: resolved.source,
+          reply: {
+            from: "commander",
+            from_label: "Commander",
+            body: replyLp,
+            created_at: new Date().toISOString(),
+          },
+          llm: { ok: false, error: "not used", detail: "lp_earnings local", model: null },
+          web: { skipped: true },
+          site: { skipped: true },
+        },
+      };
+    }
     const llm = preferLocal
       ? { ok: false, skipped: true }
       : await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null, site, holders, lpHolders, markets, xrplUniverse);
