@@ -462,7 +462,7 @@ export default function AiMatrixPanel() {
                       <small className={`aim-desk-fill ${a.last_fill.submitted ? "is-live" : "is-blocked"}`}>
                         {a.last_fill.submitted
                           ? `Fill ${a.last_fill.engine_result || "submitted"} ${a.last_fill.hash ? a.last_fill.hash.slice(0, 8) : ""}`
-                          : `Exec blocked: ${a.last_fill.blocked_by || "gate"}`}
+                          : `${a.last_fill.blocked_by_display || `${a.last_fill.blocked_by_actor_label || "Desk"} blocked: ${a.last_fill.blocked_by || "gate"}`}`}
                       </small>
                     ) : null}
                     {prop?.xrp_thesis ? <small className="aim-desk-thesis">{prop.xrp_thesis}</small> : null}

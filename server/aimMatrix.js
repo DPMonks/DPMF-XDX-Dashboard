@@ -1,4 +1,4 @@
-import { aimSpeakPayload } from "./aimSpeak.js";
+﻿import { aimSpeakPayload } from "./aimSpeak.js";
 import pg from "pg";
 import { aimAgentLabel, aimAgentRole, aimAgentProfile, resolveAimAgentId } from "./aimAgentNames.js";
 
@@ -1243,6 +1243,9 @@ export async function aimStatusPayload() {
               ok: !!fill.ok,
               submitted: !!fill.submitted,
               blocked_by: scrubText(fill.blocked_by || ""),
+              blocked_by_actor: scrubText(fill.blocked_by_actor || ""),
+              blocked_by_actor_label: scrubText(fill.blocked_by_actor_label || ""),
+              blocked_by_display: scrubText(fill.blocked_by_display || ""),
               hash: scrubText(fill.hash || ""),
               engine_result: scrubText(fill.engine_result || ""),
               dry_run: !!fill.dry_run,
@@ -1258,6 +1261,9 @@ export async function aimStatusPayload() {
               ledger_tools: Array.isArray(prop.ledger_tools) ? prop.ledger_tools.map((x) => scrubText(x)).slice(0, 12) : [],
               executable: !!prop.executable,
               blocked_by: scrubText((prop.exec && prop.exec.blocked_by) || prop.blocked_by || ""),
+              blocked_by_actor: scrubText((prop.exec && prop.exec.blocked_by_actor) || prop.blocked_by_actor || ""),
+              blocked_by_actor_label: scrubText((prop.exec && prop.exec.blocked_by_actor_label) || prop.blocked_by_actor_label || ""),
+              blocked_by_display: scrubText((prop.exec && prop.exec.blocked_by_display) || prop.blocked_by_display || ""),
             }
           : null,
       };
@@ -1918,7 +1924,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return { type: "commander_answer", intent: "connectivity", text: (line + extra).trim() };
   }
 
-  const skipOpener = ["help", "holders", "lp_holders", "lp_earnings", "balance", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
+  const skipOpener = ["help", "holders", "lp_holders", "lp_earnings", "balance", "math", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
   if (!skipOpener) {
     push(
       pickLine(seed, [
