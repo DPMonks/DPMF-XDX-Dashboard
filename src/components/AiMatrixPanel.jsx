@@ -219,7 +219,7 @@ export default function AiMatrixPanel() {
   return (
     <div className="aim-matrix" onPointerDown={() => { if (voiceOn) unlockCommanderAudio(); }}>
       <div className="aim-matrix-head">
-        <div>
+        <div className="aim-matrix-head-main">
           <p className="aim-matrix-kicker">Observe-only · ephemeral chat · no wallets shown</p>
           <p className="aim-matrix-commander">
             {data?.commander
@@ -228,7 +228,6 @@ export default function AiMatrixPanel() {
                 ? "Connecting to Commander…"
                 : "Commander offline"}
           </p>
-        </div>
         <div className="aim-matrix-actions">
           <div className="aim-toolbar-item aim-lang">
             <span className="aim-toolbar-kicker">XDX · Language</span>
@@ -293,6 +292,7 @@ export default function AiMatrixPanel() {
               Refresh
             </button>
           </div>
+        </div>
         </div>
       </div>
 

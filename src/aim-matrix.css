@@ -1,5 +1,6 @@
 .aim-matrix { display: grid; gap: 1rem; }
-.aim-matrix-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.aim-matrix-head { display: flex; flex-direction: column; gap: 0.65rem; align-items: stretch; }
+.aim-matrix-head-main { display: flex; flex-direction: column; gap: 0.55rem; align-items: stretch; }
 .aim-matrix-kicker { margin: 0; opacity: 0.7; font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase; }
 .aim-matrix-commander { margin: 0.25rem 0 0; font-weight: 600; }
 .aim-matrix-refresh, .aim-chat-form button { cursor: pointer; }
@@ -44,9 +45,11 @@
 
 .aim-matrix-actions {
   display: flex;
-  gap: 0.55rem;
-  align-items: stretch;
+  flex-direction: row;
   flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: flex-end;
+  justify-content: flex-start;
 }
 .aim-toolbar-item {
   display: flex;
@@ -55,7 +58,8 @@
   position: relative;
   min-width: 6.75rem;
 }
-.aim-toolbar-item.aim-lang { min-width: 12rem; flex: 1 1 12rem; max-width: 16rem; }
+.aim-toolbar-item.aim-lang { min-width: 11rem; flex: 0 1 14rem; max-width: 18rem; }
+.aim-toolbar-item { flex: 0 0 auto; }
 .aim-toolbar-kicker-spacer {
   visibility: hidden;
   pointer-events: none;
@@ -341,7 +345,7 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(520px, 48vw, 100%);
+  width: 100%;
   max-width: 100%;
   display: flex;
   flex-direction: column;
@@ -421,22 +425,19 @@
 
 @media (max-width: 900px) {
   .aim-drawer-panel {
-    width: min(100vw, 100%);
+    width: 100%;
     border-radius: 0;
   }
 }
 
-@media (min-width: 901px) and (max-width: 1200px) {
+@media (min-width: 901px) {
   .aim-drawer-panel {
-    width: min(480px, 50vw);
+    width: 100%;
+    border-radius: 0;
   }
 }
 
-@media (min-width: 1201px) {
-  .aim-drawer-panel {
-    width: min(560px, 42vw);
-  }
-}
+
 
 .site-jump-grid button.is-overlay em {
   color: rgba(0, 234, 255, 0.9);
@@ -444,7 +445,7 @@
 
 body.aim-drawer-open #root {
   transition: transform 0.48s cubic-bezier(0.25, 0.8, 0.25, 1);
-  transform: translate3d(-12px, 0, 0);
+  transform: translate3d(0, 0, 0);
 }
 @media (prefers-reduced-motion: reduce) {
   .aim-drawer-panel,
