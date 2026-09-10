@@ -36,11 +36,17 @@ function pickVoice(lang) {
 /** Spoken forms for tickers/names (display text stays unchanged). */
 function pronounceForSpeech(text) {
   const words = { 1: "one", 2: "two", 3: "three", 4: "four", 5: "five" };
+  const spell = (s) => String(s).split("").join(" ");
   return String(text || "")
-    .replace(/\b[A-Fa-f0-9]{64}\b/g, "as seen below")
-    .replace(/\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/g, "as seen below")
-    .replace(/\b(?:sequence|seq(?:uence)?\.?|Sequence)\s*[:=#-]?\s*\d+\b/gi, "as seen below")
-    .replace(/\bseq(?:uence)?\s+\d+\b/gi, "as seen below")
+    // Tx hashes: speak first 4 hex chars only
+    .replace(/\b([A-Fa-f0-9]{64})\b/g, (_, h) => spell(h.slice(0, 4)))
+    // Classic addresses: speak first 9 characters only
+    .replace(/\b(r[1-9A-HJ-NP-Za-km-z]{24,34})\b/g, (_, a) => spell(a.slice(0, 9)))
+    // Ledger / sequence numbers: speak first 4 digits only
+    .replace(/\b(?:ledger(?:\s*index)?|ledgerIndex|Ledger)\s*[:=#-]?\s*(\d{4,})\b/gi, (_, n) => spell(String(n).slice(0, 4)))
+    .replace(/\b(?:sequence|seq(?:uence)?\.?|Sequence)\s*[:=#-]?\s*(\d+)\b/gi, (_, n) => spell(String(n).slice(0, 4)))
+    .replace(/\bseq(?:uence)?\s+(\d+)\b/gi, (_, n) => spell(String(n).slice(0, 4)))
+    .replace(/\bledger\s+#?(\d{4,})\b/gi, (_, n) => spell(String(n).slice(0, 4)))
     .replace(/\b([1-5])\s*\/\s*([1-5])\b(?:\s*agents?)?/gi, (_, a, b) => {
       const left = words[a] || a;
       const right = words[b] || b;
