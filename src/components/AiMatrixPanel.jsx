@@ -315,41 +315,12 @@ export default function AiMatrixPanel() {
 
       {error ? <p className="aim-matrix-error">{error}</p> : null}
 
-      <div className="aim-agent-strip" role="list">
-        {(agents.length ? agents : AIM_AGENT_IDS.map((id) => ({ id, label: aimAgentLabel(id), role: aimAgentRole(id), identity: aimAgentProfile(id)?.identity || "", status: "—" }))).map(
-          (agent) => (
-            <article
-              key={agent.id}
-              className="aim-agent-chip"
-              role="listitem"
-              title={[agent.role || aimAgentRole(agent.id), agent.identity || aimAgentProfile(agent.id)?.identity].filter(Boolean).join(" — ")}
-            >
-              <header>
-                <AimAgentName agentId={agent.id} label={agent.label || aimAgentLabel(agent.id)} stacked />
-                <span className={`aim-dot is-${String(agent.status || "").toLowerCase()}`} />
-              </header>
-              {(agent.role || aimAgentRole(agent.id)) ? (
-                <p className="aim-agent-role">{agent.role || aimAgentRole(agent.id)}</p>
-              ) : null}
-              <p>{agent.status || "—"}</p>
-              <small>{ago(agent.last_seen_at)}</small>
-              {agent.meta?.pools?.pool_count != null ? (
-                <small className="aim-meta">Pools {agent.meta.pools.pool_count}</small>
-              ) : null}
-              {agent.meta?.trade_proposal?.action ? (
-                <small className="aim-meta">Desk {agent.meta.trade_proposal.urgency || "proposal"}</small>
-              ) : agent.meta?.skill?.summary ? (
-                <small className="aim-meta">{String(agent.meta.skill.summary).slice(0, 42)}</small>
-              ) : null}
-            </article>
-          )
-        )}
-      </div>
-
-
       <div className="aim-matrix-grid">
         <section className="aim-chat neon-inset">
-          <h3>Commander chat</h3>
+          <div className="aim-chat-head">
+            <div className="aim-commander-avatar" aria-hidden="true" title="Commander image" />
+            <h3>Commander chat</h3>
+          </div>
           <div className="aim-chat-log" ref={chatLogRef}>
             {localChat.map((m, i) => {
               const full = m.text || "";
@@ -421,6 +392,42 @@ export default function AiMatrixPanel() {
           </ul>
         </section>
       </div>
+
+
+      <div className="aim-agent-strip" role="list">
+        {(agents.length ? agents : AIM_AGENT_IDS.map((id) => ({ id, label: aimAgentLabel(id), role: aimAgentRole(id), identity: aimAgentProfile(id)?.identity || "", status: "—" }))).map(
+          (agent) => (
+            <article
+              key={agent.id}
+              className="aim-agent-chip"
+              role="listitem"
+              title={[agent.role || aimAgentRole(agent.id), agent.identity || aimAgentProfile(agent.id)?.identity].filter(Boolean).join(" — ")}
+            >
+              <header>
+                <div className="aim-agent-head-left">
+                  <span className="aim-agent-logo" aria-hidden="true" data-agent={agent.id} />
+                  <AimAgentName agentId={agent.id} label={agent.label || aimAgentLabel(agent.id)} stacked />
+                </div>
+                <span className={`aim-dot is-${String(agent.status || "").toLowerCase()}`} />
+              </header>
+              {(agent.role || aimAgentRole(agent.id)) ? (
+                <p className="aim-agent-role">{agent.role || aimAgentRole(agent.id)}</p>
+              ) : null}
+              <p>{agent.status || "—"}</p>
+              <small>{ago(agent.last_seen_at)}</small>
+              {agent.meta?.pools?.pool_count != null ? (
+                <small className="aim-meta">Pools {agent.meta.pools.pool_count}</small>
+              ) : null}
+              {agent.meta?.trade_proposal?.action ? (
+                <small className="aim-meta">Desk {agent.meta.trade_proposal.urgency || "proposal"}</small>
+              ) : agent.meta?.skill?.summary ? (
+                <small className="aim-meta">{String(agent.meta.skill.summary).slice(0, 42)}</small>
+              ) : null}
+            </article>
+          )
+        )}
+      </div>
+
 
       <section className="aim-desk-board neon-inset" aria-label="Internal trading desk">
         <div className="aim-desk-head">
