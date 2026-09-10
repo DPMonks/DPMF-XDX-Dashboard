@@ -37,7 +37,7 @@ export const AIM_AGENTS = {
   agent6: {
     codeName: "Agent Ghost",
     shortName: "Ghost",
-    role: "Observe scout (Nova / Quill / Cipher)",
+    role: "XRPL observe (Nova / Quill / Cipher)",
     identity: "Quiet, peripheral, opportunity-spotting.",
   },
 };
