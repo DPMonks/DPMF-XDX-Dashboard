@@ -208,7 +208,7 @@
 .aim-desk-kicker { margin: 0; opacity: 0.65; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
 .aim-desk-board h3 { margin: 0.15rem 0; }
 .aim-desk-summary { margin: 0.35rem 0 0; opacity: 0.85; font-size: 0.92rem; }
-.aim-desk-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; max-width: 22rem; }
+.aim-desk-badges { display: none !important; /* hidden from public */ display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; max-width: 22rem; }
 .aim-desk-badge {
   border: 1px solid rgba(0, 234, 255, 0.35);
   border-radius: 999px;

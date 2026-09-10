@@ -952,7 +952,6 @@ export async function aimStatusPayload() {
               usd_equity: usd.usd_equity,
               day_start_usd: usd.day_start_usd,
               mult_vs_day_start: usd.mult_vs_day_start,
-              target_100x_usd: usd.target_100x_usd,
               mark_mode: scrubText(usd.mark_mode || ""),
             }
           : null,
@@ -1000,16 +999,16 @@ export async function aimStatusPayload() {
         created_at: m.created_at,
       }));
     const desk = {
-      phase: commander?.meta?.desk_phase || "C_live_usd_100x",
-      objective: "daily_usd_growth",
-      target: "24h_100x_usd_rolling",
-      objective_detail: "Aggressive: 100x each agent wallet prior-day USD mark every 24 hours. Measure in USD; trade any XRPL asset. Start ~5 XRP (1 reserve / 4 trade).",
+      phase: "internal",
+      objective: "desk_ops",
+      target: null,
+      objective_detail: null,
       read_only: true,
       interactive: false,
       forbidden_tools: ["Freeze", "GlobalFreeze", "Clawback", "Blackhole"],
       summary:
         commander?.meta?.desk?.summary ||
-        `desk ${deskAgents.filter((a) => a.proposal).length}/5 proposals · ${high} high urgency · view only`,
+        `Internal desk · ${deskAgents.filter((a) => a.proposal).length}/5 agents reporting · view only`,
       high_urgency: high,
       agents: deskAgents,
       chatter: deskMessages,
@@ -1466,10 +1465,10 @@ Core product areas on the dashboard (JUMP TO decks 01-12 — use live platform d
 - 12 AI-Matrix: Commander chat + agent observe strip (heartbeats / movement). Phase 1 observe-only.
 Trust line: set TrustSet for XDX (and other IOUs) before holding/receiving that token.
 
-Trading desk (Phase A proposal-only, mainnet target):
-- Commander utilises agents 1-5 as one team to hit 100x prior-day USD wallet mark every 24 hours, trading any XRPL asset (compound together, not siloed vanity PnL).
-- Tools: Payment, path payments, offers, AMM, escrow, channels, checks, tickets. NEVER freeze, clawback, or blackhole.
-- Ask "desk status" / "what are the agents proposing" for the live proposal board. No public trade controls.
+Trading desk (internal · view only):
+- Commander + agents coordinate on XRPL markets. Strategy details stay internal.
+- NEVER freeze, clawback, or blackhole.
+- Ask "desk status" for the live proposal board. No public trade controls.
 
 Wider XRPL markets (free public data):
 - Commander can look up issued assets across the XRPL (70,000+), prices, volume, holders, AMM counts, and XRP books via public indexes + rippled RPC.
@@ -1576,7 +1575,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return {
       type: "commander_answer",
       intent: "identity",
-      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, XRPL markets, or desk proposals anytime. I run the agents to aggressively grow USD wallet equity — 100x each prior day, every 24 hours, any XRPL asset. Live desk when unlocked: USD equity, any XRPL asset, 100x prior-day every 24h.",
+      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, XRPL markets, or desk status anytime.",
     };
   }
 
@@ -1640,7 +1639,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
 
   if (classified.intent === "desk") {
     const agents = ["agent1", "agent2", "agent3", "agent4", "agent5"].map((id) => byId[id]).filter(Boolean);
-    push("Desk target: 100x each prior-day USD wallet mark every 24 hours. Measure in USD; trade any XRPL asset. Start ~5 XRP (1 reserve / 4 trade). No freeze, clawback, or blackhole.");
+    push("Internal desk is view-only for visitors. Agents coordinate on XRPL markets. No public trade controls. No freeze, clawback, or blackhole.");
     let n = 0;
     for (const row of agents) {
       const meta = scrubValue(row.meta) || {};
