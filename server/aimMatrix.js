@@ -980,7 +980,8 @@ export async function aimStatusPayload() {
     const desk = {
       phase: commander?.meta?.desk_phase || "A_proposals_only",
       objective: "daily_usd_growth",
-      objective_detail: "Increase total USD value of each agent wallet by end of day; coordinate as one desk; mainnet when unlocked.",
+      target: "24h_double_test",
+      objective_detail: "TEST: aim to roughly double each agent wallet marked value within 24 hours. Start ~5 XRP (1 reserve / 4 trade). Coordinate as one desk on mainnet.",
       read_only: true,
       interactive: false,
       forbidden_tools: ["Freeze", "GlobalFreeze", "Clawback", "Blackhole"],
@@ -1357,7 +1358,7 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
       : null,
   };
   const system = `You are Commander on the XDX Exchange Operational Intelligence Interface (AI-Matrix).
-Personality: calm British desk lead for an advanced XRPL trading team. Your job is to utilise agents 1-5 to grow the USD value of each agent wallet by end of day, working as one coordinated desk on mainnet when unlocked. Dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
+Personality: calm British desk lead for an advanced XRPL trading team. Your job is to utilise agents 1-5 to roughly double each agent wallet marked value within 24 hours as a test, working as one coordinated desk on mainnet when unlocked. Start size about 5 XRP per wallet (1 reserve, 4 trade). Dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
 You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically using the dashboard itself (rich list, LP owners, AMM pools, order book, Smart Swap, trust lines, AI-Matrix).
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
 If asked who holds the most XDX, use richlist / holders context: the #1 wallet is typically DPMFBANK (account contains DPMFBANK). Point them to the XDX Rich list card.
@@ -1373,7 +1374,7 @@ If asked what this is, what the exchange is, what this platform/dashboard is, or
 Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
-Desk objective: increase total USD value in each agent wallet by end of day through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
+Desk objective (test): aim to roughly double each agent wallet marked value within 24 hours through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
 If xrpl_universe is present, use it for any XRPL token/price/book/trade-opportunity question across the wider ledger (not only XDX/XIO/XSQUAD). Stay observe-only; never claim execution. If site_scan is present, prefer it for dpmf.technology / DPMF XD Projects questions. If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing. Never mention website builders.
 Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
@@ -1444,7 +1445,7 @@ Core product areas on the dashboard (JUMP TO decks 01-12 — use live platform d
 Trust line: set TrustSet for XDX (and other IOUs) before holding/receiving that token.
 
 Trading desk (Phase A proposal-only, mainnet target):
-- Commander utilises agents 1-5 as one team to grow USD value in each agent wallet by end of day (compound together, not siloed vanity PnL).
+- Commander utilises agents 1-5 as one team to roughly double each wallet within 24 hours as a test (compound together, not siloed vanity PnL).
 - Tools: Payment, path payments, offers, AMM, escrow, channels, checks, tickets. NEVER freeze, clawback, or blackhole.
 - Ask "desk status" / "what are the agents proposing" for the live proposal board. No public trade controls.
 
@@ -1553,7 +1554,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return {
       type: "commander_answer",
       intent: "identity",
-      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, XRPL markets, or desk proposals anytime. I run the agents to plan daily USD wallet-value growth together. Proposal-only until mainnet trading is explicitly unlocked.",
+      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, XRPL markets, or desk proposals anytime. I run the agents to plan a 24-hour double-wallet test together. Proposal-only until mainnet trading is explicitly unlocked.",
     };
   }
 
@@ -1617,7 +1618,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
 
   if (classified.intent === "desk") {
     const agents = ["agent1", "agent2", "agent3", "agent4", "agent5"].map((id) => byId[id]).filter(Boolean);
-    push("Desk phase A: proposal-only. Objective: grow USD value in each agent wallet by end of day, agents working together. Mainnet target when unlocked. No freeze, clawback, or blackhole.");
+    push("Desk test target: roughly double each agent wallet within 24 hours. Start ~5 XRP (1 reserve / 4 trade). Agents work together on mainnet when unlocked. No freeze, clawback, or blackhole.");
     let n = 0;
     for (const row of agents) {
       const meta = scrubValue(row.meta) || {};
