@@ -881,14 +881,14 @@ export async function aimStatusPayload() {
       `SELECT id, agent_id, kind, content, created_at
        FROM aim_agent_memory
        WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','commander')
-         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','xrpl_ledger','xrpl_book','xrpl_amm')
+         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','desk_book','desk_coordination','xrpl_ledger','xrpl_book','xrpl_amm')
        ORDER BY id DESC
        LIMIT 40`
     );
     const chat = await db.query(
       `SELECT id, from_agent, to_agent, topic, body, created_at
        FROM aim_agent_messages
-       WHERE topic IN ('chat','directive','peer')
+       WHERE topic IN ('chat','directive','peer','desk')
        ORDER BY id DESC
        LIMIT 40`
     );
@@ -936,6 +936,62 @@ export async function aimStatusPayload() {
       }))
       .reverse();
 
+    const deskAgents = agents.map((a) => {
+      const meta = a.meta || {};
+      const prop = meta.trade_proposal || {};
+      return {
+        id: a.id,
+        label: a.label,
+        status: a.status,
+        last_seen_at: a.last_seen_at,
+        skill_summary: meta.skill?.summary || null,
+        proposal: prop.action
+          ? {
+              action: scrubText(prop.action),
+              pair: scrubText(prop.pair || ""),
+              side: scrubText(prop.side || ""),
+              urgency: scrubText(prop.urgency || ""),
+              xrp_thesis: scrubText(prop.xrp_thesis || ""),
+              ledger_tools: Array.isArray(prop.ledger_tools) ? prop.ledger_tools.map((x) => scrubText(x)).slice(0, 12) : [],
+              executable: false,
+            }
+          : null,
+      };
+    });
+    const high = deskAgents.filter((a) => a.proposal?.urgency === "high").length;
+    const deskMessages = messages
+      .filter((m) => m.topic === "desk" || m.topic === "directive")
+      .slice(-24)
+      .map((m) => ({
+        id: m.id,
+        from: m.from_label || m.from,
+        to: m.to_label || m.to,
+        topic: m.topic,
+        text: scrubText(
+          m.body?.instruction ||
+            m.body?.desk_summary ||
+            m.body?.proposal?.action ||
+            m.body?.summary ||
+            m.body?.type ||
+            "update"
+        ),
+        created_at: m.created_at,
+      }));
+    const desk = {
+      phase: commander?.meta?.desk_phase || "A_proposals_only",
+      objective: "accumulate_xrp",
+      read_only: true,
+      interactive: false,
+      forbidden_tools: ["Freeze", "GlobalFreeze", "Clawback", "Blackhole"],
+      summary:
+        commander?.meta?.desk?.summary ||
+        `desk ${deskAgents.filter((a) => a.proposal).length}/5 proposals · ${high} high urgency · view only`,
+      high_urgency: high,
+      agents: deskAgents,
+      chatter: deskMessages,
+      trade_mode: "paper_pending",
+    };
+
     return {
       status: 200,
       body: {
@@ -944,6 +1000,7 @@ export async function aimStatusPayload() {
         agents,
         movements,
         messages,
+        desk,
         read_only: true,
       },
     };
@@ -1087,7 +1144,7 @@ async function loadAimChatContext(db) {
     `SELECT id, agent_id, kind, content, created_at
      FROM aim_agent_memory
      WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','commander')
-       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','xrpl_ledger','xrpl_book','xrpl_amm')
+       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','desk_book','desk_coordination','xrpl_ledger','xrpl_book','xrpl_amm')
      ORDER BY id DESC
      LIMIT 12`
   );

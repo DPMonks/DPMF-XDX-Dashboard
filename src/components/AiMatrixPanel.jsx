@@ -311,10 +311,81 @@ export default function AiMatrixPanel() {
               {agent.meta?.pools?.pool_count != null ? (
                 <small className="aim-meta">Pools {agent.meta.pools.pool_count}</small>
               ) : null}
+              {agent.meta?.trade_proposal?.action ? (
+                <small className="aim-meta">Desk {agent.meta.trade_proposal.urgency || "proposal"}</small>
+              ) : agent.meta?.skill?.summary ? (
+                <small className="aim-meta">{String(agent.meta.skill.summary).slice(0, 42)}</small>
+              ) : null}
             </article>
           )
         )}
       </div>
+
+
+      <section className="aim-desk-board neon-inset" aria-label="Internal trading desk">
+        <div className="aim-desk-head">
+          <div>
+            <p className="aim-desk-kicker">Internal desk · view only</p>
+            <h3>Desk status &amp; book</h3>
+            <p className="aim-desk-summary">
+              {data?.desk?.summary || "Waiting for AIM workers to publish proposals."}
+            </p>
+          </div>
+          <div className="aim-desk-badges">
+            <span className="aim-desk-badge">Phase {data?.desk?.phase || "A"}</span>
+            <span className="aim-desk-badge">Objective: accumulate XRP</span>
+            <span className="aim-desk-badge is-safe">No public trade controls</span>
+            <span className="aim-desk-badge is-safe">No freeze / blackhole</span>
+          </div>
+        </div>
+
+        <div className="aim-desk-grid">
+          <div className="aim-desk-book">
+            <h4>Proposal book</h4>
+            <ul>
+              {(data?.desk?.agents || agents).map((a) => {
+                const prop = a.proposal || a.meta?.trade_proposal;
+                return (
+                  <li key={`desk-${a.id}`}>
+                    <header>
+                      <b>{a.label || a.id}</b>
+                      <span className={`aim-urgency is-${String(prop?.urgency || "none").toLowerCase()}`}>
+                        {prop?.urgency || "—"}
+                      </span>
+                    </header>
+                    <p>{prop?.action || a.skill_summary || a.meta?.skill?.summary || "No proposal yet"}</p>
+                    {prop?.pair ? <small>Pair {prop.pair}</small> : null}
+                    {prop?.xrp_thesis ? <small className="aim-desk-thesis">{prop.xrp_thesis}</small> : null}
+                    {Array.isArray(prop?.ledger_tools) && prop.ledger_tools.length ? (
+                      <small className="aim-desk-tools">Tools {prop.ledger_tools.slice(0, 6).join(" · ")}</small>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div className="aim-desk-chatter">
+            <h4>Agent coordination</h4>
+            <p className="aim-desk-note">
+              Private desk chatter. Public visitors can watch the team think; they cannot place trades or steer wallets here.
+            </p>
+            <ul>
+              {(data?.desk?.chatter || []).slice().reverse().slice(0, 18).map((m) => (
+                <li key={m.id}>
+                  <b>{m.from}</b>
+                  <span>→ {m.to}</span>
+                  <p>{m.text}</p>
+                  <small>{ago(m.created_at)} · {m.topic}</small>
+                </li>
+              ))}
+              {!(data?.desk?.chatter || []).length ? (
+                <li className="aim-empty">No desk messages yet. Redeploy AIM workers to start coordination traffic.</li>
+              ) : null}
+            </ul>
+          </div>
+        </div>
+      </section>
 
       <div className="aim-matrix-grid">
         <section className="aim-chat neon-inset">

@@ -200,3 +200,43 @@
 .aim-play-voice:hover {
   border-color: rgba(165, 243, 252, 0.9);
 }
+
+
+/* Internal desk board (view-only — no public trade controls) */
+.aim-desk-board { padding: 1rem 1.1rem; display: grid; gap: 0.85rem; }
+.aim-desk-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
+.aim-desk-kicker { margin: 0; opacity: 0.65; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.aim-desk-board h3 { margin: 0.15rem 0; }
+.aim-desk-summary { margin: 0.35rem 0 0; opacity: 0.85; font-size: 0.92rem; }
+.aim-desk-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; max-width: 22rem; }
+.aim-desk-badge {
+  border: 1px solid rgba(0, 234, 255, 0.35);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  opacity: 0.9;
+}
+.aim-desk-badge.is-safe { border-color: rgba(120, 255, 180, 0.45); color: #b8ffd6; }
+.aim-desk-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 0.85rem; }
+.aim-desk-book h4, .aim-desk-chatter h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.aim-desk-book ul, .aim-desk-chatter ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.55rem; max-height: 22rem; overflow: auto; }
+.aim-desk-book li, .aim-desk-chatter li {
+  border: 1px solid rgba(199, 112, 255, 0.22);
+  border-radius: 0.7rem;
+  padding: 0.55rem 0.65rem;
+  background: rgba(8, 10, 24, 0.45);
+}
+.aim-desk-book li header, .aim-desk-chatter li { display: grid; gap: 0.2rem; }
+.aim-desk-book li header { grid-template-columns: 1fr auto; align-items: center; }
+.aim-desk-book p, .aim-desk-chatter p { margin: 0.15rem 0; font-size: 0.88rem; }
+.aim-desk-book small, .aim-desk-chatter small { opacity: 0.7; display: block; }
+.aim-desk-thesis { color: #9ef0ff; }
+.aim-desk-tools { opacity: 0.75; }
+.aim-desk-note { margin: 0 0 0.55rem; font-size: 0.8rem; opacity: 0.7; }
+.aim-urgency { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.85; }
+.aim-urgency.is-high { color: #ffb4a8; }
+.aim-urgency.is-medium { color: #ffe29a; }
+.aim-urgency.is-low { color: #b8ffd6; }
+@media (max-width: 900px) {
+  .aim-desk-grid { grid-template-columns: 1fr; }
+}
