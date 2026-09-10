@@ -70,6 +70,7 @@ function pronounceForSpeech(text) {
     .replace(/\bVECTOR-0?3\b/gi, "Agent Vector")
     .replace(/\bVORTEX-0?4\b/gi, "Agent Vortex")
     .replace(/\bECHO-0?5\b/gi, "Agent Echo")
+    .replace(/\bRLUSD\b/gi, "are lussed")
     .replace(/\bXSQUAD\b/gi, "X Squad")
     .replace(/\bX-?SQUAD\b/gi, "X Squad")
     .replace(/\s{2,}/g, " ")
