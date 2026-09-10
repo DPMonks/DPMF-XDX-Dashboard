@@ -708,6 +708,11 @@ function classifyAimQuestion(raw) {
   const agentMatch = q.match(/\bagent\s*([1-5])\b/) || q.match(/\ba([1-5])\b/);
   if (agentMatch) return { intent: "agent", agentNum: agentMatch[1] };
   if (/^(hi|hello|hey|yo|gm|good (morning|afternoon|evening))\b/i.test(q) || /\b(hi|hello|hey)\b[,!.]?\s*(commander)?\s*$/i.test(q)) return { intent: "greeting" };
+  if (
+    /\b(connected|connection|online|operational|are you (up|live|ready|online|connected)|is (the )?(xrpl|ledger|ripple|board|exchange|platform) (up|live|online|connected|working)|can you (see|reach|read) (the )?(ledger|xrpl)|hooked up|linked)\b/.test(q)
+  ) {
+    return { intent: "connectivity" };
+  }
   if (/\b(what (is|are) (this|xdx|the exchange|the platform|the dashboard|ai[- ]?matrix)|what do you (do|call this)|who are you)\b/i.test(q)) return { intent: "identity" };
   if (
     /\b(help|what can you|commands|how (do|to) (ask|use|work|trade|swap|connect)|explain|guide|tutorial|faq)\b/.test(q) ||
@@ -986,7 +991,7 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
       : null,
   };
   const system = `You are Commander on the XDX Exchange Operational Intelligence Interface (AI-Matrix).
-Personality: calm British ops lead with dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot.
+Personality: calm British ops lead with dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
 You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically using the dashboard itself (rich list, LP owners, AMM pools, order book, Smart Swap, trust lines, AI-Matrix).
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
 If asked who holds the most XDX, use richlist / holders context: the #1 wallet is typically DPMFBANK (account contains DPMFBANK). Point them to the XDX Rich list card.
@@ -997,6 +1002,7 @@ If a tool or outside web lookup is unavailable, do not explain setup. Instead sa
 Scope line to reuse when redirecting: I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on XRPL assets and transactions.
 Answer the question asked. For how-to / help / explain questions, teach the exchange flow in plain steps. Prefer concrete numbers from the live context (pools, ledger, agents) when the question is about live status. If the data is missing, say what is missing in one short line, then the best next ask.
 Greetings get one short acknowledgement plus one useful live fact, then stop.
+Connectivity questions ("are you connected", "online yet", "XRPL live?") get a short yes with personality, for example "Yes. Online and operational on the XRP Ledger." Do not dump transaction samples unless asked.
 If asked what this is, what the exchange is, what this platform/dashboard is, or what XDX Exchange is: say it is the XDX Exchange Operational Intelligence Interface (AI-Matrix observe layer). Keep that name exact.
 Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
@@ -1156,11 +1162,11 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       type: "commander_answer",
       intent: "greeting",
       text: [
-        "Commander here.",
-        commander ? "Looping." : null,
+        pickLine(Date.now(), ["Commander on deck.", "Commander here. Listening.", "Present."]),
+        commander ? "Loop is green." : null,
         agents.length ? `${active}/${agents.length} agents active.` : null,
-        topName ? `Top pool: ${topName}.` : null,
-        "Ask a direct question when ready.",
+        topName ? `Top pool ${topName}.` : null,
+        "Fire when ready.",
       ]
         .filter(Boolean)
         .join(" "),
@@ -1175,7 +1181,28 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     };
   }
 
-  const skipOpener = ["help", "holders", "lp_holders", "dpmf_site", "txs", "xrpl", "identity", "greeting"].includes(classified.intent);
+  if (classified.intent === "connectivity") {
+    const ledgerOk = !!scan?.ok;
+    const poolsOk = !!(ctx.pools?.pool_count || scrubValue(byId.agent2?.meta)?.pools?.ok);
+    const line = ledgerOk
+      ? pickLine(seed, [
+          "Yes. Online and operational on the XRP Ledger.",
+          "Affirmative. XRPL link is live and I am reading validated ledgers.",
+          "Connected. Eyes on the ledger, board is live.",
+        ])
+      : pickLine(seed, [
+          "Still with you on the board. Ledger probe is soft right now, but I am operational.",
+          "Online on my side. XRPL read is thin this second; ask again and I will recheck.",
+        ]);
+    const extra = ledgerOk
+      ? ` Validated ledger ${scan.ledger_index} is in view.`
+      : poolsOk
+        ? " Pool board is still feeding."
+        : "";
+    return { type: "commander_answer", intent: "connectivity", text: (line + extra).trim() };
+  }
+
+  const skipOpener = ["help", "holders", "lp_holders", "dpmf_site", "txs", "xrpl", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
   if (!skipOpener) {
     push(
       pickLine(seed, [
@@ -1380,6 +1407,7 @@ export async function aimChatPayload(req) {
     const needsLedger =
       classified.intent === "txs" ||
       classified.intent === "xrpl" ||
+      classified.intent === "connectivity" ||
       classified.intent === "movement" ||
       classified.intent === "snapshot" ||
       classified.intent === "status" ||
