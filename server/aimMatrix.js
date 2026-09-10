@@ -1,6 +1,12 @@
 ﻿import { aimSpeakPayload } from "./aimSpeak.js";
 import pg from "pg";
 import { aimAgentLabel, aimAgentRole, aimAgentProfile, resolveAimAgentId } from "./aimAgentNames.js";
+import {
+  looksLikeMathQuestion,
+  mathNeedsWallet,
+  mathNeedsMarkets,
+  runCommanderMath,
+} from "./commanderMath.js";
 
 /** No em/en dashes in Commander-facing text (chat + TTS). */
 function stripLongHyphens(text) {
@@ -1381,6 +1387,9 @@ function classifyAimQuestion(raw) {
     return { intent: "connectivity" };
   }
   if (/\b(what (is|are) (this|xdx|the exchange|the platform|the dashboard|ai[- ]?matrix)|what do you (do|call this)|who are you)\b/i.test(q)) return { intent: "identity" };
+  if (looksLikeMathQuestion(raw)) {
+    return { intent: "math" };
+  }
   if (
     /\b(help|what can you|commands|how (do|to) (ask|use|work|trade|swap|connect)|explain|guide|tutorial|faq)\b/.test(q) ||
     /\bhow (does|do|is|can)\b/.test(q) ||
@@ -1851,8 +1860,11 @@ function helpAnswerForQuestion(question) {
     add("dpmf.technology covers DPMF XD Projects on the XRPL: XDX utility, XIO governance and yield, XSQUAD (X-Squad), and FUZION-XIO. This dashboard is the live XDX Exchange Operational Intelligence Interface.");
   }
 
+  if (/\b(math|calculate|compound|percent|bps|drawdown|ratio)\b/.test(q)) {
+    add("I run safe desk math (not guesses): percentages, compounding (+20% daily yield milestones), LP share, fee-split estimates, notional sizing, basis points, drawdown, and R:R. Example: compound 20% for 7 days from 34.");
+  }
   if (!bits.length) {
-    add("I am Commander on the XDX Exchange Operational Intelligence Interface. I can explain wallet connect, trust lines, Smart Swap, AMM pools, order book, governance, and AI-Matrix observe mode.");
+    add("I am Commander on the XDX Exchange Operational Intelligence Interface. I can explain wallet connect, trust lines, Smart Swap, AMM pools, order book, governance, and AI-Matrix observe mode. I can also run precise desk math when you ask.");
     add("Ask a focused how-to, for example how to swap XDX, how trust lines work, or what AI-Matrix agents do.");
   } else {
     add("Ask a follow-up if you want step-by-step for one screen.");
@@ -1900,6 +1912,17 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       type: "commander_answer",
       intent: "identity",
       text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, markets on the XRPL, or desk status anytime.",
+    };
+  }
+
+  if (classified.intent === "math") {
+    const mathOut = runCommanderMath(question, {});
+    return {
+      type: "commander_answer",
+      intent: "math",
+      source: "commander_math",
+      text: mathOut.text,
+      math: mathOut.parsed || null,
     };
   }
 
@@ -2268,9 +2291,70 @@ export async function aimChatPayload(req) {
           includeDomains: wantSite ? ["dpmf.technology", "www.dpmf.technology"] : undefined,
         })
       : { ok: false, skipped: true, results: [] };
-    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "lp_earnings", "balance", "wallet", "help", "desk", "native_price", "swap", "orderbook", "details"].includes(
+    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "lp_earnings", "balance", "math", "wallet", "help", "desk", "native_price", "swap", "orderbook", "details"].includes(
       classified.intent
     );
+    if (classified.intent === "math" || looksLikeMathQuestion(text)) {
+      let accountBalancesMath = null;
+      let lpEarningsMath = null;
+      let marketsMath = null;
+      if (mathNeedsWallet(text)) {
+        const addr = resolveChatWallet(text, body);
+        if (addr) accountBalancesMath = await fetchAccountBalances(addr);
+        else accountBalancesMath = { ok: false, ask: true, error: "need_classic_address" };
+      }
+      if (mathNeedsMarkets(text) || /\b(lp|pool|share|fee)\b/i.test(text)) {
+        marketsMath = await fetchPlatformMarkets();
+        if (/\b(lp|pool share|fee)\b/i.test(text)) {
+          const addr = resolveChatWallet(text, body);
+          if (addr) {
+            const pairHint =
+              (String(text).match(/\bXDX\/(XRP|RLUSD|XIO|XSQUAD)\b/i) || [])[0] ||
+              (String(text).match(/\b(XRP|RLUSD|XIO|XSQUAD)\b/i) || [])[0] ||
+              null;
+            lpEarningsMath = await fetchLpEarningsForAccount(addr, { pairHint });
+          }
+        }
+      } else if (/\b(mark|price|notional|xdx)\b/i.test(text)) {
+        marketsMath = await fetchPlatformMarkets();
+      }
+      const mathOut = runCommanderMath(text, {
+        balances: accountBalancesMath,
+        markets: marketsMath,
+        lpEarnings: lpEarningsMath,
+      });
+      let replyMath = {
+        type: "commander_answer",
+        intent: "math",
+        source: "commander_math",
+        text: stripLongHyphens(String(mathOut.text || "")),
+        math: mathOut.parsed || null,
+      };
+      if (lang && lang !== "en" && lang !== "en-GB") {
+        const translatedMath = await translateAimText(replyMath.text, lang);
+        replyMath = { ...replyMath, text: stripLongHyphens(translatedMath), translated: translatedMath !== replyMath.text };
+      }
+      replyMath.text = stripLongHyphens(stripSiteNoise(String(replyMath.text || "").replace(/\btxs\b/gi, "transactions")));
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          ephemeral: true,
+          lang,
+          lang_source: resolved.source,
+          reply: {
+            from: "commander",
+            from_label: "Commander",
+            body: replyMath,
+            created_at: new Date().toISOString(),
+          },
+          llm: { ok: false, error: "not used", detail: "commander_math", model: null },
+          web: { skipped: true },
+          site: { skipped: true },
+          math: { ok: !!mathOut.ok, kind: mathOut.parsed?.kind || null, scope_keys: Object.keys(mathOut.scope || {}) },
+        },
+      };
+    }
     if (classified.intent === "balance" || accountBalances) {
       const bits = [];
       if (accountBalances?.ask || accountBalances?.error === "need_classic_address") {
