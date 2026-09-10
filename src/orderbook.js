@@ -61,6 +61,8 @@ export function normalizeOrderbookPair(value) {
   const trimmed = String(value || "XDX/XRP").trim();
   const spaced = trimmed.replace(/\s*\/\s*/g, "/").replace(/-/g, "/");
   const upper = spaced.toUpperCase();
+  // Liquid non-XDX watch pair from the indexer (book/amm/pairs).
+  if (upper === "XRP/RLUSD" || upper === "RLUSD/XRP") return "XRP/RLUSD";
   if (upper === "RLUSD" || upper === "XDX/RLUSD") return "XDX/RLUSD";
   if (upper === "XRP" || upper === "XDX/XRP" || upper === "XRP/XDX") return "XDX/XRP";
   if (upper === "XIO" || upper === "XDX/XIO") return "XDX/XIO";
@@ -126,10 +128,12 @@ export function bookFromMarketPayload(payload, pair = "XDX/XRP") {
 
 export function emptyOrderbook(pair = "XDX/XRP") {
   const name = normalizeOrderbookPair(pair);
-  const quote = name.split("/")[1] || "XRP";
+  const parts = name.split("/");
+  const base = parts[0] || "XDX";
+  const quote = parts[1] || "XRP";
   return {
     pair: name,
-    base: "XDX",
+    base,
     quote,
     price_unit: "quote_per_base",
     as_of: null,
@@ -155,6 +159,85 @@ function tapeBest(rows, side) {
     .map((row) => Number(row.price));
   if (!prices.length) return null;
   return side === "ask" ? Math.min(...prices) : Math.max(...prices);
+}
+
+export function asLiquidPairBook(raw, pair = "XRP/RLUSD") {
+  const name = normalizeOrderbookPair(pair || raw?.pair || "XRP/RLUSD");
+  const parts = name.split("/");
+  const base = parts[0] || "XRP";
+  const quote = parts[1] || "RLUSD";
+  if (!raw || typeof raw !== "object") return emptyOrderbook(name);
+
+  const mapSide = (rows) =>
+    (Array.isArray(rows) ? rows : [])
+      .map((row) => {
+        const price = Number(row?.price);
+        const base_size = Number(row?.base_size ?? row?.base ?? row?.size);
+        const quote_size = Number(row?.quote_size ?? row?.quote);
+        if (!(price > 0)) return null;
+        return {
+          price,
+          base_size: base_size > 0 ? base_size : null,
+          quote_size: quote_size > 0 ? quote_size : null,
+          source: row.source || "dex",
+          account: row.account || row.Account || null,
+          side: String(row.side || "").toLowerCase() === "ask" ? "ask" : "bid",
+        };
+      })
+      .filter(Boolean);
+
+  const bids = mapSide(raw.bids);
+  const asks = mapSide(raw.asks);
+  const header = bookHeader({
+    bids,
+    asks,
+    best_bid: raw.bid ?? raw.best_bid,
+    best_ask: raw.ask ?? raw.best_ask,
+    mid: raw.mid,
+    spread: raw.spread,
+    spread_bps: raw.spread_bps,
+    amm: raw.amm,
+  });
+  const ammPrice = Number(raw.amm?.price ?? raw.amm_price ?? raw.price);
+  const reserveBase = Number(raw.amm?.reserve_asset ?? raw.amountA ?? raw.amm_amount_a);
+  const reserveQuote = Number(raw.amm?.reserve_currency ?? raw.amountB ?? raw.amm_amount_b);
+  const amm =
+    raw.amm && typeof raw.amm === "object"
+      ? raw.amm
+      : ammPrice > 0
+        ? {
+            price: ammPrice,
+            reserve_asset: reserveBase > 0 ? reserveBase : null,
+            reserve_currency: reserveQuote > 0 ? reserveQuote : null,
+            account: raw.amm_account || raw.account || null,
+          }
+        : null;
+
+  return {
+    ...emptyOrderbook(name),
+    pair: name,
+    base,
+    quote,
+    present: Boolean(bids.length || asks.length || header.mid > 0 || ammPrice > 0),
+    catching_up: false,
+    best_bid: header.best_bid,
+    best_ask: header.best_ask,
+    mid: header.mid,
+    spread: header.spread,
+    spread_bps: header.spread_bps,
+    mid_usd: Number(raw.mid_usd) > 0 ? Number(raw.mid_usd) : header.mid,
+    bids,
+    asks,
+    amm,
+    depth: {
+      bid_base: Number(raw.bid_depth_base) || 0,
+      ask_base: Number(raw.ask_depth_base) || 0,
+      bid_quote: Number(raw.bid_depth_quote) || 0,
+      ask_quote: Number(raw.ask_depth_quote) || 0,
+    },
+    source: raw.source || "indexer",
+    as_of: raw.timestamp || raw.updated_at || raw.as_of || null,
+  };
 }
 
 export function bookHeader(book = {}) {

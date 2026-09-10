@@ -1,4 +1,4 @@
-export const CHART_PAIRS = ["XDX/RLUSD", "XDX/XRP"];
+export const CHART_PAIRS = ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD"];
 
 export const INTERVALS = [
   { id: "1m", label: "1m", ms: 60_000 },

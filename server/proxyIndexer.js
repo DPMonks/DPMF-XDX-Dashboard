@@ -52,6 +52,17 @@ export function indexerPathsFor(suffix) {
   return [`/api/${suffix}`];
 }
 
+
+/** Indexer liquid-pair routes: /api/pairs, /api/book/:base/:quote, /api/amm/:base/:quote */
+export function isRemoteLiquidPairSuffix(suffix) {
+  const s = String(suffix || "");
+  return (
+    s === "pairs" ||
+    /^book\/[^/]+\/[^/]+$/i.test(s) ||
+    /^amm\/[^/]+\/[^/]+$/i.test(s)
+  );
+}
+
 export async function fetchIndexer(url, { method = "GET", body } = {}) {
   const payload =
     body == null || typeof body === "string" ? body : JSON.stringify(body);
@@ -192,6 +203,27 @@ export async function fetchIndexerFirst(paths, { method = "GET", body, search = 
       suffix === "health" ||
       suffix === "health/xrpl" ||
       isHandshakeSuffix(suffix));
+
+    // Prefer the hosted indexer for liquid-pair book/amm/pairs; fall back locally on miss.
+  if (method === "GET" && isRemoteLiquidPairSuffix(suffix)) {
+    const origin = indexerOrigin();
+    let last;
+    for (const path of paths) {
+      try {
+        last = await fetchIndexer(joinIndexerUrl(origin, path, search), { method, body });
+        if (last.status < 400) return withSource(last, "indexer");
+      } catch (error) {
+        last = {
+          status: 502,
+          contentType: "application/json",
+          body: JSON.stringify({ error: error.message || "Indexer proxy failed" }),
+        };
+      }
+    }
+    const local = await readIndexerDb(suffix, search);
+    if (local && local.status < 400) return withSource(local, local.source || "xrpl");
+    if (last) return indexerErrorHint(last);
+  }
 
   let dbResult = null;
   const dbHint = databaseUrlHint();

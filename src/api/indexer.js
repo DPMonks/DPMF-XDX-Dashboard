@@ -34,6 +34,7 @@ import {
   composeAmmBook,
   emptyOrderbook,
   mergeOrderbookPayloads,
+  asLiquidPairBook,
   normalizeOrderbookPair,
   sortOrderbookPairs,
   FEATURED_ORDERBOOK_PAIRS,
@@ -434,6 +435,11 @@ function ingestOrderbooks(body, pairHint = "XDX/XRP") {
         continue;
       }
       const raw = body.books[pair] || body[pair] || emptyOrderbook(pair);
+      // Non-XDX liquid pairs (XRP/RLUSD) use indexer book shape, not XDX bridge.
+      if (!String(pair).toUpperCase().startsWith("XDX/")) {
+        books[pair] = asLiquidPairBook(raw, pair);
+        continue;
+      }
       books[pair] = composeCatalogBook(raw, pair, xrpBook);
     }
     lastOrderbooks = mergeOrderbookPayloads(lastOrderbooks, {
@@ -462,6 +468,35 @@ export async function getOrderbook(pair = "XDX/XRP") {
   } catch {
     if (lastOrderbooks) return lastOrderbooks;
     throw new Error("Waiting for XRPL book_offers on this pair.");
+  }
+}
+
+export async function getLiquidPairBook(pair = "XRP/RLUSD") {
+  const name = normalizeOrderbookPair(pair);
+  try {
+    const body = await api.book(name);
+    return asLiquidPairBook(body, name);
+  } catch {
+    return null;
+  }
+}
+
+export async function getLiquidPairAmm(pair = "XRP/RLUSD") {
+  const name = normalizeOrderbookPair(pair);
+  try {
+    const body = await api.ammPair(name);
+    if (!body || typeof body !== "object") return null;
+    return body;
+  } catch {
+    return null;
+  }
+}
+
+export async function getWatchPairs() {
+  try {
+    return await api.pairs();
+  } catch {
+    return null;
   }
 }
 

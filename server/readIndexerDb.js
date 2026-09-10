@@ -34,6 +34,7 @@ import {
   composeAmmBook,
   emptyOrderbook,
   keepLastGoodBook,
+  asLiquidPairBook,
   normalizeOrderbookPair,
   pickNativeBookRow,
   quotePerXrpFromSpots,
@@ -77,6 +78,7 @@ import { catalogHealth } from "./sourceControl.js";
 import { FREE_API_HEADERS } from "./xrplToCatalog.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
 import { loadLiveAmmReserves, loadLiveAmmReservesMany, withXrplRetry } from "./liveAmmReserves.js";
+import { RLUSD_HEX, RLUSD_ISSUER } from "../src/constants/ledger.js";
 import { loadDirectPairMarket } from "./directPairMarket.js";
 import { canSelect, loadIndexerSchema, peekIndexerSchema, pickColumns } from "./indexerSchema.js";
 
@@ -2455,6 +2457,90 @@ export async function readIndexerDb(suffix, search = "") {
   const ledger = walletLedgerResult(suffix, search);
   if (ledger) return ledger;
 
+
+  // Liquid pair book/amm/pairs: no Postgres required (XRPL direct fallback).
+  if (suffix === "pairs") {
+    return ok({
+      watch_pairs: ["XRP/RLUSD", "XDX/XRP", "XDX/RLUSD"],
+      pairs: [
+        { pair: "XRP/RLUSD", liquid: true, endpoints: { book: "/api/book/XRP/RLUSD", amm: "/api/amm/XRP/RLUSD" } },
+        { pair: "XDX/XRP", liquid: true, endpoints: { book: "/api/book/XDX/XRP", amm: "/api/amm/XDX/XRP" } },
+        { pair: "XDX/RLUSD", liquid: true, endpoints: { book: "/api/book/XDX/RLUSD", amm: "/api/amm/XDX/RLUSD" } },
+      ],
+      rlusd: {
+        issuer: process.env.RLUSD_ISSUER || RLUSD_ISSUER,
+        currency: "RLUSD",
+        currency_hex: process.env.RLUSD_CURRENCY_HEX || RLUSD_HEX,
+      },
+      source: "dashboard",
+    });
+  }
+
+  {
+    const bookMatch = String(suffix || "").match(/^book\/([^/]+)\/([^/]+)$/i);
+    if (bookMatch) {
+      const base = bookMatch[1];
+      const quote = bookMatch[2];
+      const pair = `${String(base).toUpperCase()}/${String(quote).toUpperCase()}`;
+      const market = await loadDirectPairMarket({
+        from: base,
+        to: quote,
+        toIssuer: String(quote).toUpperCase() === "RLUSD" ? process.env.RLUSD_ISSUER || RLUSD_ISSUER : undefined,
+        toHex: String(quote).toUpperCase() === "RLUSD" ? process.env.RLUSD_CURRENCY_HEX || RLUSD_HEX : undefined,
+      });
+      const book = asLiquidPairBook(
+        {
+          pair,
+          bid: market.bids?.[0]?.price,
+          ask: market.asks?.[0]?.price,
+          mid:
+            market.bids?.[0]?.price && market.asks?.[0]?.price
+              ? (Number(market.bids[0].price) + Number(market.asks[0].price)) / 2
+              : null,
+          bids: market.bids,
+          asks: market.asks,
+          amountA: market.reserveBase,
+          amountB: market.reserveQuote,
+          price:
+            market.reserveBase > 0 && market.reserveQuote > 0
+              ? market.reserveQuote / market.reserveBase
+              : null,
+          source: "xrpl",
+        },
+        pair
+      );
+      return ok(book);
+    }
+  }
+
+  {
+    const ammMatch = String(suffix || "").match(/^amm\/([^/]+)\/([^/]+)$/i);
+    if (ammMatch) {
+      const base = ammMatch[1];
+      const quote = ammMatch[2];
+      const pair = `${String(base).toUpperCase()}/${String(quote).toUpperCase()}`;
+      const market = await loadDirectPairMarket({
+        from: base,
+        to: quote,
+        toIssuer: String(quote).toUpperCase() === "RLUSD" ? process.env.RLUSD_ISSUER || RLUSD_ISSUER : undefined,
+        toHex: String(quote).toUpperCase() === "RLUSD" ? process.env.RLUSD_CURRENCY_HEX || RLUSD_HEX : undefined,
+      });
+      const price =
+        market.reserveBase > 0 && market.reserveQuote > 0
+          ? market.reserveQuote / market.reserveBase
+          : null;
+      return ok({
+        source: "xrpl",
+        pair,
+        amountA: market.reserveBase || null,
+        amountB: market.reserveQuote || null,
+        price,
+        missing: !(market.reserveBase > 0 && market.reserveQuote > 0),
+        trading_fee: market.tradingFee || null,
+      });
+    }
+  }
+
   if (postgresTemporarilyDown()) {
     if (suffix === "health" || suffix === "health/xrpl") {
       return ok(catalogHealth({ postgresDown: true, dbOk: false }));
@@ -2867,6 +2953,7 @@ export async function readIndexerDb(suffix, search = "") {
         search
       );
     }
+
 
     return null;
   } catch (error) {

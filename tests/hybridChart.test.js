@@ -31,7 +31,7 @@ import {
   windowLastBars,
   zoomVisibleBars,
 } from "../src/chart/candles.js";
-import { bucketTime, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
+import { bucketTime, CHART_PAIRS, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
 import { ammImpact, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, scalePriceView, shiftAfterPriceZoom, zoomPriceScale } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
@@ -78,6 +78,10 @@ import {
   TOOL_GROUPS,
   toolMeta,
 } from "../src/chart/drawings.js";
+
+test("CHART_PAIRS includes XRP/RLUSD hybrid pair", () => {
+  assert.deepEqual(CHART_PAIRS, ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD"]);
+});
 
 test("bucketTime uses UTC midnight and Monday weeks", () => {
   assert.equal(bucketTime(Date.parse("2021-10-24T13:31:20.000Z"), "1D"), Date.parse("2021-10-24T00:00:00.000Z"));
@@ -463,6 +467,29 @@ test("XDX/RLUSD backdate is XDX/XRP times that day's XRP/USD", () => {
   assert.equal(rlusd.source, "backdated");
   assert.ok(Math.abs(quotePerXdx({ pair: "XDX/RLUSD", xdxXrp: 0.00002, xrpUsd: 1.1 }) - 0.000022) < 1e-12);
   assert.ok(Math.abs(quotePerXdx({ pair: "XDX/XRP", xdxUsd: 0.000044, xrpUsd: 1.1 }) - 0.00004) < 1e-12);
+  assert.ok(Math.abs(quotePerXdx({ pair: "XRP/RLUSD", xrpRlusd: 2.5 }) - 2.5) < 1e-12);
+  assert.ok(Math.abs(quotePerXdx({ pair: "XRP/RLUSD", xrpUsd: 1.1 }) - 1.1) < 1e-12);
+});
+
+test("composePairCandles builds XRP/RLUSD from locked XRP/USD when native candles are absent", () => {
+  const t = Date.parse("2021-10-24T00:00:00.000Z");
+  const candles = composePairCandles({
+    pair: "XRP/RLUSD",
+    interval: "1D",
+    range: "Max",
+    locked: {
+      pairs: {},
+      xrpUsd: [{ t, o: 1.0, h: 1.2, l: 0.9, c: 1.1, v: 10, source: "yahoo-xrp-usd" }],
+    },
+    sparkline: [{ timestamp: "2021-10-24T12:00:00.000Z", price_usd: 999 }],
+    trades: [{ timestamp: "2021-10-24T12:00:00.000Z", price: 999, pool: "XDX/XRP" }],
+    livePrice: 1.15,
+    now: t + 3_600_000,
+    windowed: false,
+  });
+  assert.ok(candles.length >= 1);
+  assert.equal(candles[0].c, 1.15);
+  assert.ok(candles.every((row) => Number(row.c) < 10));
 });
 
 test("stitchRlusdCandles prefers native AMM prints after RLUSD exists", () => {

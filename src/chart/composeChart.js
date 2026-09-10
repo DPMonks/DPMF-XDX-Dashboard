@@ -80,10 +80,29 @@ export function composePairCandles({
     });
   }
 
-  const liveTicks = [
-    ...ticksFromSparkline(sparkline, name, { xrpUsd: prices.xrpUsd || latestLockedUsd() }),
-    ...ticksFromTrades(trades, name),
-  ];
+  // XRP/RLUSD daily history: RLUSD ~ USD, so reuse locked XRP/USD until native marks exist.
+  if (name === "XRP/RLUSD" && !base.length) {
+    base = (locked.xrpUsd || [])
+      .filter((row) => Number(row?.c) > 0 && Number(row?.t) > 0)
+      .map((row) => ({
+        t: row.t,
+        o: row.o ?? row.c,
+        h: row.h ?? row.c,
+        l: row.l ?? row.c,
+        c: row.c,
+        v: Number(row.v) || 0,
+        source: row.source || "xrp-usd",
+      }));
+  }
+
+  // XDX sparkline / XDX flow trades do not apply to XRP/RLUSD.
+  const liveTicks =
+    name === "XRP/RLUSD"
+      ? []
+      : [
+          ...ticksFromSparkline(sparkline, name, { xrpUsd: prices.xrpUsd || latestLockedUsd() }),
+          ...ticksFromTrades(trades, name),
+        ];
   const dbHistory = candlesFromMarketData(locked.dbMarket?.[name] || [], "db");
   if (dbHistory.length) {
     const map = new Map(base.map((row) => [row.t, row]));

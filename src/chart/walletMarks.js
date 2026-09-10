@@ -9,7 +9,13 @@ export function sameChartPair(value, pair) {
   if (!value) return true;
   const left = String(value).replace(/\s+/g, "").toUpperCase();
   const right = String(pair).replace(/\s+/g, "").toUpperCase();
-  return left === right || left.endsWith(`/${right.split("/")[1]}`);
+  if (left === right) return true;
+  const [rightBase, rightQuote] = right.split("/");
+  // Non-XDX hybrid pairs (e.g. XRP/RLUSD) require an exact or reversed match.
+  if (rightBase && rightBase !== "XDX") {
+    return left === `${rightQuote}/${rightBase}`;
+  }
+  return left.endsWith(`/${rightQuote}`) || left === rightQuote;
 }
 
 export function walletChartMarks({ address, orders = [], fills = [], pair } = {}) {

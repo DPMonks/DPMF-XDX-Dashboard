@@ -57,6 +57,9 @@ test("normalizeOrderbookPair maps quote aliases onto featured and detected AMM p
   assert.equal(normalizeOrderbookPair("xsquad"), "XDX/XSQUAD");
   assert.equal(normalizeOrderbookPair("SOLO"), "XDX/SOLO");
   assert.equal(normalizeOrderbookPair("XDX/POWDER KEG"), "XDX/POWDER KEG");
+  assert.equal(normalizeOrderbookPair("XRP/RLUSD"), "XRP/RLUSD");
+  assert.equal(normalizeOrderbookPair("XRP-RLUSD"), "XRP/RLUSD");
+  assert.equal(normalizeOrderbookPair("RLUSD/XRP"), "XRP/RLUSD");
 });
 
 test("sortOrderbookPairs keeps XRP, RLUSD, XIO, XSQUAD first", () => {

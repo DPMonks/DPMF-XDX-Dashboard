@@ -28,12 +28,21 @@ export function quotePerXdx({
   xrpUsd,
   xdxXrp,
   xdxRlusd,
+  xrpRlusd,
 } = {}) {
   const name = String(pair || "").toUpperCase();
   const usd = Number(xdxUsd);
   const xrp = Number(xrpUsd);
   const nativeXrp = Number(xdxXrp);
   const nativeRlusd = Number(xdxRlusd);
+  const nativeXrpRlusd = Number(xrpRlusd);
+
+  // RLUSD tracks USD ~1:1; prefer native XRP/RLUSD mid, else XRP/USD.
+  if (name === "XRP/RLUSD") {
+    if (nativeXrpRlusd > 0) return exactQuote(nativeXrpRlusd);
+    if (xrp > 0) return exactQuote(xrp / RLUSD_USD_PEG);
+    return null;
+  }
 
   if (name === "XDX/XRP") {
     if (nativeXrp > 0) return exactQuote(nativeXrp);

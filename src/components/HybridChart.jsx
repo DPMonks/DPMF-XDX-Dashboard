@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getAmm, getOrderbooks, getPrices, getWalletActivity, getWalletOffers, getXdxFlows } from "../api/indexer";
+import { getAmm, getLiquidPairAmm, getLiquidPairBook, getOrderbooks, getPrices, getWalletActivity, getWalletOffers, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
 import { CHART_MA_PAD, CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, visibleBarsForInterval } from "../chart/intervals";
 import {
@@ -35,7 +35,7 @@ import {
   zoomPriceScale,
 } from "../chart/overlays";
 import { walletChartMarks } from "../chart/walletMarks";
-import { bookHeader } from "../orderbook";
+import { bookHeader, mergeOrderbookPayloads } from "../orderbook";
 import { walletOrdersFromBooks } from "../wallet/composeWallet";
 import {
   mergeWalletActivity,
@@ -107,9 +107,11 @@ function MaTypeMenu({ value, t, onChange }) {
 }
 
 function poolForPair(pools, pair) {
-  return (Array.isArray(pools) ? pools : []).find(
-    (row) => String(row.pool || row.pool_name || "").toUpperCase() === pair
-  );
+  const want = String(pair || "").toUpperCase();
+  return (Array.isArray(pools) ? pools : []).find((row) => {
+    const name = String(row.pool || row.pool_name || row.pair || "").toUpperCase();
+    return name === want;
+  });
 }
 
 export default function HybridChart() {
@@ -161,16 +163,63 @@ export default function HybridChart() {
     let cancelled = false;
     async function load() {
       try {
-        const [nextBooks, nextPools, nextPrices, nextFlows, nextSpark] = await Promise.all([
-          getOrderbooks().catch(() => null),
-          getAmm().catch(() => []),
-          getPrices().catch(() => ({})),
-          getXdxFlows().catch(() => []),
-          api.sparkline("XDX").catch(() => []),
-        ]);
+        const [nextBooks, nextPools, nextPrices, nextFlows, nextSpark, liquidBook, liquidAmm] =
+          await Promise.all([
+            getOrderbooks().catch(() => null),
+            getAmm().catch(() => []),
+            getPrices().catch(() => ({})),
+            getXdxFlows().catch(() => []),
+            api.sparkline("XDX").catch(() => []),
+            getLiquidPairBook("XRP/RLUSD").catch(() => null),
+            getLiquidPairAmm("XRP/RLUSD").catch(() => null),
+          ]);
         if (cancelled) return;
-        setBooks(nextBooks);
-        setPools(Array.isArray(nextPools) ? nextPools : []);
+        let booksPayload = nextBooks;
+        if (liquidBook) {
+          booksPayload = mergeOrderbookPayloads(booksPayload || { pairs: [], books: {} }, {
+            pairs: ["XRP/RLUSD"],
+            books: { "XRP/RLUSD": liquidBook },
+          });
+        }
+        if (liquidAmm && booksPayload?.books?.["XRP/RLUSD"]) {
+          const ammPrice = Number(liquidAmm.price);
+          booksPayload = {
+            ...booksPayload,
+            books: {
+              ...booksPayload.books,
+              "XRP/RLUSD": {
+                ...booksPayload.books["XRP/RLUSD"],
+                amm: {
+                  price: ammPrice > 0 ? ammPrice : null,
+                  reserve_asset: Number(liquidAmm.amountA) || null,
+                  reserve_currency: Number(liquidAmm.amountB) || null,
+                  account: liquidAmm.amm_account || liquidAmm.account || null,
+                },
+                mid:
+                  Number(booksPayload.books["XRP/RLUSD"].mid) > 0
+                    ? booksPayload.books["XRP/RLUSD"].mid
+                    : ammPrice > 0
+                      ? ammPrice
+                      : booksPayload.books["XRP/RLUSD"].mid,
+              },
+            },
+          };
+        }
+        const poolRows = Array.isArray(nextPools) ? [...nextPools] : [];
+        if (liquidAmm) {
+          const amountA = Number(liquidAmm.amountA);
+          const amountB = Number(liquidAmm.amountB);
+          poolRows.push({
+            pool: "XRP/RLUSD",
+            pool_name: "XRP/RLUSD",
+            pair: "XRP/RLUSD",
+            reserve_asset: amountA > 0 ? amountA : 0,
+            reserve_currency: amountB > 0 ? amountB : 0,
+            amm_account: liquidAmm.amm_account || liquidAmm.account || null,
+          });
+        }
+        setBooks(booksPayload);
+        setPools(poolRows);
         setPrices(nextPrices || {});
         setTrades(Array.isArray(nextFlows) ? nextFlows : []);
         setSparkline(
@@ -253,6 +302,7 @@ export default function HybridChart() {
     xrpUsd: prices.xrpUsd,
     xdxXrp: pair === "XDX/XRP" ? book.mid || ammPrice : null,
     xdxRlusd: pair === "XDX/RLUSD" ? book.mid || ammPrice : null,
+    xrpRlusd: pair === "XRP/RLUSD" ? book.mid || ammPrice : null,
   });
 
   const series = useMemo(

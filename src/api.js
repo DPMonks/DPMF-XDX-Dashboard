@@ -564,4 +564,20 @@ export const api = {
   },
   orderbooks: () =>
     getJson(endpoint("orderbooks") || "/orderbooks", { queue: false, retries: 1 }),
+  // Liquid watch pairs from the indexer (XRP/RLUSD + XDX pairs).
+  pairs: () => getJson("/pairs", { queue: false, retries: 1 }),
+  book: (pair = "XRP/RLUSD") => {
+    const [base, quote] = String(pair || "XRP/RLUSD").split("/");
+    return getJson(`/book/${encodeURIComponent(base)}/${encodeURIComponent(quote)}`, {
+      queue: false,
+      retries: 1,
+    });
+  },
+  ammPair: (pair = "XRP/RLUSD") => {
+    const [base, quote] = String(pair || "XRP/RLUSD").split("/");
+    return getJson(`/amm/${encodeURIComponent(base)}/${encodeURIComponent(quote)}`, {
+      queue: false,
+      retries: 1,
+    });
+  },
 };
