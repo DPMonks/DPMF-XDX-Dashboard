@@ -151,10 +151,7 @@ export default function AiMatrixDrawer() {
         aria-label={t.aiMatrix || "AI-Matrix"}
         onClick={openFromUi}
       >
-        <span className="aim-edge-tab-label">{t.jumpAim || "AI-Matrix"}</span>
-        <span className="aim-edge-tab-short" aria-hidden="true">
-          AIM
-        </span>
+        <span className="aim-edge-tab-label">AI-Matrix</span>
       </button>
 
       <div

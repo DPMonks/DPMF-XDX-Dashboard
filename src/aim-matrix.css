@@ -297,11 +297,15 @@
   pointer-events: none;
   transform: translate3d(12px, -50%, 0);
 }
-.aim-edge-tab-label { display: none; }
-.aim-edge-tab-short { display: inline; }
-@media (min-width: 720px) {
-  .aim-edge-tab-label { display: inline; }
-  .aim-edge-tab-short { display: none; }
+.aim-edge-tab-label { display: inline; }
+.aim-edge-tab-short { display: none; }
+@media (max-width: 719px) {
+  .aim-edge-tab {
+    min-height: 12.5rem;
+    padding: 1.25rem 0.65rem;
+    font-size: 0.92rem;
+    letter-spacing: 0.1em;
+  }
 }
 
 .aim-drawer-root {
