@@ -35,7 +35,7 @@ function pickVoice(lang) {
 
 /** Spoken forms for tickers/names (display text stays unchanged). */
 function pronounceForSpeech(text) {
-  const words = { 1: "one", 2: "two", 3: "three", 4: "four", 5: "five" };
+  const words = { 1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six" };
   const spell = (s) => String(s).split("").join(" ");
   return String(text || "")
     // Tx hashes: speak first 4 hex chars only
@@ -47,7 +47,7 @@ function pronounceForSpeech(text) {
     .replace(/\b(?:sequence|seq(?:uence)?\.?|Sequence)\s*[:=#-]?\s*(\d+)\b/gi, (_, n) => spell(String(n).slice(0, 4)))
     .replace(/\bseq(?:uence)?\s+(\d+)\b/gi, (_, n) => spell(String(n).slice(0, 4)))
     .replace(/\bledger\s+#?(\d{4,})\b/gi, (_, n) => spell(String(n).slice(0, 4)))
-    .replace(/\b([1-5])\s*\/\s*([1-5])\b(?:\s*agents?)?/gi, (_, a, b) => {
+    .replace(/\b([1-6])\s*\/\s*([1-6])\b(?:\s*agents?)?/gi, (_, a, b) => {
       const left = words[a] || a;
       const right = words[b] || b;
       return `${left} out of ${right} agents`;
@@ -62,6 +62,9 @@ function pronounceForSpeech(text) {
     .replace(/\bagent3\b/gi, "Agent Vector")
     .replace(/\bagent4\b/gi, "Agent Vortex")
     .replace(/\bagent5\b/gi, "Agent Echo")
+    .replace(/\bagent6\b/gi, "Agent Ghost")
+    .replace(/\bagent\s*6\b/gi, "Agent Ghost")
+    .replace(/\bAgent\s*Scout\b/gi, "Agent Ghost")
     .replace(/\bPRIME-0?1\b/gi, "Agent Prime")
     .replace(/\bFLUX-0?2\b/gi, "Agent Flux")
     .replace(/\bVECTOR-0?3\b/gi, "Agent Vector")

@@ -1159,13 +1159,13 @@ export async function aimStatusPayload() {
     const heartbeats = await db.query(
       `SELECT agent_id, status, last_seen_at, meta
        FROM aim_agent_heartbeats
-       WHERE agent_id IN ('commander','agent1','agent2','agent3','agent4','agent5')
+       WHERE agent_id IN ('commander','agent1','agent2','agent3','agent4','agent5','agent6')
        ORDER BY agent_id`
     );
     const intents = await db.query(
       `SELECT id, agent_id, kind, content, created_at
        FROM aim_agent_memory
-       WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','commander')
+       WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','agent6','commander')
          AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm')
        ORDER BY id DESC
        LIMIT 40`
@@ -1303,7 +1303,7 @@ export async function aimStatusPayload() {
       forbidden_tools: ["Freeze", "GlobalFreeze", "Clawback", "Blackhole"],
       summary:
         commander?.meta?.desk?.summary ||
-        `Internal desk · ${deskAgents.filter((a) => a.proposal).length}/5 agents reporting · view only`,
+        `Internal desk — ${deskAgents.filter((a) => a.proposal).length}/${Math.max(deskAgents.length, 6)} agents reporting — view only`,
       high_urgency: high,
       agents: deskAgents,
       chatter: deskMessages,
@@ -1372,7 +1372,7 @@ function pickLine(seed, options) {
 
 function classifyAimQuestion(raw) {
   const q = String(raw || "").toLowerCase();
-  const nameHit = q.match(/\b(?:agent\s+)?(prime|flux|vector|vortex|echo)\b/) || q.match(/\bagent\s*([1-5])\b/) || q.match(/\ba([1-5])\b/);
+  const nameHit = q.match(/\b(?:agent\s+)?(prime|flux|vector|vortex|echo|ghost)\b/) || q.match(/\bagent\s*([1-6])\b/) || q.match(/\ba([1-6])\b/);
   if (nameHit) {
     const resolved = resolveAimAgentId(nameHit[1]);
     if (resolved) {
@@ -1483,13 +1483,13 @@ async function loadAimChatContext(db) {
   const heartbeats = await db.query(
     `SELECT agent_id, status, last_seen_at, meta
      FROM aim_agent_heartbeats
-     WHERE agent_id IN ('commander','agent1','agent2','agent3','agent4','agent5')
+     WHERE agent_id IN ('commander','agent1','agent2','agent3','agent4','agent5','agent6')
      ORDER BY agent_id`
   );
   const intents = await db.query(
     `SELECT id, agent_id, kind, content, created_at
      FROM aim_agent_memory
-     WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','commander')
+     WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','agent6','commander')
        AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm')
      ORDER BY id DESC
      LIMIT 12`
@@ -1702,7 +1702,7 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
       : null,
   };
   const system = `You are Commander on the XDX Exchange Operational Intelligence Interface (AI-Matrix).
-Personality: calm British desk lead for an advanced XRPL trading team. Your job is to utilise Agents Prime, Flux, Vector, Vortex, and Echo aggressively to grow USD-marked wallet equity: increase yield by about 20% each day versus the day-start USD mark (compounding daily yield milestone). They may trade any XRPL asset. Start size about 5 XRP per wallet (1 reserve, 4 trade). Dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
+Personality: calm British desk lead for an advanced XRPL trading team. Your job is to utilise Agents Prime, Flux, Vector, Vortex, Echo, and Ghost aggressively to grow USD-marked wallet equity: increase yield by about 20% each day versus the day-start USD mark (compounding daily yield milestone). They may trade any XRPL asset. Start size about 5 XRP per wallet (1 reserve, 4 trade). Dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
 You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically using the dashboard itself (rich list, LP owners, AMM pools, order book, Smart Swap modes/routing/fees, XDX details, trust lines, AI-Matrix). For LP earnings questions, use public account lines + amm_info pool share; never ask for seeds. Encourage deepening XDX LP, AMMVote, and routing Smart Swap volume through XDX pools to earn more fees. still on-ledger only.
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
 If asked who holds the most XDX, use richlist / holders context: the #1 wallet is typically DPMFBANK (account contains DPMFBANK). Point them to the XDX Rich list card.
@@ -1718,7 +1718,7 @@ If asked what this is, what the exchange is, what this platform/dashboard is, or
 Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
-Desk objective: aggressively grow USD-marked equity. about +20% daily yield versus day-start USD mark (public compounding daily-yield milestone). Trade any XRPL asset through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Call agents by public names (Agent Prime, Agent Flux, Agent Vector, Agent Vortex, Agent Echo). Still hide internal strategy type codes. Prefer the word "transactions" over "txs". Say "the XRPL" (or "the XRP Ledger"), not bare "XRPL", in user-facing replies. Never write "the XRPL". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
+Desk objective: aggressively grow USD-marked equity. about +20% daily yield versus day-start USD mark (public compounding daily-yield milestone). Trade any XRPL asset through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Call agents by public names (Agent Prime, Agent Flux, Agent Vector, Agent Vortex, Agent Echo, Agent Ghost). Still hide internal strategy type codes. Prefer the word "transactions" over "txs". Say "the XRPL" (or "the XRP Ledger"), not bare "XRPL", in user-facing replies. Never write "the XRPL". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
 If xrpl_universe is present, use it for any XRPL token/price/book/trade-opportunity question across the wider ledger (not only XDX/XIO/XSQUAD). Stay observe-only; never claim execution. If site_scan is present, prefer it for dpmf.technology / DPMF XD Projects questions. If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing. Never mention website builders.
 Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
@@ -1771,7 +1771,7 @@ const EXCHANGE_HELP_KB = `
 XDX Exchange Operational Intelligence Interface (this site):
 - Live XRPL-native exchange UI for XDX and related natives (XIO, XSQUAD). Commander is the AI-Matrix help + observe layer.
 - Chat with Commander is ephemeral (not saved). Voice can read replies aloud.
-- AI-Matrix agents (Prime, Flux, Vector, Vortex, Echo) are observe-only in Phase 1 (no live trading from those workers). They watch pools/ledger for readiness.
+- AI-Matrix agents (Prime, Flux, Vector, Vortex, Echo, Ghost) are observe-only in Phase 1 (no live trading from those workers). They watch pools/ledger for readiness.
 
 Core product areas on the dashboard (JUMP TO decks 01-12. use live platform data for each):
 - 01 Wallet: connect with Xaman (XUMM), see connected account, balances, trust lines. Never speak full addresses; say "as seen below".
@@ -1845,7 +1845,7 @@ function helpAnswerForQuestion(question) {
     add("Pool governance lets eligible LP participants vote on pool parameters. Open Vote / governance on the dashboard and sign votes in Xaman when prompted.");
   }
   if (/\b(agent|commander|ai[- ]?matrix|matrix)\b/.test(q)) {
-    add("AI-Matrix is the observe layer: Commander answers live status and help questions. Agents Prime, Flux, Vector, Vortex, and Echo show anonymized heartbeats and movement. Phase 1 is read-only. Chat is ephemeral.");
+    add("AI-Matrix is the observe layer: Commander answers live status and help questions. Agents Prime, Flux, Vector, Vortex, Echo, and Ghost show anonymized heartbeats and movement. Phase 1 is read-only. Chat is ephemeral.");
   }
   if (/\b(xdx|xio|xsquad|dpmf|native)\b/.test(q)) {
     add("Natives on this interface include XDX, XIO, and XSQUAD (say X-Squad). Ask about a named pair or pool for a sharper live read.");
@@ -1878,7 +1878,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
   const dpmfBias = wantsDpmfBias(question, classified);
   const byId = Object.fromEntries((ctx.heartbeats || []).map((r) => [r.agent_id, r]));
   const commander = byId.commander;
-  const agents = ["agent1", "agent2", "agent3", "agent4", "agent5"].map((id) => byId[id]).filter(Boolean);
+  const agents = ["agent1", "agent2", "agent3", "agent4", "agent5", "agent6"].map((id) => byId[id]).filter(Boolean);
   const looping = agents.filter((a) => /loop|online|ok/i.test(String(a.status || ""))).length;
   const agent2 = byId.agent2;
   const agent2Pools = scrubValue(agent2?.meta)?.pools || null;
@@ -1985,7 +1985,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
   }
 
   if (classified.intent === "desk") {
-    const agents = ["agent1", "agent2", "agent3", "agent4", "agent5"].map((id) => byId[id]).filter(Boolean);
+    const agents = ["agent1", "agent2", "agent3", "agent4", "agent5", "agent6"].map((id) => byId[id]).filter(Boolean);
     push("Internal desk is view-only for visitors. Agents coordinate on the XRPL markets. No public trade controls. No freeze, clawback, or blackhole.");
     let n = 0;
     for (const row of agents) {
@@ -1997,7 +1997,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       }
     }
     if (!n) push("No agent proposals in heartbeats yet. After AIM redeploy they will publish each tick.");
-    push(agentsOutOfFive(agents.filter((a) => /loop|online|ok/i.test(String(a.status || ""))).length, 5) + " reporting.");
+    push(agentsOutOfFive(agents.filter((a) => /loop|online|ok/i.test(String(a.status || ""))).length, Math.max(agents.length, 6)) + " reporting.");
     return { type: "commander_answer", intent: "desk", text: lines.join(" ") };
   }
 

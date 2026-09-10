@@ -1,6 +1,6 @@
 /**
  * Shared AIM public agent identity map.
- * Internal ids stay agent1..agent5. User-facing labels use codeName (e.g. "Agent Prime").
+ * Internal ids stay agent1..agent6. User-facing labels use codeName (e.g. "Agent Prime").
  * Keep in sync with src/aimAgentNames.js
  */
 export const AIM_AGENTS = {
@@ -34,9 +34,15 @@ export const AIM_AGENTS = {
     role: "Mean reversion + fee capture",
     identity: "Rhythmic, cyclical, pattern-aware.",
   },
+  agent6: {
+    codeName: "Agent Ghost",
+    shortName: "Ghost",
+    role: "Observe scout (Nova / Quill / Cipher)",
+    identity: "Quiet, peripheral, opportunity-spotting.",
+  },
 };
 
-export const AIM_AGENT_IDS = ["agent1", "agent2", "agent3", "agent4", "agent5"];
+export const AIM_AGENT_IDS = ["agent1", "agent2", "agent3", "agent4", "agent5", "agent6"];
 
 export function aimAgentProfile(agentId) {
   const id = String(agentId || "").toLowerCase();
@@ -64,18 +70,18 @@ export function aimAgentRole(agentId) {
   return p?.role || "";
 }
 
-/** Resolve "prime" / "agent prime" / "agent1" / "1" -> agent1..agent5 */
+/** Resolve "prime" / "agent prime" / "agent1" / "1" -> agent1..agent6 */
 export function resolveAimAgentId(raw) {
   const q = String(raw || "").trim().toLowerCase();
   if (!q) return null;
-  if (/^agent[1-5]$/.test(q)) return q;
-  if (/^[1-5]$/.test(q)) return `agent${q}`;
+  if (/^agent[1-6]$/.test(q)) return q;
+  if (/^[1-6]$/.test(q)) return `agent${q}`;
   const byShort = Object.entries(AIM_AGENTS).find(([, v]) => v.shortName.toLowerCase() === q);
   if (byShort) return byShort[0];
-  const m = q.match(/^agent\s*(prime|flux|vector|vortex|echo|[1-5])$/i);
+  const m = q.match(/^agent\s*(prime|flux|vector|vortex|echo|ghost|[1-6])$/i);
   if (m) {
     const key = m[1].toLowerCase();
-    if (/^[1-5]$/.test(key)) return `agent${key}`;
+    if (/^[1-6]$/.test(key)) return `agent${key}`;
     const hit = Object.entries(AIM_AGENTS).find(([, v]) => v.shortName.toLowerCase() === key);
     return hit ? hit[0] : null;
   }
