@@ -881,7 +881,7 @@ export async function aimStatusPayload() {
       `SELECT id, agent_id, kind, content, created_at
        FROM aim_agent_memory
        WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','commander')
-         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','xrpl_ledger','xrpl_book','xrpl_amm')
+         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','xrpl_ledger','xrpl_book','xrpl_amm')
        ORDER BY id DESC
        LIMIT 40`
     );
@@ -1020,6 +1020,9 @@ function classifyAimQuestion(raw) {
   ) {
     return { intent: "dpmf_site" };
   }
+  if (/\b(desk|trading team|proposals?|what are (the )?agents proposing|team status)\b/.test(q)) {
+    return { intent: "desk" };
+  }
   if (
     /\b(trade opportunit|trading opportunit|what.*(buy|trade|moving)|hot(test)? (token|asset)s?|across (the )?(xrpl|ledger)|70,?000|all (xrpl )?tokens|ledger tokens)\b/.test(q)
   ) {
@@ -1084,7 +1087,7 @@ async function loadAimChatContext(db) {
     `SELECT id, agent_id, kind, content, created_at
      FROM aim_agent_memory
      WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','commander')
-       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','xrpl_ledger','xrpl_book','xrpl_amm')
+       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','xrpl_ledger','xrpl_book','xrpl_amm')
      ORDER BY id DESC
      LIMIT 12`
   );
@@ -1296,7 +1299,7 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
       : null,
   };
   const system = `You are Commander on the XDX Exchange Operational Intelligence Interface (AI-Matrix).
-Personality: calm British ops lead with dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
+Personality: calm British desk lead for an advanced XRPL trading team focused on accumulating XRP. Dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
 You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically using the dashboard itself (rich list, LP owners, AMM pools, order book, Smart Swap, trust lines, AI-Matrix).
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
 If asked who holds the most XDX, use richlist / holders context: the #1 wallet is typically DPMFBANK (account contains DPMFBANK). Point them to the XDX Rich list card.
@@ -1312,7 +1315,7 @@ If asked what this is, what the exchange is, what this platform/dashboard is, or
 Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
-Observe-only: do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
+Desk phase A is proposal-only: agents may propose XRP-accumulation trades, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
 If xrpl_universe is present, use it for any XRPL token/price/book/trade-opportunity question across the wider ledger (not only XDX/XIO/XSQUAD). Stay observe-only; never claim execution. If site_scan is present, prefer it for dpmf.technology / DPMF XD Projects questions. If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing. Never mention website builders.
 Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
@@ -1381,6 +1384,11 @@ Core product areas on the dashboard (JUMP TO decks 01-12 — use live platform d
 - 11 Vote: pool governance voting for parameters.
 - 12 AI-Matrix: Commander chat + agent observe strip (heartbeats / movement). Phase 1 observe-only.
 Trust line: set TrustSet for XDX (and other IOUs) before holding/receiving that token.
+
+Trading desk (Phase A proposal-only):
+- Commander + agents 1-5 coordinate to accumulate XRP using Payment, offers, AMM, paths, escrow, channels, checks, tickets.
+- NEVER freeze, clawback, or blackhole wallets.
+- Ask "desk status" / "what are the agents proposing" for the live proposal board.
 
 Wider XRPL markets (free public data):
 - Commander can look up issued assets across the XRPL (70,000+), prices, volume, holders, AMM counts, and XRP books via public indexes + rippled RPC.
@@ -1487,7 +1495,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return {
       type: "commander_answer",
       intent: "identity",
-      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, XRPL transactions, or dpmf.technology anytime.",
+      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, XRPL markets, or XRP-accumulation desk proposals anytime. We are proposal-only until live trading is explicitly unlocked.",
     };
   }
 
@@ -1547,6 +1555,23 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       push("LP owners list is unavailable right now. Try the XDX LP Owners card on the dashboard.");
     }
     return { type: "commander_answer", intent: "lp_holders", text: lines.join(" ") };
+  }
+
+  if (classified.intent === "desk") {
+    const agents = ["agent1", "agent2", "agent3", "agent4", "agent5"].map((id) => byId[id]).filter(Boolean);
+    push("Desk phase A: proposal-only, objective accumulate XRP. No freeze, clawback, or blackhole.");
+    let n = 0;
+    for (const row of agents) {
+      const meta = scrubValue(row.meta) || {};
+      const p = meta.trade_proposal || {};
+      if (p.action) {
+        n += 1;
+        push(`${publicAgentId(row.agent_id)}: ${scrubText(p.action)} on ${scrubText(p.pair || "n/a")} (${scrubText(p.urgency || "n/a")}).`);
+      }
+    }
+    if (!n) push("No agent proposals in heartbeats yet. After AIM redeploy they will publish each tick.");
+    push(agentsOutOfFive(agents.filter((a) => /loop|online|ok/i.test(String(a.status || ""))).length, 5) + " reporting.");
+    return { type: "commander_answer", intent: "desk", text: lines.join(" ") };
   }
 
   if (classified.intent === "xrpl_market" || classified.intent === "trade_opp") {
@@ -1638,6 +1663,11 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       const meta = scrubValue(row.meta) || {};
       push(`Agent ${classified.agentNum} is ${scrubText(row.status)} (last seen ${agoPhrase(row.last_seen_at)}).`);
       if (meta.skill?.summary) push(`Skill read: ${scrubText(meta.skill.summary)}.`);
+      if (meta.trade_proposal?.action) {
+        push(`Desk proposal (not executed): ${scrubText(meta.trade_proposal.action)} on ${scrubText(meta.trade_proposal.pair || "n/a")} · urgency ${scrubText(meta.trade_proposal.urgency || "n/a")}.`);
+        if (meta.trade_proposal.xrp_thesis) push(`XRP thesis: ${scrubText(meta.trade_proposal.xrp_thesis)}`);
+      }
+
       if (meta.holders?.ok) {
         const label = meta.holders.top_label || "top wallet";
         push(`Richlist skill: ${label} leads (~${meta.holders.top_balance ?? "n/a"} XDX).`);
@@ -1775,7 +1805,7 @@ export async function aimChatPayload(req) {
           includeDomains: wantSite ? ["dpmf.technology", "www.dpmf.technology"] : undefined,
         })
       : { ok: false, skipped: true, results: [] };
-    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "wallet", "help"].includes(
+    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "wallet", "help", "desk"].includes(
       classified.intent
     );
     const llm = preferLocal
