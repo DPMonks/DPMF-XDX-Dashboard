@@ -203,7 +203,7 @@
 
 
 /* Internal desk board (view-only — no public trade controls) */
-.aim-desk-board { padding: 1rem 1.1rem; display: grid; gap: 0.85rem; }
+.aim-desk-board { padding: 1rem 1.1rem; display: grid; gap: 0.85rem; margin-top: 0.85rem; }
 .aim-desk-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
 .aim-desk-kicker { margin: 0; opacity: 0.65; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
 .aim-desk-board h3 { margin: 0.15rem 0; }
