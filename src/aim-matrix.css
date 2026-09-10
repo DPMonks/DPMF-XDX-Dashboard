@@ -722,13 +722,21 @@ body.aim-drawer-open #root {
 }
 .aim-chatter-parties {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 0.45rem;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 0.25rem;
   min-width: 0;
 }
 .aim-chatter-arrow {
-  opacity: 0.65;
+  display: block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin: 0.05rem 0 0.05rem 0.55rem;
+  border-right: 1.5px solid rgba(255, 255, 255, 0.55);
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.55);
+  transform: rotate(45deg);
+  opacity: 0.7;
   flex: 0 0 auto;
 }
 

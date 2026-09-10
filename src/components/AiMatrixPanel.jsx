@@ -528,7 +528,7 @@ export default function AiMatrixPanel() {
                       <AimAgentAvatar agentId={m.from} label={m.from_label || m.from} size="sm" />
                       <b><AimAgentName agentId={m.from} label={m.from_label || m.from} /></b>
                     </span>
-                    <span className="aim-chatter-arrow" aria-hidden="true">→</span>
+                    <span className="aim-chatter-arrow" role="img" aria-label="to"></span>
                     <span className="aim-row-agent">
                       <AimAgentAvatar agentId={m.to} label={m.to_label || m.to} size="sm" />
                       <AimAgentName agentId={m.to} label={m.to_label || m.to} />
