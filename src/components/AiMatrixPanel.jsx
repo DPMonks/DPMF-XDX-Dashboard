@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
 import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
-import { AIM_AGENT_IDS, AIM_COMMANDER_AVATAR, aimAgentLabel, aimAgentRole, aimAgentProfile, aimAgentAvatarSrc } from "../aimAgentNames";
+import { AIM_AGENT_IDS, AIM_COMMANDER_AVATAR, aimAgentLabel, aimAgentRole, aimAgentProfile } from "../aimAgentNames";
 import AimAgentName from "./AimAgentName";
+import AimAgentAvatar from "./AimAgentAvatar";
 import { useWallet } from "../context/useWallet";
 
 function ago(iso) {
@@ -414,15 +415,7 @@ export default function AiMatrixPanel() {
             >
               <header>
                 <div className="aim-agent-head-left">
-                  <img
-                    className="aim-agent-logo"
-                    src={aimAgentAvatarSrc(agent.id)}
-                    alt=""
-                    data-agent={agent.id}
-                    width={30}
-                    height={30}
-                    decoding="async"
-                  />
+                  <AimAgentAvatar agentId={agent.id} />
                   <AimAgentName agentId={agent.id} label={agent.label || aimAgentLabel(agent.id)} stacked />
                 </div>
                 <span className={`aim-dot is-${String(agent.status || "").toLowerCase()}`} />
@@ -449,13 +442,19 @@ export default function AiMatrixPanel() {
       <section className="aim-moves neon-inset">
         <h3>Recent movement</h3>
         <ul>
-          {movements.slice(0, 16).map((m) => (
-            <li key={m.id}>
-              <b><AimAgentName label={m.label} agentId={m.agent_id || m.from || m.id} /></b>
-              <span>{m.summary}</span>
-              <small>{ago(m.created_at)}</small>
-            </li>
-          ))}
+          {movements.slice(0, 16).map((m) => {
+            const moveAgentId = m.agent_id || m.from || m.id;
+            return (
+              <li key={m.id}>
+                <div className="aim-row-agent">
+                  <AimAgentAvatar agentId={moveAgentId} label={m.label} size="sm" />
+                  <b><AimAgentName label={m.label} agentId={moveAgentId} /></b>
+                </div>
+                <span>{m.summary}</span>
+                <small>{ago(m.created_at)}</small>
+              </li>
+            );
+          })}
           {!movements.length ? <li className="aim-empty">No movement yet.</li> : null}
         </ul>
       </section>
@@ -481,7 +480,10 @@ export default function AiMatrixPanel() {
                 return (
                   <li key={`desk-${a.id}`}>
                     <header>
-                      <b title={a.role || aimAgentRole(a.id) || undefined}><AimAgentName agentId={a.id} label={a.label || aimAgentLabel(a.id) || a.id} /></b>
+                      <div className="aim-row-agent" title={a.role || aimAgentRole(a.id) || undefined}>
+                        <AimAgentAvatar agentId={a.id} label={a.label || aimAgentLabel(a.id)} size="sm" />
+                        <b><AimAgentName agentId={a.id} label={a.label || aimAgentLabel(a.id) || a.id} /></b>
+                      </div>
                       <span className={`aim-urgency is-${String(prop?.urgency || "none").toLowerCase()}`}>
                         {prop?.urgency || "-"}
                       </span>
@@ -521,8 +523,17 @@ export default function AiMatrixPanel() {
             <ul>
               {(data?.desk?.chatter || []).slice().reverse().slice(0, 18).map((m) => (
                 <li key={m.id}>
-                  <b><AimAgentName agentId={m.from} label={m.from_label || m.from} /></b>
-                  <span>→ <AimAgentName agentId={m.to} label={m.to_label || m.to} /></span>
+                  <div className="aim-chatter-parties">
+                    <span className="aim-row-agent">
+                      <AimAgentAvatar agentId={m.from} label={m.from_label || m.from} size="sm" />
+                      <b><AimAgentName agentId={m.from} label={m.from_label || m.from} /></b>
+                    </span>
+                    <span className="aim-chatter-arrow" aria-hidden="true">→</span>
+                    <span className="aim-row-agent">
+                      <AimAgentAvatar agentId={m.to} label={m.to_label || m.to} size="sm" />
+                      <AimAgentName agentId={m.to} label={m.to_label || m.to} />
+                    </span>
+                  </div>
                   <p>{m.text}</p>
                   <small>{ago(m.created_at)} · {m.topic}</small>
                 </li>
