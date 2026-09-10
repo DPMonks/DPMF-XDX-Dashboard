@@ -71,8 +71,26 @@ function getAudioCtx() {
 export function unlockCommanderAudio() {
   const ctx = getAudioCtx();
   if (!ctx) return;
+  const kick = () => {
+    try {
+      const buf = ctx.createBuffer(1, 1, ctx.sampleRate || 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch {
+      /* ignore */
+    }
+  };
   if (ctx.state === "suspended") {
-    ctx.resume().catch(() => {});
+    ctx.resume().then(kick).catch(() => {});
+  } else {
+    kick();
+  }
+  try {
+    if (window.speechSynthesis?.resume) window.speechSynthesis.resume();
+  } catch {
+    /* ignore */
   }
 }
 
@@ -311,21 +329,34 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
     if (ctx.state === "suspended") await ctx.resume();
     const buffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
     pendingBuffer = buffer;
-    pendingText = line;
+    pendingText = display;
     await playAudioBuffer(buffer, display, onProgress, onDone);
     lastEngine = voiceHeader;
+    pendingBuffer = null;
+    pendingText = "";
     return { mode: "edge", engine: lastEngine, needsPlay: false };
   } catch (err) {
-    console.warn("[AIM] WebAudio play blocked/failed; keep buffer for tap-to-play", err?.message || err);
-    lastEngine = "edge-blocked";
-    // Keep pendingBuffer for Play voice button (user gesture).
-    runTimedReveal(display, onProgress, onDone, { msPerChar: 16 });
-    return {
-      mode: "edge-blocked",
-      engine: lastEngine,
-      needsPlay: true,
-      error: String(err?.message || err),
-    };
+    console.warn("[AIM] WebAudio play blocked/failed; auto browser speak", err?.message || err);
+    // Keep N1 buffer for optional Play voice, but always speak now via browser TTS.
+    lastEngine = "browser-fallback";
+    try {
+      speakBrowserFallback(display, lang, onProgress, onDone);
+      return {
+        mode: "browser",
+        engine: lastEngine,
+        needsPlay: Boolean(pendingBuffer),
+        error: String(err?.message || err),
+      };
+    } catch (err2) {
+      lastEngine = "edge-blocked";
+      runTimedReveal(display, onProgress, onDone, { msPerChar: 16 });
+      return {
+        mode: "edge-blocked",
+        engine: lastEngine,
+        needsPlay: Boolean(pendingBuffer),
+        error: String(err2?.message || err2),
+      };
+    }
   }
 }
 

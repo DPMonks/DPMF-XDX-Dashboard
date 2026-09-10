@@ -109,7 +109,10 @@ export default function AiMatrixPanel() {
     const message = text.trim();
     if (!message || busy) return;
     setBusy(true);
-    if (voiceOn) unlockCommanderAudio();
+    if (voiceOn) {
+      unlockCommanderAudio();
+      try { window.speechSynthesis?.resume?.(); } catch { /* ignore */ }
+    }
     const thinkingId = `thinking-${Date.now()}`;
     setLocalChat((rows) => [
       ...rows,
@@ -214,7 +217,7 @@ export default function AiMatrixPanel() {
   const movements = data?.movements || [];
 
   return (
-    <div className="aim-matrix">
+    <div className="aim-matrix" onPointerDown={() => { if (voiceOn) unlockCommanderAudio(); }}>
       <div className="aim-matrix-head">
         <div>
           <p className="aim-matrix-kicker">Observe-only · ephemeral chat · no wallets shown</p>
@@ -343,7 +346,7 @@ export default function AiMatrixPanel() {
                       className="aim-play-voice"
                       onClick={() => onPlayVoice(m)}
                     >
-                      Play voice (N1)
+                      Replay N1 voice
                     </button>
                   ) : null}
                 </div>
