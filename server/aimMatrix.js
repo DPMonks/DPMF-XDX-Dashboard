@@ -754,7 +754,6 @@ function extractTokenQuery(question) {
   for (const raw of m) {
     const code = raw.toUpperCase();
     if (stop.has(code)) continue;
-    if (["XDX","XIO","XSQUAD"].includes(code)) continue; // natives still ok but prefer dedicated paths
     if (code.length >= 2 && code.length <= 8) return { code };
   }
   return null;
@@ -783,10 +782,40 @@ async function fetchXrplUniverseContext(question, classified) {
     if (exact.ok) out.token = exact.token;
   }
   if (!out.token && parsed?.code) {
-    const found = await fetchXrpscanTokens({ limit: 15, search: parsed.code });
-    if (found.ok) {
-      out.top = found;
-      out.token = found.tokens.find((t) => t.code === parsed.code) || found.tokens[0] || null;
+    const code = String(parsed.code).toUpperCase();
+    // DPMF natives: prefer known issuer, never invent from volume leaders
+    if (code === "XDX") {
+      const issuer = process.env.XDX_ISSUER || "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo";
+      const exact = await fetchXrpscanTokenExact("XDX", issuer);
+      if (exact.ok) out.token = exact.token;
+      else {
+        out.token = {
+          code: "XDX",
+          name: "XDX",
+          issuer,
+          currency: asciiCurrencyToHex("XDX"),
+          price: null,
+          volume_24h: null,
+          holders: null,
+          amms: null,
+          native: true,
+        };
+      }
+    } else if (["XIO", "XSQUAD"].includes(code)) {
+      const foundNative = await fetchXrpscanTokens({ limit: 20, search: code });
+      if (foundNative.ok) {
+        out.token = foundNative.tokens.find((t) => t.code === code) || null;
+        out.top = foundNative;
+      }
+    } else {
+      const found = await fetchXrpscanTokens({ limit: 15, search: code });
+      if (found.ok) {
+        out.top = found;
+        const exactHit = found.tokens.find((t) => t.code === code);
+        // Never silently substitute a different ticker (e.g. SOLO for XDX)
+        out.token = exactHit || null;
+        if (!exactHit) out.match_error = `No exact XRPSCAN match for ${code}; refusing volume-leader fallback.`;
+      }
     }
   }
   if (wantTop || classified?.intent === "xrpl_market" || classified?.intent === "trade_opp") {
@@ -816,6 +845,9 @@ async function fetchXrplUniverseContext(question, classified) {
 function summarizeXrplUniverse(uni) {
   if (!uni?.ok) return "Public XRPL market index is soft right now. Ask for a ticker like SOLO or RLUSD and I will recheck.";
   const bits = [];
+  if (uni.match_error && !uni.token) {
+    bits.push(uni.match_error);
+  }
   if (uni.token) {
     const t = uni.token;
     bits.push(
@@ -1107,6 +1139,12 @@ function classifyAimQuestion(raw) {
     /\b(trade opportunit|trading opportunit|what.*(buy|trade|moving)|hot(test)? (token|asset)s?|across (the )?(xrpl|ledger)|70,?000|all (xrpl )?tokens|ledger tokens)\b/.test(q)
   ) {
     return { intent: "trade_opp" };
+  }
+  if (
+    /\b(price of|how much is|token price|what(?:'s| is) (the )?price)\b/.test(q) &&
+    /\b(xdx|xio|xsquad)\b/.test(q)
+  ) {
+    return { intent: "native_price" };
   }
   if (
     /\b(token price|price of|how much is|market cap|volume|rlusd|solo|coreum|\$[A-Z]{3,6})\b/.test(q) ||
@@ -1600,7 +1638,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return { type: "commander_answer", intent: "connectivity", text: (line + extra).trim() };
   }
 
-  const skipOpener = ["help", "holders", "lp_holders", "dpmf_site", "txs", "xrpl", "xrpl_market", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
+  const skipOpener = ["help", "holders", "lp_holders", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
   if (!skipOpener) {
     push(
       pickLine(seed, [
@@ -1654,7 +1692,30 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return { type: "commander_answer", intent: "desk", text: lines.join(" ") };
   }
 
+  if (classified.intent === "native_price") {
+    const qn = String(question || "").toLowerCase();
+    const which = /\bxio\b/.test(qn) ? "XIO" : /\bxsquad\b/.test(qn) ? "XSQUAD" : "XDX";
+    if (which === "XDX" && markets?.amm?.price != null) {
+      push(`XDX mark on this board is about ${markets.amm.price}${markets.amm.xrpUsd != null ? ` (XRP ~$${markets.amm.xrpUsd})` : ""}.`);
+      if (markets?.orderbook?.mid != null) push(`XDX/XRP book mid about ${markets.orderbook.mid}.`);
+      push("Open Trade chart / AMM pools for the live ladder.");
+    } else if (xrplUniverse?.token?.code === which) {
+      push(summarizeXrplUniverse(xrplUniverse));
+    } else {
+      push(`Looking up ${which} on the XDX board first.`);
+      if (markets?.amm?.price != null && which === "XDX") push(`Board mark ${markets.amm.price}.`);
+      else push(summarizeXrplUniverse(xrplUniverse) || `${which} live mark is soft right now; try the Trade chart card.`);
+    }
+    return { type: "commander_answer", intent: "native_price", text: lines.join(" ") };
+  }
+
   if (classified.intent === "xrpl_market" || classified.intent === "trade_opp") {
+    // If user asked price of a ticker but universe has no exact token, do not invent SOLO
+    if (classified.intent === "xrpl_market" && xrplUniverse?.match_error && !xrplUniverse?.token) {
+      push(xrplUniverse.match_error);
+      push("Give CURRENCY.rIssuer if you want a specific IOU.");
+      return { type: "commander_answer", intent: "xrpl_market", text: lines.join(" ") };
+    }
     push(summarizeXrplUniverse(xrplUniverse));
     if (classified.intent === "trade_opp") {
       push("Observe-only. I flag activity on the open XRPL; I do not place trades.");
@@ -1864,11 +1925,12 @@ export async function aimChatPayload(req) {
         ? await fetchTopLpHolders({ limit: 8 })
         : null;
     const wantMarkets =
-      ["orderbook", "swap", "chart", "pools", "snapshot", "status", "assets"].includes(classified.intent) ||
+      ["orderbook", "swap", "chart", "pools", "snapshot", "status", "assets", "native_price"].includes(classified.intent) ||
       /\b(price|tvl|order ?book|amm|swap|chart)\b/i.test(text);
     const markets = wantMarkets ? await fetchPlatformMarkets() : null;
     const wantUniverse =
       classified.intent === "xrpl_market" ||
+      classified.intent === "native_price" ||
       classified.intent === "trade_opp" ||
       classified.intent === "xrpl" ||
       /\b(token|price|volume|market|solo|rlusd|iou|opportunit|xrpl asset|across (the )?ledger)\b/i.test(text);
@@ -1885,7 +1947,7 @@ export async function aimChatPayload(req) {
           includeDomains: wantSite ? ["dpmf.technology", "www.dpmf.technology"] : undefined,
         })
       : { ok: false, skipped: true, results: [] };
-    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "wallet", "help", "desk"].includes(
+    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "wallet", "help", "desk", "native_price"].includes(
       classified.intent
     );
     const llm = preferLocal
