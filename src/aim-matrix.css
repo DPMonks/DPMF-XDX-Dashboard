@@ -254,3 +254,183 @@
 .aim-desk-usd { color: #b8ffd6; }
 .aim-desk-fill.is-live { color: #9ef0ff; }
 .aim-desk-fill.is-blocked { color: #ffc9a8; opacity: 0.9; }
+
+
+/* —— AI-Matrix right slide-over (over the exchange) —— */
+.aim-edge-tab {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  z-index: 9400;
+  transform: translate3d(0, -50%, 0);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 7.5rem;
+  padding: 0.85rem 0.45rem;
+  margin: 0;
+  border: 1px solid rgba(120, 220, 255, 0.35);
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: linear-gradient(180deg, rgba(14, 116, 144, 0.45), rgba(8, 24, 40, 0.92));
+  box-shadow: -4px 0 18px rgba(0, 234, 255, 0.12);
+  color: #e0f7ff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease, box-shadow 0.22s ease;
+}
+.aim-edge-tab:hover,
+.aim-edge-tab:focus-visible {
+  outline: none;
+  box-shadow: -6px 0 22px rgba(0, 234, 255, 0.22);
+  transform: translate3d(-2px, -50%, 0);
+}
+.aim-edge-tab.is-open {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(12px, -50%, 0);
+}
+.aim-edge-tab-label { display: none; }
+.aim-edge-tab-short { display: inline; }
+@media (min-width: 720px) {
+  .aim-edge-tab-label { display: inline; }
+  .aim-edge-tab-short { display: none; }
+}
+
+.aim-drawer-root {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  pointer-events: none;
+}
+.aim-drawer-root.is-open {
+  pointer-events: auto;
+}
+
+.aim-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: rgba(5, 5, 8, 0.55);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.28s ease;
+}
+.aim-drawer-root.is-open .aim-drawer-backdrop {
+  opacity: 1;
+}
+.aim-drawer-root.is-dragging .aim-drawer-backdrop {
+  transition: none;
+}
+
+.aim-drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(520px, 48vw, 100%);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border-radius: 16px 0 0 16px;
+  border-right: 0;
+  background: rgba(8, 10, 18, 0.97);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.45), 0 0 28px rgba(0, 234, 255, 0.08);
+  transform: translate3d(104%, 0, 0);
+  opacity: 0.96;
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+.aim-drawer-root.is-open .aim-drawer-panel {
+  transform: translate3d(0, 0, 0);
+}
+.aim-drawer-root.is-dragging .aim-drawer-panel {
+  transition: none;
+}
+
+.aim-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: max(0.85rem, env(safe-area-inset-top, 0px)) 1rem 0.75rem 1.1rem;
+  border-bottom: 1px solid rgba(120, 220, 255, 0.16);
+  flex: 0 0 auto;
+}
+.aim-drawer-kicker {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.aim-drawer-title {
+  margin: 0.15rem 0 0;
+  font-size: 1.15rem;
+}
+.aim-drawer-close {
+  cursor: pointer;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 220, 255, 0.35);
+  background: rgba(14, 116, 144, 0.28);
+  color: inherit;
+  padding: 0.45rem 0.8rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.aim-drawer-close:hover,
+.aim-drawer-close:focus-visible {
+  outline: none;
+  border-color: rgba(0, 234, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 234, 255, 0.2);
+}
+
+.aim-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.9rem 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+.aim-drawer-body .aim-matrix-card,
+.aim-drawer-panel .aim-matrix {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .aim-drawer-panel {
+    width: min(100vw, 100%);
+    border-radius: 0;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1200px) {
+  .aim-drawer-panel {
+    width: min(480px, 50vw);
+  }
+}
+
+@media (min-width: 1201px) {
+  .aim-drawer-panel {
+    width: min(560px, 42vw);
+  }
+}
+
+.site-jump-grid button.is-overlay em {
+  color: rgba(0, 234, 255, 0.9);
+}

@@ -10,8 +10,12 @@ export const SITE_JUMP_IDS = [
   "create-pool",
   "pools",
   "governance",
-  "ai-matrix",
 ];
+
+/** Overlay id — kept in the jump menu / hash, not in the scrollable deck spine. */
+export const AIM_MATRIX_ID = "ai-matrix";
+
+export const AIM_OVERLAY_EVENT = "xdx:aim-overlay";
 
 export function siteJumpItems(t = {}) {
   return [
@@ -26,7 +30,7 @@ export function siteJumpItems(t = {}) {
     { id: "create-pool", short: t.jumpCreate || "Create pool", label: t.createPoolTitle || "Create New XDX Pool" },
     { id: "pools", short: t.jumpPools || "AMM pools", label: t.ammPools || "AMM Pools" },
     { id: "governance", short: t.jumpVote || "Vote", label: t.poolGovernance || "Pool Governance Voting" },
-    { id: "ai-matrix", short: t.jumpAim || "AI-Matrix", label: t.aiMatrix || "AI-Matrix" },
+    { id: AIM_MATRIX_ID, short: t.jumpAim || "AI-Matrix", label: t.aiMatrix || "AI-Matrix" },
   ];
 }
 
@@ -34,7 +38,18 @@ export function readJumpHash(hash) {
   const id = String(hash || "")
     .replace(/^#/, "")
     .trim();
-  return SITE_JUMP_IDS.includes(id) ? id : "";
+  if (SITE_JUMP_IDS.includes(id) || id === AIM_MATRIX_ID) return id;
+  return "";
+}
+
+export function openAimOverlay() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(AIM_OVERLAY_EVENT, { detail: { open: true } }));
+}
+
+export function closeAimOverlay() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(AIM_OVERLAY_EVENT, { detail: { open: false } }));
 }
 
 export function pageTravelPercent(scrollY, maxScroll) {

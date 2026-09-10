@@ -1,14 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SITE_JUMP_IDS, jumpLockOffset, pageTravelPercent, readJumpHash, sectionAtLockLine, siteJumpItems, trailChromeOffset } from "../src/siteJump.js";
+import { AIM_MATRIX_ID, SITE_JUMP_IDS, jumpLockOffset, pageTravelPercent, readJumpHash, sectionAtLockLine, siteJumpItems, trailChromeOffset } from "../src/siteJump.js";
 
-test("site jump catalog covers the eleven decks", () => {
+test("site jump catalog covers the eleven decks plus AI-Matrix overlay", () => {
   assert.equal(SITE_JUMP_IDS.length, 11);
+  assert.ok(!SITE_JUMP_IDS.includes(AIM_MATRIX_ID));
   assert.deepEqual(
     siteJumpItems({}).map((row) => row.id),
-    SITE_JUMP_IDS
+    [...SITE_JUMP_IDS, AIM_MATRIX_ID]
   );
   assert.equal(readJumpHash("#swap"), "swap");
+  assert.equal(readJumpHash("#ai-matrix"), AIM_MATRIX_ID);
   assert.equal(readJumpHash("#missing"), "");
   assert.equal(readJumpHash(""), "");
 });

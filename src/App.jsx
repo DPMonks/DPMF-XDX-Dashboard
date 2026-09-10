@@ -17,7 +17,7 @@ import XdxSwapPanel from "./components/XdxSwapPanel";
 import SiteJump from "./components/SiteJump";
 import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
-import AiMatrixPanel from "./components/AiMatrixPanel";
+import AiMatrixDrawer from "./components/AiMatrixDrawer";
 import Skeleton from "./components/Skeleton";
 import { handshake } from "./api";
 import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp, getWalletLp } from "./api/indexer";
@@ -491,10 +491,6 @@ export default function App() {
           <VotingContainer />
         </section>
 
-        <section className="dashboard-card neon-card aim-matrix-card" id="ai-matrix">
-          <h2 className="card-title">{t.aiMatrix || "AI-Matrix"}</h2>
-          <AiMatrixPanel />
-        </section>
       </div>
 
       <Footer />
@@ -518,6 +514,7 @@ export default function App() {
         />
       ) : null}
       <TradeExecuted />
+      <AiMatrixDrawer />
     </div>
   );
 }

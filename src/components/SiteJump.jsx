@@ -1,8 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "../i18n/useI18n";
 import {
+  AIM_MATRIX_ID,
+  AIM_OVERLAY_EVENT,
   SITE_JUMP_IDS,
   jumpLockOffset,
+  openAimOverlay,
   pageTravelPercent,
   readJumpHash,
   sectionAtLockLine,
@@ -75,6 +78,12 @@ export default function SiteJump() {
     let frame = 0;
     function read() {
       frame = 0;
+      if (readJumpHash(window.location.hash) === AIM_MATRIX_ID) {
+        setActive(AIM_MATRIX_ID);
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        setTravel(pageTravelPercent(window.scrollY, max));
+        return;
+      }
       const next = sectionAtLockLine(SITE_JUMP_IDS, lockOffset());
       const max = document.documentElement.scrollHeight - window.innerHeight;
       setActive((current) => (current === next ? current : next));
@@ -97,7 +106,7 @@ export default function SiteJump() {
 
   useEffect(() => {
     // Browser reload should land at the top of the page, not restore a deep deck hash
-    // (e.g. #ai-matrix near the bottom). Fresh hash navigations still scroll.
+    // (e.g. #ai-matrix). Fresh hash navigations still open/scroll.
     try {
       if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
     } catch {
@@ -114,23 +123,51 @@ export default function SiteJump() {
       setActive(SITE_JUMP_IDS[0]);
     } else {
       const want = readJumpHash(window.location.hash);
-      if (want) scrollToDeck(want);
+      if (want === AIM_MATRIX_ID) {
+        setActive(AIM_MATRIX_ID);
+        openAimOverlay();
+      } else if (want) {
+        scrollToDeck(want);
+      }
     }
 
     function onHash() {
       const next = readJumpHash(window.location.hash);
       if (!next) return;
       setActive(next);
+      if (next === AIM_MATRIX_ID) {
+        openAimOverlay();
+        return;
+      }
       scrollToDeck(next);
     }
+    function onAimOverlay(event) {
+      if (event?.detail?.open === true) {
+        setActive(AIM_MATRIX_ID);
+        return;
+      }
+      if (event?.detail?.open === false) {
+        setActive(sectionAtLockLine(SITE_JUMP_IDS, lockOffset()));
+      }
+    }
     window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    window.addEventListener(AIM_OVERLAY_EVENT, onAimOverlay);
+    return () => {
+      window.removeEventListener("hashchange", onHash);
+      window.removeEventListener(AIM_OVERLAY_EVENT, onAimOverlay);
+    };
   }, []);
 
   function lockOn(id) {
     setLocking(id);
     setActive(id);
     setOpen(false);
+    if (id === AIM_MATRIX_ID) {
+      if (window.history?.replaceState) window.history.replaceState(null, "", `#${id}`);
+      openAimOverlay();
+      window.setTimeout(() => setLocking(""), 700);
+      return;
+    }
     if (window.history?.replaceState) window.history.replaceState(null, "", `#${id}`);
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => scrollToDeck(id));
@@ -171,7 +208,7 @@ export default function SiteJump() {
                 key={row.id}
                 type="button"
                 role="listitem"
-                className={`${on ? "is-on" : ""}${locking === row.id ? " is-locking" : ""}`}
+                className={`${on ? "is-on" : ""}${locking === row.id ? " is-locking" : ""}${row.id === AIM_MATRIX_ID ? " is-overlay" : ""}`}
                 aria-current={on ? "location" : undefined}
                 title={row.label}
                 onClick={() => lockOn(row.id)}
