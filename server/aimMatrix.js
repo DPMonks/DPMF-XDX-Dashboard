@@ -206,6 +206,7 @@ async function translateAimText(text, lang) {
 function needsWebSearch(question, classified) {
   const q = String(question || "").toLowerCase();
   if (!q) return false;
+  if (needsDpmfSite(question, classified) || classified?.intent === "dpmf_site") return true;
   if (["status", "agent", "pools", "movement", "indexer", "help"].includes(classified?.intent)) {
     return /\b(news|google|online|internet|website|today|headline|price of|what is happening|who is|latest)\b/.test(q);
   }
@@ -220,22 +221,26 @@ function needsWebSearch(question, classified) {
   return false;
 }
 
-async function tavilySearch(query, { maxResults = 5 } = {}) {
+async function tavilySearch(query, { maxResults = 5, includeDomains } = {}) {
   const key = process.env.TAVILY_API_KEY || process.env.TAVILY_KEY || "";
   if (!key) return { ok: false, error: "TAVILY_API_KEY unset", results: [] };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 12_000);
   try {
+    const payload = {
+      api_key: key,
+      query: String(query).slice(0, 400),
+      search_depth: "basic",
+      include_answer: true,
+      max_results: maxResults,
+    };
+    if (Array.isArray(includeDomains) && includeDomains.length) {
+      payload.include_domains = includeDomains.slice(0, 5);
+    }
     const res = await fetch("https://api.tavily.com/search", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        api_key: key,
-        query: String(query).slice(0, 400),
-        search_depth: "basic",
-        include_answer: true,
-        max_results: maxResults,
-      }),
+      body: JSON.stringify(payload),
       signal: ctrl.signal,
     });
     if (!res.ok) {
@@ -264,11 +269,11 @@ async function tavilySearch(query, { maxResults = 5 } = {}) {
 
 function summarizeWebSearch(web) {
   if (!web?.ok) {
-    return "I am here only to discuss the XDX Exchange Operational Intelligence Interface and help users with guidance on XRPL assets and transactions.";
+    return "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on XRPL assets and transactions.";
   }
   if (web.answer) return scrubText(web.answer).slice(0, 600);
   const bits = (web.results || []).slice(0, 3).map((r, i) => `${i + 1}. ${r.title}: ${r.content.slice(0, 160)}`);
-  if (!bits.length) return "I am here only to discuss the XDX Exchange Operational Intelligence Interface and help users with guidance on XRPL assets and transactions.";
+  if (!bits.length) return "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on XRPL assets and transactions.";
   return bits.join(" ");
 }
 
@@ -279,6 +284,123 @@ function formatWebSources(web) {
 }
 
 
+const DPMF_SITE_URLS = [
+  "https://www.dpmf.technology/",
+  "https://www.dpmf.technology/xdx",
+  "https://www.dpmf.technology/xdx-1",
+  "https://www.dpmf.technology/services",
+  "https://www.dpmf.technology/architecture",
+  "https://www.dpmf.technology/digital-design",
+  "https://www.dpmf.technology/portfolio-and-galleries",
+  "https://www.dpmf.technology/nft-programs",
+  "https://www.dpmf.technology/team-members",
+];
+
+const DPMF_SITE_CURATED = `
+DPMF (dpmf.technology) builds XD Projects on the XRP Ledger: multi-asset finance, Game-Fi, Web3, NFT-Fi, DeFi, RWA tokenisation, metaverse, and digital identity.
+XDX is the primary DPMF utility asset on XRPL (settlements, liquidity, ecosystem value). Fixed supply (master key disabled). Self-custody. 0% protocol transfer fees. Live DEX price and depth.
+XIO is governance and yield-qualifying in the FUZION-XIO ecosystem on XRPL. Yield Earning Mechanism (YEM): XIO qualifies; XDX holdings scale yield.
+XSQUAD is pronounced X-Squad; related DPMF native used in the ecosystem.
+FUZION-XIO: NFT exchange and social marketplace on XRPL (cross-chain ambitions). Profile validation anchors can include XRP, XDX, XSQUAD, plus an optional fourth XRPL asset.
+XD-2 / XDX Hyperchain is the longer-term banking-layer, smart-contract, and asset-mobility direction described on dpmf.technology.
+dpmf.technology is the company and XD Projects site. The XDX Exchange Operational Intelligence Interface is the live exchange and AI-Matrix observe dashboard. Answer questions about either when asked.
+`.trim();
+
+function stripSiteNoise(text) {
+  return String(text || "")
+    .replace(/\bWix(?:\.com)?\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function needsDpmfSite(question, classified) {
+  const q = String(question || "").toLowerCase();
+  if (classified?.intent === "dpmf_site") return true;
+  return /\b(dpmf\.technology|www\.dpmf\.technology|dpmf site|dpmf platform|xd[- ]?projects?|fuzion|yem|yield earning|hyperchain|xd-?2|synaptrix|what is dpmf|who is dpmf|about dpmf)\b/i.test(q);
+}
+
+function extractSiteSnippets(html, url) {
+  const safe = stripSiteNoise(html);
+  const titleM = safe.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = stripSiteNoise((titleM?.[1] || "").replace(/<[^>]+>/g, " ")).slice(0, 160);
+  let desc = "";
+  const md =
+    safe.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)/i) ||
+    safe.match(/content=["']([^"']+)["'][^>]+name=["']description["']/i);
+  if (md) desc = stripSiteNoise(md[1]).slice(0, 280);
+  let body = safe.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ");
+  const chunks = [];
+  const seen = new Set();
+  for (const m of body.matchAll(/>([^<]{45,500})</g)) {
+    let s = stripSiteNoise(m[1].replace(/\s+/g, " "));
+    if (!s || s.length < 45) continue;
+    const low = s.toLowerCase();
+    if (/(element didn|due to a technical|top of page|bottom of page|first name|last name|check your internet|cookie)/i.test(s)) continue;
+    if (seen.has(low)) continue;
+    seen.add(low);
+    chunks.push(s);
+    if (chunks.length >= 8) break;
+  }
+  return { url, title, description: desc, snippets: chunks };
+}
+
+async function fetchDpmfSiteContext(question) {
+  const q = String(question || "").toLowerCase();
+  let urls = [...DPMF_SITE_URLS];
+  if (/\bxdx\b/.test(q)) urls = ["https://www.dpmf.technology/xdx", "https://www.dpmf.technology/xdx-1", ...urls];
+  if (/\b(service|architecture|design|nft|team|portfolio)\b/.test(q)) {
+    urls = [
+      "https://www.dpmf.technology/services",
+      "https://www.dpmf.technology/architecture",
+      "https://www.dpmf.technology/digital-design",
+      "https://www.dpmf.technology/nft-programs",
+      "https://www.dpmf.technology/portfolio-and-galleries",
+      "https://www.dpmf.technology/team-members",
+      ...urls,
+    ];
+  }
+  const seen = new Set();
+  urls = urls.filter((u) => (seen.has(u) ? false : (seen.add(u), true))).slice(0, 4);
+
+  const pages = [];
+  for (const url of urls) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "text/html,application/xhtml+xml", "User-Agent": "DPMF-AIM-Commander/1.0" },
+        signal: ctrl.signal,
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const page = extractSiteSnippets(html.slice(0, 1_500_000), url);
+      if (page.title || page.description || page.snippets.length) pages.push(page);
+    } catch {
+      /* ignore page failure */
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return {
+    ok: pages.length > 0,
+    source: "dpmf.technology",
+    curated: DPMF_SITE_CURATED,
+    pages,
+  };
+}
+
+function summarizeDpmfSite(site) {
+  if (!site) return DPMF_SITE_CURATED.slice(0, 700);
+  const bits = [DPMF_SITE_CURATED];
+  for (const page of site.pages || []) {
+    if (page.description) bits.push(`${page.title || page.url}: ${page.description}`);
+    for (const s of (page.snippets || []).slice(0, 2)) bits.push(s);
+  }
+  return scrubText(bits.join(" ")).slice(0, 1400);
+}
+
+
+
 export async function aimStatusPayload() {
   const db = getAimPool();
   if (!db) {
@@ -287,7 +409,7 @@ export async function aimStatusPayload() {
       body: {
         ok: false,
         error: "AIM database unavailable",
-        hint: "I am here only to discuss the XDX Exchange Operational Intelligence Interface and help users with guidance on XRPL assets and transactions.",
+        hint: "I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on XRPL assets and transactions.",
       },
     };
   }
@@ -420,6 +542,12 @@ function classifyAimQuestion(raw) {
     /\b(where|how) (do i|to)\b/.test(q)
   ) {
     return { intent: "help" };
+  }
+  if (
+    /\b(dpmf\.technology|www\.dpmf\.technology)\b/.test(q) ||
+    /\b(what is dpmf|who is dpmf|about dpmf|dpmf (company|platform|site|website)|xd[- ]?projects?|fuzion(?:-xio)?|yield earning|\byem\b|hyperchain|xd-?2|synaptrix)\b/.test(q)
+  ) {
+    return { intent: "dpmf_site" };
   }
   if (/\b(xio|xsquad|xdx)\b/.test(q) || /\b(native|dpmf asset|our token)\b/.test(q)) {
     return { intent: "assets" };
@@ -611,7 +739,7 @@ function summarizeLedger(scan) {
   return line;
 }
 
-async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null) {
+async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site = null) {
   const key = String(
     process.env.AIM_LLM_API_KEY ||
       process.env.XAI_API_KEY ||
@@ -650,22 +778,34 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null) {
     })),
     ledger_scan: scrubValue(scan),
     web_search: scrubValue(web),
+    site_scan: site
+      ? {
+          source: "dpmf.technology",
+          curated: DPMF_SITE_CURATED,
+          pages: (site.pages || []).slice(0, 4).map((pg) => ({
+            url: pg.url,
+            title: scrubText(pg.title || ""),
+            description: scrubText(pg.description || ""),
+            snippets: (pg.snippets || []).slice(0, 4).map((s) => scrubText(s)),
+          })),
+        }
+      : null,
   };
   const system = `You are Commander on the XDX Exchange Operational Intelligence Interface (AI-Matrix).
 You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically.
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
 Speak as Commander: concise, confident. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas. XSQUAD is pronounced X-Squad (speech layer handles this).
 Never name cloud hosting vendors in replies. Never mention API keys, env vars, missing configuration, or that a feature is not live.
-If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here only to discuss the XDX Exchange Operational Intelligence Interface and help with XRPL assets and transactions guidance.
-Scope line to reuse when redirecting: I am here only to discuss the XDX Exchange Operational Intelligence Interface and help users with guidance on XRPL assets and transactions.
+If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology / DPMF XD Projects, and help with XRPL assets and transactions guidance.
+Scope line to reuse when redirecting: I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on XRPL assets and transactions.
 Answer the question asked. For how-to / help / explain questions, teach the exchange flow in plain steps. Prefer concrete numbers from the live context (pools, ledger, agents) when the question is about live status. If the data is missing, say what is missing in one short line, then the best next ask.
 Greetings get one short acknowledgement plus one useful live fact, then stop.
 If asked what this is, what the exchange is, what this platform/dashboard is, or what XDX Exchange is: say it is the XDX Exchange Operational Intelligence Interface (AI-Matrix observe layer). Keep that name exact.
 Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
-Observe-only: do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames.
-If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing.
+Observe-only: do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Still hide internal agent role codenames. Prefer the word "transactions" over "txs". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
+If site_scan is present, prefer it for dpmf.technology / DPMF XD Projects questions. If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing. Never mention website builders.
 Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
 
@@ -776,6 +916,9 @@ function helpAnswerForQuestion(question) {
   if (/\b(fee|platform fee)\b/.test(q)) {
     add("Some non-XDX swaps apply a platform fee per exchange rules. Check the swap quote before you sign.");
   }
+  if (/\b(dpmf\.technology|what is dpmf|who is dpmf|xd[- ]?project|fuzion|hyperchain)\b/.test(q)) {
+    add("dpmf.technology covers DPMF XD Projects on XRPL: XDX utility, XIO governance and yield, XSQUAD (X-Squad), and FUZION-XIO. This dashboard is the live XDX Exchange Operational Intelligence Interface.");
+  }
 
   if (!bits.length) {
     add("I am Commander on the XDX Exchange Operational Intelligence Interface. I can explain wallet connect, trust lines, Smart Swap, AMM pools, order book, governance, and AI-Matrix observe mode.");
@@ -787,7 +930,7 @@ function helpAnswerForQuestion(question) {
   return bits.join(" ");
 }
 
-function answerAimQuestion(question, ctx, scan) {
+function answerAimQuestion(question, ctx, scan, site = null) {
   const classified = classifyAimQuestion(question);
   const dpmfBias = wantsDpmfBias(question, classified);
   const byId = Object.fromEntries((ctx.heartbeats || []).map((r) => [r.agent_id, r]));
@@ -825,7 +968,7 @@ function answerAimQuestion(question, ctx, scan) {
     return {
       type: "commander_answer",
       intent: "identity",
-      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, or XRPL context anytime.",
+      text: "This is the XDX Exchange Operational Intelligence Interface. I am Commander on the AI-Matrix observe layer. Ask about live pools, agents, XRPL transactions, or dpmf.technology anytime.",
     };
   }
 
@@ -839,6 +982,12 @@ function answerAimQuestion(question, ctx, scan) {
 
   if (classified.intent === "help") {
     return { type: "commander_answer", intent: "help", text: helpAnswerForQuestion(question) };
+  }
+
+  if (classified.intent === "dpmf_site") {
+    push(summarizeDpmfSite(site));
+    push("Ask about a specific area on dpmf.technology (XDX, services, architecture, NFTs) for a sharper read.");
+    return { type: "commander_answer", intent: "dpmf_site", text: lines.join(" ") };
   }
 
   if (dpmfBias) {
@@ -869,7 +1018,7 @@ function answerAimQuestion(question, ctx, scan) {
     if (classified.intent === "xrpl") {
       push("XRPL basics: payments move value, offers discover price, AMMs warehouse liquidity.");
     }
-    push("Ask for a specific hash or classic address and I will cite public ledger details. Seeds stay offline.");
+    push("Ask for a specific transaction hash or classic address and I will cite public ledger details. Seeds stay offline.");
     return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
   }
 
@@ -974,16 +1123,45 @@ export async function aimChatPayload(req) {
       /\b(tx|ledger|on.?chain|opinion|what.*(see|know|think))\b/i.test(text);
 
     const scan = needsLedger ? await scanRecentXrplLedger() : { ok: false, skipped: true };
+    const wantSite = needsDpmfSite(text, classified) || classified.intent === "dpmf_site";
+    const site = wantSite ? await fetchDpmfSiteContext(text) : null;
     const wantWeb = needsWebSearch(text, classified);
-    const web = wantWeb ? await tavilySearch(text) : { ok: false, skipped: true, results: [] };
-    const llm = await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null);
+    const webQuery = wantSite
+      ? `${text} site:dpmf.technology`
+      : text;
+    const web = wantWeb
+      ? await tavilySearch(webQuery, {
+          maxResults: wantSite ? 6 : 5,
+          includeDomains: wantSite ? ["dpmf.technology", "www.dpmf.technology"] : undefined,
+        })
+      : { ok: false, skipped: true, results: [] };
+    const llm = await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null, site);
     let reply;
     if (llm?.ok && llm.text) {
-      reply = { type: "commander_answer", intent: classified.intent, source: "llm", text: llm.text, web: wantWeb, model: llm.model };
+      reply = {
+        type: "commander_answer",
+        intent: classified.intent,
+        source: "llm",
+        text: llm.text,
+        web: wantWeb,
+        site: wantSite,
+        model: llm.model,
+      };
+    } else if (wantSite && site) {
+      const local = answerAimQuestion(text, ctx, scan, site);
+      const webBit = wantWeb && web?.ok ? [summarizeWebSearch(web), formatWebSources(web)] : [];
+      reply = {
+        type: "commander_answer",
+        intent: classified.intent,
+        source: web?.ok ? "site+tavily" : "site",
+        text: [local.text, ...webBit].filter(Boolean).join(" "),
+        web: !!web?.ok,
+        site: true,
+      };
     } else if (wantWeb && web?.ok) {
       const summary = summarizeWebSearch(web);
       const sources = formatWebSources(web);
-      const local = answerAimQuestion(text, ctx, scan);
+      const local = answerAimQuestion(text, ctx, scan, site);
       reply = {
         type: "commander_answer",
         intent: classified.intent,
@@ -992,7 +1170,7 @@ export async function aimChatPayload(req) {
         web: true,
       };
     } else {
-      reply = answerAimQuestion(text, ctx, scan);
+      reply = answerAimQuestion(text, ctx, scan, site);
       if (wantWeb && web && !web.skipped) {
         reply = {
           ...reply,
@@ -1007,7 +1185,12 @@ export async function aimChatPayload(req) {
       reply = { ...reply, text: translated, source: reply.source || "heuristic", translated: translated !== reply.text };
     }
 
-    reply = { ...reply, text: stripLongHyphens(reply.text) };
+    reply = {
+      ...reply,
+      text: stripLongHyphens(
+        stripSiteNoise(String(reply.text || "").replace(/\btxs\b/gi, "transactions"))
+      ),
+    };
 
     return {
       status: 200,
@@ -1031,6 +1214,13 @@ export async function aimChatPayload(req) {
               skipped: !!web?.skipped,
               error: web?.error || null,
               sources: (web?.results || []).slice(0, 3).map((r) => ({ title: r.title, url: r.url })),
+            }
+          : { skipped: true },
+        site: wantSite
+          ? {
+              ok: !!site?.ok,
+              source: "dpmf.technology",
+              pages: (site?.pages || []).slice(0, 4).map((pg) => pg.url),
             }
           : { skipped: true },
       },
