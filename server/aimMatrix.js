@@ -512,6 +512,50 @@ async function fetchTopLpHolders({ limit = 5 } = {}) {
   return { ok: false, holders: [] };
 }
 
+
+async function fetchPlatformMarkets() {
+  const out = { ok: false, amm: null, orderbook: null };
+  for (const origin of platformOriginCandidates()) {
+    const base = String(origin).replace(/\/$/, "");
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    try {
+      const [ammRes, bookRes] = await Promise.all([
+        fetch(`${base}/api/amm`, { headers: { Accept: "application/json" }, signal: ctrl.signal }),
+        fetch(`${base}/api/orderbook?pair=XDX/XRP`, { headers: { Accept: "application/json" }, signal: ctrl.signal }),
+      ]);
+      if (ammRes.ok) {
+        const amm = await ammRes.json();
+        out.amm = {
+          pool: amm.pool || "XDX/XRP",
+          price: amm.price ?? amm.xdxUsd ?? null,
+          tvl: amm.tvl ?? amm.tvl_usd ?? null,
+          xrpUsd: amm.xrpUsd ?? null,
+        };
+      }
+      if (bookRes.ok) {
+        const book = await bookRes.json();
+        out.orderbook = {
+          pair: book.pair || "XDX/XRP",
+          best_bid: book.best_bid ?? null,
+          best_ask: book.best_ask ?? null,
+          mid: book.mid ?? null,
+          spread_bps: book.spread_bps ?? null,
+          bids: Array.isArray(book.bids) ? book.bids.length : null,
+          asks: Array.isArray(book.asks) ? book.asks.length : null,
+        };
+      }
+      out.ok = !!(out.amm || out.orderbook);
+      if (out.ok) return out;
+    } catch {
+      /* try next origin */
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return out;
+}
+
 function summarizeHolders(holders) {
   if (!holders?.ok || !holders.top) return "XDX rich list is unavailable right now.";
   const top = holders.top;
@@ -700,6 +744,14 @@ function classifyAimQuestion(raw) {
   ) {
     return { intent: "txs" };
   }
+  if (/\b(order ?book|best bid|best ask|spread)\b/.test(q)) return { intent: "orderbook" };
+  if (/\b(smart swap|swap)\b/.test(q)) return { intent: "swap" };
+  if (/\b(trade chart|trading chart|price chart|chart)\b/.test(q)) return { intent: "chart" };
+  if (/\b(create pool)\b/.test(q)) return { intent: "create_pool" };
+  if (/\b(vote|governance)\b/.test(q)) return { intent: "governance" };
+  if (/\b(wallet|connect|xaman|xumm|trust ?line)\b/.test(q) && !/\bholder/.test(q)) return { intent: "wallet" };
+  if (/\b(token details|details deck|xdx details)\b/.test(q)) return { intent: "details" };
+  if (/\b(activity chart|activity deck)\b/.test(q)) return { intent: "activity" };
   if (/\b(pool|amm|liquidity|xdx\/xrp)\b/.test(q)) return { intent: "pools" };
   if (/\b(mov(e|ing|ement)|recent|what.*(doing|happening)|activity|observe)\b/.test(q)) {
     return { intent: "movement" };
@@ -873,12 +925,12 @@ function summarizeLedger(scan) {
       if (s.destination) parts.push(`to ${shortAcct(s.destination)}`);
       return parts.join(" ");
     });
-    line += ` Examples as shown here: ${bits.join("; ")}.`;
+    line += ` Examples as seen below: ${bits.join("; ")}.`;
   }
   return line;
 }
 
-async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site = null, holders = null, lpHolders = null) {
+async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site = null, holders = null, lpHolders = null, markets = null) {
   const key = String(
     process.env.AIM_LLM_API_KEY ||
       process.env.XAI_API_KEY ||
@@ -919,6 +971,7 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
     web_search: scrubValue(web),
     richlist: scrubValue(holders),
     lp_richlist: scrubValue(lpHolders),
+    markets: scrubValue(markets),
     site_scan: site
       ? {
           source: "dpmf.technology",
@@ -937,7 +990,7 @@ Personality: calm British ops lead with dry wit, warm to serious traders, never 
 You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically using the dashboard itself (rich list, LP owners, AMM pools, order book, Smart Swap, trust lines, AI-Matrix).
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
 If asked who holds the most XDX, use richlist / holders context: the #1 wallet is typically DPMFBANK (account contains DPMFBANK). Point them to the XDX Rich list card.
-Never read aloud full transaction hashes. Say "as shown here" instead. Prefer "transactions" over "txs". Shorten long classic addresses when speaking.
+Never read aloud wallet addresses, transaction hashes, or sequence numbers. Say "as seen below" instead. Prefer "transactions" over "txs". Shorten long classic addresses when speaking.
 Speak as Commander: concise, confident, a little personality. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas. XSQUAD is pronounced X-Squad (speech layer handles this).
 Never name cloud hosting vendors in replies. Never mention API keys, env vars, missing configuration, or that a feature is not live.
 If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology / DPMF XD Projects, and help with XRPL assets and transactions guidance.
@@ -1003,17 +1056,20 @@ XDX Exchange Operational Intelligence Interface (this site):
 - Chat with Commander is ephemeral (not saved). Voice can read replies aloud.
 - AI-Matrix Agents 1-5 are observe-only in Phase 1 (no live trading from those workers). They watch pools/ledger for readiness.
 
-Core product areas on the dashboard:
-- Wallet / Connect: connect with Xaman (XUMM) to sign XRPL transactions.
-- Trust line: set a TrustSet for XDX (and other IOUs) before you can hold or receive that token.
-- Smart Swap: swap between assets using AMM pools; non-XDX pairs may include platform fee rules and LP governance checks.
-- Trading chart / Activity: market visuals for XDX.
-- Order book: XRPL DEX book for the selected pair.
-- AMM pools: list of XDX pools (e.g. XDX/XRP, XDX/RLUSD, XDX/XIO, XDX/XSQUAD) with depth and LP info.
-- Create pool: create a new XDX-related AMM pool (signed on XRPL).
-- Rich list / LP owners: holder and LP concentration views. Top XDX holder is typically the DPMFBANK wallet (account id contains DPMFBANK). Always use live richlist data for holder questions.
-- Pool governance / Vote: governance voting for pool parameters.
-- AI-Matrix: Commander chat + anonymized agent strip (heartbeats / movement). Public addresses and tx hashes may be shared when asked.
+Core product areas on the dashboard (JUMP TO decks 01-12 — use live platform data for each):
+- 01 Wallet: connect with Xaman (XUMM), see connected account, balances, trust lines. Never speak full addresses; say "as seen below".
+- 02 Details: XDX token details (issuer, supply narrative, on-ledger facts shown on that card).
+- 03 Trade chart: XDX price / trading chart visuals.
+- 04 Smart Swap: swap via XDX AMM pools; review quote; sign in Xaman. Non-XDX pairs may include platform fee / LP governance checks.
+- 05 Order book: live XRPL DEX book for the selected pair (bids/asks, mid, spread). Prefer live orderbook context when asked.
+- 06 Activity: XDX activity chart / recent market activity visuals.
+- 07 Rich list: ranked XDX holders. Top holder is typically DPMFBANK. Always use live richlist for holder questions.
+- 08 LP owners: ranked LP token holders by pool.
+- 09 Create pool: create a new XDX-related AMM pool (signed on XRPL).
+- 10 AMM pools: live pool list and depth (XDX/XRP, XDX/RLUSD, XDX/XIO, XDX/XSQUAD, …).
+- 11 Vote: pool governance voting for parameters.
+- 12 AI-Matrix: Commander chat + agent observe strip (heartbeats / movement). Phase 1 observe-only.
+Trust line: set TrustSet for XDX (and other IOUs) before holding/receiving that token.
 
 How XRPL basics map here:
 - Payments move value; OfferCreate/OfferCancel are the DEX book; AMMs hold pool liquidity.
@@ -1077,7 +1133,7 @@ function helpAnswerForQuestion(question) {
   return bits.join(" ");
 }
 
-function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpHolders = null) {
+function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpHolders = null, markets = null) {
   const classified = classifyAimQuestion(question);
   const dpmfBias = wantsDpmfBias(question, classified);
   const byId = Object.fromEntries((ctx.heartbeats || []).map((r) => [r.agent_id, r]));
@@ -1154,6 +1210,47 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       push("LP owners list is unavailable right now. Try the XDX LP Owners card on the dashboard.");
     }
     return { type: "commander_answer", intent: "lp_holders", text: lines.join(" ") };
+  }
+
+  if (classified.intent === "orderbook") {
+    const book = markets?.orderbook;
+    if (book) {
+      push(`Order book ${book.pair}: mid ${book.mid ?? "n/a"}, bid ${book.best_bid ?? "n/a"}, ask ${book.best_ask ?? "n/a"}.`);
+      push("Open the Order book deck for the full ladder.");
+    } else {
+      push("Open the Order book deck (05) for live bids and asks on the selected pair.");
+    }
+    return { type: "commander_answer", intent: "orderbook", text: lines.join(" ") };
+  }
+  if (classified.intent === "swap") {
+    push("Smart Swap (deck 04) routes through XDX AMM pools. Connect wallet, set any trust line you need, pick the pair, review the quote, then sign in Xaman.");
+    if (markets?.amm?.price != null) push(`Live XDX mark from the board is about ${markets.amm.price}.`);
+    return { type: "commander_answer", intent: "swap", text: lines.join(" ") };
+  }
+  if (classified.intent === "chart") {
+    push("Trade chart (deck 03) is the live XDX price view on this board. Pair it with Order book and Activity for context.");
+    if (markets?.amm?.price != null) push(`Mark price on the AMM card is about ${markets.amm.price}.`);
+    return { type: "commander_answer", intent: "chart", text: lines.join(" ") };
+  }
+  if (classified.intent === "wallet") {
+    push("Wallet (deck 01): Connect with Xaman to authorize XRPL actions. Trust lines live there too. I never need your seed, and I will not read addresses aloud; they appear as seen below.");
+    return { type: "commander_answer", intent: "wallet", text: lines.join(" ") };
+  }
+  if (classified.intent === "details") {
+    push("Details (deck 02) holds the XDX token facts on this board. Ask a sharper question if you want issuer, supply, or holder concentration tied to Rich list.");
+    return { type: "commander_answer", intent: "details", text: lines.join(" ") };
+  }
+  if (classified.intent === "activity") {
+    push("Activity (deck 06) shows recent XDX market activity on this dashboard. Use it with the Trade chart and Order book.");
+    return { type: "commander_answer", intent: "activity", text: lines.join(" ") };
+  }
+  if (classified.intent === "create_pool") {
+    push("Create pool (deck 09) lets you spin up a new XDX-related AMM pool. You sign the on-ledger setup in Xaman after reviewing the parameters.");
+    return { type: "commander_answer", intent: "create_pool", text: lines.join(" ") };
+  }
+  if (classified.intent === "governance") {
+    push("Vote (deck 11) is pool governance. Eligible LPs can vote on pool parameters from that card.");
+    return { type: "commander_answer", intent: "governance", text: lines.join(" ") };
   }
 
   if (dpmfBias) {
@@ -1298,6 +1395,10 @@ export async function aimChatPayload(req) {
       classified.intent === "lp_holders" || /\blp (owners?|holders?)\b/i.test(text)
         ? await fetchTopLpHolders({ limit: 8 })
         : null;
+    const wantMarkets =
+      ["orderbook", "swap", "chart", "pools", "snapshot", "status", "assets"].includes(classified.intent) ||
+      /\b(price|tvl|order ?book|amm|swap|chart)\b/i.test(text);
+    const markets = wantMarkets ? await fetchPlatformMarkets() : null;
     const wantSite = needsDpmfSite(text, classified) || classified.intent === "dpmf_site";
     const site = wantSite ? await fetchDpmfSiteContext(text) : null;
     const wantWeb = needsWebSearch(text, classified);
@@ -1310,7 +1411,7 @@ export async function aimChatPayload(req) {
           includeDomains: wantSite ? ["dpmf.technology", "www.dpmf.technology"] : undefined,
         })
       : { ok: false, skipped: true, results: [] };
-    const llm = await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null, site, holders, lpHolders);
+    const llm = await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null, site, holders, lpHolders, markets);
     let reply;
     if (llm?.ok && llm.text) {
       reply = {
@@ -1323,7 +1424,7 @@ export async function aimChatPayload(req) {
         model: llm.model,
       };
     } else if (wantSite && site) {
-      const local = answerAimQuestion(text, ctx, scan, site, holders, lpHolders);
+      const local = answerAimQuestion(text, ctx, scan, site, holders, lpHolders, markets);
       const webBit = wantWeb && web?.ok ? [summarizeWebSearch(web), formatWebSources(web)] : [];
       reply = {
         type: "commander_answer",
@@ -1336,7 +1437,7 @@ export async function aimChatPayload(req) {
     } else if (wantWeb && web?.ok) {
       const summary = summarizeWebSearch(web);
       const sources = formatWebSources(web);
-      const local = answerAimQuestion(text, ctx, scan, site, holders, lpHolders);
+      const local = answerAimQuestion(text, ctx, scan, site, holders, lpHolders, markets);
       reply = {
         type: "commander_answer",
         intent: classified.intent,
@@ -1345,7 +1446,7 @@ export async function aimChatPayload(req) {
         web: true,
       };
     } else {
-      reply = answerAimQuestion(text, ctx, scan, site, holders, lpHolders);
+      reply = answerAimQuestion(text, ctx, scan, site, holders, lpHolders, markets);
       if (wantWeb && web && !web.skipped) {
         reply = {
           ...reply,
