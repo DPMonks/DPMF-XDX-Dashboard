@@ -49,12 +49,12 @@ export default function SiteJump() {
   const { t } = useI18n();
   const uid = useId().replace(/:/g, "");
   const boxRef = useRef(null);
+  const travelRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [locking, setLocking] = useState("");
   const [active, setActive] = useState(() =>
     typeof window === "undefined" ? SITE_JUMP_IDS[0] : readJumpHash(window.location.hash) || SITE_JUMP_IDS[0]
   );
-  const [travel, setTravel] = useState(0);
   const items = siteJumpItems(t);
   const here = items.find((row) => row.id === active) || items[0];
 
@@ -76,29 +76,42 @@ export default function SiteJump() {
 
   useEffect(() => {
     let frame = 0;
+    let cachedLock = 64;
+    function refreshLock() {
+      cachedLock = lockOffset();
+      return cachedLock;
+    }
+    function paintTravel() {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const pct = pageTravelPercent(window.scrollY, max);
+      if (travelRef.current) travelRef.current.style.width = `${pct}%`;
+    }
     function read() {
       frame = 0;
       if (readJumpHash(window.location.hash) === AIM_MATRIX_ID) {
         setActive(AIM_MATRIX_ID);
-        const max = document.documentElement.scrollHeight - window.innerHeight;
-        setTravel(pageTravelPercent(window.scrollY, max));
+        paintTravel();
         return;
       }
-      const next = sectionAtLockLine(SITE_JUMP_IDS, lockOffset());
-      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const next = sectionAtLockLine(SITE_JUMP_IDS, cachedLock);
       setActive((current) => (current === next ? current : next));
-      setTravel(pageTravelPercent(window.scrollY, max));
+      paintTravel();
     }
     function onScroll() {
       if (frame) return;
       frame = window.requestAnimationFrame(read);
     }
+    function onResize() {
+      refreshLock();
+      onScroll();
+    }
+    refreshLock();
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
+    window.addEventListener("resize", onResize, { passive: true });
     const boot = window.requestAnimationFrame(onScroll);
     return () => {
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("resize", onResize);
       window.cancelAnimationFrame(boot);
       if (frame) window.cancelAnimationFrame(frame);
     };
@@ -193,7 +206,7 @@ export default function SiteJump() {
           <span className="site-jump-chevron" aria-hidden="true" />
         </button>
         <div className="site-jump-travel" aria-hidden="true">
-          <i style={{ width: `${travel}%` }} />
+          <i ref={travelRef} style={{ width: "0%" }} />
         </div>
       </div>
 

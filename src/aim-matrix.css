@@ -457,11 +457,14 @@
   transform: translate3d(100%, 0, 0);
   opacity: 1;
   visibility: visible;
-  will-change: transform;
   backface-visibility: hidden;
   transition: transform 0.48s cubic-bezier(0.25, 0.8, 0.25, 1);
   overflow: hidden;
   overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.aim-drawer-root.is-dragging .aim-drawer-panel {
+  will-change: transform;
 }
 .aim-drawer-root.is-open .aim-drawer-panel {
   transform: translate3d(0, 0, 0);
@@ -478,6 +481,7 @@
   padding: max(0.85rem, env(safe-area-inset-top, 0px)) 1rem 0.75rem 1.1rem;
   border-bottom: 1px solid rgba(120, 220, 255, 0.16);
   flex: 0 0 auto;
+  touch-action: pan-y;
 }
 .aim-drawer-kicker {
   margin: 0;
@@ -514,6 +518,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: 0.9rem 1rem max(1rem, env(safe-area-inset-bottom, 0px));
 }
 
@@ -528,6 +533,17 @@
     border-radius: 0;
   }
 }
+
+@media (max-width: 900px) {
+  .aim-drawer-body .aim-chat-log,
+  .aim-drawer-body .aim-moves ul,
+  .aim-drawer-body .aim-desk-book ul,
+  .aim-drawer-body .aim-desk-chatter ul {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 
 @media (min-width: 901px) and (max-width: 1200px) {
   .aim-drawer-panel {

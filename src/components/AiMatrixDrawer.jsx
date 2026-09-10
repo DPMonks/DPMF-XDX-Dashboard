@@ -116,31 +116,39 @@ export default function AiMatrixDrawer() {
     setOpenPanel(false);
   }
 
-  function onTouchStart(event) {
+  function onHeadTouchStart(event) {
     if (!open) return;
     const touch = event.changedTouches?.[0];
     if (!touch) return;
-    touchRef.current = { x: touch.clientX, y: touch.clientY };
-    setDragging(true);
+    touchRef.current = { x: touch.clientX, y: touch.clientY, axis: null, dx: 0 };
   }
 
-  function onTouchMove(event) {
+  function onHeadTouchMove(event) {
     const start = touchRef.current;
     const touch = event.changedTouches?.[0];
     if (!start || !touch) return;
     const dx = touch.clientX - start.x;
     const dy = touch.clientY - start.y;
-    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) {
-      touchRef.current = null;
-      setDragging(false);
-      setDragX(0);
-      return;
+    if (!start.axis) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      start.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      if (start.axis === "y") {
+        touchRef.current = null;
+        if (dragging) setDragging(false);
+        if (dragX) setDragX(0);
+        return;
+      }
+      setDragging(true);
     }
-    if (dx > 0) setDragX(dx);
+    if (start.axis !== "x") return;
+    const next = dx > 0 ? dx : 0;
+    start.dx = next;
+    if (next !== dragX) setDragX(next);
   }
 
-  function onTouchEnd() {
-    const dx = dragX;
+  function onHeadTouchEnd() {
+    const start = touchRef.current;
+    const dx = start?.dx ?? dragX;
     touchRef.current = null;
     setDragging(false);
     if (dx >= SWIPE_CLOSE_PX) {
@@ -186,12 +194,14 @@ export default function AiMatrixDrawer() {
           aria-modal="true"
           aria-label={t.aiMatrix || "AI-Matrix"}
           style={panelStyle}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          onTouchCancel={onTouchEnd}
         >
-          <header className="aim-drawer-head">
+          <header
+            className="aim-drawer-head"
+            onTouchStart={onHeadTouchStart}
+            onTouchMove={onHeadTouchMove}
+            onTouchEnd={onHeadTouchEnd}
+            onTouchCancel={onHeadTouchEnd}
+          >
             <div className="aim-drawer-head-copy">
               <p className="aim-drawer-kicker">{t.jumpAim || "AIM"}</p>
               <h2 className="aim-drawer-title">{t.aiMatrix || "AI-Matrix"}</h2>
