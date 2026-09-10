@@ -36,6 +36,7 @@ function pickVoice(lang) {
 /** Spoken forms for tickers/names (display text stays unchanged). */
 function pronounceForSpeech(text) {
   return String(text || "")
+    .replace(/\b[A-Fa-f0-9]{64}\b/g, "as shown here")
     .replace(/\bXSQUAD\b/gi, "X Squad")
     .replace(/\bX-?SQUAD\b/gi, "X Squad");
 }

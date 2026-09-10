@@ -399,6 +399,136 @@ function summarizeDpmfSite(site) {
   return scrubText(bits.join(" ")).slice(0, 1400);
 }
 
+function platformOriginCandidates() {
+  const list = [
+    process.env.AIM_PLATFORM_ORIGIN,
+    process.env.PUBLIC_SITE_URL,
+    process.env.VITE_SITE_ORIGIN,
+    "https://xdx-exchange.dpmf.technology",
+  ].filter(Boolean);
+  const seen = new Set();
+  return list.filter((u) => (seen.has(u) ? false : (seen.add(u), true)));
+}
+
+function holderDisplayName(account) {
+  const a = String(account || "");
+  if (/DPMFBANK/i.test(a)) return "DPMFBANK";
+  return null;
+}
+
+function shortAcct(account) {
+  const a = String(account || "");
+  if (a.length < 12) return a;
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
+
+function formatXdxAmount(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return String(n ?? "");
+  if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+  return String(Math.round(v));
+}
+
+async function fetchTopXdxHolders({ limit = 10 } = {}) {
+  for (const origin of platformOriginCandidates()) {
+    const base = String(origin).replace(/\/$/, "");
+    for (const path of ["/api/top-holders?snapshot=latest", "/api/top-holders-v2?snapshot=latest", "/api/top-holders"]) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10_000);
+      try {
+        const res = await fetch(`${base}${path}`, {
+          headers: { Accept: "application/json", "User-Agent": "DPMF-AIM-Commander/1.0" },
+          signal: ctrl.signal,
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        const rows = Array.isArray(data?.holders) ? data.holders : Array.isArray(data) ? data : [];
+        if (!rows.length) continue;
+        const holders = rows.slice(0, limit).map((r, i) => {
+          const account = r.account || r.address || "";
+          const name = holderDisplayName(account);
+          return {
+            rank: Number(r.rank) || i + 1,
+            account,
+            name,
+            label: name || shortAcct(account),
+            balance: Number(r.balance),
+            frozen: !!r.frozen,
+          };
+        });
+        return {
+          ok: true,
+          source: "xdx_richlist",
+          as_of: data.as_of || data.snapshot_day || null,
+          count: data.count || holders.length,
+          holders,
+          top: holders[0] || null,
+        };
+      } catch {
+        /* try next */
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+  return { ok: false, error: "richlist unavailable", holders: [] };
+}
+
+async function fetchTopLpHolders({ limit = 5 } = {}) {
+  for (const origin of platformOriginCandidates()) {
+    const base = String(origin).replace(/\/$/, "");
+    for (const path of ["/api/top-lp?snapshot=latest&pool=all", "/api/top-lp-holders?snapshot=latest", "/api/top-lp"]) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10_000);
+      try {
+        const res = await fetch(`${base}${path}`, {
+          headers: { Accept: "application/json", "User-Agent": "DPMF-AIM-Commander/1.0" },
+          signal: ctrl.signal,
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        const rows = Array.isArray(data?.holders) ? data.holders : Array.isArray(data?.rows) ? data.rows : Array.isArray(data) ? data : [];
+        if (!rows.length) continue;
+        return {
+          ok: true,
+          source: "xdx_lp_richlist",
+          holders: rows.slice(0, limit).map((r, i) => ({
+            rank: Number(r.rank) || i + 1,
+            account: r.account || "",
+            label: holderDisplayName(r.account) || shortAcct(r.account),
+            lp_balance: Number(r.lp_balance ?? r.balance),
+            pair: r.pool_name || r.pair || null,
+          })),
+        };
+      } catch {
+        /* next */
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+  return { ok: false, holders: [] };
+}
+
+function summarizeHolders(holders) {
+  if (!holders?.ok || !holders.top) return "XDX rich list is unavailable right now.";
+  const top = holders.top;
+  const nameBit = top.name ? `${top.name} (${shortAcct(top.account)})` : shortAcct(top.account);
+  const bal = formatXdxAmount(top.balance);
+  const runners = (holders.holders || [])
+    .slice(1, 4)
+    .map((h) => `#${h.rank} ${h.label} ${formatXdxAmount(h.balance)}`)
+    .join("; ");
+  let line = `XDX rich list: #1 is ${nameBit} with about ${bal} XDX.`;
+  if (top.name === "DPMFBANK") line += " That is the DPMFBANK wallet on this board.";
+  if (runners) line += ` Next: ${runners}.`;
+  line += " Open the XDX Rich list card on this dashboard for the full table.";
+  return line;
+}
+
+
 
 
 export async function aimStatusPayload() {
@@ -549,7 +679,17 @@ function classifyAimQuestion(raw) {
   ) {
     return { intent: "dpmf_site" };
   }
-  if (/\b(xio|xsquad|xdx)\b/.test(q) || /\b(native|dpmf asset|our token)\b/.test(q)) {
+  if (
+    /\b(rich ?list|top holders?|largest holders?|biggest holders?|highest (xdx )?holders?|who(?:'s| is|s)? (the )?(highest|top|biggest|largest).*holder|whale|concentration)\b/.test(q) ||
+    (/\bholder/.test(q) && /\b(xdx|top|highest|biggest|largest|rich)\b/.test(q)) ||
+    /\bdpmfbank\b/.test(q)
+  ) {
+    return { intent: "holders" };
+  }
+  if (/\b(lp owners?|lp holders?|liquidity providers?)\b/.test(q)) {
+    return { intent: "lp_holders" };
+  }
+  if (/\b(xio|xsquad)\b/.test(q) || /\b(native|dpmf asset|our token)\b/.test(q) || (/\bxdx\b/.test(q) && !/\bholder/.test(q))) {
     return { intent: "assets" };
   }
   if (
@@ -724,22 +864,21 @@ function summarizeLedger(scan) {
     .slice(0, 4)
     .map(([k, v]) => `${k} ${v}`)
     .join(", ");
-  let line = `Validated ledger ${scan.ledger_index}: ${scan.tx_count} txs (${top || "no expanded types"}).`;
+  let line = `Validated ledger ${scan.ledger_index}: ${scan.tx_count} transactions (${top || "no expanded types"}).`;
   const samples = Array.isArray(scan.samples) ? scan.samples : [];
   if (samples.length) {
     const bits = samples.slice(0, 3).map((s) => {
       const parts = [s.type || "Tx"];
-      if (s.hash) parts.push(`hash ${s.hash}`);
-      if (s.account) parts.push(`from ${s.account}`);
-      if (s.destination) parts.push(`to ${s.destination}`);
+      if (s.account) parts.push(`from ${shortAcct(s.account)}`);
+      if (s.destination) parts.push(`to ${shortAcct(s.destination)}`);
       return parts.join(" ");
     });
-    line += ` Examples: ${bits.join("; ")}.`;
+    line += ` Examples as shown here: ${bits.join("; ")}.`;
   }
   return line;
 }
 
-async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site = null) {
+async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site = null, holders = null, lpHolders = null) {
   const key = String(
     process.env.AIM_LLM_API_KEY ||
       process.env.XAI_API_KEY ||
@@ -778,6 +917,8 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
     })),
     ledger_scan: scrubValue(scan),
     web_search: scrubValue(web),
+    richlist: scrubValue(holders),
+    lp_richlist: scrubValue(lpHolders),
     site_scan: site
       ? {
           source: "dpmf.technology",
@@ -792,9 +933,12 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
       : null,
   };
   const system = `You are Commander on the XDX Exchange Operational Intelligence Interface (AI-Matrix).
-You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically.
+Personality: calm British ops lead with dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot.
+You are both live-ops observer and the exchange help box. When the user asks how anything works, explain clearly and practically using the dashboard itself (rich list, LP owners, AMM pools, order book, Smart Swap, trust lines, AI-Matrix).
 Be direct. Lead with the answer in the first sentence. Do not open with filler like "Pulling current signals", "Live observe context loaded", or a full status dump unless the user asked for status.
-Speak as Commander: concise, confident. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas. XSQUAD is pronounced X-Squad (speech layer handles this).
+If asked who holds the most XDX, use richlist / holders context: the #1 wallet is typically DPMFBANK (account contains DPMFBANK). Point them to the XDX Rich list card.
+Never read aloud full transaction hashes. Say "as shown here" instead. Prefer "transactions" over "txs". Shorten long classic addresses when speaking.
+Speak as Commander: concise, confident, a little personality. Never reuse a canned one-liner. Never use em dashes or en dashes; use periods or commas. XSQUAD is pronounced X-Squad (speech layer handles this).
 Never name cloud hosting vendors in replies. Never mention API keys, env vars, missing configuration, or that a feature is not live.
 If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology / DPMF XD Projects, and help with XRPL assets and transactions guidance.
 Scope line to reuse when redirecting: I am here only to discuss the XDX Exchange Operational Intelligence Interface, dpmf.technology, and help users with guidance on XRPL assets and transactions.
@@ -867,7 +1011,7 @@ Core product areas on the dashboard:
 - Order book: XRPL DEX book for the selected pair.
 - AMM pools: list of XDX pools (e.g. XDX/XRP, XDX/RLUSD, XDX/XIO, XDX/XSQUAD) with depth and LP info.
 - Create pool: create a new XDX-related AMM pool (signed on XRPL).
-- Rich list / LP owners: holder and LP concentration views.
+- Rich list / LP owners: holder and LP concentration views. Top XDX holder is typically the DPMFBANK wallet (account id contains DPMFBANK). Always use live richlist data for holder questions.
 - Pool governance / Vote: governance voting for pool parameters.
 - AI-Matrix: Commander chat + anonymized agent strip (heartbeats / movement). Public addresses and tx hashes may be shared when asked.
 
@@ -916,6 +1060,9 @@ function helpAnswerForQuestion(question) {
   if (/\b(fee|platform fee)\b/.test(q)) {
     add("Some non-XDX swaps apply a platform fee per exchange rules. Check the swap quote before you sign.");
   }
+  if (/\b(rich ?list|holder|dpmfbank)\b/.test(q)) {
+    add("Use the XDX Rich list card for ranked balances. The top holder is usually DPMFBANK. Ask me who is highest and I will read that board.");
+  }
   if (/\b(dpmf\.technology|what is dpmf|who is dpmf|xd[- ]?project|fuzion|hyperchain)\b/.test(q)) {
     add("dpmf.technology covers DPMF XD Projects on XRPL: XDX utility, XIO governance and yield, XSQUAD (X-Squad), and FUZION-XIO. This dashboard is the live XDX Exchange Operational Intelligence Interface.");
   }
@@ -930,7 +1077,7 @@ function helpAnswerForQuestion(question) {
   return bits.join(" ");
 }
 
-function answerAimQuestion(question, ctx, scan, site = null) {
+function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpHolders = null) {
   const classified = classifyAimQuestion(question);
   const dpmfBias = wantsDpmfBias(question, classified);
   const byId = Object.fromEntries((ctx.heartbeats || []).map((r) => [r.agent_id, r]));
@@ -972,13 +1119,16 @@ function answerAimQuestion(question, ctx, scan, site = null) {
     };
   }
 
-  push(
-    pickLine(seed, [
-      "Commander here. Fresh read.",
-      "Live observe context loaded.",
-      "Pulling current signals.",
-    ])
-  );
+  const skipOpener = ["help", "holders", "lp_holders", "dpmf_site", "txs", "xrpl", "identity", "greeting"].includes(classified.intent);
+  if (!skipOpener) {
+    push(
+      pickLine(seed, [
+        "Commander here.",
+        "On it.",
+        "Reading the board.",
+      ])
+    );
+  }
 
   if (classified.intent === "help") {
     return { type: "commander_answer", intent: "help", text: helpAnswerForQuestion(question) };
@@ -988,6 +1138,22 @@ function answerAimQuestion(question, ctx, scan, site = null) {
     push(summarizeDpmfSite(site));
     push("Ask about a specific area on dpmf.technology (XDX, services, architecture, NFTs) for a sharper read.");
     return { type: "commander_answer", intent: "dpmf_site", text: lines.join(" ") };
+  }
+
+  if (classified.intent === "holders") {
+    push(summarizeHolders(holders));
+    return { type: "commander_answer", intent: "holders", text: lines.join(" ") };
+  }
+
+  if (classified.intent === "lp_holders") {
+    if (lpHolders?.ok && lpHolders.holders?.length) {
+      const top = lpHolders.holders[0];
+      push(`LP owners board: #1 ${top.label} with about ${formatXdxAmount(top.lp_balance)} LP${top.pair ? ` on ${top.pair}` : ""}.`);
+      push("Open the XDX LP Owners card for the full table.");
+    } else {
+      push("LP owners list is unavailable right now. Try the XDX LP Owners card on the dashboard.");
+    }
+    return { type: "commander_answer", intent: "lp_holders", text: lines.join(" ") };
   }
 
   if (dpmfBias) {
@@ -1073,7 +1239,7 @@ function answerAimQuestion(question, ctx, scan, site = null) {
       else if (a.meta?.indexer?.skipped) bits.push(`${agentLabel(a.agent_id)} skipped HTTP`);
     }
     push(bits.length ? `Indexer path: ${bits.slice(0, 6).join("; ")}.` : "No indexer probe details yet.");
-    push("429s are noise; Postgres + selective XRPL scans keep eyes open.");
+    push("Those HTTP 429 indexer probes are rate-limit noise, not a broken exchange. Agents keep eyes open via Postgres and selective XRPL reads. The board you are looking at is still the source of truth.");
     return { type: "commander_answer", intent: classified.intent, text: lines.join(" ") };
   }
 
@@ -1123,6 +1289,15 @@ export async function aimChatPayload(req) {
       /\b(tx|ledger|on.?chain|opinion|what.*(see|know|think))\b/i.test(text);
 
     const scan = needsLedger ? await scanRecentXrplLedger() : { ok: false, skipped: true };
+    const wantHolders =
+      classified.intent === "holders" ||
+      classified.intent === "snapshot" ||
+      /\b(holder|rich ?list|dpmfbank|whale)\b/i.test(text);
+    const holders = wantHolders ? await fetchTopXdxHolders({ limit: 10 }) : null;
+    const lpHolders =
+      classified.intent === "lp_holders" || /\blp (owners?|holders?)\b/i.test(text)
+        ? await fetchTopLpHolders({ limit: 8 })
+        : null;
     const wantSite = needsDpmfSite(text, classified) || classified.intent === "dpmf_site";
     const site = wantSite ? await fetchDpmfSiteContext(text) : null;
     const wantWeb = needsWebSearch(text, classified);
@@ -1135,7 +1310,7 @@ export async function aimChatPayload(req) {
           includeDomains: wantSite ? ["dpmf.technology", "www.dpmf.technology"] : undefined,
         })
       : { ok: false, skipped: true, results: [] };
-    const llm = await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null, site);
+    const llm = await maybeLlmAnswer(text, ctx, scan, lang, wantWeb ? web : null, site, holders, lpHolders);
     let reply;
     if (llm?.ok && llm.text) {
       reply = {
@@ -1148,7 +1323,7 @@ export async function aimChatPayload(req) {
         model: llm.model,
       };
     } else if (wantSite && site) {
-      const local = answerAimQuestion(text, ctx, scan, site);
+      const local = answerAimQuestion(text, ctx, scan, site, holders, lpHolders);
       const webBit = wantWeb && web?.ok ? [summarizeWebSearch(web), formatWebSources(web)] : [];
       reply = {
         type: "commander_answer",
@@ -1161,7 +1336,7 @@ export async function aimChatPayload(req) {
     } else if (wantWeb && web?.ok) {
       const summary = summarizeWebSearch(web);
       const sources = formatWebSources(web);
-      const local = answerAimQuestion(text, ctx, scan, site);
+      const local = answerAimQuestion(text, ctx, scan, site, holders, lpHolders);
       reply = {
         type: "commander_answer",
         intent: classified.intent,
@@ -1170,7 +1345,7 @@ export async function aimChatPayload(req) {
         web: true,
       };
     } else {
-      reply = answerAimQuestion(text, ctx, scan, site);
+      reply = answerAimQuestion(text, ctx, scan, site, holders, lpHolders);
       if (wantWeb && web && !web.skipped) {
         reply = {
           ...reply,

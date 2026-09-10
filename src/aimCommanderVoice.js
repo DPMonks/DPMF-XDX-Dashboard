@@ -110,6 +110,7 @@ function runTimedReveal(text, onProgress, onDone, { msPerChar = 28 } = {}) {
 
 function pronounceForSpeech(text) {
   return String(text || "")
+    .replace(/\b[A-Fa-f0-9]{64}\b/g, "as shown here")
     .replace(/\bXSQUAD\b/gi, "X Squad")
     .replace(/\bX-?SQUAD\b/gi, "X Squad");
 }
