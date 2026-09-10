@@ -29,7 +29,17 @@
 .aim-moves small { opacity: 0.65; }
 .aim-empty { opacity: 0.65; }
 @media (max-width: 960px) {
-  .aim-agent-strip, .aim-matrix-grid { grid-template-columns: 1fr; }
+  .aim-matrix {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .aim-matrix-head { order: 0; }
+  .aim-matrix-error { order: 1; }
+  .aim-matrix-grid { order: 2; grid-template-columns: 1fr; } /* chat above agents/desk */
+  .aim-agent-strip { order: 3; grid-template-columns: 1fr; }
+  .aim-desk-board { order: 4; }
+  .aim-desk-grid { grid-template-columns: 1fr; }
 }
 
 .aim-matrix-actions {
