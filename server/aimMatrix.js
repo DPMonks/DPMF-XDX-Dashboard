@@ -3586,13 +3586,18 @@ export async function aimChatPayload(req) {
 
     if (teachPersisted) {
       let t = String(reply.text || "").trimEnd();
-      // Strip false non-admin refuse copy the LLM sometimes invents even when teach_mode.is_admin.
+      // Strip false non-admin refuse sentences the LLM sometimes invents even when teach_mode.is_admin.
       t = t
-        .replace(/\b(only (the |a |verified )?admin wallets? can (issue|teach|train|give).{0,80}?)([.!]|$)/gi, "")
-        .replace(/\b(teaching|desk directives?|training directives?|durable (lessons?|training)) (are|is) reserved.{0,100}?(admin wallet|verified).{0,40}?([.!]|$)/gi, "")
-        .replace(/\b(lesson cannot be logged|cannot (be )?logged|unverified).{0,60}?([.!]|$)/gi, "")
+        .split(/(?<=[.!?])\s+/)
+        .filter((sent) => {
+          const q = String(sent || "");
+          if (/\b(only (the |a |verified )?admin wallets? can|reserved (exclusively )?for (the )?(verified )?admin|lesson cannot be logged|cannot issue training|unverified admin)\b/i.test(q)) {
+            return false;
+          }
+          return q.trim().length > 0;
+        })
+        .join(" ")
         .replace(/\s{2,}/g, " ")
-        .replace(/\s+([.!?])/g, "$1")
         .trim();
       if (!/\b(logged|remembered|noted|lesson (saved|stored|recorded|logged)|got (it|that)|admin teach)\b/i.test(t)) {
         const pairBit = extractAimPairHint(text, chartContext);
