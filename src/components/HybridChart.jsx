@@ -46,6 +46,7 @@ import {
   pendingFromExecution,
 } from "../wallet/ledgerOrders";
 import { useWallet } from "../context/useWallet";
+import { buildChartSnapshot, publishChartSnapshot } from "../context/chartSnapshot";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { isPhoneDevice } from "../xaman/xamanClient";
 import { useI18n } from "../i18n/useI18n";
@@ -443,6 +444,50 @@ export default function HybridChart({
   const tapeRef = Number(candles[candles.length - 1]?.c) || Number(bands.mid) || livePrice || null;
   const aimDeskMarks = deskOrders ? buildDeskMarks(deskOrders, pair, tapeRef) : [];
   const aimEstimateMarks = estimate ? buildEstimateMarks(estimate, timeframe, tapeRef) : [];
+
+  useEffect(() => {
+    const last = candles.length ? candles[candles.length - 1] : null;
+    publishChartSnapshot(
+      buildChartSnapshot({
+        pair,
+        timeframe,
+        tool,
+        maType,
+        maPeriods,
+        magnet,
+        showVolume,
+        showRsi,
+        showArb,
+        hollow,
+        deskMarksCount: Array.isArray(aimDeskMarks) ? aimDeskMarks.length : 0,
+        estimateOn: Boolean(estimate) && Array.isArray(aimEstimateMarks) && aimEstimateMarks.length > 0,
+        drawings,
+        viewMin: view?.min,
+        viewMax: view?.max,
+        lastClose: last?.c,
+        livePrice,
+      })
+    );
+  }, [
+    pair,
+    timeframe,
+    tool,
+    maType,
+    maPeriods,
+    magnet,
+    showVolume,
+    showRsi,
+    showArb,
+    hollow,
+    aimDeskMarks,
+    aimEstimateMarks,
+    estimate,
+    drawings,
+    view,
+    candles,
+    livePrice,
+  ]);
+
   const showAimOverlays = Boolean(deskOrders || estimate);
   const events = microEvents({
     trades,

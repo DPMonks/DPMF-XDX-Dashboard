@@ -6,6 +6,8 @@ import { AIM_AGENT_IDS, AIM_COMMANDER_AVATAR, aimAgentLabel, aimAgentRole, aimAg
 import AimAgentName from "./AimAgentName";
 import AimAgentAvatar from "./AimAgentAvatar";
 import { useWallet } from "../context/useWallet";
+import { useChartSnapshot } from "../context/chartSnapshot";
+import { AIM_ADMIN_WALLET } from "../constants/ledger";
 import AimDeskSmartChart from "./AimDeskSmartChart";
 
 function ago(iso) {
@@ -20,6 +22,8 @@ function ago(iso) {
 
 export default function AiMatrixPanel({ onChartPropsChange = null, showInlineChart = true } = {}) {
   const { walletAddress } = useWallet();
+  const chartSnapshot = useChartSnapshot();
+  const isAimAdmin = Boolean(walletAddress) && walletAddress === AIM_ADMIN_WALLET;
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -151,8 +155,12 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
       const out = await postAimChat(message, {
         lang: langPref === "auto" ? "auto" : effectiveLang,
         wallet: walletAddress || null,
+        chart_context: chartSnapshot || null,
       });
-      const reply = out.reply?.body?.text || "Queued.";
+      let reply = out.reply?.body?.text || "Queued.";
+      if (out.teach_ack && !String(reply).includes(" ack")) {
+        reply = `${String(reply).trimEnd()} ack`;
+      }
       const replyLang = out.lang || effectiveLang;
       const replyId = `cmd-${Date.now()}`;
       setLocalChat((rows) => [
@@ -517,6 +525,11 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
               <p className="aim-empty">No chat yet. Ask how the exchange works, or about status, pools, swaps, trust lines, or XRPL context.</p>
             ) : null}
           </div>
+          {isAimAdmin ? (
+            <p className="aim-admin-teach-hint" style={{ margin: "0 0 6px", fontSize: 12, opacity: 0.85 }}>
+              Admin teach on. Direction lessons are remembered for Commander.
+            </p>
+          ) : null}
           <form className="aim-chat-form" onSubmit={onSend}>
             <input
               value={text}

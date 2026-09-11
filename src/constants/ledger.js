@@ -63,6 +63,8 @@ export const XDX_XSQUAD_LP_HEX = "03BA7FDC0F32F83750869CBA241B93F1C66A8EEB";
 
 // 1% XDX platform fee for swaps where neither side is XDX.
 export const XDX_FEE_TREASURY = "rDPMFBANKMexTKkC7e4n3ekD9HfhmWHva8";
+/** AIM Commander admin teach wallet (alias of fee treasury). Exact classic match only. */
+export const AIM_ADMIN_WALLET = XDX_FEE_TREASURY;
 export const XDX_PLATFORM_FEE_PCT = 1;
 
 // Non-XDX swaps require this much LP value in any one of these pools.

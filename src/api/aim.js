@@ -15,8 +15,12 @@ export async function getAimLocale() {
 /**
  * Ephemeral Commander chat. Pass classic `r…` address only (never seeds).
  * Server prefers an explicit r… in the message, else wallet/account/address.
+ * Optional chart_context: live HybridChart snapshot (pair/TF/tools/MA/overlays).
  */
-export async function postAimChat(message, { lang = "auto", wallet = null, account = null, address = null } = {}) {
+export async function postAimChat(
+  message,
+  { lang = "auto", wallet = null, account = null, address = null, chart_context = null, chartContext = null } = {}
+) {
   const classic =
     String(wallet || account || address || "").trim() || null;
   const payload = { message, lang };
@@ -24,6 +28,10 @@ export async function postAimChat(message, { lang = "auto", wallet = null, accou
     payload.wallet = classic;
     payload.account = classic;
     payload.address = classic;
+  }
+  const snap = chart_context || chartContext;
+  if (snap && typeof snap === "object") {
+    payload.chart_context = snap;
   }
   const res = await fetch("/api/aim/chat", {
     method: "POST",
