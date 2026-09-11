@@ -8,11 +8,19 @@ import { aimAgentShortName } from "../aimAgentNames";
 
 const PAIR = "XRP/RLUSD";
 const TF_OPTIONS = [
-  { id: "5m", label: "5m" },
-  { id: "15m", label: "15m" },
+  { id: "1D", label: "1D" },
   { id: "1h", label: "1H" },
+  { id: "15m", label: "15m" },
+  { id: "5m", label: "5m" },
 ];
-const DEFAULT_TF = "15m";
+const DEFAULT_TF = "1D";
+// Prefer long history on AIM desk chart. Caps keep SVG paint cheap.
+const AIM_HISTORY_BARS = {
+  "5m": 288,
+  "15m": 384,
+  "1h": 2160,
+  "1D": 780,
+};
 
 export const AIM_DESK_AGENT_COLORS = {
   agent1: "#38bdf8",
@@ -24,9 +32,9 @@ export const AIM_DESK_AGENT_COLORS = {
   commander: "#fbbf24",
 };
 
-const PAD = { l: 52, r: 10, t: 12, b: 22 };
-const W = 640;
-const H = 220;
+const PAD = { l: 54, r: 12, t: 14, b: 26 };
+const W = 720;
+const H = 360;
 
 function num(v) {
   const n = Number(v);
@@ -96,9 +104,31 @@ function formatPx(v) {
   return n.toFixed(5);
 }
 
-function windowCandles(rows, tf) {
-  const need = Math.max(36, visibleBarsForInterval(tf));
-  return (Array.isArray(rows) ? rows : []).slice(-need);
+function historyBarsForTf(tf) {
+  return AIM_HISTORY_BARS[tf] || Math.max(120, visibleBarsForInterval(tf));
+}
+
+/** Keep real OHLC only; take the newest N bars so the plot spans full width. */
+function selectAimCandles(rows, tf) {
+  const need = historyBarsForTf(tf);
+  const list = (Array.isArray(rows) ? rows : []).filter((c) => {
+    const o = num(c?.o);
+    const h = num(c?.h);
+    const l = num(c?.l);
+    const close = num(c?.c);
+    return o > 0 && h > 0 && l > 0 && close > 0;
+  });
+  return list.slice(-need);
+}
+
+function formatHistoryStart(ts) {
+  const n = Number(ts);
+  if (!(n > 0)) return "";
+  try {
+    return new Date(n).toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
 }
 
 function priceDomain(candles, marks = []) {
@@ -225,6 +255,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
   }, [book, prices, bands.mid]);
 
   const candles = useMemo(() => {
+    const want = historyBarsForTf(tf);
     const rows = composePairCandles({
       pair: PAIR,
       interval: tf,
@@ -236,9 +267,10 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
       livePrice: livePrice > 0 ? livePrice : bands.mid,
       now,
       windowed: false,
-      lookbackBars: visibleBarsForInterval(tf) + 40,
+      // Pull max available history from locked/compose (XRP/USD proxy for XRP/RLUSD).
+      lookbackBars: want + 80,
     });
-    return windowCandles(rows, tf);
+    return selectAimCandles(rows, tf);
   }, [tf, prices, livePrice, bands.mid, now]);
 
   const publicBookMarks = useMemo(() => {
@@ -324,18 +356,33 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
   const innerW = W - PAD.l - PAD.r;
   const innerH = H - PAD.t - PAD.b;
   const y = (p) => PAD.t + (1 - (p - domain.min) / Math.max(domain.max - domain.min, 1e-12)) * innerH;
-  const slot = candles.length > 1 ? innerW / candles.length : innerW;
-  const bodyW = Math.max(2, Math.min(10, slot * 0.62));
+  // Always stretch candles across the full plot width (even when history is thin).
+  const slot = candles.length > 0 ? innerW / candles.length : innerW;
+  const bodyW = Math.max(1.6, Math.min(14, slot * 0.72));
 
   const biasNote = useMemo(() => {
-    const hour = estimate?.bias_hour || estimate?.hour_bias || estimate?.trade_horizon;
-    const day = estimate?.bias_day || estimate?.day_bias;
+    const clean = (v) =>
+      String(v || "")
+        .replace(/[\u2010-\u2015\u2212\u00B7\u2022\u2026\uFFFD]/g, "-")
+        .replace(/\s+/g, " ")
+        .trim();
+    const hour = clean(estimate?.bias_hour || estimate?.hour_bias || estimate?.trade_horizon);
+    const day = clean(estimate?.bias_day || estimate?.day_bias);
     const bits = [];
-    if (hour) bits.push(`Hour ${String(hour)}`);
-    if (day) bits.push(`Day ${String(day)}`);
-    if (!bits.length && estimate?.chart_reason) bits.push(String(estimate.chart_reason).replace(/_/g, " "));
+    if (hour) bits.push(`Hour ${hour}`);
+    if (day) bits.push(`Day ${day}`);
+    if (!bits.length && estimate?.chart_reason) {
+      bits.push(clean(String(estimate.chart_reason).replace(/_/g, " ")));
+    }
     return bits.join(" | ");
   }, [estimate]);
+
+  const historyStart = formatHistoryStart(candles[0]?.t);
+  const historyNote = historyStart
+    ? `History from ${historyStart} (${candles.length} bars; all available)`
+    : candles.length
+      ? `${candles.length} bars`
+      : "";
 
   const last = candles[candles.length - 1];
   const lastPx = num(last?.c) || bands.mid || livePrice;
@@ -348,6 +395,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
           <h3>Smart chart</h3>
           <p className="aim-desk-chart-sub">
             Public book + desk OfferCreates. Commander estimate markers when live.
+            {historyNote ? ` | ${historyNote}` : ""}
             {biasNote ? ` | ${biasNote}` : ""}
           </p>
         </div>
@@ -396,20 +444,26 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
 
             {candles.map((c, i) => {
               const x = PAD.l + i * slot + slot / 2;
-              const up = Number(c.c) >= Number(c.o);
-              const yO = y(c.o);
-              const yC = y(c.c);
-              const yH = y(c.h);
-              const yL = y(c.l);
+              const o = Number(c.o);
+              const close = Number(c.c);
+              const hi = Number(c.h);
+              const lo = Number(c.l);
+              const up = close >= o;
+              const yO = y(o);
+              const yC = y(close);
+              const yH = y(hi);
+              const yL = y(lo);
+              const bodyTop = Math.min(yO, yC);
+              const bodyH = Math.max(1.8, Math.abs(yC - yO));
               return (
                 <g key={c.t || i} className={up ? "is-up" : "is-down"}>
                   <line className="aim-desk-chart-wick" x1={x} x2={x} y1={yH} y2={yL} />
                   <rect
                     className="aim-desk-chart-body"
                     x={x - bodyW / 2}
-                    y={Math.min(yO, yC)}
+                    y={bodyTop}
                     width={bodyW}
-                    height={Math.max(1.2, Math.abs(yC - yO))}
+                    height={bodyH}
                   />
                 </g>
               );
@@ -477,7 +531,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
           <li key={`leg-${m.key}`}>
             <i style={{ background: m.color }} />
             <span>
-              {m.label} ? {m.side} ? {formatPx(m.price)} ? {m.status}
+              {m.label} | {m.side} | {formatPx(m.price)} | {m.status}
             </span>
           </li>
         ))}

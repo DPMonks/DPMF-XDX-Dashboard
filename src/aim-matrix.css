@@ -357,7 +357,7 @@
 }
 
 
-/* Internal desk board (view-only Ã¢â‚¬â€ no public trade controls) */
+/* Internal desk board (view-only - no public trade controls) */
 .aim-desk-board { padding: 1rem 1.1rem; display: grid; gap: 0.85rem; margin-top: 0.85rem; }
 .aim-desk-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
 .aim-desk-kicker { margin: 0; opacity: 0.65; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -401,7 +401,7 @@
 .aim-desk-fill.is-blocked { color: #ffc9a8; opacity: 0.9; }
 
 
-/* Ã¢â‚¬â€Ã¢â‚¬â€ AI-Matrix right slide-over (over the exchange) Ã¢â‚¬â€Ã¢â‚¬â€ */
+/* ---- AI-Matrix right slide-over (over the exchange) ---- */
 .aim-edge-tab {
   position: fixed;
   top: 50%;
@@ -908,14 +908,14 @@ body.aim-drawer-open #root {
 .aim-desk-chart-fair { color: #fbbf24; }
 .aim-desk-chart-plot {
   width: 100%;
-  min-height: 180px;
+  min-height: 300px;
   overflow: hidden;
 }
 .aim-desk-chart-plot svg {
   width: 100%;
   height: auto;
   display: block;
-  max-height: 240px;
+  max-height: 380px;
 }
 .aim-desk-chart-grid {
   stroke: rgba(255, 255, 255, 0.06);
@@ -925,7 +925,7 @@ body.aim-drawer-open #root {
   fill: rgba(226, 232, 240, 0.55);
   font-size: 9px;
 }
-.aim-desk-chart-wick { stroke-width: 1; }
+.aim-desk-chart-wick { stroke-width: 1.25; stroke-linecap: round; }
 .aim-desk-chart-body { stroke-width: 0; }
 .aim-desk-chart-plot .is-up .aim-desk-chart-wick,
 .aim-desk-chart-plot .is-up .aim-desk-chart-body { stroke: #26a69a; fill: #26a69a; }
@@ -985,8 +985,10 @@ body.aim-drawer-open #root {
 @media (max-width: 900px) {
   .aim-desk-chart { padding: 0.65rem 0.7rem; }
   .aim-desk-chart-head { flex-direction: column; align-items: stretch; }
-  .aim-desk-chart-plot svg { max-height: 200px; }
+  .aim-desk-chart-plot { min-height: 240px; }
+  .aim-desk-chart-plot svg { max-height: 300px; }
   .aim-desk-chart-sub { font-size: 0.74rem; }
-  .aim-drawer-body .aim-desk-chart-plot svg { max-height: 180px; }
+  .aim-drawer-body .aim-desk-chart-plot { min-height: 220px; }
+  .aim-drawer-body .aim-desk-chart-plot svg { max-height: 280px; }
 }
 

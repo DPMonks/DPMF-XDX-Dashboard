@@ -140,7 +140,7 @@ export default function AiMatrixPanel() {
       {
         id: thinkingId,
         role: "commander",
-        text: "Composing…",
+        text: "Composing...",
         at: new Date().toISOString(),
         pending: true,
         reveal: 11,
@@ -287,13 +287,13 @@ export default function AiMatrixPanel() {
     const prop = a.proposal || a.meta?.trade_proposal || {};
     const fill = a.last_fill || a.meta?.last_fill || prop?.exec || null;
     let line = prop?.pair
-      ? `${prop.pair}${prop.urgency ? ` · ${prop.urgency}` : ""}`
+      ? `${prop.pair}${prop.urgency ? ` | ${prop.urgency}` : ""}`
       : (a.meta?.skill?.summary ? String(a.meta.skill.summary).slice(0, 48) : a.status || "watching");
     if (fill?.submitted) {
-      line = `Fill ${fill.engine_result || "ok"}${fill.hash ? ` ${String(fill.hash).slice(0, 8)}` : ""}${prop?.pair ? ` · ${prop.pair}` : ""}`;
+      line = `Fill ${fill.engine_result || "ok"}${fill.hash ? ` ${String(fill.hash).slice(0, 8)}` : ""}${prop?.pair ? ` | ${prop.pair}` : ""}`;
     } else if (fill?.blocked_by && !fill?.submitted) {
       const reason = fill.blocked_by_display || fill.blocked_by || "gated";
-      line = `Held · ${String(reason).slice(0, 42)}`;
+      line = `Held | ${String(reason).slice(0, 42)}`;
     }
     return {
       id: a.id,
@@ -369,19 +369,19 @@ export default function AiMatrixPanel() {
   const commanderEstimate = data?.commander?.estimate || data?.desk?.estimate || null;
 
   const commanderStatus = data?.commander
-    ? `${data.commander.status} · ${ago(data.commander.last_seen_at)}`
+    ? `${data.commander.status} | ${ago(data.commander.last_seen_at)}`
     : loading
-      ? "Connecting…"
+      ? "Connecting..."
       : "offline";
 
   return (
     <div className="aim-matrix" onPointerDown={() => { if (voiceOn) unlockCommanderAudio(); }}>
       <div className="aim-matrix-head">
         <div className="aim-matrix-head-main">
-          <p className="aim-matrix-kicker">Observe-only · ephemeral chat · no wallets shown</p>
+          <p className="aim-matrix-kicker">Observe-only | ephemeral chat | no wallets shown</p>
         <div className="aim-matrix-actions">
           <div className="aim-toolbar-item aim-lang">
-            <span className="aim-toolbar-kicker">XDX · Language</span>
+            <span className="aim-toolbar-kicker">XDX | Language</span>
             <button
               type="button"
               className={`aim-toolbar-btn aim-lang-btn ${langMenuOpen ? "is-open" : ""}`}
@@ -392,7 +392,7 @@ export default function AiMatrixPanel() {
             >
               <span className="aim-lang-btn-value">
                 {langPref === "auto"
-                  ? `Auto (${suggestedLang}${langSource ? ` · ${langSource}` : ""})`
+                  ? `Auto (${suggestedLang}${langSource ? ` | ${langSource}` : ""})`
                   : AIM_LANGUAGES.find((l) => l.code === langPref)?.label || langPref}
               </span>
               <span className="aim-lang-chevron" aria-hidden="true" />
@@ -402,7 +402,7 @@ export default function AiMatrixPanel() {
                 {AIM_LANGUAGES.map((l) => {
                   const label =
                     l.code === "auto"
-                      ? `Auto (${suggestedLang}${langSource ? ` · ${langSource}` : ""})`
+                      ? `Auto (${suggestedLang}${langSource ? ` | ${langSource}` : ""})`
                       : l.label;
                   const active = langPref === l.code;
                   return (
@@ -486,9 +486,9 @@ export default function AiMatrixPanel() {
                 >
                   <small>
                     {m.role === "you" ? "You" : m.role === "commander" ? "Commander" : "System"}
-                    {m.lang ? ` · ${m.lang}` : ""}
-                    {m.voiceEngine ? ` · ${m.voiceEngine}` : ""}
-                    {m.speaking ? " · live" : ""}
+                    {m.lang ? ` | ${m.lang}` : ""}
+                    {m.voiceEngine ? ` | ${m.voiceEngine}` : ""}
+                    {m.speaking ? " | live" : ""}
                   </small>
                   <p>
                     {revealed}
@@ -514,7 +514,7 @@ export default function AiMatrixPanel() {
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Ask Commander (not saved)…"
+              placeholder="Ask Commander (not saved)..."
               maxLength={2000}
               disabled={busy}
             />
@@ -620,7 +620,7 @@ export default function AiMatrixPanel() {
       <section className="aim-desk-board neon-inset" aria-label="Internal trading desk">
         <div className="aim-desk-head">
           <div>
-            <p className="aim-desk-kicker">Internal desk · view only</p>
+            <p className="aim-desk-kicker">Internal desk | view only</p>
             <h3>Desk status &amp; book</h3>
             <p className="aim-desk-summary">
               {data?.desk?.summary || "Waiting for AIM workers to publish proposals."}
@@ -652,7 +652,7 @@ export default function AiMatrixPanel() {
                     {a.usd_mark?.usd_equity != null ? (
                       <small className="aim-desk-usd">
                         USD {Number(a.usd_mark.usd_equity).toFixed(2)}
-                        {a.usd_mark.day_start_usd != null ? ` · day×${a.usd_mark.mult_vs_day_start != null ? Number(a.usd_mark.mult_vs_day_start).toFixed(2) : "-"}` : ""}
+                        {a.usd_mark.day_start_usd != null ? ` | day×${a.usd_mark.mult_vs_day_start != null ? Number(a.usd_mark.mult_vs_day_start).toFixed(2) : "-"}` : ""}
                         
                       </small>
                     ) : null}
@@ -665,7 +665,7 @@ export default function AiMatrixPanel() {
                     ) : null}
                     {prop?.xrp_thesis ? <small className="aim-desk-thesis">{prop.xrp_thesis}</small> : null}
                     {Array.isArray(prop?.ledger_tools) && prop.ledger_tools.length ? (
-                      <small className="aim-desk-tools">Tools {prop.ledger_tools.slice(0, 6).join(" · ")}</small>
+                      <small className="aim-desk-tools">Tools {prop.ledger_tools.slice(0, 6).join(" | ")}</small>
                     ) : null}
                   </li>
                 );
@@ -693,7 +693,7 @@ export default function AiMatrixPanel() {
                     </span>
                   </div>
                   <p>{m.text}</p>
-                  <small>{ago(m.created_at)} · {m.topic}</small>
+                  <small>{ago(m.created_at)} | {m.topic}</small>
                 </li>
               ))}
               {!(data?.desk?.chatter || []).length ? (
