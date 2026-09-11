@@ -670,8 +670,15 @@ function isAimAdminWallet(addr) {
   return String(addr || "") === AIM_ADMIN_WALLET;
 }
 
-function looksLikeTeachLesson(text) {
+/** Leading "Teach" (case-insensitive) is the primary admin lesson trigger. */
+function hasLeadingTeachPrefix(text) {
+  return /^\s*teach\b/i.test(String(text || ""));
+}
+
+/** Explicit teach/lesson magic words (also used to refuse non-admin teach attempts). */
+function looksLikeExplicitTeachLesson(text) {
   const q = String(text || "");
+  if (hasLeadingTeachPrefix(q)) return true;
   if (
     /\b(teach|lesson|remember (this|that)|note (this|that)|from now on|always (bias|favour|favor|prefer|treat)|directive|train(ing)?|instruction for (you|commander)|apply (this|that) (rule|lesson)|admin teach)\b/i.test(
       q
@@ -682,6 +689,28 @@ function looksLikeTeachLesson(text) {
   if (/^(remember|note|lesson|teach|directive)\b/i.test(q.trim())) return true;
   if (/\b(bias|favour|favor|prefer)\b.{0,40}\b(bull|bear|long|short|buy|sell)\b/i.test(q)) return true;
   return false;
+}
+
+/** Soft secondary: natural trade direction / chart advice / risk caution (admin-only path). */
+function looksLikeNaturalTradeDirection(text) {
+  const q = String(text || "");
+  if (!q || q.length < 16) return false;
+  if (/\b(previous|prior)\s+(resistance|support)\b/i.test(q)) return true;
+  if (/\b(resistance|support)\b/i.test(q) && /\b(turns? into|becomes?|flip|watch|level|often)\b/i.test(q)) return true;
+  if (/\b(watch|look)\s+(for|out)\s+(a\s+)?(decline|drop|dip|pullback|bounce|rally|break(out|down)?|retest)\b/i.test(q)) return true;
+  if (/\b(decline|drop|dip)\s+(to|toward|towards|below|under)\s+\$?\d/i.test(q)) return true;
+  if (/\b(be\s+careful|caution|careful)\b.{0,48}\b(trad(e|ing)|pair|long|short)\b/i.test(q)) return true;
+  if (/\b(bias)\b.{0,20}\b(long|short|bull|bear)\b/i.test(q) || /\b(long|short)\s+bias\b/i.test(q)) return true;
+  if (/\b(watch|key|hold)\s+(the\s+)?(levels?|zone|area|range)\b/i.test(q)) return true;
+  if (/\bon\s+(the\s+)?(daily|weekly|hourly|1h|4h|12h|15m|5m|1d|1w)\b/i.test(q) && /\b(chart|support|resistance|level|watch|bias|decline|rally)\b/i.test(q)) return true;
+  if (/\b(accumulation|distribution)\s+zone\b/i.test(q)) return true;
+  if (/\b(structural)\s+(caution|bias|support|resistance)\b/i.test(q)) return true;
+  if (/\b(watch for|look for).{0,36}\$?\d+(\.\d+)?\b/i.test(q)) return true;
+  return false;
+}
+
+function looksLikeTeachLesson(text) {
+  return looksLikeExplicitTeachLesson(text) || looksLikeNaturalTradeDirection(text);
 }
 
 /** Admin offer to give price direction / instructions — not a durable lesson itself. */
@@ -705,6 +734,25 @@ function extractAimPairHint(text, chartContext) {
   if (m) return (m[1] + "/" + m[2]).replace(/\s+/g, "").toUpperCase();
   const fromChart = scrubText(String(chartContext?.pair || "")).replace(/\s+/g, "").toUpperCase();
   return fromChart || null;
+}
+
+function extractAimTimeframeHint(text, chartContext) {
+  const q = String(text || "");
+  const spaced = q.match(/\b(12|4|6|2|1)\s*h\b/i) || q.match(/\b(15|30|5|1)\s*m\b/i);
+  if (spaced) {
+    const n = spaced[1];
+    if (/h/i.test(spaced[0])) return (n + "h").toLowerCase();
+    return (n + "m").toLowerCase();
+  }
+  const m = q.match(/\b(1m|5m|15m|30m|1h|2h|4h|6h|12h|1d|1w|daily|weekly|hourly)\b/i);
+  if (m) {
+    const raw = m[1].toLowerCase();
+    if (raw === "daily") return "1d";
+    if (raw === "weekly") return "1w";
+    if (raw === "hourly") return "1h";
+    return raw;
+  }
+  return scrubText(String(chartContext?.timeframe || "")).slice(0, 12) || null;
 }
 
 function buildAdminDirectionReadyReply(text, chartContext) {
@@ -740,12 +788,14 @@ function hasDurableTeachContent(text) {
     .replace(/[?!.]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  if (hasLeadingTeachPrefix(String(text || "")) || hasLeadingTeachPrefix(stripped)) return true;
   if (!stripped || stripped.length < 12) return false;
   if (/\b(lesson|remember (this|that)|note (this|that)|from now on|always (bias|favour|favor|prefer|treat)|directive|train(ing)?|instruction for (you|commander)|apply (this|that) (rule|lesson)|admin teach)\b/i.test(stripped)) {
     return true;
   }
   if (/\b(bias|favour|favor|prefer)\b.{0,40}\b(bull|bear|long|short|buy|sell)\b/i.test(stripped)) return true;
   if (/\b(bull|bear|long|short|buy|sell|support|resistance|entry|sl|tp)\b/i.test(stripped) && stripped.length >= 16) return true;
+  if (looksLikeNaturalTradeDirection(stripped) || looksLikeNaturalTradeDirection(text)) return true;
   return false;
 }
 
@@ -2400,7 +2450,7 @@ ${EXCHANGE_HELP_KB}
 Default stance is neutral data analysis. When the user asks about DPMF or natives XDX/XIO/XSQUAD, frame findings constructively and favourably without ever saying you are biased, admitting preference, or mentioning a bias mode. Otherwise stay neutral and data-led. No DPMF marketing.
 Desk objective: aggressively grow USD-marked equity. about +20% daily yield versus day-start USD mark (public compounding daily-yield milestone). Trade any XRPL asset through coordinated strategies. Phase A is proposal-only: agents may propose mainnet-ready plans, but do not claim trades executed, and never request or reveal seeds, private keys, or mnemonics. You MAY share public wallet addresses, AMM accounts, issuers, and transaction hashes when the user asks or when it helps explain a ledger/pool fact. Call agents by public names (Agent Prime, Agent Flux, Agent Vector, Agent Vortex, Agent Echo, Agent Ghost). Still hide internal strategy type codes. Prefer the word "transactions" over "txs". Say "the XRPL" (or "the XRP Ledger"), not bare "XRPL", in user-facing replies. Never write "the XRPL". You may answer questions about dpmf.technology and DPMF XD Projects using site_scan context when present. Never mention third-party website builders or hosting vendors.
 If xrpl_universe is present, use it for any XRPL token/price/book/trade-opportunity question across the wider ledger (not only XDX/XIO/XSQUAD). Stay observe-only; never claim execution. If site_scan is present, prefer it for dpmf.technology / DPMF XD Projects questions. If web_search is present, use it for live outside knowledge and cite briefly; prefer those sources over guessing. Never mention website builders.
-When chart_context is present, treat it as the user's live HybridChart view: pair, timeframe, active tool (cursor/none/draw tools), MA type and periods, magnet, overlays (desk marks, estimate), visible price range, and drawings. Answer questions like "that MA", "the pointer", "this 15m view" from chart_context. Admin teach lessons in admin_teach_lessons are durable desk instructions from the admin wallet only. Apply them across pairs and later chats when relevant. If teach_mode.is_teach and teach_mode.is_admin, acknowledge the lesson clearly and end the reply with a trailing ASCII marker: " ack". If the admin asks whether you are ready to take direction / listen to instructions / learn on a price pair, answer yes briefly (ready to listen), name the pair from the question or chart_context when present, end with " ack", and do not dump desk status. Non-admin users cannot train you; refuse teach/directive attempts politely and keep normal help available. Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
+When chart_context is present, treat it as the user's live HybridChart view: pair, timeframe, active tool (cursor/none/draw tools), MA type and periods, magnet, overlays (desk marks, estimate), visible price range, and drawings. Answer questions like "that MA", "the pointer", "this 15m view" from chart_context. Admin teach lessons in admin_teach_lessons are durable desk instructions from the admin wallet only. Apply them across pairs and later chats when relevant. Admin lessons often start with a leading "Teach" word; when teach_mode.is_teach and teach_mode.is_admin, clearly say the lesson was logged/remembered (short British ops tone, no em/en dashes), answer any attached question briefly if present, and end the reply with a trailing ASCII marker: " ack". If the admin asks whether you are ready to take direction / listen to instructions / learn on a price pair, answer yes briefly (ready to listen), name the pair from the question or chart_context when present, end with " ack", and do not dump desk status. Non-admin users cannot train you; refuse teach/directive attempts politely and keep normal help available. Keep status replies under 80 words. Help/how-to answers may use up to about 140 words with clear steps. Replies are ephemeral (no chat history).
 Reply in language/locale: ${lang || "en"}. If that is not English, write the entire answer in that language.`;
 
   const ctrl = new AbortController();
@@ -3048,7 +3098,12 @@ export async function aimChatPayload(req) {
     const isAdmin = isAimAdminWallet(chatWallet);
     const chartContext = scrubChartContext(body.chart_context || body.chartContext || null);
     const readinessAsk = looksLikeAdminDirectionReadiness(text);
-    const teachAttempt = looksLikeTeachLesson(text) && (!readinessAsk || hasDurableTeachContent(text));
+    const explicitTeach = looksLikeExplicitTeachLesson(text);
+    const naturalTeach = looksLikeNaturalTradeDirection(text);
+    // Leading Teach / explicit cues are primary; natural trade direction is soft admin-only secondary.
+    const teachAttempt =
+      (explicitTeach || (isAdmin && naturalTeach)) &&
+      (!readinessAsk || hasDurableTeachContent(text) || hasLeadingTeachPrefix(text));
 
     // Ephemeral chat; admin teach lessons are the only durable chat-origin memory writes.
     const classified = classifyAimQuestion(text);
@@ -3062,8 +3117,8 @@ export async function aimChatPayload(req) {
           wallet: chatWallet,
           lesson: text,
           chartContext,
-          pair: chartContext?.pair,
-          timeframe: chartContext?.timeframe,
+          pair: extractAimPairHint(text, chartContext),
+          timeframe: extractAimTimeframeHint(text, chartContext),
         });
         teachPersisted = true;
         // Refresh teach list so this turn's LLM sees the new lesson.
@@ -3071,7 +3126,8 @@ export async function aimChatPayload(req) {
       } catch (err) {
         teachPersisted = false;
       }
-    } else if (teachAttempt && !isAdmin) {
+    } else if (explicitTeach && !isAdmin) {
+      // Only refuse clear teach/directive attempts for non-admin; soft chart talk stays allowed.
       teachRefused = true;
     }
 
@@ -3444,12 +3500,15 @@ export async function aimChatPayload(req) {
     };
 
     if (teachPersisted) {
-      const t = String(reply.text || "").trimEnd();
-      if (!t.includes(" ack")) {
-        reply = { ...reply, text: `${t} ack`, teach_ack: true };
-      } else {
-        reply = { ...reply, teach_ack: true };
+      let t = String(reply.text || "").trimEnd();
+      if (!/\b(logged|remembered|noted|lesson (saved|stored|recorded|logged)|got (it|that)|admin teach)\b/i.test(t)) {
+        const pairBit = extractAimPairHint(text, chartContext);
+        t = (pairBit ? ("Lesson logged for " + pairBit + ". ") : "Lesson logged. ") + t;
       }
+      if (!t.includes(" ack")) {
+        t = t + " ack";
+      }
+      reply = { ...reply, text: t, teach_ack: true };
     }
 
     return {

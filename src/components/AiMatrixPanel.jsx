@@ -527,7 +527,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
           </div>
           {isAimAdmin ? (
             <p className="aim-admin-teach-hint" style={{ margin: "0 0 6px", fontSize: 12, opacity: 0.85 }}>
-              Admin teach on. Direction lessons are remembered for Commander.
+              Admin teach on. Start a lesson with Teach ... and Commander will log it with ack.
             </p>
           ) : null}
           <form className="aim-chat-form" onSubmit={onSend}>
