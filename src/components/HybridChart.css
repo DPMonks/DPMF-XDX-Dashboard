@@ -389,6 +389,7 @@
 .hybrid-heat,
 .hybrid-axis,
 .hybrid-pane-label,
+.hybrid-price-tick,
 .hybrid-place-layer {
   pointer-events: none;
 }
@@ -981,6 +982,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+.hybrid-axis.is-inline {
+  fill: #c8cce0;
+  font-size: 10px;
+}
+
+.hybrid-price-tick-bg {
+  fill: rgba(0, 0, 0, 0.88);
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1;
+}
+
+.hybrid-price-tick {
+  pointer-events: none;
+}
+
 .hybrid-axis.is-time {
   text-anchor: middle;
 }
@@ -1066,12 +1082,12 @@
 .hybrid-ohlc {
   position: absolute;
   top: 6px;
-  left: 88px;
+  left: 12px;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 8px;
-  max-width: min(520px, calc(100% - 98px));
+  max-width: min(520px, calc(100% - 24px));
   padding: 5px 8px;
   border-radius: 6px;
   background: rgba(7, 7, 8, 0.92);

@@ -38,7 +38,7 @@ import { ammImpact, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidit
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { fullViewPriceHeight } from "../src/chart/fullView.js";
-import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceTicks, timeTagOrigin, timeTagWidth, timeTicks } from "../src/chart/axis.js";
+import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceLabelWidth, priceTicks, timeTagOrigin, timeTagWidth, timeTicks } from "../src/chart/axis.js";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
   applyPlaceOffset,
@@ -643,6 +643,19 @@ test("chart time labels stay middle-anchored and the tag border is centered", ()
   const edge = timeTagOrigin(90, 108, { left: 84, right: 942 });
   assert.equal(edge.x, 84);
   assert.equal(edge.textX, 54);
+});
+
+
+test("formatAxisPrice uses nice round labels by magnitude", () => {
+  assert.equal(formatAxisPrice(1), "1");
+  assert.equal(formatAxisPrice(1.2), "1.2");
+  assert.equal(formatAxisPrice(1.25), "1.25");
+  assert.equal(formatAxisPrice(100), "100");
+  assert.equal(formatAxisPrice(125.5), "125.5");
+  assert.equal(formatAxisPrice(1000), "1000");
+  assert.equal(formatAxisPrice(125000), "125000");
+  assert.ok(priceLabelWidth("1.2") >= 28);
+  assert.ok(priceLabelWidth("125000") > priceLabelWidth("1"));
 });
 
 test("equalGrid spaces time and price lines the same on every timeframe", () => {

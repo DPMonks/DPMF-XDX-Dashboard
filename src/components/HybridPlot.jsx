@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
-import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, plotViewKey, priceTicks, timeTagOrigin, timeTagWidth } from "../chart/axis";
+import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, plotViewKey, priceLabelWidth, priceTicks, timeTagOrigin, timeTagWidth } from "../chart/axis";
 import { candleBodyBox, candleBodyWidth, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
@@ -12,9 +12,9 @@ import ChartEditBar from "./ChartEditBar";
 const VOL_H = 72;
 const RSI_H = 72;
 const PANE_GAP = 8;
-const GRID_COLS = 8;
-const GRID_ROWS = 6;
-const PAD = { l: 84, r: 18, t: 16, b: 36 };
+const PAD = { l: 8, r: 18, t: 16, b: 36 };
+const PRICE_HIT = 44;
+const TICK_COUNT = 6;
 const UP = "#26a69a";
 const DOWN = "#ef5350";
 
@@ -141,8 +141,8 @@ export default function HybridPlot({
     };
   }, [view, candles, innerW, futureBars, interval, PRICE_H]);
 
-  const yTicks = useMemo(() => priceTicks(scale.min, scale.max, 6), [scale.min, scale.max]);
-  const xTicks = useMemo(() => scale.ticks(6), [scale]);
+  const yTicks = useMemo(() => priceTicks(scale.min, scale.max, TICK_COUNT), [scale.min, scale.max]);
+  const xTicks = useMemo(() => scale.ticks(TICK_COUNT), [scale]);
   const volumes = useMemo(() => volumeWaveValues(candles), [candles]);
   const seenSet = new Set(seenTs);
   const freshBars = candles
@@ -247,7 +247,7 @@ export default function HybridPlot({
           return;
         }
         const mapped = clientToSvg(node, event.clientX, event.clientY, width, height);
-        if (mapped && mapped.x < PAD.l && mapped.y >= PAD.t && mapped.y <= PAD.t + PRICE_H) {
+        if (mapped && mapped.x < PAD.l + PRICE_HIT && mapped.y >= PAD.t && mapped.y <= PAD.t + PRICE_H) {
           const live = scaleRef.current;
           const span = Math.max(1e-12, Number(live?.max) - Number(live?.min));
           const anchorPrice = Number(live?.max) - ((mapped.y - PAD.t) / PRICE_H) * span;
@@ -308,7 +308,7 @@ export default function HybridPlot({
     const y = shifted.y;
     const t = scale.tAt ? scale.tAt(x) : scale.start + ((x - PAD.l) / innerW) * (scale.end - scale.start);
     const price = scale.max - ((y - PAD.t) / PRICE_H) * (scale.max - scale.min);
-    const inPriceGutter = y >= PAD.t - 2 && y <= plotBottom + 2 && x < PAD.l;
+    const inPriceGutter = y >= PAD.t - 2 && y <= plotBottom + 2 && x < PAD.l + PRICE_HIT;
     const inPrice = y >= PAD.t - 2 && y <= plotBottom + 2 && x >= PAD.l && x <= width - PAD.r;
     const inVolume = volH > 0 && y >= volTop && y <= volBottom && x >= PAD.l && x <= width - PAD.r;
     const inRsi = rsiH > 0 && y >= rsiTop && y <= rsiBottom && x >= PAD.l && x <= width - PAD.r;
@@ -365,9 +365,18 @@ export default function HybridPlot({
         hairH.setAttribute("y2", String(y));
       }
       if (priceTag && priceText) {
+        const label = formatAxisPrice(next.price);
+        const tagW = priceLabelWidth(label);
         priceTag.setAttribute("visibility", "visible");
-        priceTag.setAttribute("transform", `translate(0 ${y - 9})`);
-        priceText.textContent = formatAxisPrice(next.price);
+        priceTag.setAttribute("transform", `translate(${PAD.l + 4} ${y - 9})`);
+        const rect = priceTag.querySelector("rect");
+        if (rect) {
+          rect.setAttribute("width", String(tagW));
+          rect.setAttribute("x", "0");
+        }
+        priceText.setAttribute("x", String(tagW / 2));
+        priceText.setAttribute("textAnchor", "middle");
+        priceText.textContent = label;
       }
     } else {
       if (hairH) hairH.setAttribute("visibility", "hidden");
@@ -498,7 +507,7 @@ export default function HybridPlot({
   function onPointerDown(event) {
     const pointer = locate(event);
     if (!pointer) return;
-    if (event.button === 0 && pointer.inPriceGutter) {
+    if (event.button === 0 && pointer.inPriceGutter && tool === "cursor") {
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
       clickRef.current = null;
@@ -608,6 +617,10 @@ export default function HybridPlot({
   const hoverRsi = hoverCandle
     ? rsiValues[candles.findIndex((row) => row.t === hoverCandle.t)]
     : null;
+  const inspectPriceLabel = inspect ? formatAxisPrice(inspect.price) : "";
+  const inspectPriceTagW = inspect ? priceLabelWidth(inspectPriceLabel) : 0;
+  const inspectRsiLabel = Number.isFinite(hoverRsi) ? Number(hoverRsi).toFixed(1) : "";
+  const inspectRsiTagW = inspectRsiLabel ? priceLabelWidth(inspectRsiLabel) : 0;
   const rsiTagY =
     inspect && Number.isFinite(hoverRsi)
       ? Math.min(rsiBottom - 1, Math.max(rsiTop + 1, rsiY(hoverRsi)))
@@ -675,7 +688,6 @@ export default function HybridPlot({
         </defs>
 
         <rect className="hybrid-plot-bg" x="0" y="0" width={width} height={height} />
-        <rect className="hybrid-axis-gutter" x="0" y={PAD.t} width={PAD.l} height={PRICE_H} />
         <rect className="hybrid-plot-frame" x={PAD.l} y={PAD.t} width={innerW} height={PRICE_H} />
         {volH > 0 ? (
           <rect className="hybrid-plot-frame" x={PAD.l} y={volTop} width={innerW} height={volH} />
@@ -684,9 +696,20 @@ export default function HybridPlot({
           <rect className="hybrid-plot-frame" x={PAD.l} y={rsiTop} width={innerW} height={rsiH} />
         ) : null}
 
-        {equalGrid(GRID_ROWS, PAD.t, PRICE_H).map((y) => (
-          <line key={`gy-${y}`} className="hybrid-grid" x1={PAD.l} x2={width - PAD.r} y1={y} y2={y} />
-        ))}
+        {yTicks.map((price) => {
+          const y = scale.y(price);
+          const label = formatAxisPrice(price);
+          const tagW = priceLabelWidth(label);
+          return (
+            <g key={`gy-${price}`} className="hybrid-price-tick">
+              <line className="hybrid-grid" x1={PAD.l} x2={width - PAD.r} y1={y} y2={y} />
+              <rect className="hybrid-price-tick-bg" x={PAD.l + 4} y={y - 8} width={tagW} height={16} rx={3} />
+              <text className="hybrid-axis is-price is-inline" x={PAD.l + 4 + tagW / 2} y={y + 3.5} textAnchor="middle">
+                {label}
+              </text>
+            </g>
+          );
+        })}
         {volH > 0
           ? equalGrid(2, volTop, volH).map((y) => (
               <line key={`gvy-${y}`} className="hybrid-grid" x1={PAD.l} x2={width - PAD.r} y1={y} y2={y} />
@@ -697,18 +720,16 @@ export default function HybridPlot({
               <line key={`gry-${y}`} className="hybrid-grid" x1={PAD.l} x2={width - PAD.r} y1={y} y2={y} />
             ))
           : null}
-        {equalGrid(GRID_COLS, PAD.l, innerW).map((x) => (
-          <g key={`gx-${x}`}>
-            <line className="hybrid-grid is-time" x1={x} x2={x} y1={PAD.t} y2={plotBottom} />
-            {volH > 0 ? <line className="hybrid-grid is-time" x1={x} x2={x} y1={volTop} y2={volBottom} /> : null}
-            {rsiH > 0 ? <line className="hybrid-grid is-time" x1={x} x2={x} y1={rsiTop} y2={rsiBottom} /> : null}
-          </g>
-        ))}
-        {yTicks.map((price) => (
-          <text key={`yt-${price}`} className="hybrid-axis is-price" x={PAD.l - 8} y={scale.y(price) + 3} textAnchor="end">
-            {formatAxisPrice(price)}
-          </text>
-        ))}
+        {xTicks.map((stamp) => {
+          const x = scale.x(stamp);
+          return (
+            <g key={`gx-${stamp}`}>
+              <line className="hybrid-grid is-time" x1={x} x2={x} y1={PAD.t} y2={plotBottom} />
+              {volH > 0 ? <line className="hybrid-grid is-time" x1={x} x2={x} y1={volTop} y2={volBottom} /> : null}
+              {rsiH > 0 ? <line className="hybrid-grid is-time" x1={x} x2={x} y1={rsiTop} y2={rsiBottom} /> : null}
+            </g>
+          );
+        })}
         {xTicks.map((stamp) => {
           const x = scale.x(stamp);
           const labelX = axisLabelX(x, { min: PAD.l + 20, max: width - 20 });
@@ -990,7 +1011,7 @@ export default function HybridPlot({
           </g>
         ) : null}
         {volH > 0 ? (
-          <text className="hybrid-pane-label" x={PAD.l - 8} y={volTop + 11} textAnchor="end">
+          <text className="hybrid-pane-label" x={PAD.l + 6} y={volTop + 11}>
             VOL
           </text>
         ) : null}
@@ -1010,13 +1031,13 @@ export default function HybridPlot({
             <g clipPath={`url(#${rsiClipId})`}>
               {wavePath(rsiPoints) ? <path className="hybrid-rsi-line" d={wavePath(rsiPoints)} /> : null}
             </g>
-            <text className="hybrid-pane-label" x={PAD.l - 8} y={rsiTop + 11} textAnchor="end">
+            <text className="hybrid-pane-label" x={PAD.l + 6} y={rsiTop + 11}>
               RSI {rsiPeriod}
             </text>
-            <text className="hybrid-axis is-price" x={PAD.l - 8} y={rsiY(rsiOverbought) + 3} textAnchor="end">
+            <text className="hybrid-axis is-price is-inline" x={PAD.l + 6} y={rsiY(rsiOverbought) + 3}>
               {rsiOverbought}
             </text>
-            <text className="hybrid-axis is-price" x={PAD.l - 8} y={rsiY(rsiOversold) + 3} textAnchor="end">
+            <text className="hybrid-axis is-price is-inline" x={PAD.l + 6} y={rsiY(rsiOversold) + 3}>
               {rsiOversold}
             </text>
           </g>
@@ -1030,8 +1051,8 @@ export default function HybridPlot({
             <text ref={timeTextRef} x="54" y="13" textAnchor="middle" />
           </g>
           <g ref={priceTagRef} className="hybrid-cursor-tag is-price" visibility="hidden">
-            <rect x="2" y="0" width={PAD.l - 6} height="18" rx="3" />
-            <text ref={priceTextRef} x={PAD.l - 8} y="13" textAnchor="end" />
+            <rect x="0" y="0" width="40" height="18" rx="3" />
+            <text ref={priceTextRef} x="20" y="13" textAnchor="middle" />
           </g>
         </g>
         {inspect && !liveHair && Number.isFinite(inspectX) && Number.isFinite(inspectY) ? (
@@ -1044,17 +1065,17 @@ export default function HybridPlot({
                 {inspectWhen}
               </text>
             </g>
-            <g className="hybrid-cursor-tag is-price" transform={`translate(0 ${inspectY - 9})`}>
-              <rect x="2" y="0" width={PAD.l - 6} height="18" rx="3" />
-              <text x={PAD.l - 8} y="13" textAnchor="end">
-                {formatAxisPrice(inspect.price)}
+            <g className="hybrid-cursor-tag is-price" transform={`translate(${PAD.l + 4} ${inspectY - 9})`}>
+              <rect x="0" y="0" width={inspectPriceTagW} height="18" rx="3" />
+              <text x={inspectPriceTagW / 2} y="13" textAnchor="middle">
+                {inspectPriceLabel}
               </text>
             </g>
             {rsiTagY != null ? (
-              <g className="hybrid-cursor-tag is-price">
-                <rect x={2} y={rsiTagY - 9} width={PAD.l - 6} height={18} rx="3" />
-                <text x={PAD.l - 8} y={rsiTagY + 4} textAnchor="end">
-                  {Number(hoverRsi).toFixed(1)}
+              <g className="hybrid-cursor-tag is-price" transform={`translate(${PAD.l + 4} ${rsiTagY - 9})`}>
+                <rect x="0" y="0" width={inspectRsiTagW} height="18" rx="3" />
+                <text x={inspectRsiTagW / 2} y="13" textAnchor="middle">
+                  {inspectRsiLabel}
                 </text>
               </g>
             ) : null}

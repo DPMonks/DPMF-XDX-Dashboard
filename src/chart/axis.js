@@ -200,14 +200,28 @@ export function formatPriceLabel(value) {
   return num.toFixed(6);
 }
 
+/** Nice axis labels: 10s / 100s / 1000s steps, dollar-style 1 / 1.1 / 1.2. */
 export function formatAxisPrice(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
   if (num === 0) return "0";
   const abs = Math.abs(num);
-  if (abs >= 1) return abs >= 100 ? num.toFixed(2) : num.toFixed(4).replace(/\.?0+$/, "");
-  const digits = Math.max(4, Math.min(8, Math.ceil(-Math.log10(abs)) + 2));
-  return num.toFixed(digits);
+  if (abs >= 1000) return String(Math.round(num));
+  if (abs >= 100) {
+    const one = Math.round(num * 10) / 10;
+    if (Math.abs(one - Math.round(one)) < 1e-9) return String(Math.round(one));
+    return one.toFixed(1);
+  }
+  if (abs >= 1) {
+    return num.toFixed(2).replace(/\.?0+$/, "");
+  }
+  const digits = Math.max(2, Math.min(8, Math.ceil(-Math.log10(abs)) + 1));
+  return num.toFixed(digits).replace(/0+$/, "").replace(/\.$/, "") || "0";
+}
+
+export function priceLabelWidth(label) {
+  const text = String(label || "");
+  return Math.max(28, Math.ceil(text.length * 6.2 + 10));
 }
 
 export function formatAxisTime(t, { spanMs = 30 * DAY_MS, intervalId = "1D", locale = "en" } = {}) {
