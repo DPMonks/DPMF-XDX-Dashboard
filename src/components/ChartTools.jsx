@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DRAW_COLORS, LINE_STYLES, LINE_WIDTHS, TOOL_GROUPS, flyoutSections, groupForTool, toolMeta } from "../chart/drawings";
+import { DRAW_COLORS, LINE_STYLES, LINE_WIDTHS, TOOL_GROUPS, flyoutSections, groupForTool, isIdleTool, toggleTool, toolMeta } from "../chart/drawings";
 
 const ICONS = {
   cross: (
@@ -281,13 +281,13 @@ export default function ChartTools({
   const flyoutGroup = TOOL_GROUPS.find((group) => group.id === activeGroup && group.id !== "pointer");
   const sections = flyoutGroup ? flyoutSections(flyoutGroup.id) : [];
   const open = panel && sections.length > 0;
-  if (tool === "cursor" && panel) setPanel(false);
+  if (isIdleTool(tool) && panel) setPanel(false);
 
   useEffect(() => {
     if (!panel) return undefined;
     function onDoc(event) {
       if (rail.current?.contains(event.target)) return;
-      if (tool === "cursor") setPanel(false);
+      if (isIdleTool(tool)) setPanel(false);
     }
     document.addEventListener("pointerdown", onDoc);
     return () => document.removeEventListener("pointerdown", onDoc);
@@ -301,23 +301,21 @@ export default function ChartTools({
 
   function pickRail(id) {
     const group = groupForTool(id);
-    if (open && activeGroup === group.id) {
+    if (open && activeGroup === group.id && !isIdleTool(tool)) {
       setPanel(false);
       return;
     }
-    remember(id);
+    const next = toggleTool(tool, id);
+    if (!isIdleTool(next)) remember(next);
     onSelectTool(id);
-    setPanel(toolMeta(id).clicks > 0);
+    setPanel(toolMeta(next).clicks > 0);
   }
 
   function pickFlyout(id) {
-    if (tool === id) {
-      setPanel(false);
-      return;
-    }
-    remember(id);
+    const next = toggleTool(tool, id);
+    if (!isIdleTool(next)) remember(next);
     onSelectTool(id);
-    setPanel(toolMeta(id).clicks > 0);
+    setPanel(toolMeta(next).clicks > 0);
   }
 
   return (
@@ -325,7 +323,7 @@ export default function ChartTools({
       <div className="hybrid-tool-stack">
       {TOOL_GROUPS.map((group) => {
         const shown = group.tools.find((row) => row.id === remembered[group.id]) || group.tools[0];
-        const active = activeGroup === group.id && (group.id === "pointer" ? tool === "cursor" : tool !== "cursor");
+        const active = activeGroup === group.id && (group.id === "pointer" ? tool === "cursor" : !isIdleTool(tool));
         return (
           <button
             key={group.id}

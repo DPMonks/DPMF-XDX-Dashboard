@@ -4,7 +4,7 @@ import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAx
 import { candleBodyBox, candleBodyWidth, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
-import { applyPlaceOffset, canMoveHandle, clickIsPan, drawingToolbarAnchor, hitPlacedDrawing, shouldFollowCrosshair, snapPoint, toggleInspect } from "../chart/drawings";
+import { applyPlaceOffset, canMoveHandle, clickIsPan, drawingToolbarAnchor, hitPlacedDrawing, isIdleTool, shouldFollowCrosshair, snapPoint, toggleInspect } from "../chart/drawings";
 import { hideToolPreview, paintPlaceMark, paintToolPreview } from "../chart/paintPreview";
 import ChartDrawings from "./ChartDrawings";
 import ChartEditBar from "./ChartEditBar";
@@ -190,7 +190,7 @@ export default function HybridPlot({
     };
   }, []);
   useEffect(() => {
-    if (tool === "cursor") hideToolPreview(previewRef.current, placeMarkRef.current);
+    if (isIdleTool(tool)) hideToolPreview(previewRef.current, placeMarkRef.current);
   }, [tool]);
   useEffect(() => {
     inspectRef.current = inspect;
@@ -301,7 +301,7 @@ export default function HybridPlot({
     const mapped = clientToSvg(svgRef.current || event.currentTarget, event.clientX, event.clientY, width, height);
     if (!mapped) return null;
     const shifted =
-      place && tool !== "cursor"
+      place && !isIdleTool(tool)
         ? applyPlaceOffset(mapped, { tool, pad: PAD, width, plotBottom })
         : mapped;
     const x = shifted.x;
@@ -395,7 +395,7 @@ export default function HybridPlot({
   }
 
   function paintPlacement(next) {
-    const placing = tool !== "cursor";
+    const placing = !isIdleTool(tool);
     paintPlaceMark(placeMarkRef.current, {
       x: next?.x,
       y: next?.y,
@@ -488,7 +488,7 @@ export default function HybridPlot({
       return;
     }
     const pointer = locate(event);
-    const placing = tool !== "cursor";
+    const placing = !isIdleTool(tool);
     const next = placing && !drag ? locate(event, { place: true }) : pointer;
     const hit = drag ? { ...drag, handle: true } : hitAt(pointer);
     const overHandle = Boolean(hit?.handle);
@@ -631,7 +631,7 @@ export default function HybridPlot({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className={`hybrid-svg${tool !== "cursor" ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${priceDrag || pointerKind === "price" ? " is-price" : ""}${drag ? " is-grabbing" : pointerKind === "grab" ? " is-grab" : pointerKind === "edit" ? " is-edit" : ""}`}
+        className={`hybrid-svg${!isIdleTool(tool) ? " is-placing" : " is-pan"}${panDrag ? " is-panning" : ""}${priceDrag || pointerKind === "price" ? " is-price" : ""}${drag ? " is-grabbing" : pointerKind === "grab" ? " is-grab" : pointerKind === "edit" ? " is-edit" : ""}`}
         onPointerMove={onMove}
         onPointerLeave={() => {
           if (drag) return;
@@ -1043,7 +1043,7 @@ export default function HybridPlot({
           </g>
         ) : null}
 
-        <g className={`hybrid-crosshair is-live${tool !== "cursor" ? " is-place" : ""}`} pointerEvents="none">
+        <g className={`hybrid-crosshair is-live${!isIdleTool(tool) ? " is-place" : ""}`} pointerEvents="none">
           <line ref={hairVRef} visibility="hidden" x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={height - PAD.b} />
           <line ref={hairHRef} visibility="hidden" x1={PAD.l} x2={width - PAD.r} y1={PAD.t} y2={PAD.t} />
           <g ref={timeTagRef} className="hybrid-cursor-tag is-time" visibility="hidden">

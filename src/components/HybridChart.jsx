@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getAmm, getLiquidPairAmm, getLiquidPairBook, getOrderbooks, getPrices, getWalletActivity, getWalletOffers, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
-import { CHART_MA_PAD, CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, visibleBarsForInterval } from "../chart/intervals";
+import { CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, maHistoryPad, visibleBarsForInterval } from "../chart/intervals";
 import {
   averagesForWindow,
   clampPanOffset,
@@ -49,7 +49,7 @@ import { useWallet } from "../context/useWallet";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { isPhoneDevice } from "../xaman/xamanClient";
 import { useI18n } from "../i18n/useI18n";
-import { moveDrawingHandle, nextDrawingState, patchDrawingStyle, toolAfterDrawing } from "../chart/drawings";
+import { moveDrawingHandle, nextDrawingState, patchDrawingStyle, toggleTool, toolAfterDrawing } from "../chart/drawings";
 import ChartErrorBoundary from "./ChartErrorBoundary";
 import ChartTools from "./ChartTools";
 import HybridPlot from "./HybridPlot";
@@ -160,7 +160,7 @@ export default function HybridChart({
   const [barZoom, setBarZoom] = useState(null);
   const [priceZoom, setPriceZoom] = useState(1);
   const [priceShift, setPriceShift] = useState(0);
-  const [loadedBars, setLoadedBars] = useState(() => visibleBarsForInterval(DEFAULT_INTERVAL) + CHART_MA_PAD);
+  const [loadedBars, setLoadedBars] = useState(() => visibleBarsForInterval(DEFAULT_INTERVAL) + maHistoryPad([50]));
   const [seriesMeta, setSeriesMeta] = useState({ len: 0, head: 0 });
   const windowKey = `${pair}:${timeframe}`;
   const [activeWindow, setActiveWindow] = useState(windowKey);
@@ -371,9 +371,10 @@ export default function HybridChart({
     setBarZoom(null);
     setPriceZoom(1);
     setPriceShift(0);
-    setLoadedBars(baseVisible + CHART_MA_PAD);
+    setLoadedBars(baseVisible + maHistoryPad(maPeriods));
   }
-  const wantLoaded = Math.min(4000, visibleCount + Math.max(0, Number(panOffset) || 0) + CHART_MA_PAD + 32);
+  const maPad = maHistoryPad(maPeriods);
+  const wantLoaded = Math.min(4000, visibleCount + Math.max(0, Number(panOffset) || 0) + maPad + 32);
   if (Number.isFinite(wantLoaded) && wantLoaded > loadedBars) setLoadedBars(wantLoaded);
   const seriesHead = Number(series[0]?.t) || 0;
   if (series.length !== seriesMeta.len || seriesHead !== seriesMeta.head) {
@@ -481,9 +482,10 @@ export default function HybridChart({
   }
 
   function selectTool(id) {
-    setTool(id || "cursor");
+    const next = toggleTool(tool, id || "none");
+    setTool(next);
     setPending(null);
-    if (id && id !== "cursor") setSelected(null);
+    if (next !== "cursor") setSelected(null);
   }
 
   function undoDrawing() {
@@ -630,11 +632,21 @@ export default function HybridChart({
                 type="checkbox"
                 checked={maPeriods.includes(row.period)}
                 onChange={() =>
-                  setMaPeriods((current) =>
-                    current.includes(row.period)
+                  setMaPeriods((current) => {
+                    const next = current.includes(row.period)
                       ? current.filter((period) => period !== row.period)
-                      : [...current, row.period].sort((left, right) => left - right)
-                  )
+                      : [...current, row.period].sort((left, right) => left - right);
+                    setLoadedBars((bars) =>
+                      Math.max(
+                        bars,
+                        clampVisibleBars(barZoom ?? visibleBarsForInterval(timeframe), visibleBarsForInterval(timeframe)) +
+                          Math.max(0, Number(panOffset) || 0) +
+                          maHistoryPad(next) +
+                          32
+                      )
+                    );
+                    return next;
+                  })
                 }
               />
               <span style={{ color: row.color }}>{row.period}</span>

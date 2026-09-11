@@ -315,7 +315,19 @@ export function averagesForWindow({
   periods = [],
   periodMeta = MA_PERIODS,
 } = {}) {
-  const source = seedSeriesForAverages(series);
+  const rows = Array.isArray(series) ? series : [];
+  const view = Array.isArray(visible) ? visible : [];
+  const firstVisibleT = Number(view[0]?.t);
+  const maxPeriod = Math.max(0, ...periods.map((n) => Math.trunc(Number(n)) || 0));
+  // Prefer full series; when truncated, keep enough bars before the visible window for every period.
+  let windowed = rows;
+  if (Number.isFinite(firstVisibleT) && maxPeriod > 0 && rows.length) {
+    let startIdx = 0;
+    while (startIdx < rows.length && Number(rows[startIdx]?.t) < firstVisibleT) startIdx += 1;
+    const from = Math.max(0, startIdx - Math.max(maxPeriod * 2, maxPeriod + 32));
+    if (from > 0) windowed = rows.slice(from);
+  }
+  const source = seedSeriesForAverages(windowed.length ? windowed : rows);
   const closes = source.map((row) => row.c);
   const volumes = source.map((row) => row.v);
   return periods.map((period) => {
@@ -327,7 +339,7 @@ export function averagesForWindow({
     return {
       id: `${type}-${period}`,
       color,
-      values: (Array.isArray(visible) ? visible : []).map((row) => interpolateAverage(knots, row.t)),
+      values: view.map((row) => interpolateAverage(knots, row.t)),
     };
   });
 }

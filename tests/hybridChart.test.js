@@ -911,6 +911,9 @@ test("selecting the live tool again turns it off", () => {
   assert.equal(toggleTool("trend", "trend"), "cursor");
   assert.equal(toggleTool("trend", "ray"), "ray");
   assert.equal(toggleTool("ray", "cursor"), "cursor");
+  assert.equal(toggleTool("cursor", "cursor"), "none");
+  assert.equal(toggleTool("none", "cursor"), "cursor");
+  assert.equal(toggleTool("none", "none"), "none");
 });
 
 test("snapPoint locks to the nearest candle open high low or close", () => {

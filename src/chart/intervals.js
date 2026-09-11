@@ -1,4 +1,4 @@
-﻿export const CHART_PAIRS = ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO"];
+export const CHART_PAIRS = ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO"];
 
 export const INTERVALS = [
   { id: "1m", label: "1m", ms: 60_000 },
@@ -32,6 +32,16 @@ export const RANGE_WINDOWS = {
 export const DEFAULT_INTERVAL = "12h";
 export const CHART_VISIBLE_BARS = 280;
 export const CHART_MA_PAD = 200;
+
+/** Bars of history before the visible window so MA/SMA lines cover the full view. */
+export function maHistoryPad(periods = [], fallback = CHART_MA_PAD) {
+  const list = (Array.isArray(periods) ? periods : [])
+    .map((row) => Math.trunc(Number(row)))
+    .filter((n) => n > 1);
+  const need = list.length ? Math.max(...list) : 0;
+  // Extra headroom so carry/weekend stripping still leaves a full period of seed closes.
+  return Math.max(fallback, need > 0 ? need * 2 : fallback);
+}
 
 export function visibleBarsForInterval(id) {
   const ms = intervalMs(id);

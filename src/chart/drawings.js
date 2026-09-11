@@ -149,8 +149,17 @@ export function toolAfterDrawing(stay, tool) {
   return "cursor";
 }
 
+export function isPointerTool(tool) {
+  return tool === "cursor";
+}
+
+export function isIdleTool(tool) {
+  return !tool || tool === "cursor" || tool === "none";
+}
+
 export function toggleTool(current, next) {
-  if (!next || next === "cursor") return "cursor";
+  if (!next || next === "none") return "none";
+  if (next === "cursor") return current === "cursor" ? "none" : "cursor";
   return next === current ? "cursor" : next;
 }
 
