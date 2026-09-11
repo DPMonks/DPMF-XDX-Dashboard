@@ -52,8 +52,16 @@ import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { isPhoneDevice } from "../xaman/xamanClient";
 import { useI18n } from "../i18n/useI18n";
 import { moveDrawingHandle, nextDrawingState, patchDrawingStyle, toggleTool, toolAfterDrawing } from "../chart/drawings";
+import {
+  approxPlotClientPoint,
+  clientToOverlay,
+  drawingPlacementPoints,
+  runAiCursorScript,
+  toolIdForDrawing,
+} from "../chart/aiCursorDemo";
 import ChartErrorBoundary from "./ChartErrorBoundary";
 import ChartTools from "./ChartTools";
+import AiChartCursor from "./AiChartCursor";
 import HybridPlot from "./HybridPlot";
 import TradeBar from "./TradeBar";
 import "./HybridChart.css";
@@ -169,6 +177,11 @@ export default function HybridChart({
   const phone = isPhoneDevice();
   const [fullView, setFullView] = useState(false);
   const [estimateSide, setEstimateSide] = useState(null); // bull | bear | null
+  const [aiCursor, setAiCursor] = useState({ visible: false, x: 0, y: 0, phase: "", tool: null });
+  const bodyRef = useRef(null);
+  const plotWrapRef = useRef(null);
+  const aiRunRef = useRef(null);
+  const aiSkipRef = useRef(false);
   const chartAction = useChartAction();
   const [viewH, setViewH] = useState(() => (typeof window !== "undefined" ? window.innerHeight : 700));
 
@@ -180,6 +193,114 @@ export default function HybridChart({
       setEstimateSide(null);
     }
     // ask_side is chat-only; no overlay change until side chosen
+    if (chartAction.type !== "lay_tools") return undefined;
+
+    const drawingsIn = Array.isArray(chartAction.drawings) ? chartAction.drawings : [];
+    if (chartAction.show_estimate && chartAction.side) {
+      setEstimateSide(chartAction.side);
+    }
+
+    let cancelled = false;
+    aiSkipRef.current = false;
+    if (aiRunRef.current?.cancel) {
+      try {
+        aiRunRef.current.cancel();
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // Drop previous Commander prediction set, keep user drawings.
+    setDrawings((rows) => rows.filter((row) => !(row && (row.commander || row.source === "commander"))));
+
+    const bodyEl = bodyRef.current;
+    const plotEl = plotWrapRef.current?.querySelector("svg") || plotWrapRef.current;
+    if (!bodyEl || !drawingsIn.length) {
+      if (drawingsIn.length) {
+        setDrawings((rows) => [
+          ...rows.filter((row) => !(row && (row.commander || row.source === "commander"))),
+          ...drawingsIn.map((row) => ({ ...row, commander: true, source: "commander" })),
+        ]);
+      }
+      return undefined;
+    }
+
+    const startRect = bodyEl.getBoundingClientRect();
+    const start = { x: 24, y: 48 };
+    setAiCursor({ visible: true, x: start.x, y: start.y, phase: "wake", tool: null });
+
+    function onUserSkip() {
+      aiSkipRef.current = true;
+      if (aiRunRef.current?.cancel) aiRunRef.current.cancel();
+    }
+    bodyEl.addEventListener("pointerdown", onUserSkip, { once: true });
+
+    (async () => {
+      const placed = [];
+      for (const row of drawingsIn) {
+        if (cancelled || aiSkipRef.current) break;
+        const toolId = toolIdForDrawing(row);
+        setAiCursor((cur) => ({ ...cur, phase: "tool", tool: toolId }));
+        setTool(toolId === "hline" || toolId === "fib" || toolId === "fibext" || toolId === "trend" ? toolId : toolId);
+
+        const toolBtn =
+          bodyEl.querySelector(`[data-tool-id="${toolId}"]`) ||
+          bodyEl.querySelector(`[data-tool-group="${toolId === "fib" || toolId === "fibext" ? "fib" : toolId === "hline" ? "lines" : "lines"}"]`);
+        const steps = [];
+        const fromOverlay = { x: start.x, y: start.y };
+        if (toolBtn) {
+          const br = toolBtn.getBoundingClientRect();
+          const toClient = { x: br.left + br.width / 2, y: br.top + br.height / 2 };
+          const to = clientToOverlay(bodyEl, toClient) || fromOverlay;
+          steps.push({ type: "move", from: fromOverlay, to, ms: 420 });
+          steps.push({ type: "wait", ms: 160 });
+        }
+
+        const points = drawingPlacementPoints(row);
+        let lastOverlay = fromOverlay;
+        for (const point of points) {
+          const client = approxPlotClientPoint(plotEl, candles, view, point, plotHeight);
+          const to = clientToOverlay(bodyEl, client) || lastOverlay;
+          steps.push({ type: "move", from: lastOverlay, to, ms: 520 });
+          steps.push({ type: "wait", ms: 140 });
+          lastOverlay = to;
+        }
+        steps.push({ type: "wait", ms: 80 });
+
+        const run = runAiCursorScript(steps, {
+          onFrame: ({ x, y }) => {
+            if (cancelled) return;
+            setAiCursor((cur) => ({ ...cur, visible: true, x, y, phase: "draw", tool: toolId }));
+          },
+        });
+        aiRunRef.current = run;
+        await run.done;
+        if (cancelled || aiSkipRef.current) break;
+        placed.push({ ...row, commander: true, source: "commander" });
+        setDrawings((rows) => {
+          const kept = rows.filter((r) => !(r && (r.commander || r.source === "commander")));
+          return [...kept, ...placed];
+        });
+      }
+
+      if (aiSkipRef.current || cancelled) {
+        setDrawings((rows) => {
+          const kept = rows.filter((r) => !(r && (r.commander || r.source === "commander")));
+          return [...kept, ...drawingsIn.map((row) => ({ ...row, commander: true, source: "commander" }))];
+        });
+      }
+      setTool("cursor");
+      setPending(null);
+      setAiCursor({ visible: false, x: 0, y: 0, phase: "", tool: null });
+      bodyEl.removeEventListener("pointerdown", onUserSkip);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (aiRunRef.current?.cancel) aiRunRef.current.cancel();
+    };
+    // candles/view/plotHeight intentionally read fresh at effect start
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartAction]);
 
   useEffect(() => {
@@ -486,6 +607,7 @@ export default function HybridChart({
         viewMax: view?.max,
         lastClose: last?.c,
         livePrice,
+        candles,
       })
     );
   }, [
@@ -797,7 +919,14 @@ export default function HybridChart({
         </div>
       </div>
 
-      <div className="hybrid-body">
+      <div className="hybrid-body" ref={bodyRef}>
+        <AiChartCursor
+          visible={aiCursor.visible}
+          x={aiCursor.x}
+          y={aiCursor.y}
+          phase={aiCursor.phase}
+          label="AIM"
+        />
         <ChartTools
           tool={tool}
           color={drawColor}
@@ -814,6 +943,8 @@ export default function HybridChart({
           onClear={clearDrawings}
           onToggleMagnet={() => setMagnet((on) => !on)}
           onToggleStay={() => setStayDraw((on) => !on)}
+          aiFocusTool={aiCursor.tool}
+          aiOpenPanel={Boolean(aiCursor.visible && aiCursor.tool && aiCursor.tool !== "cursor")}
         />
 
         <div className="hybrid-main">
@@ -848,7 +979,7 @@ export default function HybridChart({
             ) : null}
           </div>
 
-          <div className="hybrid-plot-wrap">
+          <div className="hybrid-plot-wrap" ref={plotWrapRef}>
             <div className="hybrid-zoom" role="group" aria-label={t.chartZoom}>
               <label className="hybrid-toggle hybrid-ledger-toggle">
                 <input

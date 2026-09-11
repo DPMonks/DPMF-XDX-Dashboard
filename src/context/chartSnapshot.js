@@ -40,6 +40,28 @@ export function useChartSnapshot() {
   return useSyncExternalStore(subscribeChartSnapshot, getChartSnapshot, () => null);
 }
 
+function pickSwingHighLow(candles = []) {
+  const rows = Array.isArray(candles) ? candles : [];
+  let high = null;
+  let low = null;
+  for (const row of rows) {
+    const t = Number(row?.t);
+    const h = Number(row?.h);
+    const l = Number(row?.l);
+    if (!Number.isFinite(t)) continue;
+    if (Number.isFinite(h) && (!high || h > high.price)) high = { t, price: h };
+    if (Number.isFinite(l) && (!low || l < low.price)) low = { t, price: l };
+  }
+  const lastRow = rows.length ? rows[rows.length - 1] : null;
+  const last = lastRow
+    ? {
+        t: Number(lastRow.t),
+        price: Number(lastRow.c) || Number(lastRow.h) || Number(lastRow.l) || null,
+      }
+    : null;
+  return { high, low, last };
+}
+
 export function buildChartSnapshot({
   pair,
   timeframe,

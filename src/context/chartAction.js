@@ -31,12 +31,20 @@ export function publishChartAction(next) {
       : sideRaw === "bear" || sideRaw === "bearish" || sideRaw === "short"
         ? "bear"
         : null;
+  const drawings = Array.isArray(next.drawings)
+    ? next.drawings
+        .filter((row) => row && typeof row === "object" && row.kind)
+        .slice(0, 24)
+        .map((row) => ({ ...row, source: row.source || "commander", commander: true }))
+    : [];
   action = {
     type,
     side,
     timeframe: next.timeframe ? String(next.timeframe) : null,
     pair: next.pair ? String(next.pair) : null,
     label: next.label ? String(next.label) : "Estimate by AI-Matrix",
+    drawings,
+    show_estimate: Boolean(next.show_estimate),
     seq: ++seq,
     at: new Date().toISOString(),
   };

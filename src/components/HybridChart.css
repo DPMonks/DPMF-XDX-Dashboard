@@ -1469,3 +1469,37 @@
   font-size: 10px;
   pointer-events: none;
 }
+
+/* Commander AI cursor (distinct from user pointer) */
+.hybrid-body { position: relative; }
+.hybrid-ai-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  pointer-events: none;
+  will-change: transform;
+  filter: drop-shadow(0 0 6px rgba(14, 165, 233, 0.65));
+  transition: opacity 120ms ease;
+}
+.hybrid-ai-cursor-pointer { display: block; }
+.hybrid-ai-cursor-tag {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.92);
+  color: #041018;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: top;
+}
+.hybrid-ai-cursor.is-tool .hybrid-ai-cursor-tag,
+.hybrid-ai-cursor.is-draw .hybrid-ai-cursor-tag {
+  background: #38bdf8;
+}
+.hybrid-tool.is-ai-focus,
+.hybrid-flyout-tool.is-ai-focus {
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.85);
+}

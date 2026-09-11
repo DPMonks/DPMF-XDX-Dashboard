@@ -270,6 +270,8 @@ export default function ChartTools({
   onClear,
   onToggleMagnet,
   onToggleStay,
+  aiFocusTool = null,
+  aiOpenPanel = false,
 }) {
   const rail = useRef(null);
   const [panel, setPanel] = useState(false);
@@ -280,7 +282,7 @@ export default function ChartTools({
   const remembered = { ...lastTool, [activeGroup]: tool };
   const flyoutGroup = TOOL_GROUPS.find((group) => group.id === activeGroup && group.id !== "pointer");
   const sections = flyoutGroup ? flyoutSections(flyoutGroup.id) : [];
-  const open = panel && sections.length > 0;
+  const open = (panel || (aiOpenPanel && aiFocusTool && aiFocusTool !== "cursor")) && sections.length > 0;
   if (isIdleTool(tool) && panel) setPanel(false);
 
   useEffect(() => {
@@ -328,7 +330,13 @@ export default function ChartTools({
           <button
             key={group.id}
             type="button"
-            className={active ? "hybrid-tool active" : "hybrid-tool"}
+            data-tool-group={group.id}
+            data-tool-id={shown.id}
+            className={
+              active || (aiFocusTool && groupForTool(aiFocusTool).id === group.id)
+                ? "hybrid-tool active" + (aiFocusTool && groupForTool(aiFocusTool).id === group.id ? " is-ai-focus" : "")
+                : "hybrid-tool"
+            }
             style={active && shown.colors !== false ? { color } : undefined}
             onPointerDown={(event) => {
               event.preventDefault();
@@ -351,7 +359,12 @@ export default function ChartTools({
                   <button
                     key={row.id}
                     type="button"
-                    className={tool === row.id ? "hybrid-flyout-tool active" : "hybrid-flyout-tool"}
+                    data-tool-id={row.id}
+                    className={
+                      tool === row.id || aiFocusTool === row.id
+                        ? "hybrid-flyout-tool active" + (aiFocusTool === row.id ? " is-ai-focus" : "")
+                        : "hybrid-flyout-tool"
+                    }
                     style={tool === row.id && row.colors !== false ? { borderColor: color, color } : undefined}
                     onPointerDown={(event) => {
                       event.preventDefault();
