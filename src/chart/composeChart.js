@@ -5,6 +5,7 @@ import {
   clipCandleWicks,
   expandDailyToInterval,
   fillDailyGaps,
+  normalizeCandle,
   resampleCandles,
   ticksToCandles,
   wickClipOptions,
@@ -58,6 +59,19 @@ export function ticksFromTrades(rows = [], pair) {
     .filter(Boolean);
 }
 
+function normalizeCexTape(rows = [], intervalId = "15m") {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeCandle({ ...row, source: row?.source || "cex" }, intervalId))
+    .filter(Boolean)
+    .sort((left, right) => left.t - right.t);
+}
+
+/**
+ * Compose chart candles for a pair.
+ * XRP/RLUSD short TFs use real CEX OHLC (Bitstamp XRP/USD preferred) when
+ * cexCandles are provided. DEX book / desk / estimate stay as overlays.
+ * Do not invent dense DEX intraday history from daily Yahoo expands.
+ */
 export function composePairCandles({
   pair = "XDX/RLUSD",
   interval = "1D",
@@ -70,8 +84,29 @@ export function composePairCandles({
   now = Date.now(),
   windowed = true,
   lookbackBars,
+  cexCandles = [],
 } = {}) {
   const name = String(pair || "XDX/RLUSD").toUpperCase();
+  const cexTape = normalizeCexTape(
+    cexCandles,
+    isDailyOrLonger(interval) ? (interval === "1W" || interval === "3D" || interval === "1M" ? "1D" : interval) : interval
+  );
+
+  // XRP/RLUSD: CEX visual tape (RLUSD ~ USD). Skip synthetic daily->intraday expand.
+  if (name === "XRP/RLUSD" && cexTape.length) {
+    let candles = cexTape;
+    if (interval === "1W" || interval === "3D" || interval === "1M") {
+      candles = resampleCandles(candles, interval);
+    } else if (interval === "1D") {
+      candles = fillDailyGaps(candles, candles[0]?.t, now);
+    } else if (!isDailyOrLonger(interval)) {
+      candles = ticksToCandles(cexTape, interval, { continuous: false });
+    }
+    // Keep CEX bodies intact; DEX mid/book/desk remain overlays.
+    candles = clipCandleWicks(candles, wickClipOptions());
+    return windowed ? windowCandles(candles, range, now) : candles;
+  }
+
   let base = locked.pairs?.[name]?.candles || [];
 
   if (name === "XDX/RLUSD" && !base.length) {
@@ -82,7 +117,7 @@ export function composePairCandles({
     });
   }
 
-  // XRP/RLUSD daily history: RLUSD ~ USD, so reuse locked XRP/USD until native marks exist.
+  // XRP/RLUSD daily history fallback: RLUSD ~ USD, reuse locked XRP/USD until CEX loads.
   if (name === "XRP/RLUSD" && !base.length) {
     base = (locked.xrpUsd || [])
       .filter((row) => Number(row?.c) > 0 && Number(row?.t) > 0)
@@ -127,6 +162,12 @@ export function composePairCandles({
     candles = resampleCandles(candles, interval);
   }
   if (!isDailyOrLonger(interval)) {
+    // XRP/RLUSD without CEX: do not invent dense flat/wick session bars from daily.
+    // Keep coarse daily tape until /api/chart/cex-candles arrives.
+    if (name === "XRP/RLUSD") {
+      candles = clipCandleWicks(candles, wickClipOptions());
+      return windowed ? windowCandles(candles, range, now) : candles;
+    }
     const step = intervalMs(interval);
     const need = Math.min(
       4000,

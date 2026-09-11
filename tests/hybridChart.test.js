@@ -81,7 +81,7 @@ import {
 } from "../src/chart/drawings.js";
 
 test("CHART_PAIRS includes XRP/RLUSD hybrid pair", () => {
-  assert.deepEqual(CHART_PAIRS, ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD"]);
+  assert.deepEqual(CHART_PAIRS, ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO"]);
 });
 
 test("bucketTime uses UTC midnight and Monday weeks", () => {

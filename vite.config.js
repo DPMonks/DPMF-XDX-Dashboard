@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { attachIndexerProxy } from "./server/attachProxy.js";
 import { indexerOrigin } from "./server/proxyIndexer.js";
 import lockedCandles from "./src/data/lockedCandles.json" with { type: "json" };
+import { loadCexXrpUsdCandles } from "./server/cexOhlc.js";
 import { hasIndexerDatabase, readIndexerDb } from "./server/readIndexerDb.js";
 import {
   buildXamanPayload,
@@ -40,6 +41,47 @@ function xamanDevPlugin() {
                 : { error: xamanErrorMessage(data), code: data?.error?.code }
           )
         );
+        return;
+      }
+
+      if (req.url?.startsWith("/api/chart/cex-candles") && req.method === "GET") {
+        try {
+          const url = new URL(req.url, "http://localhost");
+          const interval = url.searchParams.get("interval") || url.searchParams.get("tf") || "15m";
+          const limit = Number(url.searchParams.get("limit") || 500);
+          const payload = await loadCexXrpUsdCandles({
+            interval,
+            limit: Number.isFinite(limit) ? limit : 500,
+          });
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.setHeader("Cache-Control", "public, max-age=15");
+          res.end(
+            JSON.stringify({
+              ok: true,
+              pair: payload.pair,
+              quote: "USD",
+              note: "RLUSD ~ USD; CEX tape for visual OHLC. Book overlays stay XRPL DEX.",
+              source: payload.source,
+              label: payload.label,
+              interval: payload.interval,
+              fetchId: payload.fetchId,
+              resampleTo: payload.resampleTo,
+              count: payload.count,
+              candles: payload.candles,
+            })
+          );
+        } catch (error) {
+          res.statusCode = 502;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: error?.message || "CEX OHLC unavailable",
+              code: error?.code || "CEX_OHLC_UNAVAILABLE",
+            })
+          );
+        }
         return;
       }
 

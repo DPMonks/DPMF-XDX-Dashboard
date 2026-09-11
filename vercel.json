@@ -76,6 +76,9 @@
     },
     "api/aim/speak.js": {
       "maxDuration": 30
+    },
+    "api/chart/cex-candles.js": {
+      "maxDuration": 20
     }
   },
   "rewrites": [

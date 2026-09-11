@@ -19,6 +19,7 @@ import {
 } from "../chart/candles";
 import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../chart/indicators";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
+import { defaultCexLimit, fetchCexCandles, usesCexTape } from "../chart/cexCandles";
 import { fullViewPriceHeight } from "../chart/fullView";
 import { quotePerXdx } from "../chart/pairQuote";
 import {
@@ -142,6 +143,8 @@ export default function HybridChart() {
   const [prices, setPrices] = useState({});
   const [trades, setTrades] = useState([]);
   const [sparkline, setSparkline] = useState([]);
+  const [cexCandles, setCexCandles] = useState([]);
+  const [cexMeta, setCexMeta] = useState({ source: "", label: "" });
   const [drawings, setDrawings] = useState([]);
   const [selected, setSelected] = useState(null);
   const [pending, setPending] = useState(null);
@@ -158,6 +161,36 @@ export default function HybridChart() {
   const phone = isPhoneDevice();
   const [fullView, setFullView] = useState(false);
   const [viewH, setViewH] = useState(() => (typeof window !== "undefined" ? window.innerHeight : 700));
+
+  useEffect(() => {
+    if (!usesCexTape(pair)) {
+      setCexCandles([]);
+      setCexMeta({ source: "", label: "" });
+      return undefined;
+    }
+    let cancelled = false;
+    async function loadCex() {
+      try {
+        const want = defaultCexLimit(timeframe, loadedBars);
+        const payload = await fetchCexCandles({ interval: timeframe, limit: want });
+        if (cancelled) return;
+        setCexCandles(payload.candles || []);
+        setCexMeta({ source: payload.source || "", label: payload.label || "" });
+      } catch {
+        if (!cancelled) {
+          setCexCandles([]);
+          setCexMeta({ source: "", label: "" });
+        }
+      }
+    }
+    const start = setTimeout(loadCex, 0);
+    const id = setInterval(loadCex, 60_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(start);
+      clearInterval(id);
+    };
+  }, [pair, timeframe, loadedBars]);
 
   useEffect(() => {
     let cancelled = false;
@@ -319,8 +352,9 @@ export default function HybridChart() {
         now,
         windowed: false,
         lookbackBars: loadedBars,
+        cexCandles: usesCexTape(pair) ? cexCandles : [],
       }),
-    [pair, timeframe, sparkline, trades, prices, livePrice, now, loadedBars]
+    [pair, timeframe, sparkline, trades, prices, livePrice, now, loadedBars, cexCandles]
   );
   const baseVisible = visibleBarsForInterval(timeframe);
   const visibleCount = clampVisibleBars(barZoom ?? baseVisible, baseVisible);
@@ -695,6 +729,11 @@ export default function HybridChart() {
 
         <div className="hybrid-main">
           <div className="hybrid-meta">
+            {usesCexTape(pair) && cexMeta.label ? (
+              <p className="hybrid-tape-source" title={cexMeta.label}>
+                {cexMeta.label}
+              </p>
+            ) : null}
             <p className="hybrid-events">
               {events.map((row) => (
                 <span key={row.id} title={row.label}>
