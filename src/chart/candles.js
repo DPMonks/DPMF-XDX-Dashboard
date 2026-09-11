@@ -551,6 +551,118 @@ export function atr(candles = [], period = 14) {
   return sma(ranges, period);
 }
 
+/** Defaults for display wick clipping (thin AMM / passive swap prints). */
+export const WICK_CLIP_DEFAULTS = {
+  enabled: true,
+  atrPeriod: 14,
+  atrMult: 6,
+  bodyMult: 8,
+  maxFrac: 0.75,
+  floorFrac: 0.005,
+};
+
+function envFlag(name) {
+  try {
+    const env = typeof import.meta !== "undefined" ? import.meta.env : undefined;
+    const raw = env?.[name];
+    if (raw == null || raw === "") return null;
+    const s = String(raw).trim().toLowerCase();
+    if (s === "0" || s === "false" || s === "off" || s === "no") return false;
+    if (s === "1" || s === "true" || s === "on" || s === "yes") return true;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function envNumber(name, fallback) {
+  try {
+    const env = typeof import.meta !== "undefined" ? import.meta.env : undefined;
+    const n = Number(env?.[name]);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Read VITE_CHART_WICK_* flags for Hybrid / AIM compose display clipping. */
+export function wickClipOptions(overrides = {}) {
+  const enabledFlag = envFlag("VITE_CHART_WICK_CLIP");
+  return {
+    enabled: enabledFlag == null ? WICK_CLIP_DEFAULTS.enabled : enabledFlag,
+    atrPeriod: envNumber("VITE_CHART_WICK_ATR_PERIOD", WICK_CLIP_DEFAULTS.atrPeriod),
+    atrMult: envNumber("VITE_CHART_WICK_ATR_MULT", WICK_CLIP_DEFAULTS.atrMult),
+    bodyMult: envNumber("VITE_CHART_WICK_BODY_MULT", WICK_CLIP_DEFAULTS.bodyMult),
+    maxFrac: envNumber("VITE_CHART_WICK_MAX_FRAC", WICK_CLIP_DEFAULTS.maxFrac),
+    floorFrac: envNumber("VITE_CHART_WICK_FLOOR_FRAC", WICK_CLIP_DEFAULTS.floorFrac),
+    ...overrides,
+  };
+}
+
+function medianPositive(values = []) {
+  const nums = values.map(Number).filter((value) => Number.isFinite(value) && value >= 0).sort((a, b) => a - b);
+  if (!nums.length) return 0;
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+}
+
+/**
+ * Display-only: clip absurd wick highs/lows from thin AMM/swap prints.
+ * Keeps the real open/close body. Scale is robust (body + close-to-close), not polluted high-low ATR.
+ */
+export function clipCandleWicks(candles = [], opts = {}) {
+  const cfg = { ...WICK_CLIP_DEFAULTS, ...opts };
+  const list = Array.isArray(candles) ? candles : [];
+  if (!cfg.enabled || list.length < 1) return list;
+
+  const atrPeriod = Math.max(2, Math.trunc(Number(cfg.atrPeriod) || WICK_CLIP_DEFAULTS.atrPeriod));
+  const atrMult = Number(cfg.atrMult) > 0 ? Number(cfg.atrMult) : WICK_CLIP_DEFAULTS.atrMult;
+  const bodyMult = Number(cfg.bodyMult) > 0 ? Number(cfg.bodyMult) : WICK_CLIP_DEFAULTS.bodyMult;
+  const maxFrac = Number(cfg.maxFrac) > 0 ? Number(cfg.maxFrac) : WICK_CLIP_DEFAULTS.maxFrac;
+  const floorFrac = Number(cfg.floorFrac) > 0 ? Number(cfg.floorFrac) : WICK_CLIP_DEFAULTS.floorFrac;
+
+  const robustRanges = list.map((row, index) => {
+    const open = Number(row.o) > 0 ? Number(row.o) : Number(row.c);
+    const close = Number(row.c) > 0 ? Number(row.c) : open;
+    if (!(open > 0) || !(close > 0)) return 0;
+    const body = Math.abs(close - open);
+    const prev = index > 0 ? Number(list[index - 1].c) : close;
+    const gap = prev > 0 ? Math.abs(close - prev) : 0;
+    return Math.max(body, gap);
+  });
+
+  return list.map((row, index) => {
+    const open = Number(row.o);
+    const close = Number(row.c);
+    const high = Number(row.h);
+    const low = Number(row.l);
+    if (!(open > 0) || !(close > 0)) return { ...row };
+
+    const bodyHi = Math.max(open, close);
+    const bodyLo = Math.min(open, close);
+    const mid = (open + close) / 2;
+    const body = bodyHi - bodyLo;
+    const from = Math.max(0, index - atrPeriod + 1);
+    const window = robustRanges.slice(from, index + 1).filter((value) => value >= 0);
+    const robust = medianPositive(window);
+    const mean = window.length ? window.reduce((sum, value) => sum + value, 0) / window.length : 0;
+    const scale = Math.max(robust, mean, mid * 0.002, body);
+    let maxWick = Math.max(atrMult * scale, bodyMult * Math.max(body, mid * 0.001));
+    maxWick = Math.min(maxWick, mid * maxFrac);
+    maxWick = Math.max(maxWick, mid * floorFrac);
+
+    const hiCap = bodyHi + maxWick;
+    const loCap = Math.max(mid * 1e-9, bodyLo - maxWick);
+    const nextH = high > 0 ? Math.min(high, hiCap) : bodyHi;
+    const nextL = low > 0 ? Math.max(low, loCap) : bodyLo;
+    return {
+      ...row,
+      h: Math.max(nextH, bodyHi),
+      l: Math.min(nextL, bodyLo),
+    };
+  });
+}
+
 export function appendLiveClose(candles, price, at = Date.now(), intervalId = "1D") {
   if (!(Number(price) > 0)) return candles;
   const t = bucketTime(at, intervalId);

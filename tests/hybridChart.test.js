@@ -30,6 +30,7 @@ import {
   windowBars,
   windowLastBars,
   zoomVisibleBars,
+  clipCandleWicks,
 } from "../src/chart/candles.js";
 import { bucketTime, CHART_PAIRS, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
@@ -945,4 +946,51 @@ test("appendLiveClose updates the current UTC day instead of inventing a second 
   assert.equal(next.length, 1);
   assert.equal(next[0].c, 1.5);
   assert.equal(next[0].h, 1.5);
+});
+
+test("clipCandleWicks keeps body and caps absurd high from thin print", () => {
+  const rows = [
+    { t: 1, o: 1, h: 1.02, l: 0.98, c: 1.01, v: 1 },
+    { t: 2, o: 1.01, h: 1.03, l: 0.99, c: 1.02, v: 1 },
+    { t: 3, o: 1.02, h: 1.04, l: 1.0, c: 1.03, v: 1 },
+    { t: 4, o: 1.03, h: 1.05, l: 1.01, c: 1.04, v: 1 },
+    { t: 5, o: 1.04, h: 500, l: 1.02, c: 1.05, v: 1 },
+  ];
+  const clipped = clipCandleWicks(rows);
+  assert.equal(clipped[4].o, 1.04);
+  assert.equal(clipped[4].c, 1.05);
+  assert.ok(clipped[4].h < 10);
+  assert.ok(clipped[4].h >= Math.max(1.04, 1.05));
+  assert.ok(clipped[4].l <= Math.min(1.04, 1.05));
+});
+
+test("composePairCandles clips locked wick spikes for display", () => {
+  const t = Date.parse("2021-11-18T00:00:00.000Z");
+  const candles = composePairCandles({
+    pair: "XDX/XRP",
+    interval: "1D",
+    range: "Max",
+    locked: {
+      pairs: {
+        "XDX/XRP": {
+          candles: [
+            { t: t - 86_400_000, o: 0.02, h: 0.021, l: 0.019, c: 0.02, v: 1 },
+            { t, o: 0.02, h: 1000, l: 0.019, c: 0.021, v: 1 },
+            { t: t + 86_400_000, o: 0.021, h: 0.022, l: 0.02, c: 0.0215, v: 1 },
+          ],
+        },
+      },
+      xrpUsd: [],
+    },
+    sparkline: [],
+    trades: [],
+    livePrice: 0.0215,
+    now: t + 86_400_000,
+    windowed: false,
+  });
+  const spike = candles.find((row) => row.t === t);
+  assert.ok(spike);
+  assert.equal(spike.o, 0.02);
+  assert.ok(spike.h < 1);
+  assert.ok(spike.h >= Math.max(spike.o, spike.c));
 });

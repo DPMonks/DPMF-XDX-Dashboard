@@ -2,10 +2,12 @@ import lockedCandles from "../data/lockedCandles.json" with { type: "json" };
 import {
   appendLiveClose,
   candlesFromMarketData,
+  clipCandleWicks,
   expandDailyToInterval,
   fillDailyGaps,
   resampleCandles,
   ticksToCandles,
+  wickClipOptions,
   windowCandles,
 } from "./candles.js";
 import { CHART_MA_PAD, intervalMs, isDailyOrLonger, visibleBarsForInterval } from "./intervals.js";
@@ -141,6 +143,8 @@ export function composePairCandles({
     candles = [...intraMap.values()].sort((left, right) => left.t - right.t);
     candles = appendLiveClose(candles, livePrice, now, interval);
   }
+  // Display path: clip absurd wick extremes from thin AMM/swap prints (keeps body).
+  candles = clipCandleWicks(candles, wickClipOptions());
   return windowed ? windowCandles(candles, range, now) : candles;
 }
 
