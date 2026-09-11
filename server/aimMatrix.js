@@ -1,4 +1,4 @@
-﻿import { aimSpeakPayload } from "./aimSpeak.js";
+import { aimSpeakPayload } from "./aimSpeak.js";
 import pg from "pg";
 import { aimAgentLabel, aimAgentRole, aimAgentProfile, resolveAimAgentId } from "./aimAgentNames.js";
 import {
@@ -1150,15 +1150,37 @@ function numberOrNull(value) {
 }
 
 /** Chart uses quote-per-base (RLUSD per XRP). Prefer iou_per_xrp; invert xrp_per_iou. */
+const AIM_QPB_MIN = 0.05;
+const AIM_QPB_MAX = 50;
+
+function inAimQuotePerBaseBand(v) {
+  const n = numberOrNull(v);
+  return n != null && n >= AIM_QPB_MIN && n <= AIM_QPB_MAX;
+}
+
 function quotePerBaseFromAimPrice(row = {}) {
   const iou = numberOrNull(row.iou_per_xrp);
-  if (iou > 0) return iou;
+  if (inAimQuotePerBaseBand(iou)) return iou;
   const unit = String(row.price_unit || "").toLowerCase();
-  const raw = numberOrNull(row.limit_price ?? row.price ?? row.xrp_per_iou ?? row.mark ?? row.mid);
+  // Prefer explicit fair_mid when present (commander_estimate), then price fields.
+  const raw = numberOrNull(
+    row.fair_mid ?? row.limit_price ?? row.price ?? row.xrp_per_iou ?? row.mark ?? row.mid ?? row.fair
+  );
   if (!(raw > 0)) return null;
-  if (unit === "xrp_per_iou" || row.xrp_per_iou != null) return 1 / raw;
-  if (raw > 0 && raw < 0.05) return 1 / raw;
-  return raw;
+  const candidates = [];
+  if (unit === "quote_per_base" || unit === "iou_per_xrp" || unit === "rlusd_per_xrp") {
+    candidates.push(raw);
+  } else if (unit === "xrp_per_iou" || row.xrp_per_iou != null) {
+    candidates.push(1 / raw);
+  } else if (raw > 0 && raw < 0.05) {
+    candidates.push(1 / raw);
+  } else {
+    candidates.push(raw, 1 / raw);
+  }
+  for (const c of candidates) {
+    if (inAimQuotePerBaseBand(c)) return c;
+  }
+  return null;
 }
 
 function normalizeAimOrderSide(raw) {
@@ -1272,7 +1294,7 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
         if (chart.mid || cap.trade_horizon) {
           fromMem = {
             pair: "XRP/RLUSD",
-            fair_mid: quotePerBaseFromAimPrice({ mid: chart.mid, price: chart.mid, price_unit: "quote_per_base" }) || numberOrNull(chart.mid),
+            fair_mid: quotePerBaseFromAimPrice({ mid: chart.mid, price: chart.mid, iou_per_xrp: chart.iou_per_xrp, price_unit: chart.price_unit || "quote_per_base" }),
             bias_hour: cap.trade_horizon === "hour" ? "hour" : cap.trade_horizon || null,
             bias_day: cap.trade_horizon === "day" || cap.trade_horizon === "week" ? String(cap.trade_horizon) : "day",
             trade_horizon: cap.trade_horizon || null,
@@ -1287,13 +1309,26 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
   }
   const src = fromMem || fromMeta;
   if (!src || typeof src !== "object") return null;
-  const fair = quotePerBaseFromAimPrice(src) || numberOrNull(src.fair_mid ?? src.mid ?? src.fair);
+  // Always coerce to RLUSD-per-XRP; drop wrong-pair inverted mids (~27k).
+  const fair = quotePerBaseFromAimPrice({
+    ...src,
+    fair_mid: src.fair_mid,
+    iou_per_xrp: src.iou_per_xrp,
+    price_unit: src.price_unit || "quote_per_base",
+  });
   const atrBps = numberOrNull(src.atr_bps);
-  let band_lo = numberOrNull(src.band_lo ?? src.fair_lo);
-  let band_hi = numberOrNull(src.band_hi ?? src.fair_hi);
-  let sl = numberOrNull(src.sl ?? src.stop ?? src.stop_loss);
-  let tp = numberOrNull(src.tp ?? src.take_profit);
-  let entry = numberOrNull(src.entry);
+  const coerceBand = (v) => {
+    const n = numberOrNull(v);
+    if (!(n > 0)) return null;
+    if (inAimQuotePerBaseBand(n)) return n;
+    const inv = 1 / n;
+    return inAimQuotePerBaseBand(inv) ? inv : null;
+  };
+  let band_lo = coerceBand(src.band_lo ?? src.fair_lo);
+  let band_hi = coerceBand(src.band_hi ?? src.fair_hi);
+  let sl = coerceBand(src.sl ?? src.stop ?? src.stop_loss);
+  let tp = coerceBand(src.tp ?? src.take_profit);
+  let entry = coerceBand(src.entry);
   if (fair > 0 && atrBps > 0) {
     const width = fair * (atrBps / 10000);
     if (!(band_lo > 0)) band_lo = fair - width;
@@ -1303,7 +1338,7 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
     if (!(entry > 0)) entry = fair;
   }
   return {
-    pair: scrubText(src.pair || "XRP/RLUSD"),
+    pair: "XRP/RLUSD",
     fair_mid: fair > 0 ? fair : null,
     mid: fair > 0 ? fair : null,
     entry: entry > 0 ? entry : null,
@@ -1311,6 +1346,8 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
     tp: tp > 0 ? tp : null,
     band_lo: band_lo > 0 ? band_lo : null,
     band_hi: band_hi > 0 ? band_hi : null,
+    price_unit: "quote_per_base",
+    iou_per_xrp: fair > 0 ? fair : null,
     bias_hour: scrubText(src.bias_hour || src.hour_bias || (src.trade_horizon === "hour" ? "hour" : "") || ""),
     bias_day: scrubText(src.bias_day || src.day_bias || (src.trade_horizon && src.trade_horizon !== "hour" ? String(src.trade_horizon) : "day") || ""),
     trade_horizon: scrubText(src.trade_horizon || ""),

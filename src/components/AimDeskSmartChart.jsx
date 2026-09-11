@@ -33,17 +33,51 @@ function num(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Chart uses quote-per-base (RLUSD per XRP). */
-export function quotePerBaseFromDeskOrder(row = {}) {
+/** Chart uses quote-per-base (RLUSD per XRP). Wide band rejects wrong-pair junk (~27k). */
+const QPB_MIN = 0.05;
+const QPB_MAX = 50;
+
+export function inQuotePerBaseBand(v) {
+  const n = num(v);
+  return n > 0 && n >= QPB_MIN && n <= QPB_MAX;
+}
+
+/** Coerce estimate/desk scalars to RLUSD-per-XRP; null if out of band. */
+export function coerceQuotePerBase(raw, row = {}, refPx = null) {
+  const v = num(raw);
+  if (!(v > 0)) return null;
+  const unit = String(row.price_unit || "").toLowerCase();
+  const candidates = [];
+  if (unit === "quote_per_base" || unit === "iou_per_xrp" || unit === "rlusd_per_xrp") {
+    candidates.push(v);
+  } else if (unit === "xrp_per_iou" || row.xrp_per_iou != null) {
+    candidates.push(1 / v);
+  } else {
+    candidates.push(v, 1 / v);
+  }
+  const ref = num(refPx);
+  const ok = (c) => {
+    if (!inQuotePerBaseBand(c)) return false;
+    if (ref > 0) {
+      if (c < ref / 20 || c > ref * 20) return false;
+    }
+    return true;
+  };
+  for (const c of candidates) {
+    if (ok(c)) return c;
+  }
+  return null;
+}
+
+export function quotePerBaseFromDeskOrder(row = {}, refPx = null) {
   const iou = num(row.iou_per_xrp);
-  if (iou > 0) return iou;
+  if (inQuotePerBaseBand(iou)) {
+    const ref = num(refPx);
+    if (!(ref > 0) || (iou >= ref / 20 && iou <= ref * 20)) return iou;
+  }
   const unit = String(row.price_unit || "").toLowerCase();
   const raw = num(row.limit_price ?? row.price ?? row.xrp_per_iou ?? row.mark);
-  if (!(raw > 0)) return null;
-  if (unit === "xrp_per_iou" || row.xrp_per_iou != null) return 1 / raw;
-  // Heuristic: XRP/RLUSD quote-per-base is usually 0.3-4; xrp-per-iou similar band after invert.
-  if (raw > 0 && raw < 0.05) return 1 / raw;
-  return raw;
+  return coerceQuotePerBase(raw, { ...row, price_unit: unit }, refPx);
 }
 
 export function normalizeDeskSide(raw) {
@@ -68,20 +102,38 @@ function windowCandles(rows, tf) {
 }
 
 function priceDomain(candles, marks = []) {
-  const vals = [];
+  const candleVals = [];
   for (const c of candles) {
     for (const k of ["l", "h", "c", "o"]) {
       const n = num(c[k]);
-      if (n > 0) vals.push(n);
+      if (n > 0) candleVals.push(n);
     }
   }
+  const bookDesk = [];
+  const estimates = [];
   for (const m of marks) {
     const n = num(m.price);
-    if (n > 0) vals.push(n);
+    if (!(n > 0)) continue;
+    if (m.kind === "estimate") estimates.push(n);
+    else bookDesk.push(n);
   }
-  if (!vals.length) return { min: 0, max: 1 };
-  let min = Math.min(...vals);
-  let max = Math.max(...vals);
+  // Axis from candle + public book + desk orders. Ignore out-of-range Fair.
+  let base = [...candleVals, ...bookDesk];
+  if (!base.length) {
+    const sane = estimates.filter((n) => inQuotePerBaseBand(n));
+    base = sane.length ? sane : [1];
+  }
+  let min = Math.min(...base);
+  let max = Math.max(...base);
+  const span = Math.max(max - min, Math.max(min, 1) * 0.002);
+  const lo = min - span * 0.5;
+  const hi = max + span * 0.5;
+  for (const n of estimates) {
+    if (n >= lo && n <= hi && inQuotePerBaseBand(n)) {
+      if (n < min) min = n;
+      if (n > max) max = n;
+    }
+  }
   if (min === max) {
     const pad = Math.max(min * 0.002, 1e-6);
     min -= pad;
@@ -233,25 +285,36 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
       .filter(Boolean);
   }, [deskOrders]);
 
+  const tapeRef = useMemo(() => {
+    const last = candles[candles.length - 1];
+    return num(last?.c) || bands.mid || livePrice || null;
+  }, [candles, bands.mid, livePrice]);
+
   const estimateMarks = useMemo(() => {
     if (!estimate || typeof estimate !== "object") return [];
     const out = [];
-    const fair = num(estimate.fair_mid ?? estimate.mid ?? estimate.fair);
-    if (fair > 0) out.push({ kind: "estimate", role: "fair", price: fair, label: "Fair mid" });
-    const entry = num(estimate.entry);
-    if (entry > 0) out.push({ kind: "estimate", role: "entry", price: entry, label: "Entry" });
-    const sl = num(estimate.sl ?? estimate.stop ?? estimate.stop_loss);
-    if (sl > 0) out.push({ kind: "estimate", role: "sl", price: sl, label: "SL" });
-    const tp = num(estimate.tp ?? estimate.take_profit);
-    if (tp > 0) out.push({ kind: "estimate", role: "tp", price: tp, label: "TP" });
-    const lo = num(estimate.band_lo ?? estimate.fair_lo);
-    const hi = num(estimate.band_hi ?? estimate.fair_hi);
+    const unitRow = {
+      price_unit: estimate.price_unit,
+      iou_per_xrp: estimate.iou_per_xrp,
+      xrp_per_iou: estimate.xrp_per_iou,
+    };
+    const push = (role, raw, label) => {
+      const price = coerceQuotePerBase(raw, unitRow, tapeRef);
+      if (!(price > 0)) return;
+      out.push({ kind: "estimate", role, price, label });
+    };
+    push("fair", estimate.fair_mid ?? estimate.mid ?? estimate.fair ?? estimate.iou_per_xrp, "Fair mid");
+    push("entry", estimate.entry, "Entry");
+    push("sl", estimate.sl ?? estimate.stop ?? estimate.stop_loss, "SL");
+    push("tp", estimate.tp ?? estimate.take_profit, "TP");
+    const lo = coerceQuotePerBase(estimate.band_lo ?? estimate.fair_lo, unitRow, tapeRef);
+    const hi = coerceQuotePerBase(estimate.band_hi ?? estimate.fair_hi, unitRow, tapeRef);
     if (lo > 0 && hi > 0) {
       out.push({ kind: "estimate", role: "band_lo", price: lo, label: "Band" });
       out.push({ kind: "estimate", role: "band_hi", price: hi, label: "Band" });
     }
     return out;
-  }, [estimate]);
+  }, [estimate, tapeRef]);
 
   const domain = useMemo(
     () => priceDomain(candles, [...deskMarks, ...estimateMarks, ...publicBookMarks.filter((m) => m.best)]),
@@ -271,7 +334,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
     if (hour) bits.push(`Hour ${String(hour)}`);
     if (day) bits.push(`Day ${String(day)}`);
     if (!bits.length && estimate?.chart_reason) bits.push(String(estimate.chart_reason).replace(/_/g, " "));
-    return bits.join(" ? ");
+    return bits.join(" | ");
   }, [estimate]);
 
   const last = candles[candles.length - 1];
@@ -281,11 +344,11 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
     <section className="aim-desk-chart neon-inset" aria-label="XRP RLUSD desk chart">
       <div className="aim-desk-chart-head">
         <div>
-          <p className="aim-desk-chart-kicker">Desk map ? XRP/RLUSD</p>
+          <p className="aim-desk-chart-kicker">Desk map | XRP/RLUSD</p>
           <h3>Smart chart</h3>
           <p className="aim-desk-chart-sub">
             Public book + desk OfferCreates. Commander estimate markers when live.
-            {biasNote ? ` ? ${biasNote}` : ""}
+            {biasNote ? ` | ${biasNote}` : ""}
           </p>
         </div>
         <div className="aim-desk-chart-tfs" role="group" aria-label="Timeframe">
@@ -315,7 +378,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
 
       <div className="aim-desk-chart-plot">
         {!candles.length ? (
-          <p className="aim-empty">{error || "Waiting for XRP/RLUSD candles?"}</p>
+          <p className="aim-empty">{error || "Waiting for XRP/RLUSD candles..."}</p>
         ) : (
           <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="XRP RLUSD candles with desk overlays">
             {[0, 0.25, 0.5, 0.75, 1].map((t) => {
