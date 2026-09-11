@@ -32,6 +32,26 @@ export const TOKEN_DETAIL_LABEL_KEYS = {
   lpSupply: "lpSupply",
 };
 
+/** Stock / level metrics: step-hold across the window; never invent false zeros. */
+export const TOKEN_DETAIL_LEVEL_METRICS = new Set([
+  "xrplMarketCap",
+  "circulatingMarketCap",
+  "ammMarketCap",
+  "circulating",
+  "burnedSupply",
+  "holders",
+  "trustlines",
+  "lpHolders",
+  "lpTrustlines",
+  "lpSupply",
+]);
+
+export const TOKEN_DETAIL_LP_METRICS = new Set(["lpHolders", "lpTrustlines", "lpSupply"]);
+
+export function tokenDetailIsLevelMetric(metric) {
+  return TOKEN_DETAIL_LEVEL_METRICS.has(metric);
+}
+
 export function tokenDetailLabel(t, metric) {
   const key = TOKEN_DETAIL_LABEL_KEYS[metric] || metric;
   return t?.[key] || t?.[metric] || metric;
@@ -52,7 +72,7 @@ const METRIC_KEYS = {
   price: ["price", "recorded_price", "xdxUsd", "xdx_usd", "price_usd"],
   xdxPerXrp: ["xdxPerXrp", "xdx_per_xrp"],
   xrplMarketCap: ["xrplMarketCap", "market_cap", "fdv"],
-  circulatingMarketCap: ["circulatingMarketCap", "circ_mc"],
+  circulatingMarketCap: ["circulatingMarketCap", "usd_mc"],
   ammMarketCap: ["ammMarketCap", "tvl_usd", "tvl"],
   circulating: ["circulating", "circulating_supply", "xdx_supply"],
   burnedSupply: ["burnedSupply", "burned_supply", "issuer_locked", "issuerLocked"],
@@ -69,6 +89,14 @@ function rawNumber(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+/** Drop unconfirmed zeros for LP level samples (missing scan ≠ empty pool). */
+function levelSample(value, { allowZero = false } = {}) {
+  const num = rawNumber(value);
+  if (num == null) return null;
+  if (!allowZero && num === 0) return null;
+  return num;
+}
+
 export function tokenDetailMetricNumber(row, metric) {
   const keys = METRIC_KEYS[metric] || [metric];
   for (const key of keys) {
@@ -79,10 +107,13 @@ export function tokenDetailMetricNumber(row, metric) {
 }
 
 export function namedHistoryRows(rows, metric) {
+  const allowZero = !TOKEN_DETAIL_LP_METRICS.has(metric);
   return (Array.isArray(rows) ? rows : [])
     .map((row) => {
       const value =
-        tokenDetailMetricNumber(row, metric) ?? rawNumber(row?.count) ?? rawNumber(row?.value);
+        levelSample(tokenDetailMetricNumber(row, metric), { allowZero }) ??
+        levelSample(row?.count, { allowZero }) ??
+        levelSample(row?.value, { allowZero });
       return value == null ? null : mapHistoryRow(row, { [metric]: value });
     })
     .filter(Boolean);
@@ -118,6 +149,7 @@ export function mergeTokenDetailRows(...lists) {
         const value = tokenDetailMetricNumber(row, metric);
         if (value != null) current[metric] = value;
       }
+      if (row.__lpConfirmedEmpty) current.__lpConfirmedEmpty = true;
       merged.set(iso, current);
     }
   }
@@ -129,7 +161,15 @@ export function carryTokenDetailMetrics(rows = []) {
   return (Array.isArray(rows) ? rows : []).map((row) => {
     const next = { ...row };
     for (const metric of TOKEN_DETAIL_METRICS) {
-      const value = tokenDetailMetricNumber(row, metric);
+      let value = tokenDetailMetricNumber(row, metric);
+      // History zeros on LP series are almost always missing/partial scans.
+      if (
+        TOKEN_DETAIL_LP_METRICS.has(metric) &&
+        value === 0 &&
+        !row.__lpConfirmedEmpty
+      ) {
+        value = null;
+      }
       if (value != null) last[metric] = value;
       if (last[metric] != null) next[metric] = last[metric];
     }
@@ -142,12 +182,18 @@ export function liveTokenDetailTip(live) {
   const tip = mapHistoryRow({ timestamp: live.timestamp || Date.now() }, live);
   if (!tip) return null;
   const hasValue = TOKEN_DETAIL_METRICS.some((metric) => tokenDetailMetricNumber(tip, metric) != null);
-  return hasValue ? tip : null;
+  if (!hasValue) return null;
+  // Live overview may legitimately report empty LP; allow those zeros through carry.
+  tip.__lpConfirmedEmpty = true;
+  return tip;
 }
 
 function sparkMetricRows(sparkline, live) {
   const totalSupply = rawNumber(live?.totalSupply ?? live?.total_supply);
   const circulating = tokenDetailMetricNumber(live, "circulating") ?? rawNumber(live?.circulating);
+  const burned =
+    tokenDetailMetricNumber(live, "burnedSupply") ??
+    rawNumber(live?.burnedSupply ?? live?.issuerLocked ?? live?.issuer_locked);
   const xrpUsd = rawNumber(live?.xrpUsd ?? live?.xrp_usd);
   return (Array.isArray(sparkline) ? sparkline : [])
     .map((row) => {
@@ -157,7 +203,11 @@ function sparkMetricRows(sparkline, live) {
       if (price == null) return null;
       const fields = { price };
       if (totalSupply != null) fields.xrplMarketCap = price * totalSupply;
-      if (circulating != null) fields.circulatingMarketCap = price * circulating;
+      if (circulating != null) {
+        fields.circulating = circulating;
+        fields.circulatingMarketCap = price * circulating;
+      }
+      if (burned != null) fields.burnedSupply = burned;
       if (xrpUsd != null && xrpUsd > 0) fields.xdxPerXrp = price / xrpUsd;
       return mapHistoryRow(row, fields);
     })
@@ -205,6 +255,28 @@ export function xdxPriceHistoryRows(payload) {
   });
 }
 
+/** Locked Trading-chart daily closes (USD) — same tape HybridChart seeds from. */
+export function rowsFromLockedCandles(locked, pair = "XDX/XRP") {
+  const key = String(pair || "XDX/XRP").toUpperCase();
+  const candles =
+    locked?.pairs?.[key]?.candles ||
+    locked?.pairs?.[pair]?.candles ||
+    (Array.isArray(locked) ? locked : []);
+  return (Array.isArray(candles) ? candles : [])
+    .map((row) => {
+      const t = Number(row?.t ?? row?.time ?? row?.timestamp);
+      const close = rawNumber(row?.c ?? row?.price_usd ?? row?.price);
+      if (!Number.isFinite(t) || !(close > 0)) return null;
+      return {
+        timestamp: new Date(t < 1e12 ? t * 1000 : t).toISOString(),
+        price_usd: close,
+        asset: "XDX",
+        source: row?.source || "locked",
+      };
+    })
+    .filter(Boolean);
+}
+
 function ammHistoryRows(rows, live) {
   const price = tokenDetailMetricNumber(live, "price");
   return (Array.isArray(rows) ? rows : [])
@@ -221,34 +293,97 @@ function ammHistoryRows(rows, live) {
         ammMarketCap = tvl > 1_000_000 && price > 0 ? tvl * price : tvl;
       }
       if (ammMarketCap == null && reserve != null && price > 0) ammMarketCap = reserve * price;
-      const lpSupply = rawNumber(row.lp_supply ?? row.lpSupply);
+      // Never treat a missing/empty AMM sample as LP supply zero.
+      const lpSupply = levelSample(row.lp_supply ?? row.lpSupply);
       if (ammMarketCap == null && lpSupply == null) return null;
       return mapHistoryRow(row, {
-        ...(ammMarketCap != null ? { ammMarketCap } : {}),
+        ...(ammMarketCap != null && ammMarketCap !== 0 ? { ammMarketCap } : {}),
         ...(lpSupply != null ? { lpSupply } : {}),
       });
     })
     .filter(Boolean);
 }
 
+/**
+ * Aggregate LP chart scans. Partial per-pool snapshots must not become global zeros:
+ * carry last known per pool, then sum across pools at each timestamp.
+ */
 export function aggregateLpChartRows(rows = []) {
-  const byTs = new Map();
+  const byPool = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
+    const pool = String(row.pool_name || row.pool || row.pair || "XDX/XRP")
+      .replace(/\s+/g, "")
+      .toUpperCase() || "XDX/XRP";
     const mapped = mapHistoryRow(row, {
-      lpHolders: rawNumber(row.lp_holder_count ?? row.lpHolders ?? row.holders),
-      lpTrustlines: rawNumber(row.trustline_count ?? row.lp_trustline_count ?? row.lpTrustlines),
-      lpSupply: rawNumber(row.lp_supply ?? row.lpSupply),
+      lpHolders: levelSample(row.lp_holder_count ?? row.lpHolders ?? row.holders),
+      lpTrustlines: levelSample(row.trustline_count ?? row.lp_trustline_count ?? row.lpTrustlines),
+      lpSupply: levelSample(row.lp_supply ?? row.lpSupply),
     });
     if (!mapped) continue;
-    const current = byTs.get(mapped.ts) || { timestamp: mapped.timestamp, ts: mapped.ts };
-    if (mapped.lpHolders != null) current.lpHolders = (current.lpHolders || 0) + mapped.lpHolders;
-    if (mapped.lpTrustlines != null) {
-      current.lpTrustlines = (current.lpTrustlines || 0) + mapped.lpTrustlines;
-    }
-    if (mapped.lpSupply != null && current.lpSupply == null) current.lpSupply = mapped.lpSupply;
-    byTs.set(mapped.ts, current);
+    if (mapped.lpHolders == null && mapped.lpTrustlines == null && mapped.lpSupply == null) continue;
+    const list = byPool.get(pool) || [];
+    list.push(mapped);
+    byPool.set(pool, list);
   }
-  return [...byTs.values()].sort((a, b) => a.ts - b.ts);
+
+  if (!byPool.size) return [];
+
+  const carried = new Map();
+  const allTs = new Set();
+  for (const [pool, list] of byPool) {
+    list.sort((a, b) => a.ts - b.ts);
+    let last = { lpHolders: null, lpTrustlines: null, lpSupply: null };
+    const series = [];
+    for (const row of list) {
+      if (row.lpHolders != null) last.lpHolders = row.lpHolders;
+      if (row.lpTrustlines != null) last.lpTrustlines = row.lpTrustlines;
+      if (row.lpSupply != null) last.lpSupply = row.lpSupply;
+      series.push({
+        ts: row.ts,
+        timestamp: row.timestamp,
+        lpHolders: last.lpHolders,
+        lpTrustlines: last.lpTrustlines,
+        lpSupply: last.lpSupply,
+      });
+      allTs.add(row.ts);
+    }
+    carried.set(pool, series);
+  }
+
+  const timestamps = [...allTs].sort((a, b) => a - b);
+  const cursors = new Map([...carried.keys()].map((pool) => [pool, 0]));
+  const lastByPool = new Map();
+  const out = [];
+
+  for (const ts of timestamps) {
+    for (const [pool, series] of carried) {
+      let index = cursors.get(pool) || 0;
+      while (index < series.length && series[index].ts <= ts) {
+        lastByPool.set(pool, series[index]);
+        index += 1;
+      }
+      cursors.set(pool, index);
+    }
+    let lpHolders = null;
+    let lpTrustlines = null;
+    let lpSupply = null;
+    for (const sample of lastByPool.values()) {
+      if (!sample) continue;
+      if (sample.lpHolders != null) lpHolders = (lpHolders || 0) + sample.lpHolders;
+      if (sample.lpTrustlines != null) lpTrustlines = (lpTrustlines || 0) + sample.lpTrustlines;
+      // LP supply is pool-scoped (XDX/XRP primary); prefer XDX/XRP, else first known.
+      if (sample.lpSupply != null && lpSupply == null) lpSupply = sample.lpSupply;
+    }
+    if (lpHolders == null && lpTrustlines == null && lpSupply == null) continue;
+    out.push({
+      timestamp: new Date(ts).toISOString(),
+      ts,
+      ...(lpHolders != null ? { lpHolders } : {}),
+      ...(lpTrustlines != null ? { lpTrustlines } : {}),
+      ...(lpSupply != null ? { lpSupply } : {}),
+    });
+  }
+  return out;
 }
 
 export function composeTokenDetailHistory({
@@ -260,16 +395,19 @@ export function composeTokenDetailHistory({
   sparkline = [],
   candles = [],
   amm = [],
+  lockedCandles = null,
   live = null,
 } = {}) {
+  const lockedRows = rowsFromLockedCandles(lockedCandles);
   const priceRows = xdxPriceHistoryRows(candles);
+  const sparkSource = priceRows.length || lockedRows.length ? [...lockedRows, ...priceRows] : sparkline;
   return carryTokenDetailMetrics(
     mergeTokenDetailRows(
       namedHistoryRows(holders, "holders"),
       namedHistoryRows(trustlines, "trustlines"),
       namedHistoryRows(lpHolders, "lpHolders"),
       aggregateLpChartRows(lpTrustlines),
-      sparkMetricRows(priceRows.length ? priceRows : sparkline, live),
+      sparkMetricRows(sparkSource, live),
       ammHistoryRows(amm, live),
       ammHistoryRows(tvl, live),
       [liveTokenDetailTip(live)]
@@ -289,7 +427,14 @@ export function windowedTokenSeries(rows, range, now, metric) {
 
   let lastKnown = null;
   const filled = all.map((row) => {
-    const value = tokenDetailMetricNumber(row, metric);
+    let value = tokenDetailMetricNumber(row, metric);
+    if (
+      TOKEN_DETAIL_LP_METRICS.has(metric) &&
+      value === 0 &&
+      !row.__lpConfirmedEmpty
+    ) {
+      value = null;
+    }
     if (value != null) lastKnown = value;
     return { ...row, plot: lastKnown };
   });
@@ -305,6 +450,15 @@ export function windowedTokenSeries(rows, range, now, metric) {
   const out = [...inside];
   if (lastBefore) {
     out.unshift({ ...lastBefore, timestamp: new Date(start).toISOString(), ts: start });
+  } else if (out.length && out[0].ts > start) {
+    // Fill empty left of the selected window:
+    // - level metrics on intraday TFs (even a single live tip → flat step)
+    // - price-like series when ≥2 points already exist mid-window
+    const levelIntraday = tokenDetailIsLevelMetric(metric) && tokenDetailIsIntraday(range);
+    const priceMidWindow = !tokenDetailIsLevelMetric(metric) && out.length >= 2;
+    if (levelIntraday || priceMidWindow) {
+      out.unshift({ ...out[0], timestamp: new Date(start).toISOString(), ts: start });
+    }
   }
   return collapseUnchangedPlot(downsampleSeries(out.filter((row) => Number.isFinite(row.plot))));
 }

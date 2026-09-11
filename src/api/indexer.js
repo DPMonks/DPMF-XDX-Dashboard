@@ -16,6 +16,7 @@ import {
 } from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
 import { composeTokenDetailHistory, rowsFromOhlc, xdxPriceHistoryRows } from "../tokenDetailsHistory";
+import lockedCandles from "../data/lockedCandles.json" with { type: "json" };
 import { fillMissingXdxFiat, pricesNeedFiat } from "../utils/fiatFx";
 import {
   applyXrplToChange,
@@ -765,6 +766,7 @@ export async function getTokenDetailsHistory() {
     lpTrustlines,
     sparkline,
     candles: priceRows,
+    lockedCandles,
     amm: Array.isArray(candlesBody?.amm_pool_history) ? candlesBody.amm_pool_history : [],
     live: {
       ...live,
@@ -773,6 +775,9 @@ export async function getTokenDetailsHistory() {
       price: live.recorded_price ?? live.xdxUsd,
       holders: live.holders,
       trustlines: live.trustlines,
+      circulating: live.circulating,
+      burnedSupply: live.burnedSupply ?? live.issuerLocked,
+      totalSupply: live.totalSupply,
       lpHolders: live.lp_holder_count,
       lpTrustlines: live.lp_trustline_count,
       lpSupply: live.lp_supply,

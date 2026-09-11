@@ -1254,6 +1254,8 @@ async function loadOrderbooks(db) {
 async function loadLpTrustlineChart(db, pool = "all") {
   const pair = normalizeLpPool(pool);
   const where = lpPoolClause(pair);
+  // Always group by pool+timestamp. Mixing pools into one timestamp produced
+  // false LP zeros when only one pool was scanned at that instant.
   const byScan = pair
     ? await tryQuery(
         db,
@@ -1273,19 +1275,25 @@ async function loadLpTrustlineChart(db, pool = "all") {
         `SELECT timestamp,
             COUNT(*)::int AS trustline_count,
             COUNT(*) FILTER (WHERE ABS(lp_balance::numeric) > 0)::int AS lp_holder_count,
-            COALESCE(SUM(ABS(lp_balance::numeric)) FILTER (WHERE COALESCE(pool_name, 'XDX/XRP') = 'XDX/XRP'), 0) AS lp_supply,
-            'ALL' AS pool_name
+            COALESCE(SUM(ABS(lp_balance::numeric)), 0) AS lp_supply,
+            COALESCE(pool_name, 'XDX/XRP') AS pool_name
      FROM lp_holders_history
-     GROUP BY timestamp
+     GROUP BY timestamp, COALESCE(pool_name, 'XDX/XRP')
      ORDER BY timestamp ASC`
       );
-  return (byScan.rows || []).map((row) => ({
-    timestamp: asIso(row.timestamp) || row.timestamp,
-    trustline_count: Number(row.trustline_count || 0),
-    lp_holder_count: Number(row.lp_holder_count || 0),
-    lp_supply: Number(row.lp_supply || 0) || null,
-    pool_name: row.pool_name || pair || "XDX/XRP",
-  }));
+  return (byScan.rows || []).map((row) => {
+    const trustlines = Number(row.trustline_count);
+    const holders = Number(row.lp_holder_count);
+    const supply = Number(row.lp_supply);
+    return {
+      timestamp: asIso(row.timestamp) || row.timestamp,
+      // Missing/empty partial scans stay null — client carries last known.
+      trustline_count: Number.isFinite(trustlines) && trustlines > 0 ? trustlines : null,
+      lp_holder_count: Number.isFinite(holders) && holders > 0 ? holders : null,
+      lp_supply: Number.isFinite(supply) && supply > 0 ? supply : null,
+      pool_name: row.pool_name || pair || "XDX/XRP",
+    };
+  });
 }
 
 async function loadAmmReserveIndex(db) {

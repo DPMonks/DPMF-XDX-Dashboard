@@ -8,6 +8,7 @@ import {
   TOKEN_DETAIL_RANGES,
   tokenDetailDecimals,
   tokenDetailIsIntraday,
+  tokenDetailIsLevelMetric,
   tokenDetailLabel,
   tokenDetailYDomain,
   windowedTokenSeries,
@@ -75,6 +76,7 @@ export default function TokenDetailsChart() {
   );
   const digits = tokenDetailDecimals(metric);
   const label = tokenDetailLabel(t, metric);
+  const lineType = tokenDetailIsLevelMetric(metric) ? "stepAfter" : "linear";
 
   return (
     <div className="activity-chart-container token-details-chart">
@@ -168,7 +170,7 @@ export default function TokenDetailsChart() {
                   ]}
                 />
                 <Line
-                  type="linear"
+                  type={lineType}
                   dataKey="plot"
                   stroke="#00ff6a"
                   strokeWidth={2.4}

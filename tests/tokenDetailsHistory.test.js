@@ -11,6 +11,7 @@ import {
   tokenDetailDecimals,
   tokenDetailLabel,
   tokenDetailMetricNumber,
+  aggregateLpChartRows,
   windowedTokenSeries,
   xdxPriceHistoryRows,
 } from "../src/tokenDetailsHistory.js";
@@ -213,3 +214,89 @@ test("tokenDetailDecimals match Token Details precision", () => {
   assert.equal(tokenDetailDecimals("xrplMarketCap"), 2);
   assert.equal(tokenDetailDecimals("holders"), 0);
 });
+
+test("windowedTokenSeries left-fills level metrics across intraday windows", () => {
+  const now = Date.parse("2026-09-11T22:00:00.000Z");
+  const windowed = windowedTokenSeries(
+    [{ timestamp: "2026-09-11T22:00:00.000Z", ts: now, holders: 16010 }],
+    "24H",
+    now,
+    "holders"
+  );
+  assert.ok(windowed.length >= 2);
+  assert.equal(windowed[0].ts, now - 86400000);
+  assert.equal(windowed[0].plot, 16010);
+  assert.equal(windowed[windowed.length - 1].plot, 16010);
+});
+
+test("windowedTokenSeries left-fills mid-window price when history already has shape", () => {
+  const now = Date.parse("2026-09-11T22:00:00.000Z");
+  const start = now - 86400000;
+  const windowed = windowedTokenSeries(
+    [
+      { timestamp: new Date(start + 6 * 3600000).toISOString(), ts: start + 6 * 3600000, price: 0.00004 },
+      { timestamp: new Date(start + 12 * 3600000).toISOString(), ts: start + 12 * 3600000, price: 0.000041 },
+      { timestamp: new Date(now - 60000).toISOString(), ts: now - 60000, price: 0.000042 },
+    ],
+    "24H",
+    now,
+    "price"
+  );
+  assert.equal(windowed[0].ts, start);
+  assert.equal(windowed[0].plot, 0.00004);
+});
+
+test("composeTokenDetailHistory steps circulating and burned onto price history", () => {
+  const rows = composeTokenDetailHistory({
+    candles: [
+      { timestamp: "2026-09-11T10:00:00.000Z", asset: "XDX", price_usd: 0.00004 },
+      { timestamp: "2026-09-11T18:00:00.000Z", asset: "XDX", price_usd: 0.000041 },
+    ],
+    live: {
+      timestamp: "2026-09-11T22:00:00.000Z",
+      price: 0.000042,
+      circulating: 9_500_000_000,
+      burnedSupply: 500_000_000,
+      totalSupply: 10_000_000_000,
+      xrpUsd: 2,
+    },
+  });
+  const mid = rows.find((row) => row.price === 0.00004);
+  assert.ok(mid);
+  assert.equal(mid.circulating, 9_500_000_000);
+  assert.equal(mid.burnedSupply, 500_000_000);
+  assert.equal(Math.round(mid.circulatingMarketCap), 380_000);
+});
+
+test("aggregateLpChartRows carries per-pool samples instead of plotting false zeros", () => {
+  const rows = aggregateLpChartRows([
+    {
+      timestamp: "2026-09-11T10:00:00.000Z",
+      pool_name: "XDX/XRP",
+      trustline_count: 70,
+      lp_holder_count: 55,
+      lp_supply: 200_000_000,
+    },
+    {
+      timestamp: "2026-09-11T11:00:00.000Z",
+      pool_name: "XDX/RLUSD",
+      trustline_count: 20,
+      lp_holder_count: 18,
+      lp_supply: 0,
+    },
+    {
+      timestamp: "2026-09-11T12:00:00.000Z",
+      pool_name: "XDX/XRP",
+      trustline_count: 0,
+      lp_holder_count: 0,
+      lp_supply: 0,
+    },
+  ]);
+  assert.ok(rows.length >= 2);
+  const last = rows[rows.length - 1];
+  assert.ok(last.lpTrustlines >= 70);
+  assert.ok(last.lpHolders >= 55);
+  assert.equal(last.lpSupply, 200_000_000);
+  assert.ok(rows.every((row) => row.lpSupply !== 0));
+});
+
