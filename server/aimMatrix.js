@@ -1428,6 +1428,11 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
           bullish: row.scenarios.bullish || null,
           bearish: row.scenarios.bearish || null,
         } : null,
+        plan_id: scrubText(row.plan_id || ""),
+        plan_bucket: scrubText(row.plan_bucket || ""),
+        planned_at: scrubText(row.planned_at || ""),
+        refresh_sec: numberOrNull(row.refresh_sec),
+        cadence: scrubText(row.cadence || tf),
         disclaimer: scrubText(row.disclaimer || ""),
       };
     }
@@ -1514,6 +1519,15 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
       planned_at: scrubText(src.plan.planned_at || ""),
       refresh_sec: numberOrNull(src.plan.refresh_sec) || 300,
       timeframes: Array.isArray(src.plan.timeframes) ? src.plan.timeframes.map(scrubText).filter(Boolean) : ["5m", "15m", "1h", "1D"],
+      cadence_sec: src.plan.cadence_sec && typeof src.plan.cadence_sec === "object" ? {
+        "5m": numberOrNull(src.plan.cadence_sec["5m"]) || 300,
+        "15m": numberOrNull(src.plan.cadence_sec["15m"]) || 900,
+        "1h": numberOrNull(src.plan.cadence_sec["1h"]) || 3600,
+        "1D": numberOrNull(src.plan.cadence_sec["1D"]) || 86400,
+      } : { "5m": 300, "15m": 900, "1h": 3600, "1D": 86400 },
+      cadence_note: scrubText(src.plan.cadence_note || ""),
+      refreshed_tfs: Array.isArray(src.plan.refreshed_tfs) ? src.plan.refreshed_tfs.map(scrubText).filter(Boolean) : [],
+      kept_tfs: Array.isArray(src.plan.kept_tfs) ? src.plan.kept_tfs.map(scrubText).filter(Boolean) : [],
       scenarios_ready: Array.isArray(src.plan.scenarios_ready) ? src.plan.scenarios_ready.map(scrubText).filter(Boolean) : ["bullish", "bearish"],
       preferred_scenario: scrubText(src.plan.preferred_scenario || ""),
       note: scrubText(src.plan.note || ""),

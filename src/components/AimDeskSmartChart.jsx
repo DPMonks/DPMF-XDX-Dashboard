@@ -657,9 +657,16 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null, on
             Public book + desk OfferCreates. Pick Bullish or Bearish for this TF ({ESTIMATE_LABEL}).
             {historyNote ? ` | ${historyNote}` : ""}
             {biasNote ? ` | ${biasNote}` : ""}
-            {estimate?.refresh_sec || estimate?.plan?.refresh_sec
-              ? ` | Plan refresh ~${estimate?.refresh_sec || estimate?.plan?.refresh_sec}s`
-              : ""}
+            {(() => {
+              const sec =
+                tfPack?.refresh_sec ||
+                estimate?.plan?.cadence_sec?.[tf] ||
+                ({ "5m": 300, "15m": 900, "1h": 3600, "1D": 86400 }[tf] || 300);
+              const label =
+                tf === "1D" ? "daily" : tf === "1h" ? "hourly" : `every ${Math.round(sec / 60)}m`;
+              return ` | ${tf} plan ${label}`;
+            })()}
+            {tfPack?.planned_at ? ` | Plan ${asciiClean(String(tfPack.planned_at).slice(0, 16))}Z` : ""}
             {estimate?.preferred_scenario || estimate?.plan?.preferred_scenario
               ? ` | Prefer ${asciiClean(estimate?.preferred_scenario || estimate?.plan?.preferred_scenario)}`
               : ""}
