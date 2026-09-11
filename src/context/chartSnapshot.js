@@ -62,6 +62,26 @@ function pickSwingHighLow(candles = []) {
   return { high, low, last };
 }
 
+function slimCandles(candles = []) {
+  const rows = Array.isArray(candles) ? candles : [];
+  return rows
+    .slice(-48)
+    .map((c) => ({
+      t: Number(c?.t),
+      o: Number(c?.o),
+      h: Number(c?.h),
+      l: Number(c?.l),
+      c: Number(c?.c),
+    }))
+    .filter(
+      (c) =>
+        Number.isFinite(c.t) &&
+        Number.isFinite(c.h) &&
+        Number.isFinite(c.l) &&
+        Number.isFinite(c.c)
+    );
+}
+
 export function buildChartSnapshot({
   pair,
   timeframe,
@@ -81,6 +101,7 @@ export function buildChartSnapshot({
   viewMax = null,
   lastClose = null,
   livePrice = null,
+  candles = [],
 } = {}) {
   const kinds = {};
   for (const row of Array.isArray(drawings) ? drawings : []) {
@@ -94,6 +115,8 @@ export function buildChartSnapshot({
     if (Math.abs(n) >= 1) return Math.round(n * 1e6) / 1e6;
     return Math.round(n * 1e8) / 1e8;
   };
+  const candleRows = slimCandles(candles);
+  const swings = pickSwingHighLow(candleRows);
   return {
     pair: String(pair || "").replace(/\s+/g, "").toUpperCase() || null,
     timeframe: String(timeframe || "") || null,
@@ -121,6 +144,12 @@ export function buildChartSnapshot({
       count: Array.isArray(drawings) ? drawings.length : 0,
       kinds,
     },
+    swings: {
+      high: swings.high,
+      low: swings.low,
+      last: swings.last,
+    },
+    candles: candleRows,
     at: new Date().toISOString(),
   };
 }

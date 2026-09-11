@@ -1,4 +1,4 @@
-﻿/**
+/**
  * AIM Commander HybridChart prediction drawings + theory replies.
  * Uses drawings.js kinds: fib, fibext, trend, hline (not decorative random marks).
  * Visitor side-calls are treated as predictions/estimates, never fact or Teach.
@@ -33,12 +33,37 @@ const CMD_COLOR = {
   trend: "#c770ff",
 };
 
+const MIN_TREND_BARS = 4;
+
 export function resolvePredictSide(question, classified) {
   if (classified?.side === "bull" || classified?.side === "bear") return classified.side;
   const q = String(question || "").toLowerCase();
-  if (/\bbearish\b|\bbear\b|\bshort\b/.test(q)) return "bear";
-  if (/\bbullish\b|\bbull\b|\blong\b/.test(q)) return "bull";
+  if (/\bbearish\b|\bbear\b|\bshort\b/.test(q) && !/\beither\b|\bboth\b|\bany\b/.test(q)) return "bear";
+  if (/\bbullish\b|\bbull\b|\blong\b/.test(q) && !/\beither\b|\bboth\b|\bany\b/.test(q)) return "bull";
+  // Support / demand structure => bullish higher-lows. Resistance / supply => bearish.
+  if (/\b(support|demand|higher\s*lows?)\b/.test(q)) return "bull";
+  if (/\b(resist(ance)?|supply|lower\s*highs?)\b/.test(q)) return "bear";
+  if (isSideAgnosticReply(q)) return classified?.default_side === "bear" ? "bear" : "bull";
   return null;
+}
+
+/** User declined to pick a side: either / doesn't matter / both / any / you choose. */
+export function isSideAgnosticReply(question) {
+  const q = String(question || "").toLowerCase().trim();
+  if (!q) return false;
+  if (
+    /^(either|both|any|whatever|whichever)([,.!]|\s|$)/.test(q) ||
+    /\b(either|both|any|whatever|whichever)\b/.test(q) &&
+      /\b(doesn'?t matter|dont matter|do not matter|no matter|fine|ok|okay|works|is fine|you (choose|pick|decide)|dealer.?s? choice|up to you|as you (like|wish)|i (don'?t|do not) (mind|care))\b/.test(q)
+  ) {
+    return true;
+  }
+  if (
+    /\b(doesn'?t matter|dont matter|do not matter|no matter|you (choose|pick|decide)|dealer.?s? choice|up to you)\b/.test(q)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /** Detect visitor sharing their own call (not asking Commander to draw). */
@@ -48,6 +73,7 @@ export function looksLikeVisitorPrediction(question) {
   if (/\b(lay|draw|plot|paint|put|show)\b/.test(q) && /\b(prediction|fib|trend|hline|estimate)\b/.test(q)) {
     return false;
   }
+  if (isSideAgnosticReply(q)) return false;
   return (
     /\b(i think|i believe|my (call|view|bias|prediction|estimate|take)|im (bullish|bearish)|i'?m (bullish|bearish)|we are (bullish|bearish)|going (long|short)|targets? (at|near|around)|will (go|move|hit)|should (go|hit|reach))\b/.test(
       q
@@ -89,11 +115,63 @@ function findSwingLow(rows, from, to) {
   return best;
 }
 
+function localSwingLows(rows, pad = 2) {
+  const out = [];
+  for (let i = pad; i < rows.length - pad; i += 1) {
+    const row = rows[i];
+    let ok = true;
+    for (let j = i - pad; j <= i + pad; j += 1) {
+      if (j === i) continue;
+      if (rows[j].l < row.l) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) out.push({ index: i, t: row.t, price: row.l, kind: "swing_low" });
+  }
+  return out;
+}
+
+function localSwingHighs(rows, pad = 2) {
+  const out = [];
+  for (let i = pad; i < rows.length - pad; i += 1) {
+    const row = rows[i];
+    let ok = true;
+    for (let j = i - pad; j <= i + pad; j += 1) {
+      if (j === i) continue;
+      if (rows[j].h > row.h) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) out.push({ index: i, t: row.t, price: row.h, kind: "swing_high" });
+  }
+  return out;
+}
+
+/** Reject vertical / zero-width / same-candle "trends". */
+export function isValidDiagonal(a, b, { minBars = MIN_TREND_BARS } = {}) {
+  if (!a || !b) return false;
+  const t1 = num(a.t);
+  const t2 = num(b.t);
+  const p1 = num(a.price);
+  const p2 = num(b.price);
+  if (t1 == null || t2 == null || p1 == null || p2 == null) return false;
+  if (t1 === t2) return false;
+  const i1 = Number.isFinite(Number(a.index)) ? Number(a.index) : null;
+  const i2 = Number.isFinite(Number(b.index)) ? Number(b.index) : null;
+  if (i1 != null && i2 != null && Math.abs(i2 - i1) < minBars) return false;
+  // Meaningful time span (avoid synthetic 1ms stubs)
+  if (Math.abs(t2 - t1) < 60_000) return false;
+  // Must have price slope (not a horizontal disguised as trend when used as fib extremes at one x)
+  if (p1 === p2) return false;
+  return true;
+}
+
 /**
- * Structure swings from visible candles: prior impulse extreme + corrective extreme.
- * Bullish: swing low (A) then swing high (B) for retracement up impulse, or low->high for fib pullback.
- * For bullish fib retracement of an up-leg: A = swing low, B = swing high (measure pullback from B toward A).
- * For bearish fib of a down-leg: A = swing high, B = swing low.
+ * Fib impulse swings: distinct time+price extremes for retracement.
+ * Bullish up-leg: A swing low -> B swing high.
+ * Bearish down-leg: A swing high -> B swing low.
  */
 export function detectStructureSwings(chartContext, side) {
   const rows = candleRows(chartContext);
@@ -106,83 +184,235 @@ export function detectStructureSwings(chartContext, side) {
     if (side === "bear") {
       const high = findSwingHigh(rows, 0, earlyEnd);
       const low = findSwingLow(rows, lateStart, n - 1);
-      if (high && low && high.t < low.t && high.price > low.price) {
-        return { a: high, b: low, last: rows[n - 1], rows, source: "candles" };
+      if (high && low && high.t < low.t && high.price > low.price && isValidDiagonal(high, low, { minBars: 3 })) {
+        return { a: high, b: low, last: rows[n - 1], rows, source: "candles", side };
       }
-      // fallback: global high then later low
       const gHigh = findSwingHigh(rows, 0, n - 2);
       const gLow = findSwingLow(rows, (gHigh?.index || 0) + 1, n - 1);
-      if (gHigh && gLow) return { a: gHigh, b: gLow, last: rows[n - 1], rows, source: "candles" };
+      if (gHigh && gLow && isValidDiagonal(gHigh, gLow, { minBars: 3 })) {
+        return { a: gHigh, b: gLow, last: rows[n - 1], rows, source: "candles", side };
+      }
     } else {
       const low = findSwingLow(rows, 0, earlyEnd);
       const high = findSwingHigh(rows, lateStart, n - 1);
-      if (low && high && low.t < high.t && high.price > low.price) {
-        return { a: low, b: high, last: rows[n - 1], rows, source: "candles" };
+      if (low && high && low.t < high.t && high.price > low.price && isValidDiagonal(low, high, { minBars: 3 })) {
+        return { a: low, b: high, last: rows[n - 1], rows, source: "candles", side };
       }
       const gLow = findSwingLow(rows, 0, n - 2);
       const gHigh = findSwingHigh(rows, (gLow?.index || 0) + 1, n - 1);
-      if (gLow && gHigh) return { a: gLow, b: gHigh, last: rows[n - 1], rows, source: "candles" };
+      if (gLow && gHigh && isValidDiagonal(gLow, gHigh, { minBars: 3 })) {
+        return { a: gLow, b: gHigh, last: rows[n - 1], rows, source: "candles", side };
+      }
     }
   }
 
-  // Prefer published swings from snapshot
   if (swingsCtx?.high && swingsCtx?.low) {
     const hi = { t: num(swingsCtx.high.t), price: num(swingsCtx.high.price), kind: "swing_high" };
     const lo = { t: num(swingsCtx.low.t), price: num(swingsCtx.low.price), kind: "swing_low" };
     const last = swingsCtx.last
       ? { t: num(swingsCtx.last.t), price: num(swingsCtx.last.price) || num(swingsCtx.last.c) }
       : null;
-    if (hi.t != null && hi.price != null && lo.t != null && lo.price != null) {
+    if (hi.t != null && hi.price != null && lo.t != null && lo.price != null && hi.t !== lo.t) {
       if (side === "bear") {
-        return { a: hi, b: lo.t > hi.t ? lo : { ...lo, t: hi.t + 1 }, last, rows, source: "swings" };
+        const a = hi;
+        const b = lo.t > hi.t ? lo : null;
+        if (b && isValidDiagonal(a, b, { minBars: 1 })) return { a, b, last, rows, source: "swings", side };
+      } else {
+        const a = lo;
+        const b = hi.t > lo.t ? hi : null;
+        if (b && isValidDiagonal(a, b, { minBars: 1 })) return { a, b, last, rows, source: "swings", side };
       }
-      return { a: lo, b: hi.t > lo.t ? hi : { ...hi, t: lo.t + 1 }, last, rows, source: "swings" };
     }
   }
 
-  // Last resort: visible price range (still labelled estimate; times synthetic from context.at)
   const price = chartContext?.price || {};
   const lo = num(price.visible_min);
   const hi = num(price.visible_max);
   const lastPx = num(price.live) || num(price.last_close);
   if (lo != null && hi != null && hi > lo) {
+    // Prefer candle span times when available so anchors are not both clamped to the right edge.
+    const n = rows.length;
+    const tEarly = n >= 2 ? rows[Math.max(0, Math.floor(n * 0.15))].t : null;
+    const tLate = n >= 2 ? rows[Math.min(n - 1, Math.floor(n * 0.85))].t : null;
     const now = Date.parse(chartContext?.at) || Date.now();
-    const span = 15 * 60 * 1000;
+    const span = 60 * 60 * 1000;
+    const aT = tEarly != null ? tEarly : now - span * 4;
+    const bT = tLate != null ? tLate : now - span;
     if (side === "bear") {
       return {
-        a: { t: now - span * 4, price: hi, kind: "range_high" },
-        b: { t: now - span, price: lo, kind: "range_low" },
+        a: { t: aT, price: hi, kind: "range_high", index: 0 },
+        b: { t: bT, price: lo, kind: "range_low", index: Math.max(1, n - 1) },
         last: { t: now, price: lastPx || (lo + hi) / 2 },
         rows,
         source: "visible_range",
+        side,
       };
     }
     return {
-      a: { t: now - span * 4, price: lo, kind: "range_low" },
-      b: { t: now - span, price: hi, kind: "range_high" },
+      a: { t: aT, price: lo, kind: "range_low", index: 0 },
+      b: { t: bT, price: hi, kind: "range_high", index: Math.max(1, n - 1) },
       last: { t: now, price: lastPx || (lo + hi) / 2 },
       rows,
       source: "visible_range",
+      side,
     };
   }
   return null;
 }
 
+/**
+ * Diagonal structure trendline on candle swings.
+ * Bull/support: two distinct swing lows (prefer rising / higher lows).
+ * Bear/resist: two distinct swing highs (prefer falling / lower highs).
+ * NEVER reuses fib 0/1 extremes at the same index, NEVER vertical.
+ */
+export function detectTrendAnchors(chartContext, side) {
+  const rows = candleRows(chartContext);
+  if (rows.length >= 10) {
+    if (side === "bear") {
+      const highs = localSwingHighs(rows, 2);
+      // Prefer lower highs: earlier high > later high
+      for (let i = 0; i < highs.length; i += 1) {
+        for (let j = i + 1; j < highs.length; j += 1) {
+          const a = highs[i];
+          const b = highs[j];
+          if (b.index - a.index < MIN_TREND_BARS) continue;
+          if (b.price <= a.price * 1.002 && isValidDiagonal(a, b)) {
+            return { a, b, last: rows[rows.length - 1], rows, source: "candles_trend", side, role: "resistance" };
+          }
+        }
+      }
+      // Fallback: earliest and latest swing high with span
+      if (highs.length >= 2) {
+        const a = highs[0];
+        const b = highs[highs.length - 1];
+        if (isValidDiagonal(a, b)) {
+          return { a, b, last: rows[rows.length - 1], rows, source: "candles_trend", side, role: "resistance" };
+        }
+      }
+      // Fallback: early-window high to late-window high (forced different windows)
+      const n = rows.length;
+      const early = findSwingHigh(rows, 0, Math.floor(n * 0.4));
+      const late = findSwingHigh(rows, Math.floor(n * 0.55), n - 1);
+      if (early && late && isValidDiagonal(early, late)) {
+        return { a: early, b: late, last: rows[n - 1], rows, source: "candles_trend", side, role: "resistance" };
+      }
+    } else {
+      const lows = localSwingLows(rows, 2);
+      for (let i = 0; i < lows.length; i += 1) {
+        for (let j = i + 1; j < lows.length; j += 1) {
+          const a = lows[i];
+          const b = lows[j];
+          if (b.index - a.index < MIN_TREND_BARS) continue;
+          // Prefer higher lows for support
+          if (b.price >= a.price * 0.998 && isValidDiagonal(a, b)) {
+            return { a, b, last: rows[rows.length - 1], rows, source: "candles_trend", side, role: "support" };
+          }
+        }
+      }
+      if (lows.length >= 2) {
+        const a = lows[0];
+        const b = lows[lows.length - 1];
+        if (isValidDiagonal(a, b)) {
+          return { a, b, last: rows[rows.length - 1], rows, source: "candles_trend", side, role: "support" };
+        }
+      }
+      const n = rows.length;
+      const early = findSwingLow(rows, 0, Math.floor(n * 0.4));
+      const late = findSwingLow(rows, Math.floor(n * 0.55), n - 1);
+      if (early && late && isValidDiagonal(early, late)) {
+        return { a: early, b: late, last: rows[n - 1], rows, source: "candles_trend", side, role: "support" };
+      }
+    }
+  }
+
+  // Last resort: spaced points on visible range using candle times when possible
+  const fibLike = detectStructureSwings(chartContext, side);
+  if (!fibLike?.a || !fibLike?.b) return null;
+  // Do NOT use fib A/B (impulse high/low) as trend — rebuild from thirds of the series
+  const rows2 = fibLike.rows || [];
+  if (rows2.length >= 8) {
+    const n = rows2.length;
+    const i1 = Math.max(1, Math.floor(n * 0.2));
+    const i2 = Math.min(n - 2, Math.floor(n * 0.8));
+    if (side === "bear") {
+      const a = { index: i1, t: rows2[i1].t, price: rows2[i1].h, kind: "swing_high" };
+      const b = { index: i2, t: rows2[i2].t, price: rows2[i2].h, kind: "swing_high" };
+      if (isValidDiagonal(a, b)) return { a, b, last: rows2[n - 1], rows: rows2, source: "spaced", side, role: "resistance" };
+    } else {
+      const a = { index: i1, t: rows2[i1].t, price: rows2[i1].l, kind: "swing_low" };
+      const b = { index: i2, t: rows2[i2].t, price: rows2[i2].l, kind: "swing_low" };
+      if (isValidDiagonal(a, b)) return { a, b, last: rows2[n - 1], rows: rows2, source: "spaced", side, role: "support" };
+    }
+  }
+  return null;
+}
+
+/** Infer bull/bear from visible candles when user did not specify. */
+export function inferSideFromChart(chartContext, hint = null) {
+  if (hint === "bull" || hint === "bear") return hint;
+  const qSide = resolvePredictSide(hint || "", {});
+  if (qSide) return qSide;
+  const rows = candleRows(chartContext);
+  if (rows.length >= 8) {
+    const n = rows.length;
+    const earlyLow = findSwingLow(rows, 0, Math.floor(n * 0.45));
+    const lateHigh = findSwingHigh(rows, Math.floor(n * 0.5), n - 1);
+    const earlyHigh = findSwingHigh(rows, 0, Math.floor(n * 0.45));
+    const lateLow = findSwingLow(rows, Math.floor(n * 0.5), n - 1);
+    const up =
+      earlyLow && lateHigh && lateHigh.t > earlyLow.t && lateHigh.price > earlyLow.price
+        ? lateHigh.price - earlyLow.price
+        : 0;
+    const down =
+      earlyHigh && lateLow && lateLow.t > earlyHigh.t && earlyHigh.price > lateLow.price
+        ? earlyHigh.price - lateLow.price
+        : 0;
+    if (up > down && up > 0) return "bull";
+    if (down > up && down > 0) return "bear";
+    const first = rows[0].c;
+    const last = rows[n - 1].c;
+    if (last > first) return "bull";
+    if (last < first) return "bear";
+  }
+  const live = num(chartContext?.price?.live) || num(chartContext?.price?.last_close);
+  const vmin = num(chartContext?.price?.visible_min);
+  const vmax = num(chartContext?.price?.visible_max);
+  if (live != null && vmin != null && vmax != null && vmax > vmin) {
+    return live >= (vmin + vmax) / 2 ? "bull" : "bear";
+  }
+  return "bull";
+}
+
 function wantTools(question) {
   const q = String(question || "").toLowerCase();
-  const fib = /\bfib|\bretrace|\bextension|\bgolden\b/.test(q);
-  const trend = /\btrend(\s*line)?\b|\bstructure\b|\bchannel\b/.test(q);
-  const hline = /\bhline|\bhorizontal|\bsupport|\bresist|\bs\/r|\blevels?\b/.test(q);
+  const fib = /\bfib(onacci)?\b|\bretrace(ment)?\b|\bfibext\b|\bextension\b|\bgolden\b/.test(q);
+  const trend = /\btrend(\s*line)?s?\b|\bstructure\b|\bchannel\b|\bsupport\b|\bresist(ance)?\b/.test(q);
+  const hline = /\bhline|\bhorizontal|\bs\/r\b|\blevels?\b/.test(q);
   const multi = /\b(and|plus|with|also|stack|combo|all (the )?tools|full (kit|set))\b/.test(q);
-  // Default: fib + structure trend + S/R when user asks to lay prediction without naming one tool
+  const countOne = /\b(1|one|single|a)\s+trend(\s*line)?\b/.test(q) || /\blay\s+(1|one)\b/.test(q);
+  // Support/resist trendline alone should not force fibs
+  const supportOrResistOnly =
+    /\b(support|resist(ance)?)\b/.test(q) &&
+    /\btrend(\s*line)?s?\b/.test(q) &&
+    !fib &&
+    !/\b(prediction|predict|estimate|projection|full)\b/.test(q);
+
+  if (supportOrResistOnly || (trend && !fib && !hline && !multi && !/\b(prediction|predict|estimate|projection)\b/.test(q))) {
+    return { fib: false, trend: true, hline: false, multi: false, maxTrends: countOne || supportOrResistOnly ? 1 : 1 };
+  }
+  if (fib && !trend && !hline && !multi) {
+    return { fib: true, trend: false, hline: false, multi: false, maxTrends: 0 };
+  }
   if (!fib && !trend && !hline) {
-    return { fib: true, trend: true, hline: true, multi: true };
+    return { fib: true, trend: true, hline: true, multi: true, maxTrends: 1 };
   }
   return {
     fib: fib || (multi && !trend && !hline),
     trend: trend || multi,
     hline: hline || multi,
     multi,
+    maxTrends: countOne ? 1 : 1,
   };
 }
 
@@ -197,18 +427,55 @@ function tagCommander(row) {
   };
 }
 
+function pointPayload(p) {
+  return { t: p.t, price: p.price };
+}
+
 export function buildCommanderPredictionDrawings(side, chartContext, estimate, question) {
-  const structure = detectStructureSwings(chartContext, side);
-  if (!structure?.a || !structure?.b) {
-    return { drawings: [], structure: null, tools: wantTools(question) };
-  }
   const tools = wantTools(question);
   const drawings = [];
-  const a = { t: structure.a.t, price: structure.a.price };
-  const b = { t: structure.b.t, price: structure.b.price };
+  const narrate_steps = [];
   const color = side === "bear" ? CMD_COLOR.bear : CMD_COLOR.bull;
 
-  if (tools.fib) {
+  const fibStructure = tools.fib ? detectStructureSwings(chartContext, side) : null;
+  const trendStructure = tools.trend ? detectTrendAnchors(chartContext, side) : null;
+  const structure = fibStructure || trendStructure;
+
+  if (!structure?.a || !structure?.b) {
+    return { drawings: [], structure: null, tools, narrate_steps: [], side };
+  }
+
+  narrate_steps.push({
+    id: "open",
+    text: scrub(
+      tools.trend && !tools.fib
+        ? side === "bull"
+          ? "Laying one support trendline on the higher lows."
+          : "Laying one resistance trendline on the lower highs."
+        : `Laying ${side === "bull" ? "bullish" : "bearish"} HybridChart tools on the visible swings.`
+    ),
+  });
+
+  if (tools.fib && fibStructure?.a && fibStructure?.b && isValidDiagonal(fibStructure.a, fibStructure.b, { minBars: 2 })) {
+    const a = pointPayload(fibStructure.a);
+    const b = pointPayload(fibStructure.b);
+    narrate_steps.push({ id: "tool:fib", text: "Selecting the Fib retracement tool." });
+    narrate_steps.push({
+      id: "anchor:fib:a",
+      text: scrub(
+        side === "bear"
+          ? `Anchoring the swing high near ${formatPx(a.price)}.`
+          : `Anchoring the swing low near ${formatPx(a.price)}.`
+      ),
+    });
+    narrate_steps.push({
+      id: "anchor:fib:b",
+      text: scrub(
+        side === "bear"
+          ? `Anchoring the swing low near ${formatPx(b.price)}. Full Fib levels coming in.`
+          : `Anchoring the swing high near ${formatPx(b.price)}. Full Fib levels coming in.`
+      ),
+    });
     drawings.push(
       tagCommander({
         kind: "fib",
@@ -221,21 +488,47 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
     );
   }
 
-  if (tools.trend) {
-    drawings.push(
-      tagCommander({
-        kind: "trend",
-        color: CMD_COLOR.trend,
-        a,
-        b,
-        strokeWidth: 2,
-        lineStyle: "solid",
-      })
-    );
+  if (tools.trend && trendStructure?.a && trendStructure?.b && isValidDiagonal(trendStructure.a, trendStructure.b)) {
+    const a = pointPayload(trendStructure.a);
+    const b = pointPayload(trendStructure.b);
+    // Hard reject vertical / same-x before apply
+    if (a.t !== b.t && Math.abs(a.t - b.t) >= 60_000) {
+      narrate_steps.push({ id: "tool:trend", text: "Selecting the trendline tool." });
+      narrate_steps.push({
+        id: "anchor:trend:a",
+        text: scrub(
+          side === "bull"
+            ? `Anchoring the earlier swing low near ${formatPx(a.price)}.`
+            : `Anchoring the earlier swing high near ${formatPx(a.price)}.`
+        ),
+      });
+      narrate_steps.push({
+        id: "anchor:trend:b",
+        text: scrub(
+          side === "bull"
+            ? `Anchoring the later swing low near ${formatPx(b.price)} for support.`
+            : `Anchoring the later swing high near ${formatPx(b.price)} for resistance.`
+        ),
+      });
+      drawings.push(
+        tagCommander({
+          kind: "trend",
+          color: CMD_COLOR.trend,
+          a,
+          b,
+          strokeWidth: 2,
+          lineStyle: "solid",
+          role: trendStructure.role || (side === "bull" ? "support" : "resistance"),
+        })
+      );
+      // Cap at 1 trendline when requested
+      void tools.maxTrends;
+    }
   }
 
-  if (tools.hline) {
-    const mid = (a.price + b.price) / 2;
+  if (tools.hline && fibStructure?.a && fibStructure?.b) {
+    const a = fibStructure.a;
+    const b = fibStructure.b;
     const r618 = b.price + (a.price - b.price) * 0.618;
     const r382 = b.price + (a.price - b.price) * 0.382;
     const levels =
@@ -250,8 +543,8 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
             { price: r382, role: "fib_382" },
             { price: Math.min(a.price, b.price), role: "support" },
           ];
-    // Deduplicate near levels
     const used = [];
+    narrate_steps.push({ id: "tool:hline", text: "Marking horizontal support and resistance." });
     for (const lvl of levels) {
       const px = num(lvl.price);
       if (px == null) continue;
@@ -269,32 +562,39 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
         })
       );
     }
-    // silence unused mid warning in some linters
-    void mid;
   }
 
-  // Optional fib extension when user asks extension or multi and we have a clear third point (last)
-  if ((/\bfibext|\bextension\b/.test(String(question || "").toLowerCase()) || tools.multi) && structure.last?.t) {
-    const c = { t: structure.last.t, price: num(structure.last.price) || num(structure.last.c) || b.price };
-    if (c.price != null && (/\bfibext|\bextension\b/.test(String(question || "").toLowerCase()))) {
-      drawings.push(
-        tagCommander({
-          kind: "fibext",
-          color,
-          a,
-          b,
-          c,
-          strokeWidth: 1,
-          lineStyle: "solid",
-        })
-      );
+  if ((/\bfibext|\bextension\b/.test(String(question || "").toLowerCase()) || tools.multi) && fibStructure?.last?.t) {
+    if (/\bfibext|\bextension\b/.test(String(question || "").toLowerCase())) {
+      const a = pointPayload(fibStructure.a);
+      const b = pointPayload(fibStructure.b);
+      const c = {
+        t: fibStructure.last.t,
+        price: num(fibStructure.last.price) || num(fibStructure.last.c) || b.price,
+      };
+      if (c.price != null) {
+        drawings.push(
+          tagCommander({
+            kind: "fibext",
+            color,
+            a,
+            b,
+            c,
+            strokeWidth: 1,
+            lineStyle: "solid",
+          })
+        );
+      }
     }
   }
 
-  return { drawings, structure, tools, side };
+  return { drawings, structure, tools, narrate_steps, side, trendStructure, fibStructure };
 }
 
 function patternName(side, structure, tools) {
+  if (tools?.trend && !tools?.fib) {
+    return side === "bull" ? "rising support trendline" : "falling resistance trendline";
+  }
   if (tools?.fib && tools?.trend) {
     return side === "bull" ? "bullish impulse with Fibonacci pullback map" : "bearish impulse with Fibonacci continuation map";
   }
@@ -349,25 +649,28 @@ function theoryText(side, chartContext, built, estimate) {
   const tf = scrub(chartContext?.timeframe) || "this timeframe";
   const bits = [];
   bits.push("Estimate by AI-Matrix. Not guaranteed.");
-  if (!built?.structure) {
+  if (!built?.structure || !(built.drawings || []).length) {
     bits.push("I need a clearer visible swing on the HybridChart before I can lay tools accurately. Soft-refresh the chart and ask again.");
     return scrub(bits.join(" "));
   }
-  const { a, b, source } = built.structure;
-  const aPx = formatPx(a.price);
-  const bPx = formatPx(b.price);
   const pattern = patternName(side, built.structure, built.tools);
-  bits.push(
-    `Laying a ${pattern} on ${pair} ${tf}.`
-  );
-  if (source === "candles" || source === "swings") {
+  bits.push(`Laying a ${pattern} on ${pair} ${tf}.`);
+  if (built.tools?.trend && built.trendStructure) {
+    const aPx = formatPx(built.trendStructure.a.price);
+    const bPx = formatPx(built.trendStructure.b.price);
+    bits.push(
+      side === "bull"
+        ? `Support trendline joins swing lows near ${aPx} and ${bPx}.`
+        : `Resistance trendline joins swing highs near ${aPx} and ${bPx}.`
+    );
+  } else if (built.fibStructure) {
+    const aPx = formatPx(built.fibStructure.a.price);
+    const bPx = formatPx(built.fibStructure.b.price);
     bits.push(
       side === "bear"
         ? `Anchors: swing high ${aPx} into swing low ${bPx} from the visible candles.`
         : `Anchors: swing low ${aPx} into swing high ${bPx} from the visible candles.`
     );
-  } else {
-    bits.push(`Anchors from the visible price window ${aPx} to ${bPx} (soft estimate until candle swings load).`);
   }
   if (built.tools?.fib) {
     bits.push(
@@ -379,8 +682,8 @@ function theoryText(side, chartContext, built, estimate) {
   if (built.tools?.trend) {
     bits.push(
       side === "bull"
-        ? "The trendline tracks rising structure between those swings; a clean hold keeps the bullish continuation theory alive."
-        : "The trendline tracks falling structure between those swings; acceptance below keeps the bearish continuation theory alive."
+        ? "The diagonal tracks rising support between those lows; a clean hold keeps the bullish continuation theory alive."
+        : "The diagonal tracks falling resistance between those highs; acceptance below keeps the bearish continuation theory alive."
     );
   }
   if (built.tools?.hline) {
@@ -446,37 +749,72 @@ export function answerVisitorPrediction(question, chartContext, estimate) {
   };
 }
 
-export function answerChartPredict(question, estimate, chartContext, classified) {
+function needsSideAsk(question, tools) {
+  const q = String(question || "").toLowerCase();
+  // Support trendline / resistance trendline imply side
+  if (/\b(support|demand|higher\s*lows?)\b/.test(q)) return false;
+  if (/\b(resist(ance)?|supply|lower\s*highs?)\b/.test(q)) return false;
+  // Plain fib / trend without side: prefer auto-infer over asking when tools are specific
+  if (tools?.fib && !tools?.trend && !tools?.hline) return false;
+  if (tools?.trend && !tools?.fib && !tools?.multi) return false;
+  // Full prediction kit: ask if side unknown
+  return Boolean(tools?.multi || (tools?.fib && tools?.trend));
+}
+
+export function answerChartPredict(question, estimate, chartContext, classified, pendingChartAction = null) {
   const q = String(question || "");
   if (looksLikeVisitorPrediction(q) && classified?.intent !== "chart_predict" && classified?.intent !== "chart_side") {
     return answerVisitorPrediction(q, chartContext, estimate);
   }
-  // Visitor sharing a call while also wording like predict without draw verbs
   if (looksLikeVisitorPrediction(q) && !/\b(lay|draw|plot|paint|put|show|use)\b/i.test(q)) {
     return answerVisitorPrediction(q, chartContext, estimate);
   }
 
-  const side = resolvePredictSide(q, classified);
   const pair = scrub(chartContext?.pair) || "XRP/RLUSD";
   const tf = scrub(chartContext?.timeframe) || null;
+  const toolsPeek = wantTools(q);
+  const pendingAsk =
+    pendingChartAction &&
+    (pendingChartAction.type === "ask_side" || String(pendingChartAction.type || "") === "ask_side");
+
+  let side = resolvePredictSide(q, classified || {});
+
+  // Follow-up after ask_side: either / doesn't matter / both / any
+  if (!side && (isSideAgnosticReply(q) || classified?.intent === "chart_side" || pendingAsk)) {
+    if (isSideAgnosticReply(q) || pendingAsk || classified?.intent === "chart_side") {
+      side = inferSideFromChart(chartContext, classified?.default_side || "bull");
+    }
+  }
 
   if (!side) {
-    return {
-      text: scrub(
-        "Would you like a bullish or bearish prediction? Say bullish or bearish and I will lay the HybridChart tools on the visible swings. Estimate by AI-Matrix, not guaranteed."
-      ),
-      chart_action: {
-        type: "ask_side",
-        side: null,
-        timeframe: tf,
-        pair,
-        label: "Estimate by AI-Matrix",
-      },
-    };
+    side = inferSideFromChart(chartContext, q);
+  }
+
+  // Only ask side for ambiguous full prediction kits
+  if (!resolvePredictSide(q, classified || {}) && !isSideAgnosticReply(q) && !pendingAsk && needsSideAsk(q, toolsPeek)) {
+    // If user already implied nothing and it's a generic predict, ask
+    if (!/\b(support|resist|fib|trend)\b/i.test(q)) {
+      return {
+        text: scrub(
+          "Would you like a bullish or bearish prediction? Say bullish or bearish and I will lay the HybridChart tools on the visible swings. Estimate by AI-Matrix, not guaranteed."
+        ),
+        chart_action: {
+          type: "ask_side",
+          side: null,
+          timeframe: tf,
+          pair,
+          label: "Estimate by AI-Matrix",
+          pending_question: scrub(q).slice(0, 400),
+        },
+      };
+    }
   }
 
   const built = buildCommanderPredictionDrawings(side, chartContext, estimate, q);
   const text = theoryText(side, chartContext, built, estimate);
+  const narrate = [...(built.narrate_steps || [])];
+  narrate.push({ id: "close", text });
+
   return {
     text,
     chart_action: {
@@ -486,7 +824,7 @@ export function answerChartPredict(question, estimate, chartContext, classified)
       pair,
       label: "Estimate by AI-Matrix",
       drawings: built.drawings,
-      // Keep estimate overlay optional companion when desk pack exists
+      narrate_steps: narrate,
       show_estimate: Boolean(estimate && (estimate.fair_mid > 0 || estimate.by_tf)),
     },
   };

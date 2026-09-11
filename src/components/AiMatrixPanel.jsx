@@ -7,7 +7,7 @@ import AimAgentName from "./AimAgentName";
 import AimAgentAvatar from "./AimAgentAvatar";
 import { useWallet } from "../context/useWallet";
 import { useChartSnapshot } from "../context/chartSnapshot";
-import { publishChartAction } from "../context/chartAction";
+import { getChartAction, publishChartAction, subscribeChartNarrate } from "../context/chartAction";
 import { AIM_ADMIN_WALLET } from "../constants/ledger";
 import AimDeskSmartChart from "./AimDeskSmartChart";
 
@@ -162,12 +162,24 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     ]);
     setText("");
     try {
+      const pendingAction = getChartAction();
+      const pending_chart_action =
+        pendingAction && pendingAction.type === "ask_side"
+          ? {
+              type: "ask_side",
+              side: pendingAction.side || null,
+              pair: pendingAction.pair || null,
+              timeframe: pendingAction.timeframe || null,
+              pending_question: pendingAction.pending_question || null,
+            }
+          : null;
       const out = await postAimChat(message, {
         lang: langPref === "auto" ? "auto" : effectiveLang,
         wallet: chatWallet || classicAimWallet(walletAddress) || null,
         account: chatWallet || classicAimWallet(walletAddress) || null,
         address: chatWallet || classicAimWallet(walletAddress) || null,
         chart_context: chartSnapshot || null,
+        pending_chart_action,
       });
       if (myGen !== sendGenRef.current) return;
       let reply = out.reply?.body?.text || "Queued.";
@@ -179,53 +191,177 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
         out.reply?.body?.chart_action ||
         out.reply?.chart_action ||
         null;
-      if (chartAction && typeof chartAction === "object") {
-        publishChartAction(chartAction);
-      }
       const replyLang = out.lang || effectiveLang;
-      const replyId = `cmd-${Date.now()}`;
-      setLocalChat((rows) => [
-        ...rows.filter((r) => r.id !== thinkingId),
-        {
-          id: replyId,
-          role: "commander",
-          text: reply,
-          at: new Date().toISOString(),
+      const isLayTools = chartAction && chartAction.type === "lay_tools";
+      let spoken = { engine: aimVoiceEngineLabel(), needsPlay: false };
+      if (isLayTools) {
+        // Progressive narrate while AI cursor places tools; keep full theory in chat.
+        const replyId = `cmd-${Date.now()}`;
+        setLocalChat((rows) => [
+          ...rows.filter((r) => r.id !== thinkingId),
+          {
+            id: replyId,
+            role: "commander",
+            text: reply,
+            at: new Date().toISOString(),
+            lang: replyLang,
+            reveal: Math.min(120, reply.length),
+            speaking: true,
+          },
+        ]);
+        const queue = [];
+        let wake = null;
+        const wait = () =>
+          new Promise((resolve) => {
+            wake = resolve;
+          });
+        const unsub = subscribeChartNarrate((step) => {
+          if (!step?.text) return;
+          queue.push(step);
+          if (wake) {
+            const r = wake;
+            wake = null;
+            r();
+          }
+        });
+        publishChartAction(chartAction);
+        const seen = new Set();
+        const deadline = Date.now() + 45000;
+        while (Date.now() < deadline) {
+          if (myGen !== sendGenRef.current) break;
+          if (!queue.length) {
+            const step = await Promise.race([
+              wait().then(() => queue.shift()),
+              new Promise((r) => setTimeout(() => r(null), 400)),
+            ]);
+            if (step) queue.unshift(step);
+            if (!queue.length) {
+              // If HybridChart already finished (skip/fast), stop waiting once we have spoken open/close or timeout soft
+              if (seen.has("done") || seen.has("close")) break;
+              continue;
+            }
+          }
+          const step = queue.shift();
+          if (!step?.text || seen.has(step.id || step.text)) continue;
+          seen.add(step.id || step.text);
+          if (step.id === "close") {
+            // Speak theory as the closing line on the main bubble
+            spoken = await speakCommander(step.text || reply, {
+              voiceOn,
+              lang: replyLang,
+              onProgress: ({ chars }) => {
+                if (myGen !== sendGenRef.current) return;
+                setLocalChat((rows) =>
+                  rows.map((r) => (r.id === replyId ? { ...r, reveal: chars, speaking: true } : r))
+                );
+              },
+              onDone: () => {
+                if (myGen !== sendGenRef.current) return;
+                setLocalChat((rows) =>
+                  rows.map((r) =>
+                    r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r
+                  )
+                );
+              },
+            });
+            continue;
+          }
+          if (step.id === "done") break;
+          const lineId = `cmd-n-${Date.now()}-${seen.size}`;
+          setLocalChat((rows) => [
+            ...rows,
+            {
+              id: lineId,
+              role: "commander",
+              text: step.text,
+              at: new Date().toISOString(),
+              lang: replyLang,
+              reveal: 0,
+              speaking: true,
+              narrate: true,
+            },
+          ]);
+          await speakCommander(step.text, {
+            voiceOn,
+            lang: replyLang,
+            onProgress: ({ chars }) => {
+              if (myGen !== sendGenRef.current) return;
+              setLocalChat((rows) =>
+                rows.map((r) => (r.id === lineId ? { ...r, reveal: chars, speaking: true } : r))
+              );
+            },
+            onDone: () => {
+              if (myGen !== sendGenRef.current) return;
+              setLocalChat((rows) =>
+                rows.map((r) =>
+                  r.id === lineId ? { ...r, reveal: step.text.length, speaking: false } : r
+                )
+              );
+            },
+          });
+        }
+        unsub();
+        setLocalChat((rows) =>
+          rows.map((r) =>
+            r.id === replyId
+              ? {
+                  ...r,
+                  reveal: reply.length,
+                  speaking: false,
+                  voiceEngine: spoken?.engine || aimVoiceEngineLabel(),
+                  needsPlay: !!spoken?.needsPlay,
+                }
+              : r
+          )
+        );
+      } else {
+        if (chartAction && typeof chartAction === "object") {
+          publishChartAction(chartAction);
+        }
+        const replyId = `cmd-${Date.now()}`;
+        setLocalChat((rows) => [
+          ...rows.filter((r) => r.id !== thinkingId),
+          {
+            id: replyId,
+            role: "commander",
+            text: reply,
+            at: new Date().toISOString(),
+            lang: replyLang,
+            reveal: 0,
+            speaking: true,
+          },
+        ]);
+        spoken = await speakCommander(reply, {
+          voiceOn,
           lang: replyLang,
-          reveal: 0,
-          speaking: true,
-        },
-      ]);
-      const spoken = await speakCommander(reply, {
-        voiceOn,
-        lang: replyLang,
-        onProgress: ({ chars }) => {
-          if (myGen !== sendGenRef.current) return;
-          setLocalChat((rows) =>
-            rows.map((r) => (r.id === replyId ? { ...r, reveal: chars, speaking: true } : r))
-          );
-        },
-        onDone: () => {
-          if (myGen !== sendGenRef.current) return;
-          setLocalChat((rows) =>
-            rows.map((r) =>
-              r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r
-            )
-          );
-        },
-      });
-      if (myGen !== sendGenRef.current) return;
-      setLocalChat((rows) =>
-        rows.map((r) =>
-          r.id === replyId
-            ? {
-                ...r,
-                voiceEngine: spoken?.engine || aimVoiceEngineLabel(),
-                needsPlay: !!spoken?.needsPlay,
-              }
-            : r
-        )
-      );
+          onProgress: ({ chars }) => {
+            if (myGen !== sendGenRef.current) return;
+            setLocalChat((rows) =>
+              rows.map((r) => (r.id === replyId ? { ...r, reveal: chars, speaking: true } : r))
+            );
+          },
+          onDone: () => {
+            if (myGen !== sendGenRef.current) return;
+            setLocalChat((rows) =>
+              rows.map((r) =>
+                r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r
+              )
+            );
+          },
+        });
+        if (myGen !== sendGenRef.current) return;
+        setLocalChat((rows) =>
+          rows.map((r) =>
+            r.id === replyId
+              ? {
+                  ...r,
+                  voiceEngine: spoken?.engine || aimVoiceEngineLabel(),
+                  needsPlay: !!spoken?.needsPlay,
+                }
+              : r
+          )
+        );
+      }
       await refresh();
     } catch (err) {
       if (myGen !== sendGenRef.current) return;

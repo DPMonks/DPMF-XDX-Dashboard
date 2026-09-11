@@ -37,7 +37,7 @@ import {
 } from "../chart/overlays";
 import { walletChartMarks } from "../chart/walletMarks";
 import { buildDeskMarks, buildEstimateMarks, buildEstimateScenarioOverlay } from "../chart/aimMarks";
-import { useChartAction } from "../context/chartAction";
+import { useChartAction, publishChartNarrate } from "../context/chartAction";
 import { bookHeader, mergeOrderbookPayloads } from "../orderbook";
 import { walletOrdersFromBooks } from "../wallet/composeWallet";
 import {
@@ -237,9 +237,23 @@ export default function HybridChart({
 
     (async () => {
       const placed = [];
+      const narrateSteps = Array.isArray(chartAction.narrate_steps) ? chartAction.narrate_steps : [];
+      const narrateById = Object.fromEntries(narrateSteps.filter((n) => n?.id).map((n) => [n.id, n]));
+      const speakStep = (id, fallback) => {
+        const step = narrateById[id] || (fallback ? { id, text: fallback } : null);
+        if (step?.text) {
+          try {
+            publishChartNarrate(step);
+          } catch {
+            /* ignore */
+          }
+        }
+      };
+      if (narrateById.open) speakStep("open");
       for (const row of drawingsIn) {
         if (cancelled || aiSkipRef.current) break;
         const toolId = toolIdForDrawing(row);
+        speakStep(`tool:${toolId}`, `Selecting the ${toolId} tool.`);
         setAiCursor((cur) => ({ ...cur, phase: "tool", tool: toolId }));
         setTool(toolId === "hline" || toolId === "fib" || toolId === "fibext" || toolId === "trend" ? toolId : toolId);
 
@@ -258,7 +272,15 @@ export default function HybridChart({
 
         const points = drawingPlacementPoints(row);
         let lastOverlay = fromOverlay;
+        let pointIdx = 0;
         for (const point of points) {
+          const anchorId =
+            pointIdx === 0 ? `anchor:${toolId}:a` : pointIdx === 1 ? `anchor:${toolId}:b` : `anchor:${toolId}:c`;
+          speakStep(
+            anchorId,
+            pointIdx === 0 ? "Anchoring the first swing." : pointIdx === 1 ? "Anchoring the second swing." : "Anchoring the extension point."
+          );
+          pointIdx += 1;
           const client = approxPlotClientPoint(plotEl, candles, view, point, plotHeight);
           const to = clientToOverlay(bodyEl, client) || lastOverlay;
           steps.push({ type: "move", from: lastOverlay, to, ms: 520 });
@@ -288,6 +310,12 @@ export default function HybridChart({
           const kept = rows.filter((r) => !(r && (r.commander || r.source === "commander")));
           return [...kept, ...drawingsIn.map((row) => ({ ...row, commander: true, source: "commander" }))];
         });
+      }
+      speakStep("close");
+      try {
+        publishChartNarrate({ id: "done", text: "Tools laid. Estimate by AI-Matrix, not guaranteed." });
+      } catch {
+        /* ignore */
       }
       setTool("cursor");
       setPending(null);
