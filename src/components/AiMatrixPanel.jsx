@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
+import { getAimStatus, postAimChat, getAimLocale, classicAimWallet } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
 import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
 import { AIM_AGENT_IDS, AIM_COMMANDER_AVATAR, aimAgentLabel, aimAgentRole, aimAgentProfile } from "../aimAgentNames";
@@ -23,7 +23,9 @@ function ago(iso) {
 export default function AiMatrixPanel({ onChartPropsChange = null, showInlineChart = true } = {}) {
   const { walletAddress } = useWallet();
   const chartSnapshot = useChartSnapshot();
-  const isAimAdmin = Boolean(walletAddress) && walletAddress === AIM_ADMIN_WALLET;
+  // Only show Admin teach on when the same classic wallet will be sent on chat.
+  const chatWallet = classicAimWallet(walletAddress);
+  const isAimAdmin = Boolean(chatWallet) && chatWallet === AIM_ADMIN_WALLET;
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -154,7 +156,9 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     try {
       const out = await postAimChat(message, {
         lang: langPref === "auto" ? "auto" : effectiveLang,
-        wallet: walletAddress || null,
+        wallet: chatWallet || classicAimWallet(walletAddress) || null,
+        account: chatWallet || classicAimWallet(walletAddress) || null,
+        address: chatWallet || classicAimWallet(walletAddress) || null,
         chart_context: chartSnapshot || null,
       });
       let reply = out.reply?.body?.text || "Queued.";
