@@ -2683,12 +2683,13 @@ function classifyAimQuestion(raw) {
   }
   // Draw / lay chart tools (fib, trendline, support) — keep out of identity/LLM fallthrough
   if (
-    (/\b(lay|draw|plot|show|put|paint|add|use)\b/.test(q) &&
-      /\b(prediction|predict|estimate|projection|next (move|path|leg)|forward path|scenario|chart tools?|fib(onacci)?|fibext|trend\s*lines?|hlines?|support|resist)\b/.test(q)) ||
+    (/\b(lay|draw|plot|show|put|paint|add|use|place)\b/.test(q) &&
+      /\b(prediction|predict|estimate|projection|next (move|path|leg)|forward path|scenario|chart tools?|fib(onacci)?|fibext|trend\s*lines?|hlines?|support|resist|line)\b/.test(q)) ||
     /\b(predict (the )?(next|move)|next potential move|forecast (path|move)|estimate path|prediction of (the )?next)\b/.test(q) ||
     /\b(fib(onacci)?(\s+retrace(ment)?)?|lay\s+(a\s+)?fib|fib\s*ext)\b/.test(q) ||
-    /\b(trend\s*lines?|support\s+trend|resist(ance)?\s+trend|(lay|draw|show)\s+(1|one|a)?\s*trend)\b/.test(q) ||
-    (/\b(support|resist(ance)?)\b/.test(q) && /\b(trend|line|draw|lay|show)\b/.test(q))
+    /\b(trend\s*lines?|support\s+trend|resist(ance)?\s+trend|(lay|draw|show|place)\s+(1|one|a)?\s*trend)\b/.test(q) ||
+    /\b(support\s*lines?|resist(ance)?\s*lines?|horizontal\s+(support|resist)|place\s+(me\s+)?(a\s+)?support|place\s+(me\s+)?(a\s+)?resist)\b/.test(q) ||
+    (/\b(support|resist(ance)?)\b/.test(q) && /\b(trend|line|draw|lay|show|place|hline)\b/.test(q))
   ) {
     const side = /\bbear/i.test(q)
       ? "bear"
@@ -2779,7 +2780,14 @@ function classifyAimQuestion(raw) {
   }
   if (/\b(order ?book|best bid|best ask|spread)\b/.test(q)) return { intent: "orderbook" };
   if (/\b(smart swap|swap)\b/.test(q)) return { intent: "swap" };
-  if (/\b(smart chart|desk chart|aim[- ]?desk|commander estimate|estimate by ai[- ]?matrix|projection|bullish|bearish|demand (zone|box|area)|supply (zone|box|area)|support|resistance|fair mid|xrp\/rlusd.*(chart|estimate|overlay)|overlay|why .*(estimate|bull|bear|projection|chart|bias|score)|why (bullish|bearish)|rationale)\b/.test(q)) {
+  if (
+    /\b(smart chart|desk chart|aim[- ]?desk|commander estimate|estimate by ai[- ]?matrix|fair mid|xrp\/rlusd.*(chart|estimate|overlay)|why .*(estimate|bull|bear|projection|chart|bias|score)|why (bullish|bearish)|rationale)\b/.test(q) ||
+    (/\b(projection|demand (zone|box|area)|supply (zone|box|area)|overlay)\b/.test(q) &&
+      !/\b(lay|draw|plot|paint|put|show|add|use|place|fib|trend|hline|support\s*line|resist(ance)?\s*line)\b/.test(q)) ||
+    (/\b(bullish|bearish)\b/.test(q) &&
+      /\b(estimate|projection|overlay|desk|why|rationale|bias|score)\b/.test(q) &&
+      !/\b(lay|draw|plot|paint|put|show|add|use|place|fib|trend|hline|line|support|resist)\b/.test(q))
+  ) {
     return { intent: "estimate" };
   }
   if (/\b(trade chart|trading chart|price chart|chart)\b/.test(q)) return { intent: "chart" };
@@ -3700,6 +3708,25 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
   }
 
   if (classified.intent === "estimate") {
+    // Never answer a chart-tool place request with estimate-missing copy.
+    if (
+      /\b(lay|draw|plot|paint|put|show|add|use|place)\b/i.test(question) &&
+      /\b(fib|trend|hline|support|resist|line|level)\b/i.test(question)
+    ) {
+      const pred = answerChartPredict(
+        question,
+        ctx.estimate,
+        chartContext || ctx.chart_context || null,
+        { intent: "chart_predict", side: resolvePredictSide(question, classified) },
+        ctx.pending_chart_action || null
+      );
+      return {
+        type: "commander_answer",
+        intent: "chart_predict",
+        text: pred.text,
+        chart_action: pred.chart_action || null,
+      };
+    }
     const side = resolvePredictSide(question, classified);
     const base = {
       type: "commander_answer",

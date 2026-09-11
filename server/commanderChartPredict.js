@@ -387,25 +387,46 @@ export function inferSideFromChart(chartContext, hint = null) {
 function wantTools(question) {
   const q = String(question || "").toLowerCase();
   const fib = /\bfib(onacci)?\b|\bretrace(ment)?\b|\bfibext\b|\bextension\b|\bgolden\b/.test(q);
-  const trend = /\btrend(\s*line)?s?\b|\bstructure\b|\bchannel\b|\bsupport\b|\bresist(ance)?\b/.test(q);
-  const hline = /\bhline|\bhorizontal|\bs\/r\b|\blevels?\b/.test(q);
+  const explicitTrend = /\btrend(\s*line)?s?\b|\bstructure\b|\bchannel\b/.test(q);
+  const supportOrResist = /\b(support|resist(ance)?|demand|supply)\b/.test(q);
+  const lineWord = /\b(line|hline|horizontal|level)s?\b/.test(q);
+  // "support line" / "place support" => horizontal support (hline). "support trendline" => diagonal.
+  const supportLineOnly =
+    supportOrResist &&
+    lineWord &&
+    !explicitTrend &&
+    !fib &&
+    !/\b(prediction|predict|estimate|projection|full)\b/.test(q);
+  const trend =
+    explicitTrend ||
+    (supportOrResist && explicitTrend) ||
+    (/\b(support|resist(ance)?)\b/.test(q) && /\btrend\b/.test(q));
+  const hline =
+    /\bhline|\bhorizontal|\bs\/r\b|\blevels?\b/.test(q) ||
+    supportLineOnly ||
+    (supportOrResist && lineWord && !explicitTrend);
   const multi = /\b(and|plus|with|also|stack|combo|all (the )?tools|full (kit|set))\b/.test(q);
-  const countOne = /\b(1|one|single|a)\s+trend(\s*line)?\b/.test(q) || /\blay\s+(1|one)\b/.test(q);
-  // Support/resist trendline alone should not force fibs
-  const supportOrResistOnly =
-    /\b(support|resist(ance)?)\b/.test(q) &&
-    /\btrend(\s*line)?s?\b/.test(q) &&
+  const countOne =
+    /\b(1|one|single|a)\s+(trend(\s*line)?|support|resist|hline|line)\b/.test(q) ||
+    /\b(lay|draw|place)\s+(1|one|me\s+a|a)\b/.test(q);
+  const supportOrResistTrendOnly =
+    supportOrResist &&
+    explicitTrend &&
     !fib &&
     !/\b(prediction|predict|estimate|projection|full)\b/.test(q);
 
-  if (supportOrResistOnly || (trend && !fib && !hline && !multi && !/\b(prediction|predict|estimate|projection)\b/.test(q))) {
-    return { fib: false, trend: true, hline: false, multi: false, maxTrends: countOne || supportOrResistOnly ? 1 : 1 };
+  if (supportLineOnly) {
+    // One support/resist horizontal; optional diagonal only if they also said trend
+    return { fib: false, trend: false, hline: true, multi: false, maxTrends: 0, maxHlines: 1, supportLine: true };
+  }
+  if (supportOrResistTrendOnly || (trend && !fib && !hline && !multi && !/\b(prediction|predict|estimate|projection)\b/.test(q))) {
+    return { fib: false, trend: true, hline: false, multi: false, maxTrends: 1, maxHlines: 0 };
   }
   if (fib && !trend && !hline && !multi) {
-    return { fib: true, trend: false, hline: false, multi: false, maxTrends: 0 };
+    return { fib: true, trend: false, hline: false, multi: false, maxTrends: 0, maxHlines: 0 };
   }
   if (!fib && !trend && !hline) {
-    return { fib: true, trend: true, hline: true, multi: true, maxTrends: 1 };
+    return { fib: true, trend: true, hline: true, multi: true, maxTrends: 1, maxHlines: 3 };
   }
   return {
     fib: fib || (multi && !trend && !hline),
@@ -413,6 +434,8 @@ function wantTools(question) {
     hline: hline || multi,
     multi,
     maxTrends: countOne ? 1 : 1,
+    maxHlines: supportLineOnly ? 1 : 3,
+    supportLine: supportLineOnly,
   };
 }
 
@@ -438,21 +461,28 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
   const color = side === "bear" ? CMD_COLOR.bear : CMD_COLOR.bull;
 
   const fibStructure = tools.fib ? detectStructureSwings(chartContext, side) : null;
-  const trendStructure = tools.trend ? detectTrendAnchors(chartContext, side) : null;
-  const structure = fibStructure || trendStructure;
+  const trendStructure = tools.trend || tools.supportLine || tools.hline
+    ? detectTrendAnchors(chartContext, side)
+    : null;
+  const structure = fibStructure || trendStructure || detectStructureSwings(chartContext, side);
 
-  if (!structure?.a || !structure?.b) {
+  // Hline-only support/resist can proceed even if diagonal structure is soft
+  if (!(tools.hline && (tools.supportLine || tools.maxHlines === 1)) && (!structure?.a || !structure?.b)) {
     return { drawings: [], structure: null, tools, narrate_steps: [], side };
   }
 
   narrate_steps.push({
     id: "open",
     text: scrub(
-      tools.trend && !tools.fib
+      tools.supportLine || (tools.hline && !tools.fib && !tools.trend)
         ? side === "bull"
-          ? "Laying one support trendline on the higher lows."
-          : "Laying one resistance trendline on the lower highs."
-        : `Laying ${side === "bull" ? "bullish" : "bearish"} HybridChart tools on the visible swings.`
+          ? "Placing a bullish support line on the recent swing low."
+          : "Placing a bearish resistance line on the recent swing high."
+        : tools.trend && !tools.fib
+          ? side === "bull"
+            ? "Laying one support trendline on the higher lows."
+            : "Laying one resistance trendline on the lower highs."
+          : `Laying ${side === "bull" ? "bullish" : "bearish"} HybridChart tools on the visible swings.`
     ),
   });
 
@@ -526,38 +556,75 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
     }
   }
 
-  if (tools.hline && fibStructure?.a && fibStructure?.b) {
-    const a = fibStructure.a;
-    const b = fibStructure.b;
-    const r618 = b.price + (a.price - b.price) * 0.618;
-    const r382 = b.price + (a.price - b.price) * 0.382;
-    const levels =
-      side === "bull"
-        ? [
-            { price: Math.min(a.price, b.price), role: "support" },
-            { price: r618, role: "fib_618" },
-            { price: Math.max(a.price, b.price), role: "resistance" },
-          ]
-        : [
-            { price: Math.max(a.price, b.price), role: "resistance" },
-            { price: r382, role: "fib_382" },
-            { price: Math.min(a.price, b.price), role: "support" },
-          ];
+  if (tools.hline) {
+    const levels = [];
+    if (tools.supportLine || (tools.maxHlines === 1 && !tools.fib)) {
+      // Single support/resist horizontal from recent swing (not estimate-dependent)
+      const rows = candleRows(chartContext);
+      let px = null;
+      let tAt = null;
+      if (side === "bull") {
+        const swing = detectTrendAnchors(chartContext, "bull");
+        const low = swing?.b || swing?.a || (rows.length ? { t: rows[rows.length - 1].t, price: findSwingLow(rows, Math.max(0, rows.length - 12), rows.length - 1)?.price } : null);
+        px = num(low?.price);
+        tAt = num(low?.t);
+        if (px != null) levels.push({ price: px, role: "support", t: tAt });
+      } else {
+        const swing = detectTrendAnchors(chartContext, "bear");
+        const high = swing?.b || swing?.a || (rows.length ? { t: rows[rows.length - 1].t, price: findSwingHigh(rows, Math.max(0, rows.length - 12), rows.length - 1)?.price } : null);
+        px = num(high?.price);
+        tAt = num(high?.t);
+        if (px != null) levels.push({ price: px, role: "resistance", t: tAt });
+      }
+      if (!levels.length) {
+        const vmin = num(chartContext?.price?.visible_min);
+        const vmax = num(chartContext?.price?.visible_max);
+        if (side === "bull" && vmin != null) levels.push({ price: vmin, role: "support", t: Date.now() });
+        if (side === "bear" && vmax != null) levels.push({ price: vmax, role: "resistance", t: Date.now() });
+      }
+    } else if (fibStructure?.a && fibStructure?.b) {
+      const a = fibStructure.a;
+      const b = fibStructure.b;
+      const r618 = b.price + (a.price - b.price) * 0.618;
+      const r382 = b.price + (a.price - b.price) * 0.382;
+      if (side === "bull") {
+        levels.push(
+          { price: Math.min(a.price, b.price), role: "support", t: b.t },
+          { price: r618, role: "fib_618", t: b.t },
+          { price: Math.max(a.price, b.price), role: "resistance", t: b.t }
+        );
+      } else {
+        levels.push(
+          { price: Math.max(a.price, b.price), role: "resistance", t: b.t },
+          { price: r382, role: "fib_382", t: b.t },
+          { price: Math.min(a.price, b.price), role: "support", t: b.t }
+        );
+      }
+    }
     const used = [];
-    narrate_steps.push({ id: "tool:hline", text: "Marking horizontal support and resistance." });
-    for (const lvl of levels) {
+    if (levels.length) {
+      narrate_steps.push({
+        id: "tool:hline",
+        text: side === "bull" ? "Selecting horizontal support." : "Selecting horizontal resistance.",
+      });
+    }
+    for (const lvl of levels.slice(0, tools.maxHlines || 3)) {
       const px = num(lvl.price);
       if (px == null) continue;
-      if (used.some((u) => Math.abs(u - px) / px < 0.0008)) continue;
+      if (used.some((u) => Math.abs(u - px) / Math.max(px, 1e-12) < 0.0008)) continue;
       used.push(px);
+      narrate_steps.push({
+        id: `anchor:hline:${lvl.role}`,
+        text: scrub(`Anchoring ${lvl.role.replace(/_/g, " ")} near ${formatPx(px)}.`),
+      });
       drawings.push(
         tagCommander({
           kind: "hline",
           color: CMD_COLOR.level,
-          t: b.t,
+          t: lvl.t || Date.now(),
           price: px,
-          strokeWidth: 1,
-          lineStyle: lvl.role.includes("fib") ? "dash" : "solid",
+          strokeWidth: 2,
+          lineStyle: String(lvl.role).includes("fib") ? "dash" : "solid",
           role: lvl.role,
         })
       );
@@ -592,6 +659,9 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
 }
 
 function patternName(side, structure, tools) {
+  if (tools?.supportLine || (tools?.hline && !tools?.fib && !tools?.trend)) {
+    return side === "bull" ? "horizontal support line" : "horizontal resistance line";
+  }
   if (tools?.trend && !tools?.fib) {
     return side === "bull" ? "rising support trendline" : "falling resistance trendline";
   }
@@ -649,8 +719,8 @@ function theoryText(side, chartContext, built, estimate) {
   const tf = scrub(chartContext?.timeframe) || "this timeframe";
   const bits = [];
   bits.push("Estimate by AI-Matrix. Not guaranteed.");
-  if (!built?.structure || !(built.drawings || []).length) {
-    bits.push("I need a clearer visible swing on the HybridChart before I can lay tools accurately. Soft-refresh the chart and ask again.");
+  if (!(built.drawings || []).length) {
+    bits.push("I could not lock a clear swing on the visible candles yet. Keep the HybridChart open and ask me to place the support line again.");
     return scrub(bits.join(" "));
   }
   const pattern = patternName(side, built.structure, built.tools);
@@ -686,14 +756,28 @@ function theoryText(side, chartContext, built, estimate) {
         : "The diagonal tracks falling resistance between those highs; acceptance below keeps the bearish continuation theory alive."
     );
   }
-  if (built.tools?.hline) {
+  if (built.tools?.supportLine || (built.tools?.hline && !built.tools?.fib && !built.tools?.trend)) {
+    bits.push(
+      side === "bull"
+        ? "Horizontal support is on the recent swing low from the visible candles. Estimate by AI-Matrix, not guaranteed."
+        : "Horizontal resistance is on the recent swing high from the visible candles. Estimate by AI-Matrix, not guaranteed."
+    );
+  } else if (built.tools?.hline) {
     bits.push("Horizontal levels mark clear support and resistance from those same extremes plus a key Fibonacci reaction line.");
   }
-  bits.push(
-    side === "bull"
-      ? "Next-move theory: look for a hold above the mapped demand band, then a push toward or through the prior swing high. This is a prediction, not fact."
-      : "Next-move theory: look for rejection under the mapped supply band, then a push toward or through the prior swing low. This is a prediction, not fact."
-  );
+  if (built.tools?.supportLine || (built.tools?.hline && !built.tools?.fib && !built.tools?.trend)) {
+    bits.push(
+      side === "bull"
+        ? "Next-move theory: watch for a hold above that support. This is a prediction, not fact."
+        : "Next-move theory: watch for rejection under that resistance. This is a prediction, not fact."
+    );
+  } else {
+    bits.push(
+      side === "bull"
+        ? "Next-move theory: look for a hold above the mapped demand band, then a push toward or through the prior swing high. This is a prediction, not fact."
+        : "Next-move theory: look for rejection under the mapped supply band, then a push toward or through the prior swing low. This is a prediction, not fact."
+    );
+  }
   if (estimate?.fair_mid > 0 || estimate?.mid > 0) {
     const fair = formatPx(estimate.fair_mid || estimate.mid);
     if (fair) bits.push(`Desk fair mid sits near ${fair} as context only, also an estimate.`);
