@@ -305,6 +305,7 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
   }
 
   stopCommanderSpeech({ keepPending: false });
+  const speakGen = playGen;
   unlockCommanderAudio();
 
   if (!voiceOn) {
@@ -328,12 +329,20 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
     arrayBuffer = await res.arrayBuffer();
     if (!arrayBuffer || arrayBuffer.byteLength < 64) throw new Error("empty audio");
   } catch (err) {
+    if (speakGen !== playGen) {
+      lastEngine = "aborted";
+      return { mode: "aborted", engine: lastEngine };
+    }
     console.warn("[AIM] Edge speak API failed", err?.message || err);
     lastEngine = "browser-fallback";
     speakBrowserFallback(display, lang, onProgress, onDone);
     return { mode: "browser", engine: lastEngine, error: String(err?.message || err) };
   }
 
+  if (speakGen !== playGen) {
+    lastEngine = "aborted";
+    return { mode: "aborted", engine: lastEngine };
+  }
   const ctx = getAudioCtx();
   if (!ctx) {
     lastEngine = "browser-fallback";
@@ -380,6 +389,7 @@ function speakBrowserFallback(text, lang, onProgress, onDone) {
   const synth = window.speechSynthesis;
   const display = String(text || "");
   const spoken = pronounceForSpeech(display);
+  const gen = playGen;
   if (!synth || !spoken) {
     runTimedReveal(display || spoken, onProgress, onDone, { msPerChar: 16 });
     return;
@@ -392,19 +402,25 @@ function speakBrowserFallback(text, lang, onProgress, onDone) {
   const weights = revealWeights(display);
   emitProgress(onProgress, 0, total);
   utter.onboundary = (ev) => {
+    if (gen !== playGen) return;
     // Drive reveal from speech progress but burst identifiers
     const approx = Math.min(1, (ev.charIndex + (ev.charLength || 1)) / Math.max(1, spoken.length));
     emitProgress(onProgress, charsForWeightedRatio(weights, approx), total);
   };
   utter.onend = () => {
+    if (gen !== playGen) return;
     emitProgress(onProgress, total, total);
     if (typeof onDone === "function") onDone();
   };
-  utter.onerror = () => runTimedReveal(display, onProgress, onDone, { msPerChar: 12 });
+  utter.onerror = () => {
+    if (gen !== playGen) return;
+    runTimedReveal(display, onProgress, onDone, { msPerChar: 12 });
+  };
   try {
     synth.cancel();
     synth.speak(utter);
   } catch {
+    if (gen !== playGen) return;
     runTimedReveal(display, onProgress, onDone, { msPerChar: 12 });
   }
 }

@@ -39,6 +39,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   const [langSource, setLangSource] = useState("auto");
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const chatLogRef = useRef(null);
+  const sendGenRef = useRef(0);
   const [movePage, setMovePage] = useState(0);
   const [moveSwap, setMoveSwap] = useState(false);
   const [pulsePage, setPulsePage] = useState(0);
@@ -134,7 +135,12 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   async function onSend(event) {
     event.preventDefault();
     const message = text.trim();
-    if (!message || busy) return;
+    if (!message) return;
+
+    // Interrupt any in-flight compose/speech so the user can barge in mid-reply.
+    stopCommanderSpeech();
+    const myGen = ++sendGenRef.current;
+
     setBusy(true);
     if (voiceOn) {
       unlockCommanderAudio();
@@ -142,7 +148,8 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     }
     const thinkingId = `thinking-${Date.now()}`;
     setLocalChat((rows) => [
-      ...finishSpeakingRows(rows),
+      // Drop prior "Composing..." bubbles; finalize any mid-reveal speech rows.
+      ...finishSpeakingRows(rows.filter((r) => !r.pending)),
       { role: "you", text: message, at: new Date().toISOString() },
       {
         id: thinkingId,
@@ -162,6 +169,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
         address: chatWallet || classicAimWallet(walletAddress) || null,
         chart_context: chartSnapshot || null,
       });
+      if (myGen !== sendGenRef.current) return;
       let reply = out.reply?.body?.text || "Queued.";
       if (out.teach_ack && !String(reply).includes(" ack")) {
         reply = `${String(reply).trimEnd()} ack`;
@@ -192,11 +200,13 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
         voiceOn,
         lang: replyLang,
         onProgress: ({ chars }) => {
+          if (myGen !== sendGenRef.current) return;
           setLocalChat((rows) =>
             rows.map((r) => (r.id === replyId ? { ...r, reveal: chars, speaking: true } : r))
           );
         },
         onDone: () => {
+          if (myGen !== sendGenRef.current) return;
           setLocalChat((rows) =>
             rows.map((r) =>
               r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r
@@ -204,6 +214,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
           );
         },
       });
+      if (myGen !== sendGenRef.current) return;
       setLocalChat((rows) =>
         rows.map((r) =>
           r.id === replyId
@@ -217,12 +228,13 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
       );
       await refresh();
     } catch (err) {
+      if (myGen !== sendGenRef.current) return;
       setLocalChat((rows) => [
         ...rows.filter((r) => r.id !== thinkingId),
         { role: "system", text: err.message || "Chat failed", at: new Date().toISOString() },
       ]);
     } finally {
-      setBusy(false);
+      if (myGen === sendGenRef.current) setBusy(false);
     }
   }
 
@@ -549,9 +561,8 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
               onChange={(e) => setText(e.target.value)}
               placeholder="Ask Commander (not saved)..."
               maxLength={2000}
-              disabled={busy}
             />
-            <button type="submit" disabled={busy || !text.trim()}>
+            <button type="submit" disabled={!text.trim()} title={busy ? "Stop current reply and send" : "Send"}>
               Send
             </button>
           </form>
