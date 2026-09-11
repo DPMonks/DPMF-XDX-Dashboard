@@ -36,6 +36,7 @@ import {
   zoomPriceScale,
 } from "../chart/overlays";
 import { walletChartMarks } from "../chart/walletMarks";
+import { buildDeskMarks, buildEstimateMarks } from "../chart/aimMarks";
 import { bookHeader, mergeOrderbookPayloads } from "../orderbook";
 import { walletOrdersFromBooks } from "../wallet/composeWallet";
 import {
@@ -115,10 +116,15 @@ function poolForPair(pools, pair) {
   });
 }
 
-export default function HybridChart() {
+export default function HybridChart({
+  deskOrders = null,
+  estimate = null,
+  aimEmbed = false,
+  initialPair = "XDX/RLUSD",
+} = {}) {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
-  const [pair, setPair] = useState("XDX/RLUSD");
+  const [pair, setPair] = useState(initialPair || "XDX/RLUSD");
   const [timeframe, setTimeframe] = useState(DEFAULT_INTERVAL);
   const [tool, setTool] = useState("cursor");
   const [drawColor, setDrawColor] = useState("#3d8bff");
@@ -433,6 +439,10 @@ export default function HybridChart() {
     fills: mergeWalletActivity(ledgerFills, trades, walletPending.activity),
     pair,
   });
+  const tapeRef = Number(candles[candles.length - 1]?.c) || Number(bands.mid) || livePrice || null;
+  const aimDeskMarks = deskOrders ? buildDeskMarks(deskOrders, pair, tapeRef) : [];
+  const aimEstimateMarks = estimate ? buildEstimateMarks(estimate, timeframe, tapeRef) : [];
+  const showAimOverlays = Boolean(deskOrders || estimate);
   const events = microEvents({
     trades,
     spreadBps: header.spread_bps,
@@ -588,7 +598,7 @@ export default function HybridChart() {
     ? fullViewPriceHeight(viewH, { volume: showVolume, rsi: showRsi })
     : undefined;
   const chart = (
-    <div className={`hybrid-chart${showArb && arb?.highlight ? " is-arb" : ""}${fullView ? " is-fullview" : ""}`}>
+    <div className={`hybrid-chart${showArb && arb?.highlight ? " is-arb" : ""}${fullView ? " is-fullview" : ""}${aimEmbed ? " is-aim-embed" : ""}`}>
       {fullView ? (
         <button
           type="button"
@@ -822,6 +832,9 @@ export default function HybridChart() {
             showRsi={showRsi}
             showArb={showArb}
             showLedgerOrders={showLedgerOrders}
+            aimDeskMarks={aimDeskMarks}
+            aimEstimateMarks={aimEstimateMarks}
+            showAimOverlays={showAimOverlays}
             locale={locale}
             t={t}
             selectedIndex={selected}

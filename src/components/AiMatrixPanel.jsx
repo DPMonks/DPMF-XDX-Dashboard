@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAimStatus, postAimChat, getAimLocale } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
 import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
@@ -18,7 +18,7 @@ function ago(iso) {
   return `${Math.round(sec / 3600)}h ago`;
 }
 
-export default function AiMatrixPanel() {
+export default function AiMatrixPanel({ onChartPropsChange = null, showInlineChart = true } = {}) {
   const { walletAddress } = useWallet();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -331,71 +331,14 @@ export default function AiMatrixPanel() {
     };
   }, [pulsePool.length]);
 
-
-
-  async function speakScenarioExplain({ text: line, tf: chartTf, scenario: side } = {}) {
-    const reply = String(line || "").replace(/[\u2010-\u2015\u2212]/g, "-").trim();
-    if (!reply) return;
-    if (voiceOn) {
-      unlockCommanderAudio();
-      try {
-        window.speechSynthesis?.resume?.();
-      } catch {
-        /* ignore */
-      }
-    }
-    const replyId = `cmd-scenario-${Date.now()}`;
-    const replyLang = effectiveLang || "en";
-    setLocalChat((rows) => [
-      ...finishSpeakingRows(rows),
-      {
-        id: replyId,
-        role: "commander",
-        text: reply,
-        at: new Date().toISOString(),
-        lang: replyLang,
-        reveal: 0,
-        speaking: true,
-        kind: "scenario_explain",
-        chartTf: chartTf || null,
-        scenario: side || null,
-      },
-    ]);
-    const spoken = await speakCommander(reply, {
-      voiceOn,
-      lang: replyLang,
-      onProgress: ({ chars }) => {
-        setLocalChat((rows) =>
-          rows.map((r) => (r.id === replyId ? { ...r, reveal: chars, speaking: true } : r))
-        );
-      },
-      onDone: () => {
-        setLocalChat((rows) =>
-          rows.map((r) => (r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r))
-        );
-      },
-    });
-    setLocalChat((rows) =>
-      rows.map((r) =>
-        r.id === replyId
-          ? {
-              ...r,
-              voiceEngine: spoken?.engine || aimVoiceEngineLabel(),
-              needsPlay: !!spoken?.needsPlay,
-            }
-          : r
-      )
-    );
-  }
-
-  const deskChartOrders = (() => {
+  const deskChartOrders = useMemo(() => {
     const out = [];
     const seen = new Set();
     const push = (row) => {
       if (!row || !(Number(row.price) > 0 || Number(row.iou_per_xrp) > 0 || Number(row.xrp_per_iou) > 0 || Number(row.limit_price) > 0)) return;
       const pair = String(row.pair || "XRP/RLUSD").replace(/\s+/g, "").toUpperCase();
       if (pair && pair !== "XRP/RLUSD" && pair !== "RLUSD/XRP") return;
-      const key = `${row.agent_id || row.id || "?"}|${row.side || ""}|${row.price || row.iou_per_xrp || row.xrp_per_iou || row.limit_price}|${row.status || ""}`;
+      const key = `${row.agent_id || row.id || "x"}|${row.side || ""}|${row.price || row.iou_per_xrp || row.xrp_per_iou || row.limit_price}|${row.status || ""}`;
       if (seen.has(key)) return;
       seen.add(key);
       out.push({ ...row, pair: "XRP/RLUSD", key });
@@ -420,9 +363,17 @@ export default function AiMatrixPanel() {
       });
     }
     return out;
-  })();
+  }, [data]);
 
   const commanderEstimate = data?.commander?.estimate || data?.desk?.estimate || null;
+
+  useEffect(() => {
+    if (typeof onChartPropsChange !== "function") return;
+    onChartPropsChange({
+      deskOrders: deskChartOrders,
+      estimate: commanderEstimate,
+    });
+  }, [deskChartOrders, commanderEstimate, onChartPropsChange]);
 
   const commanderStatus = data?.commander
     ? `${data.commander.status} | ${ago(data.commander.last_seen_at)}`
@@ -580,7 +531,9 @@ export default function AiMatrixPanel() {
           </form>
       </section>
 
-      <AimDeskSmartChart deskOrders={deskChartOrders} estimate={commanderEstimate} onScenarioExplain={speakScenarioExplain} />
+      {showInlineChart ? (
+        <AimDeskSmartChart deskOrders={deskChartOrders} estimate={commanderEstimate} />
+      ) : null}
 
       <div className="aim-agent-strip" role="list">
         {agents.map(

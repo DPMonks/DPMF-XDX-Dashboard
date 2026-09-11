@@ -47,6 +47,9 @@ export default function HybridPlot({
   showRsi = true,
   showArb = false,
   showLedgerOrders = false,
+  aimDeskMarks = [],
+  aimEstimateMarks = [],
+  showAimOverlays = false,
   locale,
   t,
   selectedIndex = null,
@@ -880,6 +883,62 @@ export default function HybridPlot({
               />
             ) : null
           )}
+
+          {showAimOverlays && bands?.bid > 0 ? (
+            <line
+              className="hybrid-aim-book is-bid"
+              x1={PAD.l}
+              x2={width - PAD.r}
+              y1={scale.y(bands.bid)}
+              y2={scale.y(bands.bid)}
+            />
+          ) : null}
+          {showAimOverlays && bands?.ask > 0 ? (
+            <line
+              className="hybrid-aim-book is-ask"
+              x1={PAD.l}
+              x2={width - PAD.r}
+              y1={scale.y(bands.ask)}
+              y2={scale.y(bands.ask)}
+            />
+          ) : null}
+
+          {(aimEstimateMarks || []).map((m) => {
+            const y = scale.y(m.price);
+            if (!Number.isFinite(y)) return null;
+            return (
+              <g key={`aim-est-${m.role}-${m.price}`} className={`hybrid-aim-est is-${m.role}`}>
+                <line x1={PAD.l} x2={width - PAD.r} y1={y} y2={y} />
+                <text x={width - PAD.r - 2} y={y - 3} textAnchor="end">
+                  {m.label} {formatQuotePerBase(m.price, locale, quote)}
+                </text>
+              </g>
+            );
+          })}
+
+          {(aimDeskMarks || []).map((m, i) => {
+            const y = scale.y(m.price);
+            if (!Number.isFinite(y)) return null;
+            const xTag = PAD.l + 8 + (i % 3) * 78;
+            return (
+              <g key={m.key || `aim-desk-${i}`} className={`hybrid-aim-desk is-${m.side}`}>
+                <line
+                  x1={PAD.l}
+                  x2={width - PAD.r}
+                  y1={y}
+                  y2={y}
+                  stroke={m.color || "#7dd3fc"}
+                  strokeWidth={1.4}
+                  strokeDasharray={m.status === "proposal" ? "4 3" : undefined}
+                  opacity={0.88}
+                />
+                <circle cx={xTag} cy={y} r={3.2} fill={m.color || "#7dd3fc"} />
+                <text x={xTag + 6} y={y - 3} fill={m.color || "#7dd3fc"} className="hybrid-aim-desk-label">
+                  {m.label} {m.side} {formatQuotePerBase(m.price, locale, quote)}
+                </text>
+              </g>
+            );
+          })}
 
           {ghost?.next > 0 ? (
             <g className="hybrid-ghost">

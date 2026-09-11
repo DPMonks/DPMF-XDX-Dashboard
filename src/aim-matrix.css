@@ -96,7 +96,7 @@
 .aim-matrix-head { order: 0; }
 .aim-matrix-error { order: 1; }
 .aim-chat { order: 2; }
-.aim-desk-chart { order: 3; }
+.aim-merged-chart, .aim-desk-chart { order: 3; }
 .aim-agent-strip { order: 4; }
 .aim-moves { order: 5; }
 .aim-desk-pulse { order: 6; }
@@ -645,9 +645,11 @@
   color: rgba(0, 234, 255, 0.9);
 }
 
-body.aim-drawer-open #root {
-  transition: transform 0.48s cubic-bezier(0.25, 0.8, 0.25, 1);
-  transform: translate3d(-12px, 0, 0);
+@media (max-width: 900px) {
+  body.aim-drawer-open #root {
+    transition: transform 0.48s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transform: translate3d(-12px, 0, 0);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .aim-drawer-panel,
@@ -1132,3 +1134,136 @@ body.aim-drawer-open #root {
   background: rgba(248, 113, 113, 0.22);
   color: #fecaca;
 }
+
+
+/* ---- Merged shared chart layout (AIM open) ---- */
+.aim-drawer-root.has-chart-pane .aim-drawer-backdrop {
+  /* Dim only behind the right panel; left chart stays clear */
+  left: auto;
+  width: min(560px, 42vw);
+  background: rgba(5, 5, 8, 0.35);
+}
+@media (min-width: 901px) and (max-width: 1200px) {
+  .aim-drawer-root.has-chart-pane .aim-drawer-backdrop {
+    width: min(520px, 52vw);
+  }
+}
+@media (min-width: 1201px) {
+  .aim-drawer-root.has-chart-pane .aim-drawer-backdrop {
+    width: min(560px, 42vw);
+  }
+}
+
+.aim-drawer-chart-pane {
+  display: none;
+}
+@media (min-width: 901px) {
+  .aim-drawer-root.is-open.has-chart-pane .aim-drawer-chart-pane {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: min(560px, 42vw);
+    z-index: 2;
+    padding: 0.65rem 0.75rem 0.75rem;
+    box-sizing: border-box;
+    background: rgba(6, 8, 14, 0.96);
+    overflow: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+  }
+}
+@media (min-width: 901px) and (max-width: 1200px) {
+  .aim-drawer-root.is-open.has-chart-pane .aim-drawer-chart-pane {
+    right: min(520px, 52vw);
+  }
+}
+@media (min-width: 1201px) {
+  .aim-drawer-root.is-open.has-chart-pane .aim-drawer-chart-pane {
+    right: min(560px, 42vw);
+  }
+}
+
+.aim-drawer-chart-pane .aim-merged-chart {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  margin: 0;
+  overflow: auto;
+}
+.aim-merged-chart.is-fill .hybrid-chart,
+.aim-drawer-chart-pane .hybrid-chart.is-aim-embed {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.aim-drawer-chart-pane .hybrid-body,
+.aim-drawer-chart-pane .hybrid-main,
+.aim-drawer-chart-pane .hybrid-plot-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.aim-drawer-chart-pane .hybrid-plot-wrap .hybrid-svg,
+.aim-drawer-chart-pane .hybrid-plot {
+  min-height: 280px;
+}
+
+.aim-merged-chart {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+}
+.aim-merged-chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+.aim-merged-chart-kicker {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+.aim-merged-chart h3 {
+  margin: 0.15rem 0 0;
+  font-size: 1.05rem;
+}
+.aim-merged-chart-sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  opacity: 0.78;
+  max-width: 52rem;
+}
+.aim-merged-mode {
+  flex: 0 0 auto;
+}
+
+/* Mobile: chart stays in panel flow below AIM content */
+@media (max-width: 900px) {
+  .aim-drawer-body .aim-merged-chart {
+    width: 100%;
+    min-width: 0;
+  }
+  .aim-drawer-body .aim-merged-chart .hybrid-chart {
+    min-width: 0;
+  }
+  .aim-drawer-body .aim-merged-chart-sub {
+    font-size: 0.75rem;
+  }
+}
+
+/* Keep desktop panel from showing a second chart (inline hidden via React) */
+body.aim-drawer-open:not(.aim-mobile) {
+  /* class hook reserved */
+}
+

@@ -383,6 +383,9 @@
 .hybrid-ghost,
 .hybrid-wallet-order,
 .hybrid-wallet-fill,
+.hybrid-aim-book,
+.hybrid-aim-est,
+.hybrid-aim-desk,
 .hybrid-heat,
 .hybrid-axis,
 .hybrid-pane-label,
@@ -1312,4 +1315,54 @@
   font-size: 0.72rem;
   letter-spacing: 0.02em;
   color: rgba(186, 230, 253, 0.78);
+}
+
+
+/* AIM desk + estimate overlays on HybridPlot */
+.hybrid-aim-book {
+  stroke-width: 1.2;
+  stroke-dasharray: 5 4;
+  opacity: 0.75;
+  pointer-events: none;
+}
+.hybrid-aim-book.is-bid { stroke: #34d399; }
+.hybrid-aim-book.is-ask { stroke: #f87171; }
+
+.hybrid-aim-est {
+  pointer-events: none;
+}
+.hybrid-aim-est line {
+  stroke: #fbbf24;
+  stroke-width: 1.15;
+  stroke-dasharray: 4 3;
+  opacity: 0.85;
+}
+.hybrid-aim-est.is-sl line { stroke: #fb7185; }
+.hybrid-aim-est.is-tp line { stroke: #4ade80; }
+.hybrid-aim-est.is-entry line { stroke: #38bdf8; }
+.hybrid-aim-est.is-fair line { stroke: #fbbf24; }
+.hybrid-aim-est.is-support line { stroke: #34d399; }
+.hybrid-aim-est.is-resistance line { stroke: #f472b6; }
+.hybrid-aim-est.is-band_lo line,
+.hybrid-aim-est.is-band_hi line {
+  stroke: #a5b4fc;
+  stroke-dasharray: 2 3;
+  opacity: 0.55;
+}
+.hybrid-aim-est text {
+  fill: #e2e8f0;
+  font-size: 10px;
+  opacity: 0.9;
+}
+
+.hybrid-aim-desk {
+  pointer-events: none;
+}
+.hybrid-aim-desk-label {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.hybrid-chart.is-aim-embed {
+  min-height: 0;
 }
