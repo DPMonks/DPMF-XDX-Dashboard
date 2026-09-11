@@ -1143,6 +1143,187 @@ function summarizeHolders(holders) {
 
 
 
+
+function numberOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Chart uses quote-per-base (RLUSD per XRP). Prefer iou_per_xrp; invert xrp_per_iou. */
+function quotePerBaseFromAimPrice(row = {}) {
+  const iou = numberOrNull(row.iou_per_xrp);
+  if (iou > 0) return iou;
+  const unit = String(row.price_unit || "").toLowerCase();
+  const raw = numberOrNull(row.limit_price ?? row.price ?? row.xrp_per_iou ?? row.mark ?? row.mid);
+  if (!(raw > 0)) return null;
+  if (unit === "xrp_per_iou" || row.xrp_per_iou != null) return 1 / raw;
+  if (raw > 0 && raw < 0.05) return 1 / raw;
+  return raw;
+}
+
+function normalizeAimOrderSide(raw) {
+  const s = String(raw || "").toLowerCase();
+  if (!s) return "buy";
+  if (s.includes("sell") || s.includes("ask") || s === "to_xrp") return "sell";
+  return "buy";
+}
+
+function isXrpRlusdPair(pair) {
+  const p = String(pair || "").replace(/\s+/g, "").toUpperCase();
+  return !p || p === "XRP/RLUSD" || p === "RLUSD/XRP";
+}
+
+function buildDeskChartOrders(deskAgents = [], intents = []) {
+  const out = [];
+  const seen = new Set();
+  const push = (row) => {
+    if (!row || !isXrpRlusdPair(row.pair)) return;
+    const price = quotePerBaseFromAimPrice(row);
+    if (!(price > 0)) return;
+    const key = `${row.agent_id}|${row.side}|${price.toFixed(8)}|${row.status || ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      agent_id: publicAgentId(row.agent_id),
+      label: agentLabel(row.agent_id),
+      pair: "XRP/RLUSD",
+      side: normalizeAimOrderSide(row.side),
+      price,
+      iou_per_xrp: price,
+      price_unit: "quote_per_base",
+      status: scrubText(row.status || "proposal"),
+      open: !!row.open,
+      submitted: !!row.submitted,
+      action: scrubText(row.action || "OfferCreate"),
+    });
+  };
+
+  for (const a of deskAgents) {
+    const prop = a.proposal || {};
+    push({
+      agent_id: a.id,
+      pair: prop.pair || "XRP/RLUSD",
+      side: prop.side || prop.limit_side || prop.trade_direction,
+      price: prop.price,
+      limit_price: prop.limit_price,
+      xrp_per_iou: prop.xrp_per_iou,
+      iou_per_xrp: prop.iou_per_xrp,
+      price_unit: prop.price_unit,
+      action: prop.action,
+      status: prop.executable ? "open" : "proposal",
+      open: String(prop.action || "").includes("OfferCreate"),
+      submitted: !!a.last_fill?.submitted,
+    });
+    const levels = Array.isArray(a.meta?.open_book_levels) ? a.meta.open_book_levels : [];
+    for (const lvl of levels) {
+      push({
+        agent_id: a.id,
+        pair: lvl.pair || "XRP/RLUSD",
+        side: lvl.side,
+        price: lvl.price,
+        iou_per_xrp: lvl.iou_per_xrp,
+        xrp_per_iou: lvl.xrp_per_iou,
+        price_unit: lvl.price_unit || "quote_per_base",
+        action: "OfferCreate",
+        status: "open",
+        open: true,
+      });
+    }
+  }
+
+  for (const row of intents) {
+    if (!["trade_proposal", "trade_execution"].includes(String(row.kind || ""))) continue;
+    const content = row.content && typeof row.content === "object" ? row.content : {};
+    const prop = content.proposal || content.trade_proposal || content;
+    push({
+      agent_id: row.agent_id,
+      pair: prop.pair || content.pair || "XRP/RLUSD",
+      side: prop.side || prop.limit_side || content.side,
+      price: prop.price ?? content.price,
+      limit_price: prop.limit_price,
+      xrp_per_iou: prop.xrp_per_iou,
+      iou_per_xrp: prop.iou_per_xrp,
+      price_unit: prop.price_unit,
+      action: prop.action || content.action,
+      status: content.submitted || prop.submitted ? "submitted" : "proposal",
+      submitted: !!(content.submitted || prop.submitted),
+      open: String(prop.action || "").includes("OfferCreate"),
+    });
+  }
+  return out.slice(0, 48);
+}
+
+function pickCommanderEstimate(intents = [], commanderMeta = {}) {
+  const fromMeta = commanderMeta?.estimate || commanderMeta?.commander_estimate || null;
+  let fromMem = null;
+  for (const row of intents) {
+    if (String(row.agent_id) !== "commander") continue;
+    if (String(row.kind) === "commander_estimate" && row.content && typeof row.content === "object") {
+      fromMem = row.content;
+      break;
+    }
+  }
+  if (!fromMem) {
+    for (const row of intents) {
+      if (String(row.agent_id) !== "commander") continue;
+      if (String(row.kind) === "desk_arbiter") {
+        const cap = row.content?.capital || {};
+        const chart = cap.chart || {};
+        if (chart.mid || cap.trade_horizon) {
+          fromMem = {
+            pair: "XRP/RLUSD",
+            fair_mid: quotePerBaseFromAimPrice({ mid: chart.mid, price: chart.mid, price_unit: "quote_per_base" }) || numberOrNull(chart.mid),
+            bias_hour: cap.trade_horizon === "hour" ? "hour" : cap.trade_horizon || null,
+            bias_day: cap.trade_horizon === "day" || cap.trade_horizon === "week" ? String(cap.trade_horizon) : "day",
+            trade_horizon: cap.trade_horizon || null,
+            atr_bps: chart.atr_bps ?? null,
+            chart_reason: cap.chart_reason || null,
+            source: "desk_arbiter_capital",
+          };
+          break;
+        }
+      }
+    }
+  }
+  const src = fromMem || fromMeta;
+  if (!src || typeof src !== "object") return null;
+  const fair = quotePerBaseFromAimPrice(src) || numberOrNull(src.fair_mid ?? src.mid ?? src.fair);
+  const atrBps = numberOrNull(src.atr_bps);
+  let band_lo = numberOrNull(src.band_lo ?? src.fair_lo);
+  let band_hi = numberOrNull(src.band_hi ?? src.fair_hi);
+  let sl = numberOrNull(src.sl ?? src.stop ?? src.stop_loss);
+  let tp = numberOrNull(src.tp ?? src.take_profit);
+  let entry = numberOrNull(src.entry);
+  if (fair > 0 && atrBps > 0) {
+    const width = fair * (atrBps / 10000);
+    if (!(band_lo > 0)) band_lo = fair - width;
+    if (!(band_hi > 0)) band_hi = fair + width;
+    if (!(sl > 0)) sl = fair - width * 1.25;
+    if (!(tp > 0)) tp = fair + width * 1.5;
+    if (!(entry > 0)) entry = fair;
+  }
+  return {
+    pair: scrubText(src.pair || "XRP/RLUSD"),
+    fair_mid: fair > 0 ? fair : null,
+    mid: fair > 0 ? fair : null,
+    entry: entry > 0 ? entry : null,
+    sl: sl > 0 ? sl : null,
+    tp: tp > 0 ? tp : null,
+    band_lo: band_lo > 0 ? band_lo : null,
+    band_hi: band_hi > 0 ? band_hi : null,
+    bias_hour: scrubText(src.bias_hour || src.hour_bias || (src.trade_horizon === "hour" ? "hour" : "") || ""),
+    bias_day: scrubText(src.bias_day || src.day_bias || (src.trade_horizon && src.trade_horizon !== "hour" ? String(src.trade_horizon) : "day") || ""),
+    trade_horizon: scrubText(src.trade_horizon || ""),
+    atr_bps: atrBps,
+    chart_reason: scrubText(src.chart_reason || ""),
+    note: scrubText(src.note || ""),
+    // Private learning: Daniel relays estimate feedback in Grok Bot chat; AIM may remember kind AIM_COMMANDER_ESTIMATE_FEEDBACK.
+    feedback_hook: "AIM_COMMANDER_ESTIMATE_FEEDBACK",
+    source: scrubText(src.source || "commander_estimate"),
+  };
+}
+
+
 export async function aimStatusPayload() {
   const db = getAimPool();
   if (!db) {
@@ -1166,7 +1347,7 @@ export async function aimStatusPayload() {
       `SELECT id, agent_id, kind, content, created_at
        FROM aim_agent_memory
        WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','agent6','commander')
-         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm')
+         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm','commander_estimate','price_marks','trading_metrics','AIM_COMMANDER_ESTIMATE_FEEDBACK')
        ORDER BY id DESC
        LIMIT 40`
     );
@@ -1176,6 +1357,14 @@ export async function aimStatusPayload() {
        WHERE topic IN ('chat','directive','peer','desk','arbiter','opportunity')
        ORDER BY id DESC
        LIMIT 40`
+    );
+    const estimateMem = await db.query(
+      `SELECT id, agent_id, kind, content, created_at
+       FROM aim_agent_memory
+       WHERE agent_id = 'commander'
+         AND kind IN ('commander_estimate','desk_arbiter','price_marks','trading_metrics')
+       ORDER BY id DESC
+       LIMIT 8`
     );
 
     const agents = heartbeats.rows
@@ -1227,6 +1416,19 @@ export async function aimStatusPayload() {
       const prop = meta.trade_proposal || {};
       const usd = meta.usd_mark || prop.usd_mark || null;
       const fill = meta.last_fill || prop.exec || null;
+      const openLevels = Array.isArray(meta.open_book_levels)
+        ? meta.open_book_levels
+            .map((lvl) => ({
+              pair: scrubText(lvl?.pair || "XRP/RLUSD"),
+              side: scrubText(lvl?.side || ""),
+              price: numberOrNull(lvl?.price),
+              iou_per_xrp: numberOrNull(lvl?.iou_per_xrp),
+              xrp_per_iou: numberOrNull(lvl?.xrp_per_iou),
+              price_unit: scrubText(lvl?.price_unit || "quote_per_base"),
+            }))
+            .filter((lvl) => isXrpRlusdPair(lvl.pair) && (lvl.price > 0 || lvl.iou_per_xrp > 0 || lvl.xrp_per_iou > 0))
+            .slice(0, 12)
+        : [];
       return {
         id: a.id,
         label: a.label,
@@ -1235,6 +1437,7 @@ export async function aimStatusPayload() {
         identity: a.identity || "",
         status: a.status,
         last_seen_at: a.last_seen_at,
+        meta: { open_book_levels: openLevels },
         skill_summary: meta.skill?.summary || null,
         usd_mark: usd
           ? {
@@ -1257,15 +1460,24 @@ export async function aimStatusPayload() {
               dry_run: !!fill.dry_run,
             }
           : null,
-        proposal: prop.action
+        proposal: prop.action || prop.price || prop.xrp_per_iou || prop.iou_per_xrp || prop.limit_price
           ? {
-              action: scrubText(prop.action),
+              action: scrubText(prop.action || ""),
               pair: scrubText(prop.pair || ""),
               side: scrubText(prop.side || ""),
+              limit_side: scrubText(prop.limit_side || ""),
+              trade_direction: scrubText(prop.trade_direction || ""),
               urgency: scrubText(prop.urgency || ""),
               xrp_thesis: scrubText(prop.xrp_thesis || ""),
               ledger_tools: Array.isArray(prop.ledger_tools) ? prop.ledger_tools.map((x) => scrubText(x)).slice(0, 12) : [],
               executable: !!prop.executable,
+              price: Number.isFinite(Number(prop.price)) ? Number(prop.price) : null,
+              limit_price: Number.isFinite(Number(prop.limit_price)) ? Number(prop.limit_price) : null,
+              xrp_per_iou: Number.isFinite(Number(prop.xrp_per_iou)) ? Number(prop.xrp_per_iou) : null,
+              iou_per_xrp: Number.isFinite(Number(prop.iou_per_xrp)) ? Number(prop.iou_per_xrp) : null,
+              price_unit: scrubText(prop.price_unit || ""),
+              size_iou: Number.isFinite(Number(prop.size_iou)) ? Number(prop.size_iou) : null,
+              notional_xrp: Number.isFinite(Number(prop.notional_xrp)) ? Number(prop.notional_xrp) : null,
               blocked_by: scrubText((prop.exec && prop.exec.blocked_by) || prop.blocked_by || ""),
               blocked_by_actor: scrubText((prop.exec && prop.exec.blocked_by_actor) || prop.blocked_by_actor || ""),
               blocked_by_actor_label: scrubText((prop.exec && prop.exec.blocked_by_actor_label) || prop.blocked_by_actor_label || ""),
@@ -1293,6 +1505,22 @@ export async function aimStatusPayload() {
         ),
         created_at: m.created_at,
       }));
+    const deskOrders = buildDeskChartOrders(deskAgents, intents.rows.map((r) => ({
+      agent_id: r.agent_id,
+      kind: r.kind,
+      content: scrubValue(r.content) || {},
+    })));
+    const estimateRows = [
+      ...(estimateMem?.rows || []),
+      ...intents.rows,
+    ].map((r) => ({
+      agent_id: r.agent_id,
+      kind: r.kind,
+      content: scrubValue(r.content) || {},
+    }));
+    const estimate = pickCommanderEstimate(estimateRows, commander?.meta || {});
+    if (commander && estimate) commander.estimate = estimate;
+
     const desk = {
       phase: "internal",
       objective: "desk_ops",
@@ -1307,6 +1535,8 @@ export async function aimStatusPayload() {
       high_urgency: high,
       agents: deskAgents,
       chatter: deskMessages,
+      orders: deskOrders,
+      estimate,
       trade_mode: "paper_pending",
     };
 

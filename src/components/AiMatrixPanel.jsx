@@ -6,6 +6,7 @@ import { AIM_AGENT_IDS, AIM_COMMANDER_AVATAR, aimAgentLabel, aimAgentRole, aimAg
 import AimAgentName from "./AimAgentName";
 import AimAgentAvatar from "./AimAgentAvatar";
 import { useWallet } from "../context/useWallet";
+import AimDeskSmartChart from "./AimDeskSmartChart";
 
 function ago(iso) {
   if (!iso) return "-";
@@ -330,6 +331,43 @@ export default function AiMatrixPanel() {
     };
   }, [pulsePool.length]);
 
+
+  const deskChartOrders = (() => {
+    const out = [];
+    const seen = new Set();
+    const push = (row) => {
+      if (!row || !(Number(row.price) > 0 || Number(row.iou_per_xrp) > 0 || Number(row.xrp_per_iou) > 0 || Number(row.limit_price) > 0)) return;
+      const pair = String(row.pair || "XRP/RLUSD").replace(/\s+/g, "").toUpperCase();
+      if (pair && pair !== "XRP/RLUSD" && pair !== "RLUSD/XRP") return;
+      const key = `${row.agent_id || row.id || "?"}|${row.side || ""}|${row.price || row.iou_per_xrp || row.xrp_per_iou || row.limit_price}|${row.status || ""}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ ...row, pair: "XRP/RLUSD", key });
+    };
+    for (const a of data?.desk?.orders || []) push(a);
+    for (const a of data?.desk?.agents || agents) {
+      const prop = a.proposal || a.meta?.trade_proposal || {};
+      if (!prop?.action && !prop?.price && !prop?.xrp_per_iou && !prop?.iou_per_xrp && !prop?.limit_price) continue;
+      push({
+        agent_id: a.id,
+        label: a.label || aimAgentLabel(a.id),
+        pair: prop.pair || "XRP/RLUSD",
+        side: prop.side || prop.limit_side || prop.trade_direction,
+        price: prop.price,
+        limit_price: prop.limit_price,
+        xrp_per_iou: prop.xrp_per_iou,
+        iou_per_xrp: prop.iou_per_xrp,
+        price_unit: prop.price_unit,
+        status: a.last_fill?.submitted ? "submitted" : prop.executable ? "open" : "proposal",
+        submitted: !!a.last_fill?.submitted,
+        open: String(prop.action || "").includes("OfferCreate"),
+      });
+    }
+    return out;
+  })();
+
+  const commanderEstimate = data?.commander?.estimate || data?.desk?.estimate || null;
+
   const commanderStatus = data?.commander
     ? `${data.commander.status} · ${ago(data.commander.last_seen_at)}`
     : loading
@@ -485,6 +523,8 @@ export default function AiMatrixPanel() {
             </button>
           </form>
       </section>
+
+      <AimDeskSmartChart deskOrders={deskChartOrders} estimate={commanderEstimate} />
 
       <div className="aim-agent-strip" role="list">
         {agents.map(
