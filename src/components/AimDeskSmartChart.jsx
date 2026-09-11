@@ -13,8 +13,18 @@ const TF_OPTIONS = [
   { id: "15m", label: "15m" },
   { id: "5m", label: "5m" },
 ];
+const LAYER_OPTIONS = [
+  { id: "trend", label: "Trend" },
+  { id: "levels", label: "Levels" },
+  { id: "projection", label: "Projection" },
+];
+const SCENARIO_OPTIONS = [
+  { id: "bull", label: "Bullish" },
+  { id: "bear", label: "Bearish" },
+];
 const DEFAULT_TF = "1D";
-// Prefer long history on AIM desk chart. Caps keep SVG paint cheap.
+const ESTIMATE_LABEL = "Estimate by AI-Matrix";
+const ESTIMATE_DISC = "Estimate by AI-Matrix - not guaranteed.";
 const AIM_HISTORY_BARS = {
   "5m": 288,
   "15m": 384,
@@ -41,7 +51,6 @@ function num(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Chart uses quote-per-base (RLUSD per XRP). Wide band rejects wrong-pair junk (~27k). */
 const QPB_MIN = 0.05;
 const QPB_MAX = 50;
 
@@ -50,7 +59,6 @@ export function inQuotePerBaseBand(v) {
   return n > 0 && n >= QPB_MIN && n <= QPB_MAX;
 }
 
-/** Coerce estimate/desk scalars to RLUSD-per-XRP; null if out of band. */
 export function coerceQuotePerBase(raw, row = {}, refPx = null) {
   const v = num(raw);
   if (!(v > 0)) return null;
@@ -108,7 +116,6 @@ function historyBarsForTf(tf) {
   return AIM_HISTORY_BARS[tf] || Math.max(120, visibleBarsForInterval(tf));
 }
 
-/** Keep real OHLC only; take the newest N bars so the plot spans full width. */
 function selectAimCandles(rows, tf) {
   const need = historyBarsForTf(tf);
   const list = (Array.isArray(rows) ? rows : []).filter((c) => {
@@ -131,7 +138,14 @@ function formatHistoryStart(ts) {
   }
 }
 
-function priceDomain(candles, marks = []) {
+function asciiClean(v) {
+  return String(v || "")
+    .replace(/[\u2010-\u2015\u2212\u00B7\u2022\u2026\uFFFD]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function priceDomain(candles, marks = [], extra = []) {
   const candleVals = [];
   for (const c of candles) {
     for (const k of ["l", "h", "c", "o"]) {
@@ -144,10 +158,13 @@ function priceDomain(candles, marks = []) {
   for (const m of marks) {
     const n = num(m.price);
     if (!(n > 0)) continue;
-    if (m.kind === "estimate") estimates.push(n);
-    else bookDesk.push(n);
+    if (m.kind === "estimate" || m.kind === "trend" || m.kind === "level" || m.kind === "proj") {
+      estimates.push(n);
+    } else bookDesk.push(n);
   }
-  // Axis from candle + public book + desk orders. Ignore out-of-range Fair.
+  for (const n of extra) {
+    if (num(n) > 0) estimates.push(Number(n));
+  }
   let base = [...candleVals, ...bookDesk];
   if (!base.length) {
     const sane = estimates.filter((n) => inQuotePerBaseBand(n));
@@ -176,12 +193,38 @@ function priceDomain(candles, marks = []) {
   return { min, max };
 }
 
+function coercePath(raw, unitRow, tapeRef) {
+  if (!raw || typeof raw !== "object" || !Array.isArray(raw.path)) return null;
+  const path = raw.path
+    .map((pt, idx) => {
+      const mid = coerceQuotePerBase(pt?.mid, unitRow, tapeRef);
+      const lo = coerceQuotePerBase(pt?.lo, unitRow, tapeRef);
+      const hi = coerceQuotePerBase(pt?.hi, unitRow, tapeRef);
+      if (!(mid > 0)) return null;
+      return {
+        i: num(pt?.i) || idx + 1,
+        mid,
+        lo: lo > 0 ? lo : mid,
+        hi: hi > 0 ? hi : mid,
+      };
+    })
+    .filter(Boolean);
+  if (!path.length) return null;
+  return {
+    ...raw,
+    path,
+    label: asciiClean(raw.label || ESTIMATE_LABEL),
+  };
+}
+
 /**
  * Compact XRP/RLUSD desk chart for AI-Matrix only.
- * Layers: (1) public book (2) desk OfferCreate / submit levels (3) Commander estimate markers.
+ * Per-TF overlays: Trend, Levels, Projection (bullish/bearish), demand/supply boxes.
  */
 export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) {
   const [tf, setTf] = useState(DEFAULT_TF);
+  const [layers, setLayers] = useState({ trend: true, levels: true, projection: true });
+  const [scenarios, setScenarios] = useState({ bull: true, bear: true });
   const [book, setBook] = useState(null);
   const [prices, setPrices] = useState({});
   const [now, setNow] = useState(() => Date.now());
@@ -267,7 +310,6 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
       livePrice: livePrice > 0 ? livePrice : bands.mid,
       now,
       windowed: false,
-      // Pull max available history from locked/compose (XRP/USD proxy for XRP/RLUSD).
       lookbackBars: want + 80,
     });
     return selectAimCandles(rows, tf);
@@ -322,60 +364,134 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
     return num(last?.c) || bands.mid || livePrice || null;
   }, [candles, bands.mid, livePrice]);
 
+  const tfPack = useMemo(() => {
+    const byTf = estimate?.by_tf || estimate?.overlays?.by_tf || {};
+    return byTf[tf] || byTf["1h"] || byTf["1D"] || null;
+  }, [estimate, tf]);
+
+  const overlays = estimate?.overlays && typeof estimate.overlays === "object" ? estimate.overlays : null;
+  const unitRow = {
+    price_unit: estimate?.price_unit || "quote_per_base",
+    iou_per_xrp: estimate?.iou_per_xrp,
+    xrp_per_iou: estimate?.xrp_per_iou,
+  };
+
+  const demandZones = useMemo(() => {
+    const rows = tfPack?.demand || estimate?.demand || overlays?.demand || [];
+    return (Array.isArray(rows) ? rows : [])
+      .map((z) => {
+        const lo = coerceQuotePerBase(z?.lo, unitRow, tapeRef);
+        const hi = coerceQuotePerBase(z?.hi, unitRow, tapeRef);
+        if (!(lo > 0) || !(hi > 0) || hi <= lo) return null;
+        return { lo, hi, strength: num(z?.strength) || 1 };
+      })
+      .filter(Boolean)
+      .slice(0, 4);
+  }, [tfPack, estimate, overlays, tapeRef]);
+
+  const supplyZones = useMemo(() => {
+    const rows = tfPack?.supply || estimate?.supply || overlays?.supply || [];
+    return (Array.isArray(rows) ? rows : [])
+      .map((z) => {
+        const lo = coerceQuotePerBase(z?.lo, unitRow, tapeRef);
+        const hi = coerceQuotePerBase(z?.hi, unitRow, tapeRef);
+        if (!(lo > 0) || !(hi > 0) || hi <= lo) return null;
+        return { lo, hi, strength: num(z?.strength) || 1 };
+      })
+      .filter(Boolean)
+      .slice(0, 4);
+  }, [tfPack, estimate, overlays, tapeRef]);
+
   const estimateMarks = useMemo(() => {
     if (!estimate || typeof estimate !== "object") return [];
     const out = [];
-    const unitRow = {
-      price_unit: estimate.price_unit,
-      iou_per_xrp: estimate.iou_per_xrp,
-      xrp_per_iou: estimate.xrp_per_iou,
-    };
-    const push = (role, raw, label) => {
+    const levels = tfPack?.levels || overlays?.levels || {};
+    const trend = tfPack?.trend || overlays?.trend || {};
+    const push = (role, raw, label, kind = "estimate") => {
       const price = coerceQuotePerBase(raw, unitRow, tapeRef);
       if (!(price > 0)) return;
-      out.push({ kind: "estimate", role, price, label });
+      out.push({ kind, role, price, label });
     };
     push("fair", estimate.fair_mid ?? estimate.mid ?? estimate.fair ?? estimate.iou_per_xrp, "Fair mid");
-    push("entry", estimate.entry, "Entry");
-    push("sl", estimate.sl ?? estimate.stop ?? estimate.stop_loss, "SL");
-    push("tp", estimate.tp ?? estimate.take_profit, "TP");
-    const lo = coerceQuotePerBase(estimate.band_lo ?? estimate.fair_lo, unitRow, tapeRef);
-    const hi = coerceQuotePerBase(estimate.band_hi ?? estimate.fair_hi, unitRow, tapeRef);
-    if (lo > 0 && hi > 0) {
-      out.push({ kind: "estimate", role: "band_lo", price: lo, label: "Band" });
-      out.push({ kind: "estimate", role: "band_hi", price: hi, label: "Band" });
+    if (layers.levels) {
+      push("entry", estimate.entry ?? levels.entry, "Entry");
+      push("sl", estimate.sl ?? estimate.stop ?? estimate.stop_loss ?? levels.sl, "SL");
+      push("tp", estimate.tp ?? estimate.take_profit ?? levels.tp, "TP");
+      const lo = coerceQuotePerBase(estimate.band_lo ?? estimate.fair_lo ?? levels.band_lo, unitRow, tapeRef);
+      const hi = coerceQuotePerBase(estimate.band_hi ?? estimate.fair_hi ?? levels.band_hi, unitRow, tapeRef);
+      if (lo > 0 && hi > 0) {
+        out.push({ kind: "estimate", role: "band_lo", price: lo, label: "Band" });
+        out.push({ kind: "estimate", role: "band_hi", price: hi, label: "Band" });
+      }
+      push("support", estimate.support ?? levels.support, "Support", "level");
+      push("resistance", estimate.resistance ?? levels.resistance, "Resist", "level");
+      push("target_hour", estimate.target_hour ?? levels.target_hour, "Hour tgt", "level");
+      push("target_day", estimate.target_day ?? levels.target_day, "Day tgt", "level");
+    }
+    if (layers.trend) {
+      push("sma_short", estimate.sma_short ?? trend.sma_short, "SMA-S", "trend");
+      push("sma_long", estimate.sma_long ?? trend.sma_long, "SMA-L", "trend");
+      push("ema_short", estimate.ema_short ?? trend.ema_short, "EMA-S", "trend");
+      push("ema_long", estimate.ema_long ?? trend.ema_long, "EMA-L", "trend");
     }
     return out;
-  }, [estimate, tapeRef]);
+  }, [estimate, tapeRef, layers.levels, layers.trend, overlays, tfPack]);
+
+  const projBull = useMemo(() => {
+    if (!layers.projection || !scenarios.bull) return null;
+    return coercePath(
+      tfPack?.projection_bull || estimate?.projection_bull || estimate?.projection || overlays?.projection,
+      unitRow,
+      tapeRef
+    );
+  }, [layers.projection, scenarios.bull, tfPack, estimate, overlays, tapeRef]);
+
+  const projBear = useMemo(() => {
+    if (!layers.projection || !scenarios.bear) return null;
+    return coercePath(tfPack?.projection_bear || estimate?.projection_bear, unitRow, tapeRef);
+  }, [layers.projection, scenarios.bear, tfPack, estimate, tapeRef]);
+
+  const projExtras = useMemo(() => {
+    const vals = [];
+    for (const p of [projBull, projBear]) {
+      for (const pt of p?.path || []) vals.push(pt.mid, pt.lo, pt.hi);
+    }
+    for (const z of [...demandZones, ...supplyZones]) vals.push(z.lo, z.hi);
+    return vals;
+  }, [projBull, projBear, demandZones, supplyZones]);
 
   const domain = useMemo(
-    () => priceDomain(candles, [...deskMarks, ...estimateMarks, ...publicBookMarks.filter((m) => m.best)]),
-    [candles, deskMarks, estimateMarks, publicBookMarks]
+    () =>
+      priceDomain(
+        candles,
+        [...deskMarks, ...estimateMarks, ...publicBookMarks.filter((m) => m.best)],
+        projExtras
+      ),
+    [candles, deskMarks, estimateMarks, publicBookMarks, projExtras]
   );
 
+  const projBars = Math.max(projBull?.path?.length || 0, projBear?.path?.length || 0);
+  const totalSlots = Math.max(1, candles.length + (layers.projection ? projBars : 0));
   const innerW = W - PAD.l - PAD.r;
   const innerH = H - PAD.t - PAD.b;
   const y = (p) => PAD.t + (1 - (p - domain.min) / Math.max(domain.max - domain.min, 1e-12)) * innerH;
-  // Always stretch candles across the full plot width (even when history is thin).
-  const slot = candles.length > 0 ? innerW / candles.length : innerW;
+  const slot = innerW / totalSlots;
   const bodyW = Math.max(1.6, Math.min(14, slot * 0.72));
+  const xAt = (i) => PAD.l + i * slot + slot / 2;
 
   const biasNote = useMemo(() => {
-    const clean = (v) =>
-      String(v || "")
-        .replace(/[\u2010-\u2015\u2212\u00B7\u2022\u2026\uFFFD]/g, "-")
-        .replace(/\s+/g, " ")
-        .trim();
-    const hour = clean(estimate?.bias_hour || estimate?.hour_bias || estimate?.trade_horizon);
-    const day = clean(estimate?.bias_day || estimate?.day_bias);
+    const hour = asciiClean(estimate?.bias_hour || estimate?.hour_bias || estimate?.trade_horizon);
+    const day = asciiClean(estimate?.bias_day || estimate?.day_bias);
+    const score = asciiClean(estimate?.score_bias || overlays?.score?.bias || estimate?.signal);
     const bits = [];
     if (hour) bits.push(`Hour ${hour}`);
     if (day) bits.push(`Day ${day}`);
+    if (score) bits.push(`Score ${score}`);
     if (!bits.length && estimate?.chart_reason) {
-      bits.push(clean(String(estimate.chart_reason).replace(/_/g, " ")));
+      bits.push(asciiClean(String(estimate.chart_reason).replace(/_/g, " ")));
     }
     return bits.join(" | ");
-  }, [estimate]);
+  }, [estimate, overlays]);
 
   const historyStart = formatHistoryStart(candles[0]?.t);
   const historyNote = historyStart
@@ -386,6 +502,35 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
 
   const last = candles[candles.length - 1];
   const lastPx = num(last?.c) || bands.mid || livePrice;
+  const disclaimer = asciiClean(estimate?.disclaimer || overlays?.disclaimer || tfPack?.disclaimer || ESTIMATE_DISC);
+
+  const toggleLayer = (id) => setLayers((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleScenario = (id) => setScenarios((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  function buildChannel(projection, cls) {
+    if (!projection?.path?.length || !candles.length) return null;
+    const startIdx = candles.length - 1;
+    const anchor = num(last?.c) || projection.path[0].mid;
+    const upper = [`${xAt(startIdx)},${y(anchor)}`];
+    const lower = [`${xAt(startIdx)},${y(anchor)}`];
+    projection.path.forEach((pt, i) => {
+      const xi = xAt(candles.length + i);
+      upper.push(`${xi},${y(pt.hi)}`);
+      lower.push(`${xi},${y(pt.lo)}`);
+    });
+    const mid = [`${xAt(startIdx)},${y(anchor)}`];
+    projection.path.forEach((pt, i) => mid.push(`${xAt(candles.length + i)},${y(pt.mid)}`));
+    return (
+      <g key={cls} className={cls}>
+        <polygon className="aim-desk-chart-proj-band" points={`${upper.join(" ")} ${lower.reverse().join(" ")}`} />
+        <polyline className="aim-desk-chart-proj-mid" points={mid.join(" ")} fill="none" />
+      </g>
+    );
+  }
+
+  // Zone boxes: span recent 28% of candle width (demand/supply areas)
+  const zoneX0 = PAD.l + Math.max(0, candles.length - Math.max(8, Math.floor(candles.length * 0.28))) * slot;
+  const zoneX1 = PAD.l + candles.length * slot;
 
   return (
     <section className="aim-desk-chart neon-inset" aria-label="XRP RLUSD desk chart">
@@ -394,22 +539,48 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
           <p className="aim-desk-chart-kicker">Desk map | XRP/RLUSD</p>
           <h3>Smart chart</h3>
           <p className="aim-desk-chart-sub">
-            Public book + desk OfferCreates. Commander estimate markers when live.
+            Public book + desk OfferCreates. Commander overlays per TF ({ESTIMATE_LABEL}).
             {historyNote ? ` | ${historyNote}` : ""}
             {biasNote ? ` | ${biasNote}` : ""}
           </p>
         </div>
-        <div className="aim-desk-chart-tfs" role="group" aria-label="Timeframe">
-          {TF_OPTIONS.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              className={`aim-desk-chart-tf${tf === opt.id ? " is-on" : ""}`}
-              onClick={() => setTf(opt.id)}
-            >
-              {opt.label}
-            </button>
-          ))}
+        <div className="aim-desk-chart-controls">
+          <div className="aim-desk-chart-tfs" role="group" aria-label="Timeframe">
+            {TF_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={`aim-desk-chart-tf${tf === opt.id ? " is-on" : ""}`}
+                onClick={() => setTf(opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="aim-desk-chart-layers" role="group" aria-label="Overlay layers">
+            {LAYER_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={`aim-desk-chart-layer${layers[opt.id] ? " is-on" : ""}`}
+                onClick={() => toggleLayer(opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="aim-desk-chart-layers" role="group" aria-label="Scenarios">
+            {SCENARIO_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={`aim-desk-chart-layer is-scenario is-${opt.id}${scenarios[opt.id] ? " is-on" : ""}`}
+                onClick={() => toggleScenario(opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -422,6 +593,16 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
             Fair {formatPx(estimateMarks.find((m) => m.role === "fair").price)}
           </span>
         ) : null}
+        {estimate?.trade_score != null ? (
+          <span className="aim-desk-chart-score">
+            Score {Number(estimate.trade_score).toFixed(3)}
+            {estimate.signal ? ` ${asciiClean(estimate.signal)}` : ""}
+          </span>
+        ) : null}
+        {layers.levels && (estimate?.rsi != null || tfPack?.levels?.rsi != null) ? (
+          <span>RSI {Number(estimate?.rsi ?? tfPack?.levels?.rsi).toFixed(1)}</span>
+        ) : null}
+        <span className="aim-desk-chart-est-tag">{ESTIMATE_LABEL}</span>
       </div>
 
       <div className="aim-desk-chart-plot">
@@ -442,8 +623,39 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
               );
             })}
 
+            {/* Demand = green 50% opacity boxes; Supply = red 50% opacity boxes */}
+            {layers.levels
+              ? demandZones.map((z, i) => (
+                  <rect
+                    key={`dem-${i}-${z.lo}`}
+                    className="aim-desk-chart-zone is-demand"
+                    x={zoneX0}
+                    y={y(z.hi)}
+                    width={Math.max(8, zoneX1 - zoneX0)}
+                    height={Math.max(2, y(z.lo) - y(z.hi))}
+                    opacity={0.5}
+                  />
+                ))
+              : null}
+            {layers.levels
+              ? supplyZones.map((z, i) => (
+                  <rect
+                    key={`sup-${i}-${z.hi}`}
+                    className="aim-desk-chart-zone is-supply"
+                    x={zoneX0}
+                    y={y(z.hi)}
+                    width={Math.max(8, zoneX1 - zoneX0)}
+                    height={Math.max(2, y(z.lo) - y(z.hi))}
+                    opacity={0.5}
+                  />
+                ))
+              : null}
+
+            {buildChannel(projBull, "aim-desk-chart-proj is-bull")}
+            {buildChannel(projBear, "aim-desk-chart-proj is-bear")}
+
             {candles.map((c, i) => {
-              const x = PAD.l + i * slot + slot / 2;
+              const x = xAt(i);
               const o = Number(c.o);
               const close = Number(c.c);
               const hi = Number(c.h);
@@ -469,7 +681,16 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
               );
             })}
 
-            {/* Public book: best levels only as light guides (not full noise) */}
+            {layers.projection && projBars > 0 ? (
+              <line
+                className="aim-desk-chart-now"
+                x1={xAt(candles.length - 1)}
+                x2={xAt(candles.length - 1)}
+                y1={PAD.t}
+                y2={H - PAD.b}
+              />
+            ) : null}
+
             {publicBookMarks
               .filter((m) => m.best)
               .map((m) => (
@@ -483,11 +704,10 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
                 />
               ))}
 
-            {/* Commander estimate layer (separate from order layers) */}
             {estimateMarks.map((m) => (
-              <g key={`est-${m.role}-${m.price}`}>
+              <g key={`est-${m.kind}-${m.role}-${m.price}`}>
                 <line
-                  className={`aim-desk-chart-est is-${m.role}`}
+                  className={`aim-desk-chart-est is-${m.role} is-${m.kind}`}
                   x1={PAD.l}
                   x2={W - PAD.r}
                   y1={y(m.price)}
@@ -499,7 +719,6 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
               </g>
             ))}
 
-            {/* Desk orders */}
             {deskMarks.map((m, i) => {
               const yy = y(m.price);
               const xTag = PAD.l + 8 + (i % 3) * 72;
@@ -522,9 +741,17 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
                 </g>
               );
             })}
+
+            {layers.projection && (projBull || projBear) ? (
+              <text className="aim-desk-chart-proj-label" x={W - PAD.r - 4} y={PAD.t + 12} textAnchor="end">
+                {ESTIMATE_LABEL} | not guaranteed
+              </text>
+            ) : null}
           </svg>
         )}
       </div>
+
+      <p className="aim-desk-chart-disclaimer">{disclaimer}</p>
 
       <ul className="aim-desk-chart-legend" aria-label="Desk order legend">
         {deskMarks.slice(0, 8).map((m) => (

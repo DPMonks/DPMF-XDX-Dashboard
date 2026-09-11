@@ -906,6 +906,130 @@ body.aim-drawer-open #root {
   opacity: 0.85;
 }
 .aim-desk-chart-fair { color: #fbbf24; }
+
+.aim-desk-chart-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+.aim-desk-chart-layers {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.aim-desk-chart-layer {
+  border-radius: 8px;
+  border: 1px solid rgba(120, 220, 255, 0.28);
+  background: rgba(0, 0, 0, 0.22);
+  color: inherit;
+  font-size: 0.72rem;
+  padding: 0.22rem 0.45rem;
+  cursor: pointer;
+  opacity: 0.72;
+}
+.aim-desk-chart-layer.is-on {
+  opacity: 1;
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.12);
+}
+.aim-desk-chart-layer.is-scenario.is-bull.is-on {
+  border-color: rgba(74, 222, 128, 0.55);
+  background: rgba(74, 222, 128, 0.14);
+}
+.aim-desk-chart-layer.is-scenario.is-bear.is-on {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(248, 113, 113, 0.14);
+}
+.aim-desk-chart-score { color: #a5b4fc; }
+.aim-desk-chart-est-tag {
+  color: #fbbf24;
+  font-weight: 600;
+}
+.aim-desk-chart-disclaimer {
+  margin: 0.35rem 0 0.15rem;
+  opacity: 0.72;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+.aim-desk-chart-zone.is-demand {
+  fill: #22c55e;
+  stroke: rgba(34, 197, 94, 0.55);
+  stroke-width: 1;
+}
+.aim-desk-chart-zone.is-supply {
+  fill: #ef4444;
+  stroke: rgba(239, 68, 68, 0.55);
+  stroke-width: 1;
+}
+.aim-desk-chart-proj-band {
+  fill: rgba(251, 191, 36, 0.16);
+  stroke: none;
+}
+.aim-desk-chart-proj.is-bull .aim-desk-chart-proj-band {
+  fill: rgba(74, 222, 128, 0.18);
+}
+.aim-desk-chart-proj.is-bear .aim-desk-chart-proj-band {
+  fill: rgba(248, 113, 113, 0.18);
+}
+.aim-desk-chart-proj-mid {
+  stroke: #fbbf24;
+  stroke-width: 1.6;
+  stroke-dasharray: 5 3;
+  fill: none;
+}
+.aim-desk-chart-proj.is-bull .aim-desk-chart-proj-mid {
+  stroke: #4ade80;
+}
+.aim-desk-chart-proj.is-bear .aim-desk-chart-proj-mid {
+  stroke: #f87171;
+}
+.aim-desk-chart-proj-label {
+  fill: rgba(251, 191, 36, 0.9);
+  font-size: 10px;
+}
+.aim-desk-chart-now {
+  stroke: rgba(148, 163, 184, 0.55);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.aim-desk-chart-est.is-trend {
+  stroke: #38bdf8;
+  stroke-dasharray: 6 4;
+  stroke-width: 1.1;
+  opacity: 0.85;
+}
+.aim-desk-chart-est.is-level {
+  stroke: #c084fc;
+  stroke-dasharray: 2 3;
+  stroke-width: 1.1;
+  opacity: 0.8;
+}
+.aim-desk-chart-est.is-sma_short,
+.aim-desk-chart-est.is-ema_short {
+  stroke: #67e8f9;
+}
+.aim-desk-chart-est.is-sma_long,
+.aim-desk-chart-est.is-ema_long {
+  stroke: #818cf8;
+}
+.aim-desk-chart-est.is-support {
+  stroke: #4ade80;
+}
+.aim-desk-chart-est.is-resistance {
+  stroke: #f87171;
+}
+.aim-desk-chart-est.is-target_hour {
+  stroke: #fde68a;
+  stroke-dasharray: 4 2;
+}
+.aim-desk-chart-est.is-target_day {
+  stroke: #fdba74;
+  stroke-dasharray: 4 2;
+}
+
 .aim-desk-chart-plot {
   width: 100%;
   min-height: 300px;

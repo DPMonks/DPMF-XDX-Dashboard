@@ -1337,6 +1337,130 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
     if (!(tp > 0)) tp = fair + width * 1.5;
     if (!(entry > 0)) entry = fair;
   }
+  const overlaysIn = src.overlays && typeof src.overlays === "object" ? src.overlays : null;
+  const projectionIn = src.projection || overlaysIn?.projection || null;
+  const scrubPx = (v) => {
+    const n = coerceBand(v);
+    return n > 0 ? n : null;
+  };
+  const projection = projectionIn && typeof projectionIn === "object"
+    ? {
+        bars: numberOrNull(projectionIn.bars),
+        method: scrubText(projectionIn.method || "rule_based_score_v1"),
+        label: scrubText(projectionIn.label || "Estimate by AI-Matrix"),
+        drift_per_bar: numberOrNull(projectionIn.drift_per_bar),
+        path: Array.isArray(projectionIn.path)
+          ? projectionIn.path
+              .map((pt) => ({
+                i: numberOrNull(pt?.i),
+                mid: scrubPx(pt?.mid),
+                lo: scrubPx(pt?.lo),
+                hi: scrubPx(pt?.hi),
+              }))
+              .filter((pt) => pt.mid > 0)
+              .slice(0, 24)
+          : [],
+      }
+    : null;
+  const scrubZone = (z) => {
+    if (!z || typeof z !== "object") return null;
+    const lo = scrubPx(z.lo);
+    const hi = scrubPx(z.hi);
+    if (!(lo > 0) || !(hi > 0) || hi <= lo) return null;
+    return { lo, hi, strength: numberOrNull(z.strength) ?? 1 };
+  };
+  const scrubProj = (raw) => {
+    if (!raw || typeof raw !== "object") return null;
+    const path = Array.isArray(raw.path)
+      ? raw.path
+          .map((pt) => ({
+            i: numberOrNull(pt?.i),
+            mid: scrubPx(pt?.mid),
+            lo: scrubPx(pt?.lo),
+            hi: scrubPx(pt?.hi),
+          }))
+          .filter((pt) => pt.mid > 0)
+          .slice(0, 24)
+      : [];
+    if (!path.length) return null;
+    return {
+      bars: numberOrNull(raw.bars),
+      direction: scrubText(raw.direction || ""),
+      method: scrubText(raw.method || "rule_based_score_v1"),
+      label: scrubText(raw.label || "Estimate by AI-Matrix"),
+      drift_per_bar: numberOrNull(raw.drift_per_bar),
+      path,
+    };
+  };
+  const demand = (Array.isArray(src.demand) ? src.demand : Array.isArray(overlaysIn?.demand) ? overlaysIn.demand : [])
+    .map(scrubZone)
+    .filter(Boolean)
+    .slice(0, 4);
+  const supply = (Array.isArray(src.supply) ? src.supply : Array.isArray(overlaysIn?.supply) ? overlaysIn.supply : [])
+    .map(scrubZone)
+    .filter(Boolean)
+    .slice(0, 4);
+  const byTfIn = src.by_tf && typeof src.by_tf === "object" ? src.by_tf : overlaysIn?.by_tf;
+  const by_tf = {};
+  if (byTfIn && typeof byTfIn === "object") {
+    for (const tf of ["5m", "15m", "1h", "1D"]) {
+      const row = byTfIn[tf];
+      if (!row || typeof row !== "object") continue;
+      by_tf[tf] = {
+        tf,
+        demand: (Array.isArray(row.demand) ? row.demand : []).map(scrubZone).filter(Boolean).slice(0, 4),
+        supply: (Array.isArray(row.supply) ? row.supply : []).map(scrubZone).filter(Boolean).slice(0, 4),
+        projection_bull: scrubProj(row.projection_bull),
+        projection_bear: scrubProj(row.projection_bear),
+        trend: row.trend && typeof row.trend === "object" ? row.trend : null,
+        levels: row.levels && typeof row.levels === "object" ? row.levels : null,
+        disclaimer: scrubText(row.disclaimer || ""),
+      };
+    }
+  }
+
+  const overlays = {
+    trend: {
+
+      sma_short: scrubPx(src.sma_short ?? overlaysIn?.trend?.sma_short),
+      sma_long: scrubPx(src.sma_long ?? overlaysIn?.trend?.sma_long),
+      ema_short: scrubPx(src.ema_short ?? overlaysIn?.trend?.ema_short),
+      ema_long: scrubPx(src.ema_long ?? overlaysIn?.trend?.ema_long),
+      trend: numberOrNull(src.overlays?.trend?.trend ?? overlaysIn?.trend?.trend),
+      trend_bps: numberOrNull(src.trend_bps ?? overlaysIn?.trend?.trend_bps),
+    },
+    levels: {
+      support: scrubPx(src.support ?? overlaysIn?.levels?.support),
+      resistance: scrubPx(src.resistance ?? overlaysIn?.levels?.resistance),
+      rsi: numberOrNull(src.rsi ?? overlaysIn?.levels?.rsi),
+      rsi_ob: !!(overlaysIn?.levels?.rsi_ob),
+      rsi_os: !!(overlaysIn?.levels?.rsi_os),
+      atr_bps: atrBps,
+      band_lo: band_lo > 0 ? band_lo : null,
+      band_hi: band_hi > 0 ? band_hi : null,
+      entry: entry > 0 ? entry : null,
+      sl: sl > 0 ? sl : null,
+      tp: tp > 0 ? tp : null,
+      target_hour: scrubPx(src.target_hour ?? overlaysIn?.levels?.target_hour),
+      target_day: scrubPx(src.target_day ?? overlaysIn?.levels?.target_day),
+    },
+    projection,
+    score: {
+      trade_score: numberOrNull(src.trade_score ?? overlaysIn?.score?.trade_score),
+      edge_score: numberOrNull(src.edge_score ?? overlaysIn?.score?.edge_score),
+      signal: scrubText(src.signal || overlaysIn?.score?.signal || ""),
+      bias: scrubText(src.score_bias || overlaysIn?.score?.bias || ""),
+      formula: scrubText(overlaysIn?.score?.formula || src.formula || ""),
+    },
+    disclaimer: scrubText(
+      src.disclaimer || overlaysIn?.disclaimer || "Estimate by AI-Matrix - not guaranteed."
+    ),
+    demand,
+    supply,
+    by_tf,
+    scenarios: { bullish: true, bearish: true },
+  };
+
   return {
     pair: "XRP/RLUSD",
     fair_mid: fair > 0 ? fair : null,
@@ -1350,10 +1474,30 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
     iou_per_xrp: fair > 0 ? fair : null,
     bias_hour: scrubText(src.bias_hour || src.hour_bias || (src.trade_horizon === "hour" ? "hour" : "") || ""),
     bias_day: scrubText(src.bias_day || src.day_bias || (src.trade_horizon && src.trade_horizon !== "hour" ? String(src.trade_horizon) : "day") || ""),
+    score_bias: scrubText(src.score_bias || overlays.score.bias || ""),
+    trade_score: numberOrNull(src.trade_score),
+    signal: scrubText(src.signal || ""),
+    sma_short: overlays.trend.sma_short,
+    sma_long: overlays.trend.sma_long,
+    ema_short: overlays.trend.ema_short,
+    ema_long: overlays.trend.ema_long,
+    rsi: overlays.levels.rsi,
+    support: overlays.levels.support,
+    resistance: overlays.levels.resistance,
+    target_hour: overlays.levels.target_hour,
+    target_day: overlays.levels.target_day,
+    projection,
+    projection_bull: scrubProj(src.projection_bull) || (by_tf["1h"] && by_tf["1h"].projection_bull) || projection,
+    projection_bear: scrubProj(src.projection_bear) || (by_tf["1h"] && by_tf["1h"].projection_bear) || null,
+    demand,
+    supply,
+    by_tf,
+    overlays,
     trade_horizon: scrubText(src.trade_horizon || ""),
     atr_bps: atrBps,
     chart_reason: scrubText(src.chart_reason || ""),
     note: scrubText(src.note || ""),
+    disclaimer: overlays.disclaimer,
     // Private learning: Daniel relays estimate feedback in Grok Bot chat; AIM may remember kind AIM_COMMANDER_ESTIMATE_FEEDBACK.
     feedback_hook: "AIM_COMMANDER_ESTIMATE_FEEDBACK",
     source: scrubText(src.source || "commander_estimate"),
@@ -1728,6 +1872,9 @@ function classifyAimQuestion(raw) {
   }
   if (/\b(order ?book|best bid|best ask|spread)\b/.test(q)) return { intent: "orderbook" };
   if (/\b(smart swap|swap)\b/.test(q)) return { intent: "swap" };
+  if (/\b(smart chart|desk chart|aim[- ]?desk|commander estimate|estimate by ai[- ]?matrix|projection|bullish|bearish|demand (zone|box|area)|supply (zone|box|area)|support|resistance|fair mid|xrp\/rlusd.*(chart|estimate|overlay)|overlay)\b/.test(q)) {
+    return { intent: "estimate" };
+  }
   if (/\b(trade chart|trading chart|price chart|chart)\b/.test(q)) return { intent: "chart" };
   if (/\b(create pool)\b/.test(q)) return { intent: "create_pool" };
   if (/\b(vote|governance)\b/.test(q)) return { intent: "governance" };
@@ -1757,9 +1904,9 @@ async function loadAimChatContext(db) {
     `SELECT id, agent_id, kind, content, created_at
      FROM aim_agent_memory
      WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','agent6','commander')
-       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm')
+       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm','commander_estimate','price_marks','trading_metrics','AIM_COMMANDER_ESTIMATE_FEEDBACK')
      ORDER BY id DESC
-     LIMIT 12`
+     LIMIT 24`
   );
 
   let pools = null;
@@ -1784,7 +1931,15 @@ async function loadAimChatContext(db) {
     pools = null;
   }
 
-  return { heartbeats: heartbeats.rows, intents: intents.rows, pools, fetched_at: Date.now() };
+  const estimate = pickCommanderEstimate(
+    intents.rows.map((r) => ({
+      agent_id: r.agent_id,
+      kind: r.kind,
+      content: scrubValue(r.content) || {},
+    })),
+    {}
+  );
+  return { heartbeats: heartbeats.rows, intents: intents.rows, pools, estimate, fetched_at: Date.now() };
 }
 
 function xrplRpcUrl() {
@@ -2053,7 +2208,7 @@ Core product areas on the dashboard (JUMP TO decks 01-12. use live platform data
 - 09 Create pool: create a new XDX-related AMM pool (signed on the XRPL).
 - 10 AMM pools: live pool list and depth (XDX/XRP, XDX/RLUSD, XDX/XIO, XDX/XSQUAD, …).
 - 11 Vote: pool governance voting for parameters.
-- 12 AI-Matrix: Commander chat + agent observe strip (heartbeats / movement). Phase 1 observe-only.
+- 12 AI-Matrix: Commander chat + agent observe strip + XRP/RLUSD smart chart under chat. Estimate by AI-Matrix overlays (Trend/Levels/Projection, bullish/bearish, demand green / supply red boxes). Rule-based, not guaranteed. Phase 1 observe-only.
 Trust line: set TrustSet for XDX (and other IOUs) before holding/receiving that token.
 
 Trading desk (internal · view only):
@@ -2111,8 +2266,8 @@ function helpAnswerForQuestion(question) {
   if (/\b(govern|vote|voting)\b/.test(q)) {
     add("Pool governance lets eligible LP participants vote on pool parameters. Open Vote / governance on the dashboard and sign votes in Xaman when prompted.");
   }
-  if (/\b(agent|commander|ai[- ]?matrix|matrix)\b/.test(q)) {
-    add("AI-Matrix is the observe layer: Commander answers live status and help questions. Agents Prime, Flux, Vector, Vortex, Echo, and Ghost show anonymized heartbeats and movement. Phase 1 is read-only. Chat is ephemeral.");
+  if (/\b(agent|commander|ai[- ]?matrix|matrix|smart chart|estimate)\b/.test(q)) {
+    add("AI-Matrix is the observe layer: Commander answers live status and help questions. The smart chart under this chat shows XRP/RLUSD with Estimate by AI-Matrix overlays (bullish/bearish projections, demand/supply boxes). Agents Prime, Flux, Vector, Vortex, Echo, and Ghost show anonymized heartbeats and movement. Phase 1 is read-only. Chat is ephemeral.");
   }
   if (/\b(xdx|xio|xsquad|dpmf|native)\b/.test(q)) {
     add("Natives on this interface include XDX, XIO, and XSQUAD (say X-Squad). Ask about a named pair or pool for a sharper live read.");
@@ -2140,6 +2295,95 @@ function helpAnswerForQuestion(question) {
   return bits.join(" ");
 }
 
+
+function formatPxAim(v) {
+  const n = Number(v);
+  if (!(n > 0)) return null;
+  if (n >= 10) return n.toFixed(3);
+  if (n >= 1) return n.toFixed(4);
+  return n.toFixed(5);
+}
+
+function answerEstimateQuestion(question, estimate) {
+  const q = String(question || "").toLowerCase();
+  const est = estimate && typeof estimate === "object" ? estimate : null;
+  const bits = [];
+  const add = (s) => {
+    if (s) bits.push(scrubText(s));
+  };
+  add("Estimate by AI-Matrix - not guaranteed.");
+  if (!est || !(est.fair_mid > 0 || est.mid > 0)) {
+    add("No live XRP/RLUSD Commander estimate on the board yet. Soft-refresh AI-Matrix and ask again after the next Commander tick.");
+    return bits.join(" ");
+  }
+  const fair = formatPxAim(est.fair_mid || est.mid);
+  if (fair) add(`XRP/RLUSD fair mid ${fair} RLUSD per XRP (quote-per-base).`);
+  if (est.bias_hour) add(`Hour bias ${scrubText(est.bias_hour)}.`);
+  if (est.bias_day) add(`Day bias ${scrubText(est.bias_day)}.`);
+  if (est.score_bias || est.signal) add(`Score bias ${scrubText(est.score_bias || est.signal)}.`);
+  if (est.trade_score != null && Number.isFinite(Number(est.trade_score))) {
+    add(`TradeScore ${Number(est.trade_score).toFixed(4)}.`);
+  }
+  const wantBull = /\bbull/.test(q);
+  const wantBear = /\bbear/.test(q);
+  const tfHit = (q.match(/\b(1d|1h|15m|5m)\b/) || [])[0];
+  const byTf = est.by_tf || est.overlays?.by_tf || {};
+  const tfKey = tfHit === "1d" ? "1D" : tfHit || null;
+  const pack = (tfKey && byTf[tfKey]) || byTf["1h"] || byTf["1D"] || null;
+  if (/\b(demand|support|buy zone|green)\b/.test(q)) {
+    const zones = pack?.demand || est.demand || [];
+    if (zones.length) {
+      const z = zones[0];
+      const lo = formatPxAim(z.lo);
+      const hi = formatPxAim(z.hi);
+      if (lo && hi) add(`Demand box (green, 50% opacity on chart): ${lo} to ${hi}.`);
+    } else add("No demand box published on this tick.");
+  }
+  if (/\b(supply|resist|sell zone|red)\b/.test(q)) {
+    const zones = pack?.supply || est.supply || [];
+    if (zones.length) {
+      const z = zones[0];
+      const lo = formatPxAim(z.lo);
+      const hi = formatPxAim(z.hi);
+      if (lo && hi) add(`Supply box (red, 50% opacity on chart): ${lo} to ${hi}.`);
+    } else add("No supply box published on this tick.");
+  }
+  const scrubPath = (proj, label) => {
+    if (!proj?.path?.length) return;
+    const last = proj.path[proj.path.length - 1];
+    const mid = formatPxAim(last?.mid);
+    const lo = formatPxAim(last?.lo);
+    const hi = formatPxAim(last?.hi);
+    if (mid) add(`${label} path to bar ${proj.path.length}: mid ${mid}${lo && hi ? ` channel ${lo}-${hi}` : ""}.`);
+  };
+  if (wantBull || (!wantBear && /\b(projection|overlay|estimate|ahead|forward)\b/.test(q))) {
+    scrubPath(pack?.projection_bull || est.projection_bull || est.projection, "Bullish");
+  }
+  if (wantBear || (!wantBull && /\b(projection|overlay|estimate|ahead|forward)\b/.test(q))) {
+    scrubPath(pack?.projection_bear || est.projection_bear, "Bearish");
+  }
+  if (/\b(entry|sl|stop|tp|take)\b/.test(q)) {
+    const entry = formatPxAim(est.entry);
+    const sl = formatPxAim(est.sl);
+    const tp = formatPxAim(est.tp);
+    if (entry) add(`Entry ${entry}.`);
+    if (sl) add(`SL ${sl}.`);
+    if (tp) add(`TP ${tp}.`);
+  }
+  if (/\b(sma|ema|trend)\b/.test(q)) {
+    const smaS = formatPxAim(est.sma_short);
+    const smaL = formatPxAim(est.sma_long);
+    const emaS = formatPxAim(est.ema_short);
+    const emaL = formatPxAim(est.ema_long);
+    if (smaS || smaL) add(`SMA short ${smaS || "n/a"}, long ${smaL || "n/a"}.`);
+    if (emaS || emaL) add(`EMA short ${emaS || "n/a"}, long ${emaL || "n/a"}.`);
+  }
+  if (tfKey) add(`Timeframe focus ${tfKey}.`);
+  add("Toggle Trend, Levels, Projection, Bullish, and Bearish on the AI-Matrix smart chart under this chat.");
+  add("I only cite published Commander numbers. No invented prices.");
+  return bits.join(" ");
+}
+
 function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpHolders = null, markets = null, xrplUniverse = null) {
   const classified = classifyAimQuestion(question);
   const dpmfBias = wantsDpmfBias(question, classified);
@@ -2164,10 +2408,11 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       intent: "greeting",
       text: [
         pickLine(Date.now(), ["Commander on deck.", "Commander here. Listening.", "Present."]),
+        "XDX Exchange Operational Intelligence Interface, built by DPMF.Technology.",
         commander ? "Loop is green." : null,
         agents.length ? `${agentsOutOfFive(active, agents.length)} active.` : null,
         topName ? `Top pool ${topName}.` : null,
-        "Fire when ready.",
+        "Ask about the XRP/RLUSD smart chart estimates anytime. Fire when ready.",
       ]
         .filter(Boolean)
         .join(" "),
@@ -2214,7 +2459,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return { type: "commander_answer", intent: "connectivity", text: (line + extra).trim() };
   }
 
-  const skipOpener = ["help", "holders", "lp_holders", "lp_earnings", "balance", "math", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "details", "activity", "create_pool", "governance"].includes(classified.intent);
+  const skipOpener = ["help", "holders", "lp_holders", "lp_earnings", "balance", "math", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "estimate", "details", "activity", "create_pool", "governance"].includes(classified.intent);
   if (!skipOpener) {
     push(
       pickLine(seed, [
@@ -2323,8 +2568,23 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     if (markets?.amm?.price != null) push(`Live XDX mark from the board is about ${markets.amm.price}.`);
     return { type: "commander_answer", intent: "swap", text: lines.join(" ") };
   }
+  if (classified.intent === "estimate") {
+    return {
+      type: "commander_answer",
+      intent: "estimate",
+      text: answerEstimateQuestion(question, ctx.estimate),
+    };
+  }
   if (classified.intent === "chart") {
-    push("Trade chart (deck 03) is the live XDX price view on this board. Pair it with Order book and Activity for context.");
+    // Prefer AI-Matrix XRP/RLUSD smart chart when estimate language is present; else deck 03.
+    if (/\b(xrp\/rlusd|smart chart|estimate|overlay|projection|bullish|bearish)\b/i.test(question) || ctx.estimate) {
+      return {
+        type: "commander_answer",
+        intent: "chart",
+        text: answerEstimateQuestion(question, ctx.estimate),
+      };
+    }
+    push("Trade chart (deck 03) is the live XDX price view on this board. The AI-Matrix panel under this chat holds the XRP/RLUSD smart chart with Estimate by AI-Matrix overlays.");
     if (markets?.amm?.price != null) push(`Mark price on the AMM card is about ${markets.amm.price}.`);
     return { type: "commander_answer", intent: "chart", text: lines.join(" ") };
   }
@@ -2536,7 +2796,7 @@ export async function aimChatPayload(req) {
       }
     }
     const wantMarkets =
-      ["orderbook", "swap", "chart", "pools", "snapshot", "status", "assets", "native_price", "details", "lp_earnings", "help"].includes(classified.intent) ||
+      ["orderbook", "swap", "chart", "estimate", "pools", "snapshot", "status", "assets", "native_price", "details", "lp_earnings", "help"].includes(classified.intent) ||
       /\b(price|tvl|order ?book|amm|swap|chart)\b/i.test(text);
     const markets = wantMarkets ? await fetchPlatformMarkets() : null;
     const wantUniverse =
@@ -2558,7 +2818,7 @@ export async function aimChatPayload(req) {
           includeDomains: wantSite ? ["dpmf.technology", "www.dpmf.technology"] : undefined,
         })
       : { ok: false, skipped: true, results: [] };
-    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "lp_earnings", "balance", "math", "wallet", "help", "desk", "native_price", "swap", "orderbook", "details"].includes(
+    const preferLocal = ["connectivity", "greeting", "identity", "holders", "lp_holders", "lp_earnings", "balance", "math", "wallet", "help", "desk", "native_price", "swap", "orderbook", "details", "chart", "estimate"].includes(
       classified.intent
     );
     if (classified.intent === "math" || looksLikeMathQuestion(text)) {
