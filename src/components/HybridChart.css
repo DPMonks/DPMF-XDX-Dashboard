@@ -1,4 +1,6 @@
 .hybrid-chart {
+  display: flex;
+  flex-direction: column;
   border-radius: 16px;
   background: #000000;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
@@ -81,7 +83,12 @@
   padding: 6px 8px;
 }
 
+.hybrid-footer {
+  flex: 0 0 auto;
+}
+
 .hybrid-topbar {
+  flex: 0 0 auto;
   flex-wrap: nowrap;
   min-height: 36px;
   padding: 5px 8px;
@@ -92,6 +99,7 @@
 .hybrid-body {
   display: grid;
   grid-template-columns: 36px 1fr;
+  flex: 1 1 auto;
   min-height: 460px;
   overflow: visible;
 }
@@ -330,6 +338,9 @@
 
 .hybrid-main {
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .hybrid-plot {
@@ -559,6 +570,12 @@
   text-indent: 0;
 }
 
+.hybrid-chart .range {
+  flex: 0 0 auto;
+  min-width: 36px;
+  padding: 6px 10px;
+}
+
 .hybrid-chart .range::-moz-focus-inner {
   border: 0;
   padding: 0;
@@ -570,18 +587,22 @@
   justify-items: center;
   width: 100%;
   height: 100%;
-  padding: 0 8px;
+  padding: 0;
   margin: 0;
   text-align: center;
   line-height: 1;
 }
 
 .hybrid-ranges {
+  flex: 0 0 auto;
   flex-wrap: nowrap;
   gap: 2px;
-  padding: 4px 8px 6px;
+  padding: 6px 8px;
   overflow-x: auto;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  overflow-y: hidden;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: #050508;
+  -webkit-overflow-scrolling: touch;
 }
 
 .hybrid-meta {
@@ -591,6 +612,8 @@
 
 .hybrid-plot-wrap {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .hybrid-plot-error {
@@ -1381,4 +1404,39 @@
 
 .hybrid-chart.is-aim-embed {
   min-height: 0;
+  height: auto;
+}
+
+.hybrid-chart.is-aim-embed .hybrid-topbar,
+.hybrid-chart.is-aim-embed .hybrid-ranges,
+.hybrid-chart.is-aim-embed .hybrid-footer,
+.hybrid-chart.is-fullview .hybrid-topbar,
+.hybrid-chart.is-fullview .hybrid-ranges {
+  flex: 0 0 auto;
+}
+
+.hybrid-chart.is-aim-embed .hybrid-body,
+.hybrid-chart.is-fullview .hybrid-body {
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.hybrid-chart.is-aim-embed .hybrid-plot,
+.hybrid-chart.is-aim-embed .hybrid-svg,
+.hybrid-chart.is-fullview .hybrid-plot,
+.hybrid-chart.is-fullview .hybrid-svg {
+  height: 100%;
+  min-height: 160px;
+}
+
+.aim-drawer-chart-pane,
+.aim-drawer-chart-pane .aim-merged-chart {
+  overflow: hidden;
+}
+
+.aim-drawer-body .hybrid-ranges,
+.aim-drawer-chart-pane .hybrid-ranges {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 3;
 }

@@ -1170,7 +1170,7 @@
     padding: 0.65rem 0.75rem 0.75rem;
     box-sizing: border-box;
     background: rgba(6, 8, 14, 0.96);
-    overflow: auto;
+    overflow: hidden;
     overscroll-behavior: contain;
     pointer-events: auto;
   }
@@ -1193,7 +1193,16 @@
   flex-direction: column;
   height: 100%;
   margin: 0;
-  overflow: auto;
+  overflow: hidden;
+}
+.aim-merged-chart.is-fill .aim-merged-chart-head {
+  flex: 0 0 auto;
+}
+.aim-merged-chart.is-fill .aim-merged-chart-sub {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .aim-merged-chart.is-fill .hybrid-chart,
 .aim-drawer-chart-pane .hybrid-chart.is-aim-embed {
@@ -1201,7 +1210,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: auto;
 }
 .aim-drawer-chart-pane .hybrid-body,
 .aim-drawer-chart-pane .hybrid-main,
@@ -1211,7 +1220,8 @@
 }
 .aim-drawer-chart-pane .hybrid-plot-wrap .hybrid-svg,
 .aim-drawer-chart-pane .hybrid-plot {
-  min-height: 280px;
+  min-height: 160px;
+  height: 100%;
 }
 
 .aim-merged-chart {

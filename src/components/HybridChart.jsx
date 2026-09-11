@@ -912,20 +912,20 @@ export default function HybridChart({
           />
           </ChartErrorBoundary>
           </div>
-
-          <div className="hybrid-ranges" role="tablist" aria-label={t.chartTimeframes || "Candle size"}>
-            {INTERVALS.map((row) => (
-              <button
-                key={row.id}
-                type="button"
-                className={timeframe === row.id ? "range active" : "range"}
-                onClick={() => setTimeframe(row.id)}
-              >
-                <span className="range-label">{row.label}</span>
-              </button>
-            ))}
-          </div>
         </div>
+      </div>
+
+      <div className="hybrid-ranges" role="tablist" aria-label={t.chartTimeframes || "Candle size"}>
+        {INTERVALS.map((row) => (
+          <button
+            key={row.id}
+            type="button"
+            className={timeframe === row.id ? "range active" : "range"}
+            onClick={() => setTimeframe(row.id)}
+          >
+            <span className="range-label">{row.label}</span>
+          </button>
+        ))}
       </div>
 
       <div className="hybrid-footer">
