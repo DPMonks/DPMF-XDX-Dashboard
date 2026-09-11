@@ -773,8 +773,12 @@ export default function ConnectedWallet() {
                             .replace("{pair}", row.pair || "")
                             .replace(/\s+/g, " ")
                             .trim()
-                        : row.side === "trustline"
-                          ? (t.trustlineActivity || "Added {asset} trustline").replace(
+                        : row.side === "trustline" || row.side === "removeTrustline"
+                          ? (
+                              row.side === "removeTrustline" || row.removed
+                                ? t.removedTrustlineActivity || "Removed {asset} trustline"
+                                : t.trustlineActivity || "Added {asset} trustline"
+                            ).replace(
                               "{asset}",
                               displayTrustlinePair(row, view.pools) || row.pair || t.xdx
                             )

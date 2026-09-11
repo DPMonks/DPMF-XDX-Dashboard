@@ -82,7 +82,10 @@ export function exchangeMemoText({ txjson = {}, trade = {} } = {}) {
   }
   if (type === "TrustSet") {
     const token = currencyLabel(txjson.LimitAmount);
-    return memoLine(`${token} trustline opened`);
+    const limit = txjson.LimitAmount || {};
+    const raw = limit.value ?? limit.Value;
+    const removed = raw != null && raw !== "" && Number(raw) === 0;
+    return memoLine(`${token} trustline ${removed ? "removed" : "opened"}`);
   }
   if (action === "xdxPlatformFee") {
     return memoLine(`1% XDX platform fee`);

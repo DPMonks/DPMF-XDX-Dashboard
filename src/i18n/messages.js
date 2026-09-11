@@ -351,6 +351,7 @@ const en = {
   createdPoolActivity: "Created {pair} pool",
   addedLpActivity: "Added LP to {pair}",
   trustlineActivity: "Added {asset} trustline",
+  removedTrustlineActivity: "Removed {asset} trustline",
   removedLpActivity: "Removed {amount} LP from {pair}",
   tvl: "TVL",
   lpSupply: "LP supply",

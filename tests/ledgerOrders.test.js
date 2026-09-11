@@ -6,6 +6,7 @@ import {
   activityFromOfferTx,
   activityFromPaymentTx,
   activityFromTrustSetTx,
+  isTrustSetRemove,
   currencyCode,
   displayTrustlinePair,
   lpBalanceEventsFromMeta,
@@ -400,6 +401,39 @@ test("activityFromTrustSetTx records a confirmed XDX line", () => {
     "rBuyer"
   );
   assert.equal(history[0].side, "buy");
+});
+
+test("activityFromTrustSetTx labels LimitAmount 0 as removeTrustline", () => {
+  assert.equal(isTrustSetRemove({ value: "0" }), true);
+  assert.equal(isTrustSetRemove({ value: "10000000000" }), false);
+  const row = activityFromTrustSetTx(
+    {
+      hash: "a".repeat(64),
+      tx: {
+        TransactionType: "TrustSet",
+        Account: "rBuyer",
+        LimitAmount: { currency: "BPUG", issuer: "rBpugIssuerxxxxxxxxxxxxxxxxxxxx", value: "0" },
+      },
+      meta: { TransactionResult: "tesSUCCESS" },
+    },
+    "rBuyer"
+  );
+  assert.equal(row.side, "removeTrustline");
+  assert.equal(row.removed, true);
+  assert.equal(row.pair, "XDX/BPUG");
+  const pending = pendingFromExecution(
+    {
+      txjson: {
+        TransactionType: "TrustSet",
+        Account: "rBuyer",
+        LimitAmount: { currency: "ODC", issuer: "rOdcIssuerxxxxxxxxxxxxxxxxxxxxx", value: "0" },
+      },
+      txid: "b".repeat(64),
+    },
+    "rBuyer"
+  );
+  assert.equal(pending.activity.side, "removeTrustline");
+  assert.equal(pending.activity.removed, true);
 });
 
 test("trustline activity shows a pair, never a hex dump", () => {

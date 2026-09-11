@@ -388,6 +388,14 @@ export function activityFromPaymentTx(row, address) {
   };
 }
 
+export function isTrustSetRemove(limitAmount) {
+  const limit = limitAmount && typeof limitAmount === "object" ? limitAmount : {};
+  const raw = limit.value ?? limit.Value;
+  if (raw == null || raw === "") return false;
+  const n = Number(raw);
+  return Number.isFinite(n) && n === 0;
+}
+
 export function activityFromTrustSetTx(row, address) {
   const { tx, meta, hash, timestamp } = unwrapAccountTx(row);
   if (tx?.TransactionType !== "TrustSet") return null;
@@ -395,6 +403,7 @@ export function activityFromTrustSetTx(row, address) {
   const result = meta.TransactionResult || row.TransactionResult || "";
   if (result && result !== "tesSUCCESS") return null;
   const limit = tx.LimitAmount || {};
+  const removed = isTrustSetRemove(limit);
   const pair = displayTrustlinePair({
     currency: limit.currency,
     issuer: limit.issuer,
@@ -404,8 +413,9 @@ export function activityFromTrustSetTx(row, address) {
   if (currency === "XRP") return null;
   return {
     account: tx.Account || address,
-    side: "trustline",
+    side: removed ? "removeTrustline" : "trustline",
     kind: "trustline",
+    removed,
     pair: pair || (currency === "XDX" ? "XDX" : `XDX/${currency}`),
     currency: currency || pair,
     issuer: limit.issuer || null,
@@ -595,12 +605,14 @@ export function pendingFromExecution(detail = {}, address = "") {
     const limit = txjson.LimitAmount || {};
     const currency = currencyCode(limit.currency);
     if (!currency || currency === "XRP") return null;
+    const removed = isTrustSetRemove(limit);
     return {
       order: null,
       activity: {
         account,
-        side: "trustline",
+        side: removed ? "removeTrustline" : "trustline",
         kind: "trustline",
+        removed,
         pair: currency === "XDX" ? "XDX" : `XDX/${currency}`,
         currency,
         issuer: limit.issuer || null,

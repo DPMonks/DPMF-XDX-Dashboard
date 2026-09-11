@@ -136,3 +136,16 @@ test("stamping keeps the platform memo and the sign marker together", () => {
   assert.equal(txjson.Memos.length, 2);
   assert.equal(memo.text.includes("rBuyer"), false);
 });
+
+
+test("TrustSet memo says removed when LimitAmount is 0", () => {
+  assert.equal(
+    exchangeMemoText({
+      txjson: {
+        TransactionType: "TrustSet",
+        LimitAmount: { currency: "FPT", issuer: "rFptIssuerxxxxxxxxxxxxxxxxxxxxx", value: "0" },
+      },
+    }),
+    `${EXCHANGE_PLATFORM} | FPT trustline removed`
+  );
+});
