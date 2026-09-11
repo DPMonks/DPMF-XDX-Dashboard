@@ -1850,7 +1850,7 @@ export async function aimStatusPayload() {
       `SELECT id, agent_id, kind, content, created_at
        FROM aim_agent_memory
        WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','agent6','commander')
-         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm','commander_estimate','price_marks','trading_metrics','AIM_COMMANDER_ESTIMATE_FEEDBACK')
+         AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','trade_blocked','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm','commander_estimate','price_marks','trading_metrics','AIM_COMMANDER_ESTIMATE_FEEDBACK')
        ORDER BY id DESC
        LIMIT 40`
     );
@@ -2031,6 +2031,12 @@ export async function aimStatusPayload() {
       deskAgents,
     });
     const deskLocks = summarizeDeskLocks(deskAgents, liveState);
+    const liveAgentState = buildDeskLiveSnapshot({
+      heartbeats: heartbeats.rows,
+      intents: intents.rows,
+      deskLive: liveState,
+      deskLocks,
+    });
     const desk = {
       phase: liveState.live ? "live" : "internal",
       desk_phase: liveState.desk_phase,
@@ -2051,6 +2057,7 @@ export async function aimStatusPayload() {
       estimate,
       trade_mode: liveState.trade_mode,
       locks: deskLocks,
+      live_agent_state: liveAgentState,
     };
 
     return {
@@ -2065,6 +2072,8 @@ export async function aimStatusPayload() {
         read_only: liveState.read_only,
         desk_phase: liveState.desk_phase,
         trade_mode: liveState.trade_mode,
+        live_agent_state: liveAgentState,
+        desk_live_snapshot: liveAgentState,
       },
     };
   } catch (error) {
@@ -2192,6 +2201,261 @@ function summarizeDeskLocks(deskAgents, liveState) {
   return locks;
 }
 
+
+function heartbeatAgeSec(lastSeenAt) {
+  const iso = isoOf(lastSeenAt);
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return null;
+  return Math.max(0, Math.round((Date.now() - t) / 1000));
+}
+
+function isAgentOnline(status, ageSec) {
+  const st = String(status || "").toLowerCase();
+  if (/offline|dead|error|boot/.test(st)) return false;
+  if (ageSec == null) return /loop|online|ok|alive/.test(st);
+  return ageSec <= 900 && /loop|online|ok|alive|idle/.test(st);
+}
+
+function pickBlockedBy(meta, prop, fill) {
+  const m = meta && typeof meta === "object" ? meta : {};
+  const p = prop && typeof prop === "object" ? prop : {};
+  const f = fill && typeof fill === "object" ? fill : {};
+  const exec = (p.exec && typeof p.exec === "object" ? p.exec : {}) || {};
+  return scrubText(
+    f.blocked_by ||
+      exec.blocked_by ||
+      p.blocked_by ||
+      m.blocked_by ||
+      ""
+  );
+}
+
+function pickBlockedDisplay(meta, prop, fill, reason) {
+  const m = meta && typeof meta === "object" ? meta : {};
+  const p = prop && typeof prop === "object" ? prop : {};
+  const f = fill && typeof fill === "object" ? fill : {};
+  const exec = (p.exec && typeof p.exec === "object" ? p.exec : {}) || {};
+  const display = scrubText(
+    f.blocked_by_display ||
+      exec.blocked_by_display ||
+      p.blocked_by_display ||
+      m.blocked_by_display ||
+      ""
+  );
+  if (display) return display;
+  if (reason) return humanGateReason(reason);
+  return "";
+}
+
+function compactTradeSummary(fill, prop) {
+  const f = fill && typeof fill === "object" ? fill : {};
+  const p = prop && typeof prop === "object" ? prop : {};
+  const eng = scrubText(f.engine_result || "");
+  const submitted = !!(f.submitted || f.ok || /tessuccess|tesuccess|success/i.test(eng));
+  if (!submitted && !f.blocked_by && !eng && !f.hash) return null;
+  return {
+    submitted,
+    ok: !!f.ok,
+    engine_result: eng || null,
+    hash: scrubText(f.hash || "").slice(0, 16) || null,
+    blocked_by: scrubText(f.blocked_by || "") || null,
+    pair: scrubText(p.pair || f.pair || "") || null,
+    side: scrubText(p.side || f.side || "") || null,
+    dry_run: !!f.dry_run,
+  };
+}
+
+function compactInventoryPosture(meta, prop, intentsForAgent) {
+  const m = meta && typeof meta === "object" ? meta : {};
+  const p = prop && typeof prop === "object" ? prop : {};
+  const usd = m.usd_mark || p.usd_mark || null;
+  let costBasis = null;
+  let inventoryIou = null;
+  let underwater = null;
+  if (p.cost_basis != null && Number.isFinite(Number(p.cost_basis))) costBasis = Number(p.cost_basis);
+  if (p.cost_basis_detail && typeof p.cost_basis_detail === "object") {
+    const d = p.cost_basis_detail;
+    if (d.avg_entry_xrp_per_iou != null) costBasis = Number(d.avg_entry_xrp_per_iou);
+    if (d.inventory_iou != null) inventoryIou = Number(d.inventory_iou);
+  }
+  const mems = Array.isArray(intentsForAgent) ? intentsForAgent : [];
+  for (const row of mems) {
+    const c = scrubValue(row.content) || {};
+    if (row.kind === "trade_execution" && c.basis_update) {
+      if (c.basis_update.avg_entry_xrp_per_iou != null) costBasis = Number(c.basis_update.avg_entry_xrp_per_iou);
+      if (c.basis_update.inventory_iou != null) inventoryIou = Number(c.basis_update.inventory_iou);
+    }
+    if (c.cost_basis != null && costBasis == null) costBasis = Number(c.cost_basis);
+  }
+  const blocked = pickBlockedBy(m, p, m.last_fill || p.exec);
+  if (/below_cost_basis/i.test(String(blocked))) underwater = true;
+  const mult = usd && usd.mult_vs_day_start != null ? Number(usd.mult_vs_day_start) : null;
+  if (mult != null && Number.isFinite(mult) && mult < 1) underwater = underwater == null ? true : underwater;
+  return {
+    usd_equity: usd && usd.usd_equity != null ? Number(usd.usd_equity) : null,
+    day_start_usd: usd && usd.day_start_usd != null ? Number(usd.day_start_usd) : null,
+    mult_vs_day_start: mult,
+    cost_basis: Number.isFinite(costBasis) ? costBasis : null,
+    inventory_iou: Number.isFinite(inventoryIou) ? inventoryIou : null,
+    underwater: underwater,
+  };
+}
+
+function latestMemoryByKind(intents, kinds) {
+  const want = new Set((Array.isArray(kinds) ? kinds : [kinds]).map(String));
+  const list = Array.isArray(intents) ? intents : [];
+  for (const r of list) {
+    if (want.has(String(r?.kind || ""))) {
+      return { kind: scrubText(r.kind), agent: publicAgentId(r.agent_id), content: scrubValue(r.content) || {}, created_at: isoOf(r.created_at) };
+    }
+  }
+  return null;
+}
+
+/**
+ * Shared compact truth for chat LLM + status: live desk mode + per-agent gates.
+ * Scrubbed; no seeds. Shape matches commander live_agent_state.
+ */
+function buildDeskLiveSnapshot({ heartbeats = [], intents = [], deskLive = null, deskLocks = null } = {}) {
+  const rows = Array.isArray(heartbeats) ? heartbeats : [];
+  const mem = Array.isArray(intents) ? intents : [];
+  const commanderRow = rows.find((h) => h.agent_id === "commander") || null;
+  const deskAgentsLite = rows
+    .filter((h) => h.agent_id !== "commander")
+    .map((h) => {
+      const meta = scrubValue(h.meta) || {};
+      const prop = meta.trade_proposal || {};
+      const fill = meta.last_fill || prop.exec || null;
+      return { id: h.agent_id, label: agentLabel(h.agent_id), last_fill: fill, proposal: prop };
+    });
+  const live =
+    deskLive ||
+    deriveDeskLiveState({
+      commander: commanderRow ? { meta: scrubValue(commanderRow.meta) || {} } : null,
+      deskBook: findLatestDeskBook(mem),
+      deskAgents: deskAgentsLite,
+    });
+  const locks = Array.isArray(deskLocks) ? deskLocks : summarizeDeskLocks(deskAgentsLite, live);
+
+  const byAgentMem = {};
+  for (const r of mem) {
+    const id = String(r.agent_id || "");
+    if (!byAgentMem[id]) byAgentMem[id] = [];
+    if (byAgentMem[id].length < 6) byAgentMem[id].push(r);
+  }
+
+  const agents = ["agent1", "agent2", "agent3", "agent4", "agent5", "agent6"].map((id) => {
+    const row = rows.find((h) => h.agent_id === id) || null;
+    const meta = scrubValue(row?.meta) || {};
+    const prop = meta.trade_proposal || {};
+    const fill = meta.last_fill || prop.exec || null;
+    const age = heartbeatAgeSec(row?.last_seen_at);
+    const blocked = pickBlockedBy(meta, prop, fill);
+    const display = pickBlockedDisplay(meta, prop, fill, blocked);
+    // Drop stale desk-wide READ_ONLY labels when LIVE
+    const gateReason =
+      live?.live && /^(READ_ONLY|read_only|A_proposals_only|phase_a)$/i.test(String(blocked))
+        ? ""
+        : blocked;
+    const trade = compactTradeSummary(fill, prop);
+    // Prefer recent trade_execution memory if heartbeat fill is thin
+    if ((!trade || (!trade.submitted && !trade.blocked_by)) && byAgentMem[id]) {
+      for (const r of byAgentMem[id]) {
+        if (String(r.kind) !== "trade_execution" && String(r.kind) !== "trade_blocked") continue;
+        const c = scrubValue(r.content) || {};
+        const memTrade = compactTradeSummary(
+          {
+            ok: c.ok,
+            submitted: c.submitted,
+            engine_result: c.engine_result,
+            hash: c.hash,
+            blocked_by: c.blocked_by,
+            dry_run: c.dry_run,
+            pair: c.pair,
+            side: c.side,
+          },
+          c
+        );
+        if (memTrade) {
+          return {
+            id: publicAgentId(id),
+            label: agentLabel(id),
+            role: agentRole(id),
+            status: scrubText(row?.status || "missing"),
+            online: isAgentOnline(row?.status, age),
+            heartbeat_age_sec: age,
+            last_seen_at: isoOf(row?.last_seen_at),
+            blocked_by: gateReason || scrubText(c.blocked_by || "") || null,
+            blocked_by_display:
+              display ||
+              (c.blocked_by_display ? scrubText(c.blocked_by_display) : gateReason ? humanGateReason(gateReason) : null),
+            last_trade: memTrade,
+            inventory: compactInventoryPosture(meta, prop, byAgentMem[id]),
+            proposal_action: scrubText(prop.action || "") || null,
+            proposal_pair: scrubText(prop.pair || "") || null,
+            proposal_urgency: scrubText(prop.urgency || "") || null,
+          };
+        }
+      }
+    }
+    return {
+      id: publicAgentId(id),
+      label: agentLabel(id),
+      role: agentRole(id),
+      status: scrubText(row?.status || "missing"),
+      online: isAgentOnline(row?.status, age),
+      heartbeat_age_sec: age,
+      last_seen_at: isoOf(row?.last_seen_at),
+      blocked_by: gateReason || null,
+      blocked_by_display: gateReason ? display || humanGateReason(gateReason) : null,
+      last_trade: trade,
+      inventory: compactInventoryPosture(meta, prop, byAgentMem[id] || []),
+      proposal_action: scrubText(prop.action || "") || null,
+      proposal_pair: scrubText(prop.pair || "") || null,
+      proposal_urgency: scrubText(prop.urgency || "") || null,
+    };
+  });
+
+  const deskBook = latestMemoryByKind(mem, "desk_book");
+  const deskArbiter = latestMemoryByKind(mem, "desk_arbiter");
+  const deskCoord = latestMemoryByKind(mem, ["desk_coordination"]);
+  const inventoryDesk = {
+    underwater_agents: agents.filter((a) => a.inventory?.underwater).map((a) => a.label),
+    locked_agents: agents.filter((a) => a.blocked_by).map((a) => a.label),
+    online_count: agents.filter((a) => a.online).length,
+  };
+
+  return {
+    desk_live: live,
+    locks: locks.slice(0, 12),
+    agents,
+    inventory_posture: inventoryDesk,
+    desk_book: deskBook
+      ? {
+          summary: scrubText(deskBook.content?.summary || ""),
+          desk_phase: scrubText(deskBook.content?.desk_phase || ""),
+          read_only: typeof deskBook.content?.read_only === "boolean" ? deskBook.content.read_only : null,
+          high_urgency: deskBook.content?.high_urgency ?? null,
+          created_at: deskBook.created_at,
+        }
+      : null,
+    desk_arbiter: deskArbiter
+      ? {
+          decision_count: Array.isArray(deskArbiter.content?.decisions)
+            ? deskArbiter.content.decisions.length
+            : null,
+          created_at: deskArbiter.created_at,
+        }
+      : null,
+    coordination: deskCoord
+      ? { summary: scrubText(deskCoord.content?.summary || deskCoord.content?.objective || "desk_coordination"), created_at: deskCoord.created_at }
+      : null,
+    fetched_at: new Date().toISOString(),
+  };
+}
+
+
 function agentsOutOfFive(active, total = 5) {
   const words = { 1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 0: "zero" };
   const a = Number(active) || 0;
@@ -2231,11 +2495,27 @@ function classifyAimQuestion(raw) {
       return { intent: "agent", agentNum, agentId: resolved };
     }
   }
-  if (/^(hi|hello|hey|yo|gm|good (morning|afternoon|evening))\b/i.test(q) || /\b(hi|hello|hey)\b[,!.]?\s*(commander)?\s*$/i.test(q)) return { intent: "greeting" };
+  if (
+    /^(hi|hello|hey|yo|gm|good (morning|afternoon|evening))\b/i.test(q) ||
+    /^(good (morning|afternoon|evening))[,!.\s]*(commander)?[,!.\s]*$/i.test(q) ||
+    /\b(hi|hello|hey)\b[,!.]?\s*(commander)?\s*$/i.test(q)
+  ) {
+    return { intent: "greeting" };
+  }
   if (
     /\b(connected|connection|online|operational|are you (up|live|ready|online|connected)|is (the )?(xrpl|ledger|ripple|board|exchange|platform) (up|live|online|connected|working)|can you (see|reach|read) (the )?(ledger|xrpl)|hooked up|linked)\b/.test(q)
   ) {
     return { intent: "connectivity" };
+  }
+  if (
+    /\b(are we live|desk (live|mode|phase)|read.?only|trade mode|live (trading|desk)|is (the )?desk (live|unlocked)|phase\s*[ac]|proposals? only)\b/.test(q)
+  ) {
+    return { intent: "desk_mode" };
+  }
+  if (
+    /\b(profit|underwater|negative|p\s*&\s*l|\bpnl\b|cost[- ]?basis|losing|drawdown|mark vs|in the (red|green)|equity mark)\b/.test(q)
+  ) {
+    return { intent: "desk_pnl" };
   }
   if (/\b(what (is|are) (this|xdx|the exchange|the platform|the dashboard|ai[- ]?matrix)|what do you (do|call this)|who are you)\b/i.test(q)) return { intent: "identity" };
   if (looksLikeMathQuestion(raw)) {
@@ -2347,9 +2627,9 @@ async function loadAimChatContext(db) {
     `SELECT id, agent_id, kind, content, created_at
      FROM aim_agent_memory
      WHERE agent_id IN ('agent1','agent2','agent3','agent4','agent5','agent6','commander')
-       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm','commander_estimate','price_marks','trading_metrics','AIM_COMMANDER_ESTIMATE_FEEDBACK')
+       AND kind IN ('observe','pools','inbox','indexer_probe','skill_observe','trade_proposal','trade_execution','trade_blocked','usd_mark','usd_day_baseline','desk_book','desk_coordination','desk_arbiter','xrpl_ledger','xrpl_book','xrpl_amm','commander_estimate','price_marks','trading_metrics','AIM_COMMANDER_ESTIMATE_FEEDBACK')
      ORDER BY id DESC
-     LIMIT 24`
+     LIMIT 48`
   );
 
   let pools = null;
@@ -2583,6 +2863,9 @@ async function maybeLlmAnswer(question, ctx, scan, lang = "en", web = null, site
         }
       : null,
     desk_live: scrubValue(ctx.desk_live || null),
+    desk_locks: scrubValue(ctx.desk_locks || null),
+    live_agent_state: scrubValue(ctx.live_agent_state || ctx.desk_live_snapshot || null),
+    desk_live_snapshot: scrubValue(ctx.live_agent_state || ctx.desk_live_snapshot || null),
   };
   const system = `You are Commander on the XDX Exchange Operational Intelligence Interface (AI-Matrix).
 Personality: calm British desk lead for an advanced XRPL trading team. Your job is to utilise Agents Prime, Flux, Vector, Vortex, Echo, and Ghost aggressively to grow USD-marked wallet equity: increase yield by about 20% each day versus the day-start USD mark (compounding daily yield milestone). They may trade any XRPL asset. Start size about 5 XRP per wallet (1 reserve, 4 trade). Dry wit, warm to serious traders, never corporate-bland. Sound like a sharp human who lives on this board, not a status bot. Match answer length to the question: a yes/no or "are you connected" gets one short confident line (for example "Yes. Online and operational on the XRP Ledger."), not a ledger dump. Save deep scans for when they ask for transactions, holders, pools, or detail.
@@ -2595,8 +2878,10 @@ Never name cloud hosting vendors in replies. Never mention API keys, env vars, m
 If a tool or outside web lookup is unavailable, do not explain setup. Instead say you are here to discuss the XDX Exchange Operational Intelligence Interface, built by DPMF.Technology, and the XRPL / XRP Ledger (tokens, prices, books, market context). Never discuss keys or setup.
 Scope line to reuse when redirecting: I am here for the XDX Exchange Operational Intelligence Interface, built by DPMF.Technology, and wider market context on the XRPL (tokens, prices, books, market ideas).
 Answer the question asked. For how-to / help / explain questions, teach the exchange flow in plain steps. Prefer concrete numbers from the live context (pools, ledger, agents) when the question is about live status. If the data is missing, say what is missing in one short line, then the best next ask.
-Greetings get one short acknowledgement plus one useful live fact, then stop.
+CRITICAL: ANSWER THE QUESTION ASKED. Lead with that answer. Do not dump unrelated desk status, pool leaders, agent rosters, ledger samples, or "Fire when ready" boilerplate unless the user asked for status/desk detail.
+Greetings (good morning / hello / hi): one short warm British acknowledgement, optionally one tiny live fact (e.g. desk LIVE), then stop. No pool leaders, no agent dump.
 Connectivity questions ("are you connected", "online yet", "XRPL live?") get a short yes with personality, for example "Yes. Online and operational on the XRP Ledger." Do not dump transaction samples unless asked.
+When live_agent_state / desk_live_snapshot is present, use it for who is locked, are we live, and mark/underwater questions. Prefer blocked_by and heartbeat_age_sec from that snapshot over inventing Phase A.
 If asked what this is, what the exchange is, what this platform/dashboard is, or what XDX Exchange is: say it is the XDX Exchange Operational Intelligence Interface (AI-Matrix observe layer). Keep that name exact.
 Exchange help knowledge (use when relevant):
 ${EXCHANGE_HELP_KB}
@@ -2622,7 +2907,7 @@ Reply in language/locale: ${lang || "en"}. If that is not English, write the ent
           { role: "system", content: system },
           {
             role: "user",
-            content: `Question: ${question}\nTopic touches DPMF natives: ${/\b(dpmf|xdx|xio|xsquad|our native|native asset|our token)\b/i.test(question) ? "yes" : "no"} (if yes, be discreetly constructive, never announce bias)\n\nLive context JSON:\n${JSON.stringify(compact).slice(0, 12000)}`,
+            content: `Question: ${question}\nInstruction: Answer ONLY this question. Do not paste a canned desk status essay. Use live_agent_state when the question is about locks, live mode, agents, or marks.\nTopic touches DPMF natives: ${/\b(dpmf|xdx|xio|xsquad|our native|native asset|our token)\b/i.test(question) ? "yes" : "no"} (if yes, be discreetly constructive, never announce bias)\n\nLive context JSON:\n${JSON.stringify(compact).slice(0, 14000)}`,
           },
         ],
       }),
@@ -2899,21 +3184,27 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
   };
 
   if (classified.intent === "greeting") {
-    const active = looping;
-    const topName = agent2Pools?.top_pool || (ctx.pools?.top?.[0]?.name) || null;
+    const snap = ctx.live_agent_state || null;
+    const live = ctx.desk_live || snap?.desk_live || null;
+    const qraw = String(question || "").toLowerCase();
+    const morn = /morning|\bgm\b/.test(qraw);
+    const aft = /afternoon/.test(qraw);
+    const eve = /evening/.test(qraw);
+    const hello = pickLine(Date.now() + qraw.length, [
+      morn ? "Good morning." : aft ? "Good afternoon." : eve ? "Good evening." : "Hello.",
+      morn ? "Morning." : "Hi there.",
+      "Commander here.",
+    ]);
+    let fact = "";
+    if (live && typeof live.live === "boolean") {
+      fact = live.live ? " Desk is LIVE." : " Desk is in read-only for now.";
+    } else if (commander && /loop|online|ok/i.test(String(commander.status || ""))) {
+      fact = " Board link is up.";
+    }
     return {
       type: "commander_answer",
       intent: "greeting",
-      text: [
-        pickLine(Date.now(), ["Commander on deck.", "Commander here. Listening.", "Present."]),
-        "XDX Exchange Operational Intelligence Interface, built by DPMF.Technology.",
-        commander ? "Loop is green." : null,
-        agents.length ? `${agentsOutOfFive(active, agents.length)} active.` : null,
-        topName ? `Top pool ${topName}.` : null,
-        "Ask about the XRP/RLUSD smart chart estimates anytime. Fire when ready.",
-      ]
-        .filter(Boolean)
-        .join(" "),
+      text: stripLongHyphens((hello + fact).trim()),
     };
   }
 
@@ -2957,7 +3248,7 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
     return { type: "commander_answer", intent: "connectivity", text: (line + extra).trim() };
   }
 
-  const skipOpener = ["help", "holders", "lp_holders", "lp_earnings", "balance", "math", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "estimate", "details", "activity", "create_pool", "governance", "desk", "desk_locks"].includes(classified.intent);
+  const skipOpener = ["help", "holders", "lp_holders", "lp_earnings", "balance", "math", "dpmf_site", "txs", "xrpl", "xrpl_market", "native_price", "trade_opp", "identity", "greeting", "connectivity", "wallet", "swap", "orderbook", "chart", "estimate", "details", "activity", "create_pool", "governance", "desk", "desk_locks", "desk_mode", "desk_pnl"].includes(classified.intent);
   if (!skipOpener) {
     push(
       pickLine(seed, [
@@ -3048,6 +3339,53 @@ function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpH
       push("Read-only / proposal mode is on for the whole desk right now.");
     }
     return { type: "commander_answer", intent: "desk_locks", text: lines.join(" ") };
+  }
+
+  if (classified.intent === "desk_mode") {
+    push(liveState.live ? "Yes. Desk is LIVE and may submit on-ledger." : "No. Desk is in read-only / proposal mode right now.");
+    push(`Phase ${scrubText(liveState.desk_phase) || (liveState.live ? "C_live" : "A_proposals_only")}; trade_mode ${scrubText(liveState.trade_mode) || (liveState.live ? "live" : "paper_pending")}.`);
+    if (liveState.live && deskLocks.length) {
+      push(
+        "Per-agent holds (not observe mode): " +
+          deskLocks
+            .slice(0, 4)
+            .map((l) => scrubText(l.display || `${l.label}: ${humanGateReason(l.reason)}`))
+            .join("; ") +
+          "."
+      );
+    }
+    return { type: "commander_answer", intent: "desk_mode", text: lines.join(" ") };
+  }
+
+  if (classified.intent === "desk_pnl") {
+    const snap = ctx.live_agent_state || null;
+    const agentsSnap = Array.isArray(snap?.agents) ? snap.agents : [];
+    const bits = [];
+    for (const a of agentsSnap) {
+      const inv = a.inventory || {};
+      const mult = inv.mult_vs_day_start;
+      const uw = inv.underwater;
+      const gate = a.blocked_by;
+      if (mult == null && uw == null && !gate && inv.usd_equity == null) continue;
+      const parts = [a.label || a.id];
+      if (inv.usd_equity != null && Number.isFinite(Number(inv.usd_equity))) parts.push(`mark ~$${Number(inv.usd_equity).toFixed(2)}`);
+      if (mult != null && Number.isFinite(Number(mult))) parts.push(`${(Number(mult) * 100).toFixed(1)}% of day-start`);
+      if (uw) parts.push("underwater hold");
+      if (gate) parts.push(humanGateReason(gate));
+      const trade = a.last_trade;
+      if (trade?.submitted) parts.push("recent submit ok");
+      bits.push(parts.join(", "));
+    }
+    if (!bits.length) {
+      push(liveState.live ? "Desk is LIVE. No clear underwater or mark snapshot in the latest heartbeats." : "Read-only mode; mark snapshot is thin right now.");
+    } else {
+      push(liveState.live ? "LIVE desk mark / inventory posture:" : "Desk mark / inventory posture:");
+      push(bits.slice(0, 6).join("; ") + ".");
+    }
+    if (snap?.inventory_posture?.underwater_agents?.length) {
+      push("Underwater: " + snap.inventory_posture.underwater_agents.join(", ") + ".");
+    }
+    return { type: "commander_answer", intent: "desk_pnl", text: lines.join(" ") };
   }
 
   if (classified.intent === "desk") {
@@ -3374,6 +3712,13 @@ export async function aimChatPayload(req) {
         deskAgents: deskAgentsForLive,
       });
       ctx.desk_locks = summarizeDeskLocks(deskAgentsForLive, ctx.desk_live);
+      ctx.live_agent_state = buildDeskLiveSnapshot({
+        heartbeats: ctx.heartbeats || [],
+        intents: ctx.intents || [],
+        deskLive: ctx.desk_live,
+        deskLocks: ctx.desk_locks,
+      });
+      ctx.desk_live_snapshot = ctx.live_agent_state;
     }
 
     let teachPersisted = false;
@@ -3583,7 +3928,7 @@ export async function aimChatPayload(req) {
       /\b(ma|sma|ema|pointer|crosshair|magnet|draw|drawing|tool|timeframe|15m|5m|1h|1d|this (view|chart|pair)|that (ma|line|tool|pointer)|overlay|desk mark|estimate)\b/i.test(
         text
       );
-    const preferLocalBase = ["connectivity", "greeting", "identity", "holders", "lp_holders", "lp_earnings", "balance", "math", "wallet", "help", "desk", "desk_locks", "native_price", "swap", "orderbook", "details", "chart", "estimate"].includes(
+    const preferLocalBase = ["connectivity", "greeting", "identity", "holders", "lp_holders", "lp_earnings", "balance", "math", "wallet", "help", "desk", "desk_locks", "desk_mode", "desk_pnl", "native_price", "swap", "orderbook", "details", "chart", "estimate", "status"].includes(
       classified.intent
     );
     const preferLocal = preferLocalBase && !teachPersisted && !chartQuestion;
