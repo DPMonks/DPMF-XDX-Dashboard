@@ -36,7 +36,8 @@ import {
   zoomPriceScale,
 } from "../chart/overlays";
 import { walletChartMarks } from "../chart/walletMarks";
-import { buildDeskMarks, buildEstimateMarks } from "../chart/aimMarks";
+import { buildDeskMarks, buildEstimateMarks, buildEstimateScenarioOverlay } from "../chart/aimMarks";
+import { useChartAction } from "../context/chartAction";
 import { bookHeader, mergeOrderbookPayloads } from "../orderbook";
 import { walletOrdersFromBooks } from "../wallet/composeWallet";
 import {
@@ -167,7 +168,19 @@ export default function HybridChart({
   const [activeWindow, setActiveWindow] = useState(windowKey);
   const phone = isPhoneDevice();
   const [fullView, setFullView] = useState(false);
+  const [estimateSide, setEstimateSide] = useState(null); // bull | bear | null
+  const chartAction = useChartAction();
   const [viewH, setViewH] = useState(() => (typeof window !== "undefined" ? window.innerHeight : 700));
+
+  useEffect(() => {
+    if (!chartAction || !chartAction.seq) return;
+    if (chartAction.type === "show_estimate" && chartAction.side) {
+      setEstimateSide(chartAction.side);
+    } else if (chartAction.type === "clear_estimate") {
+      setEstimateSide(null);
+    }
+    // ask_side is chat-only; no overlay change until side chosen
+  }, [chartAction]);
 
   useEffect(() => {
     if (!usesCexTape(pair)) {
@@ -392,7 +405,7 @@ export default function HybridChart({
   }
   const clampedPan = clampPanOffset(panOffset, series.length, visibleCount);
   if (Number.isFinite(clampedPan) && clampedPan !== panOffset) setPanOffset(clampedPan);
-  const futureBars = futureBarsFromPan(clampedPan);
+  const futureBarsBase = futureBarsFromPan(clampedPan);
   const candles = useMemo(
     () => windowBars(series, { bars: visibleCount, offset: clampedPan }),
     [series, visibleCount, clampedPan]
@@ -444,6 +457,12 @@ export default function HybridChart({
   const tapeRef = Number(candles[candles.length - 1]?.c) || Number(bands.mid) || livePrice || null;
   const aimDeskMarks = deskOrders ? buildDeskMarks(deskOrders, pair, tapeRef) : [];
   const aimEstimateMarks = estimate ? buildEstimateMarks(estimate, timeframe, tapeRef) : [];
+  const aimEstimateScenario =
+    estimate && estimateSide
+      ? buildEstimateScenarioOverlay(estimate, timeframe, estimateSide, tapeRef)
+      : null;
+  const estimateFutureBars = Math.max(0, Number(aimEstimateScenario?.bars || aimEstimateScenario?.path?.length || 0));
+  const futureBars = Math.max(futureBarsBase, estimateFutureBars);
 
   useEffect(() => {
     const last = candles.length ? candles[candles.length - 1] : null;
@@ -460,7 +479,8 @@ export default function HybridChart({
         showArb,
         hollow,
         deskMarksCount: Array.isArray(aimDeskMarks) ? aimDeskMarks.length : 0,
-        estimateOn: Boolean(estimate) && Array.isArray(aimEstimateMarks) && aimEstimateMarks.length > 0,
+        estimateOn: Boolean(estimate) && ((Array.isArray(aimEstimateMarks) && aimEstimateMarks.length > 0) || Boolean(aimEstimateScenario)),
+        estimateSide: estimateSide || null,
         drawings,
         viewMin: view?.min,
         viewMax: view?.max,
@@ -481,6 +501,8 @@ export default function HybridChart({
     hollow,
     aimDeskMarks,
     aimEstimateMarks,
+    aimEstimateScenario,
+    estimateSide,
     estimate,
     drawings,
     view,
@@ -488,7 +510,7 @@ export default function HybridChart({
     livePrice,
   ]);
 
-  const showAimOverlays = Boolean(deskOrders || estimate);
+  const showAimOverlays = Boolean(deskOrders || estimate || aimEstimateScenario);
   const events = microEvents({
     trades,
     spreadBps: header.spread_bps,
@@ -891,6 +913,7 @@ export default function HybridChart({
             showLedgerOrders={showLedgerOrders}
             aimDeskMarks={aimDeskMarks}
             aimEstimateMarks={aimEstimateMarks}
+            aimEstimateScenario={aimEstimateScenario}
             showAimOverlays={showAimOverlays}
             locale={locale}
             t={t}

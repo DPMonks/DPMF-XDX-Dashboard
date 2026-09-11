@@ -53,6 +53,7 @@ export function buildChartSnapshot({
   hollow,
   deskMarksCount = 0,
   estimateOn = false,
+  estimateSide = null,
   drawings = [],
   viewMin = null,
   viewMax = null,
@@ -86,6 +87,7 @@ export function buildChartSnapshot({
       desk_marks: Number(deskMarksCount) > 0,
       desk_marks_count: Number(deskMarksCount) || 0,
       estimate: Boolean(estimateOn),
+      estimate_side: estimateSide === "bear" || estimateSide === "bull" ? estimateSide : null,
     },
     price: {
       last_close: round(lastClose),

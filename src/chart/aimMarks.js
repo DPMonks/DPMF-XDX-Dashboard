@@ -142,3 +142,67 @@ export function buildEstimateMarks(estimate = null, timeframe = "1D", tapeRef = 
   if (hi > 0) out.push({ kind: "estimate", role: "band_hi", price: hi, label: "Band" });
   return out;
 }
+
+/**
+ * Bull/bear projection path + demand/supply boxes from commander_estimate by_tf pack.
+ * side: "bull" | "bear"
+ */
+export function buildEstimateScenarioOverlay(estimate = null, timeframe = "1D", side = "bull", tapeRef = null) {
+  if (!estimate || typeof estimate !== "object") return null;
+  const want = String(side || "bull").toLowerCase().startsWith("bear") ? "bear" : "bull";
+  const byTf = estimate.by_tf || estimate.overlays?.by_tf || {};
+  const tfPack = byTf[timeframe] || byTf["1h"] || byTf["1D"] || byTf["15m"] || byTf["5m"] || null;
+  const scenario = want === "bull"
+    ? (tfPack?.bullish || estimate.bullish || null)
+    : (tfPack?.bearish || estimate.bearish || null);
+  const proj =
+    (want === "bull"
+      ? tfPack?.projection_bull || scenario?.projection || estimate.projection_bull
+      : tfPack?.projection_bear || scenario?.projection || estimate.projection_bear) || null;
+  const demand = (want === "bull"
+    ? (scenario?.demand || tfPack?.demand || estimate.demand || [])
+    : (scenario?.demand || [])) || [];
+  const supply = (want === "bear"
+    ? (scenario?.supply || tfPack?.supply || estimate.supply || [])
+    : (scenario?.supply || [])) || [];
+  const unitRow = {
+    price_unit: estimate.price_unit || "quote_per_base",
+    iou_per_xrp: estimate.iou_per_xrp,
+    xrp_per_iou: estimate.xrp_per_iou,
+  };
+  const zones = [];
+  for (const z of (Array.isArray(demand) ? demand : []).slice(0, 3)) {
+    const lo = coerceQuotePerBase(z?.lo, unitRow, tapeRef);
+    const hi = coerceQuotePerBase(z?.hi, unitRow, tapeRef);
+    if (!(lo > 0) || !(hi > 0)) continue;
+    zones.push({ kind: "demand", lo: Math.min(lo, hi), hi: Math.max(lo, hi), strength: Number(z?.strength) || 1 });
+  }
+  for (const z of (Array.isArray(supply) ? supply : []).slice(0, 3)) {
+    const lo = coerceQuotePerBase(z?.lo, unitRow, tapeRef);
+    const hi = coerceQuotePerBase(z?.hi, unitRow, tapeRef);
+    if (!(lo > 0) || !(hi > 0)) continue;
+    zones.push({ kind: "supply", lo: Math.min(lo, hi), hi: Math.max(lo, hi), strength: Number(z?.strength) || 1 });
+  }
+  const path = [];
+  for (const pt of (proj?.path || [])) {
+    const mid = coerceQuotePerBase(pt?.mid, unitRow, tapeRef);
+    const lo = coerceQuotePerBase(pt?.lo, unitRow, tapeRef);
+    const hi = coerceQuotePerBase(pt?.hi, unitRow, tapeRef);
+    if (!(mid > 0)) continue;
+    path.push({
+      i: Number(pt?.i) || path.length + 1,
+      mid,
+      lo: lo > 0 ? lo : null,
+      hi: hi > 0 ? hi : null,
+    });
+  }
+  if (!path.length && !zones.length) return null;
+  return {
+    side: want,
+    label: asciiClean(proj?.label || "Estimate by AI-Matrix"),
+    disclaimer: "not guaranteed",
+    path,
+    zones,
+    bars: Number(proj?.bars) || path.length || 0,
+  };
+}

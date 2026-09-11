@@ -1440,3 +1440,32 @@
   position: relative;
   z-index: 3;
 }
+
+
+.hybrid-aim-zone.is-demand {
+  fill: rgba(52, 211, 153, 0.28);
+  stroke: rgba(52, 211, 153, 0.55);
+  stroke-width: 1;
+}
+.hybrid-aim-zone.is-supply {
+  fill: rgba(248, 113, 113, 0.28);
+  stroke: rgba(248, 113, 113, 0.55);
+  stroke-width: 1;
+}
+.hybrid-aim-proj-mid {
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.hybrid-aim-proj.is-bull .hybrid-aim-proj-mid { stroke: #4ade80; }
+.hybrid-aim-proj.is-bear .hybrid-aim-proj-mid { stroke: #fb7185; }
+.hybrid-aim-proj-band {
+  opacity: 0.22;
+}
+.hybrid-aim-proj.is-bull .hybrid-aim-proj-band { fill: #4ade80; }
+.hybrid-aim-proj.is-bear .hybrid-aim-proj-band { fill: #fb7185; }
+.hybrid-aim-proj text {
+  fill: #e2e8f0;
+  font-size: 10px;
+  pointer-events: none;
+}

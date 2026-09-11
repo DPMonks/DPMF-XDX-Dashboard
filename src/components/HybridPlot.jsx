@@ -49,6 +49,7 @@ export default function HybridPlot({
   showLedgerOrders = false,
   aimDeskMarks = [],
   aimEstimateMarks = [],
+  aimEstimateScenario = null,
   showAimOverlays = false,
   locale,
   t,
@@ -923,6 +924,67 @@ export default function HybridPlot({
               y2={scale.y(bands.ask)}
             />
           ) : null}
+
+          {(aimEstimateScenario?.zones || []).map((z, zi) => {
+            const y1 = scale.y(z.hi);
+            const y2 = scale.y(z.lo);
+            if (!Number.isFinite(y1) || !Number.isFinite(y2)) return null;
+            const top = Math.min(y1, y2);
+            const h = Math.max(2, Math.abs(y2 - y1));
+            return (
+              <rect
+                key={`aim-zone-${z.kind}-${zi}`}
+                className={`hybrid-aim-zone is-${z.kind}`}
+                x={PAD.l}
+                y={top}
+                width={Math.max(1, width - PAD.l - PAD.r)}
+                height={h}
+                opacity={0.5}
+              />
+            );
+          })}
+
+          {(() => {
+            const scen = aimEstimateScenario;
+            const path = scen?.path || [];
+            if (!path.length || !candles.length) return null;
+            const last = candles[candles.length - 1];
+            const step = intervalMs(interval) || 60_000;
+            const midPts = [];
+            const hiPts = [];
+            const loPts = [];
+            for (const pt of path) {
+              const tStamp = Number(last.t) + Number(pt.i || 0) * step;
+              const x = scale.x(tStamp);
+              if (!Number.isFinite(x)) continue;
+              const ym = scale.y(pt.mid);
+              if (Number.isFinite(ym)) midPts.push(`${x},${ym}`);
+              if (pt.hi > 0) {
+                const yh = scale.y(pt.hi);
+                if (Number.isFinite(yh)) hiPts.push(`${x},${yh}`);
+              }
+              if (pt.lo > 0) {
+                const yl = scale.y(pt.lo);
+                if (Number.isFinite(yl)) loPts.push(`${x},${yl}`);
+              }
+            }
+            if (!midPts.length) return null;
+            const lastMid = path[path.length - 1];
+            return (
+              <g className={`hybrid-aim-proj is-${scen.side || "bull"}`}>
+                {hiPts.length && loPts.length ? (
+                  <polygon
+                    className="hybrid-aim-proj-band"
+                    points={[...hiPts, ...loPts.slice().reverse()].join(" ")}
+                  />
+                ) : null}
+                <polyline className="hybrid-aim-proj-mid" points={midPts.join(" ")} fill="none" />
+                <text x={width - PAD.r - 2} y={scale.y(lastMid.mid) - 6} textAnchor="end">
+                  {scen.label || "Estimate by AI-Matrix"} ({scen.side === "bear" ? "bearish" : "bullish"})
+                </text>
+              </g>
+            );
+          })()}
 
           {(aimEstimateMarks || []).map((m) => {
             const y = scale.y(m.price);

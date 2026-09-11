@@ -7,6 +7,7 @@ import AimAgentName from "./AimAgentName";
 import AimAgentAvatar from "./AimAgentAvatar";
 import { useWallet } from "../context/useWallet";
 import { useChartSnapshot } from "../context/chartSnapshot";
+import { publishChartAction } from "../context/chartAction";
 import { AIM_ADMIN_WALLET } from "../constants/ledger";
 import AimDeskSmartChart from "./AimDeskSmartChart";
 
@@ -164,6 +165,14 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
       let reply = out.reply?.body?.text || "Queued.";
       if (out.teach_ack && !String(reply).includes(" ack")) {
         reply = `${String(reply).trimEnd()} ack`;
+      }
+      const chartAction =
+        out.chart_action ||
+        out.reply?.body?.chart_action ||
+        out.reply?.chart_action ||
+        null;
+      if (chartAction && typeof chartAction === "object") {
+        publishChartAction(chartAction);
       }
       const replyLang = out.lang || effectiveLang;
       const replyId = `cmd-${Date.now()}`;
