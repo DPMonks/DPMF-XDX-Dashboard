@@ -33,6 +33,8 @@ export default function AiMatrixPanel() {
   const chatLogRef = useRef(null);
   const [movePage, setMovePage] = useState(0);
   const [moveSwap, setMoveSwap] = useState(false);
+  const [pulsePage, setPulsePage] = useState(0);
+  const [pulseSwap, setPulseSwap] = useState(false);
 
   const effectiveLang = langPref === "auto" ? suggestedLang : normalizeLang(langPref);
 
@@ -279,6 +281,55 @@ export default function AiMatrixPanel() {
     };
   }, [movePool.length]);
 
+  // Compact mobile desk pulse: one live line per agent, rotate 2 at a time
+  const pulsePool = agents.map((a) => {
+    const prop = a.proposal || a.meta?.trade_proposal || {};
+    const fill = a.last_fill || a.meta?.last_fill || prop?.exec || null;
+    let line = prop?.pair
+      ? `${prop.pair}${prop.urgency ? ` · ${prop.urgency}` : ""}`
+      : (a.meta?.skill?.summary ? String(a.meta.skill.summary).slice(0, 48) : a.status || "watching");
+    if (fill?.submitted) {
+      line = `Fill ${fill.engine_result || "ok"}${fill.hash ? ` ${String(fill.hash).slice(0, 8)}` : ""}${prop?.pair ? ` · ${prop.pair}` : ""}`;
+    } else if (fill?.blocked_by && !fill?.submitted) {
+      const reason = fill.blocked_by_display || fill.blocked_by || "gated";
+      line = `Held · ${String(reason).slice(0, 42)}`;
+    }
+    return {
+      id: a.id,
+      label: a.label || aimAgentLabel(a.id),
+      line,
+      status: a.status || "-",
+    };
+  });
+  const PULSE_PAGE_SIZE = 2;
+  const PULSE_HOLD_MS = 1600;
+  const pulsePageCount = Math.max(1, Math.ceil(Math.max(pulsePool.length, 1) / PULSE_PAGE_SIZE));
+  const pulsePageSafe = pulsePage % pulsePageCount;
+  const visiblePulse = pulsePool.slice(
+    pulsePageSafe * PULSE_PAGE_SIZE,
+    pulsePageSafe * PULSE_PAGE_SIZE + PULSE_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setPulsePage(0);
+  }, [pulsePool.length]);
+
+  useEffect(() => {
+    if (pulsePool.length <= PULSE_PAGE_SIZE) return undefined;
+    let fadeTimer = 0;
+    const tick = window.setInterval(() => {
+      setPulseSwap(true);
+      fadeTimer = window.setTimeout(() => {
+        setPulsePage((p) => (p + 1) % Math.ceil(pulsePool.length / PULSE_PAGE_SIZE));
+        setPulseSwap(false);
+      }, 260);
+    }, PULSE_HOLD_MS);
+    return () => {
+      window.clearInterval(tick);
+      if (fadeTimer) window.clearTimeout(fadeTimer);
+    };
+  }, [pulsePool.length]);
+
   const commanderStatus = data?.commander
     ? `${data.commander.status} · ${ago(data.commander.last_seen_at)}`
     : loading
@@ -496,6 +547,33 @@ export default function AiMatrixPanel() {
             );
           })}
           {!movePool.length ? <li className="aim-empty">No movement yet.</li> : null}
+        </ul>
+      </section>
+
+      <section className="aim-desk-pulse neon-inset" aria-live="polite" aria-label="Live desk pulse">
+        <div className="aim-moves-head">
+          <h3>Live desk</h3>
+          {pulsePool.length > PULSE_PAGE_SIZE ? (
+            <div className="aim-moves-pips" aria-hidden="true">
+              {Array.from({ length: pulsePageCount }).map((_, i) => (
+                <i key={i} className={i === pulsePageSafe ? "is-on" : ""} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <p className="aim-desk-pulse-note">Compact mobile feed. Full book on larger screens.</p>
+        <ul className={`aim-desk-pulse-list${pulseSwap ? " is-swap" : ""}`}>
+          {visiblePulse.map((row, idx) => (
+            <li key={`${row.id}-${pulsePageSafe}-${idx}`} style={{ "--aim-move-i": idx }}>
+              <div className="aim-row-agent">
+                <AimAgentAvatar agentId={row.id} label={row.label} size="sm" />
+                <b><AimAgentName agentId={row.id} label={row.label} /></b>
+              </div>
+              <span>{row.line}</span>
+              <small>{row.status}</small>
+            </li>
+          ))}
+          {!pulsePool.length ? <li className="aim-empty">Desk warming up.</li> : null}
         </ul>
       </section>
 

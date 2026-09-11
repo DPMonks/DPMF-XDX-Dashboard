@@ -98,7 +98,85 @@
 .aim-chat { order: 2; }
 .aim-agent-strip { order: 3; }
 .aim-moves { order: 4; }
-.aim-desk-board { order: 5; }
+.aim-desk-pulse { order: 5; }
+.aim-desk-board { order: 6; }
+
+/* Mobile compact desk pulse (below agents). Full book stays desktop. */
+.aim-desk-pulse { display: none; }
+.aim-desk-pulse-note {
+  margin: 0 0 0.55rem;
+  font-size: 0.78rem;
+  opacity: 0.68;
+  line-height: 1.35;
+}
+.aim-desk-pulse-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+  transition: opacity 0.26s ease, transform 0.26s ease;
+}
+.aim-desk-pulse-list.is-swap { opacity: 0; transform: translateY(6px) scale(0.985); }
+.aim-desk-pulse-list li {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.4rem 0.15rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  min-width: 0;
+}
+.aim-desk-pulse-list li span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-clamp: 2;
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.aim-desk-pulse-list li small { opacity: 0.65; }
+.aim-desk-pulse-list:not(.is-swap) li {
+  animation: aim-move-in 0.3s ease both;
+  animation-delay: calc(var(--aim-move-i, 0) * 50ms);
+}
+
+@media (max-width: 900px) {
+  .aim-desk-pulse { display: block; }
+  .aim-desk-board { display: none !important; }
+
+  .aim-moves {
+    padding: 0.65rem 0.7rem;
+  }
+  .aim-moves h3 { font-size: 0.95rem; margin: 0; }
+  .aim-moves li span,
+  .aim-moves-list li span {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-clamp: 2;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .aim-moves li {
+    gap: 0.1rem;
+    padding: 0.35rem 0;
+  }
+
+  /* Keep under-agent lists bounded so the drawer does not become a tall block */
+  .aim-drawer-body .aim-moves ul,
+  .aim-drawer-body .aim-moves-list,
+  .aim-drawer-body .aim-desk-pulse-list {
+    max-height: none;
+    overflow: visible;
+  }
+  .aim-drawer-body .aim-chat-log {
+    min-height: 220px;
+    max-height: min(42vh, 320px);
+    overflow: auto;
+  }
+}
 @media (max-width: 960px) {
   .aim-matrix { gap: 0.85rem; }
   .aim-agent-strip { grid-template-columns: 1fr; }
@@ -546,15 +624,7 @@
   }
 }
 
-@media (max-width: 900px) {
-  .aim-drawer-body .aim-chat-log,
-  .aim-drawer-body .aim-moves ul,
-  .aim-drawer-body .aim-desk-book ul,
-  .aim-drawer-body .aim-desk-chatter ul {
-    max-height: none;
-    overflow: visible;
-  }
-}
+/* unbounded desk book lists removed; mobile uses pulse */
 
 
 @media (min-width: 901px) and (max-width: 1200px) {
