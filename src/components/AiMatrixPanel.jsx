@@ -332,6 +332,62 @@ export default function AiMatrixPanel() {
   }, [pulsePool.length]);
 
 
+
+  async function speakScenarioExplain({ text: line, tf: chartTf, scenario: side } = {}) {
+    const reply = String(line || "").replace(/[\u2010-\u2015\u2212]/g, "-").trim();
+    if (!reply) return;
+    if (voiceOn) {
+      unlockCommanderAudio();
+      try {
+        window.speechSynthesis?.resume?.();
+      } catch {
+        /* ignore */
+      }
+    }
+    const replyId = `cmd-scenario-${Date.now()}`;
+    const replyLang = effectiveLang || "en";
+    setLocalChat((rows) => [
+      ...finishSpeakingRows(rows),
+      {
+        id: replyId,
+        role: "commander",
+        text: reply,
+        at: new Date().toISOString(),
+        lang: replyLang,
+        reveal: 0,
+        speaking: true,
+        kind: "scenario_explain",
+        chartTf: chartTf || null,
+        scenario: side || null,
+      },
+    ]);
+    const spoken = await speakCommander(reply, {
+      voiceOn,
+      lang: replyLang,
+      onProgress: ({ chars }) => {
+        setLocalChat((rows) =>
+          rows.map((r) => (r.id === replyId ? { ...r, reveal: chars, speaking: true } : r))
+        );
+      },
+      onDone: () => {
+        setLocalChat((rows) =>
+          rows.map((r) => (r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r))
+        );
+      },
+    });
+    setLocalChat((rows) =>
+      rows.map((r) =>
+        r.id === replyId
+          ? {
+              ...r,
+              voiceEngine: spoken?.engine || aimVoiceEngineLabel(),
+              needsPlay: !!spoken?.needsPlay,
+            }
+          : r
+      )
+    );
+  }
+
   const deskChartOrders = (() => {
     const out = [];
     const seen = new Set();
@@ -524,7 +580,7 @@ export default function AiMatrixPanel() {
           </form>
       </section>
 
-      <AimDeskSmartChart deskOrders={deskChartOrders} estimate={commanderEstimate} />
+      <AimDeskSmartChart deskOrders={deskChartOrders} estimate={commanderEstimate} onScenarioExplain={speakScenarioExplain} />
 
       <div className="aim-agent-strip" role="list">
         {agents.map(

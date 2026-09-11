@@ -145,6 +145,74 @@ function asciiClean(v) {
     .trim();
 }
 
+
+function formatScenarioSpeak(tf, side, tfPack, estimate) {
+  const bits = [];
+  const tfLabel = { "5m": "5 minute", "15m": "15 minute", "1h": "1 hour", "1D": "daily" }[tf] || tf;
+  const why = tfPack?.why || estimate?.why || {};
+  const packRationale = asciiClean(tfPack?.rationale || "");
+  if (side === "bull") {
+    bits.push(`Bullish estimate on the ${tfLabel} chart.`);
+    const lead = asciiClean(why.rationale || packRationale || "");
+    if (lead) bits.push(lead);
+    const bullets = (Array.isArray(why.why_bull) && why.why_bull.length
+      ? why.why_bull
+      : Array.isArray(tfPack?.why_bullets)
+        ? tfPack.why_bullets
+        : Array.isArray(estimate?.why_bull)
+          ? estimate.why_bull
+          : []
+    )
+      .map(asciiClean)
+      .filter(Boolean)
+      .slice(0, 3);
+    bits.push(...bullets);
+    const z = (tfPack?.demand || estimate?.demand || [])[0];
+    if (z) {
+      const lo = formatPx(z.lo);
+      const hi = formatPx(z.hi);
+      if (lo !== "-" && hi !== "-") {
+        const line = `Demand box at ${lo} to ${hi}.`;
+        if (!bits.some((b) => b.includes(String(lo)) && b.includes(String(hi)))) bits.push(line);
+      }
+    }
+  } else {
+    bits.push(`Bearish estimate on the ${tfLabel} chart.`);
+    const lead = asciiClean(why.rationale || packRationale || "");
+    if (lead) bits.push(lead);
+    const bullets = (Array.isArray(why.why_bear) && why.why_bear.length
+      ? why.why_bear
+      : Array.isArray(estimate?.why_bear)
+        ? estimate.why_bear
+        : []
+    )
+      .map(asciiClean)
+      .filter(Boolean)
+      .slice(0, 3);
+    bits.push(...bullets);
+    const z = (tfPack?.supply || estimate?.supply || [])[0];
+    if (z) {
+      const lo = formatPx(z.lo);
+      const hi = formatPx(z.hi);
+      if (lo !== "-" && hi !== "-") {
+        const line = `Supply box at ${lo} to ${hi}.`;
+        if (!bits.some((b) => b.includes(String(lo)) && b.includes(String(hi)))) bits.push(line);
+      }
+    }
+  }
+  bits.push(ESTIMATE_DISC);
+  const out = [];
+  const seen = new Set();
+  for (const b of bits) {
+    const k = String(b || "").toLowerCase();
+    if (!b || seen.has(k)) continue;
+    seen.add(k);
+    out.push(b);
+  }
+  return out.join(" ").replace(/[\u2010-\u2015\u2212]/g, "-").slice(0, 700);
+}
+
+
 function priceDomain(candles, marks = [], extra = []) {
   const candleVals = [];
   for (const c of candles) {
@@ -221,10 +289,12 @@ function coercePath(raw, unitRow, tapeRef) {
  * Compact XRP/RLUSD desk chart for AI-Matrix only.
  * Per-TF overlays: Trend, Levels, Projection (bullish/bearish), demand/supply boxes.
  */
-export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) {
+export default function AimDeskSmartChart({ deskOrders = [], estimate = null, onScenarioExplain = null }) {
   const [tf, setTf] = useState(DEFAULT_TF);
   const [layers, setLayers] = useState({ trend: true, levels: true, projection: true });
-  const [scenarios, setScenarios] = useState({ bull: true, bear: true });
+  // Exclusive scenario for the ACTIVE timeframe only: null | 'bull' | 'bear'
+  const [scenario, setScenario] = useState(null);
+  const [preferredApplied, setPreferredApplied] = useState("");
   const [book, setBook] = useState(null);
   const [prices, setPrices] = useState({});
   const [now, setNow] = useState(() => Date.now());
@@ -369,6 +439,29 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
     return byTf[tf] || byTf["1h"] || byTf["1D"] || null;
   }, [estimate, tf]);
 
+  // Soft-default to Score-advantaged scenario when a new plan arrives; user can still flip.
+  useEffect(() => {
+    const planId = estimate?.plan_id || estimate?.plan?.plan_id || "";
+    const pref = String(
+      tfPack?.preferred_scenario ||
+        estimate?.preferred_scenario ||
+        estimate?.plan?.preferred_scenario ||
+        estimate?.active_scenario ||
+        ""
+    ).toLowerCase();
+    const key = `${planId}|${tf}|${pref}`;
+    if (!pref || key === preferredApplied) return;
+    if (pref === "bullish" || pref === "long" || pref === "bull") {
+      setScenario("bull");
+      setPreferredApplied(key);
+    } else if (pref === "bearish" || pref === "short" || pref === "bear") {
+      setScenario("bear");
+      setPreferredApplied(key);
+    } else {
+      setPreferredApplied(key);
+    }
+  }, [estimate?.plan_id, estimate?.preferred_scenario, estimate?.plan?.preferred_scenario, estimate?.active_scenario, tf, tfPack?.preferred_scenario, preferredApplied]);
+
   const overlays = estimate?.overlays && typeof estimate.overlays === "object" ? estimate.overlays : null;
   const unitRow = {
     price_unit: estimate?.price_unit || "quote_per_base",
@@ -438,27 +531,28 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
   }, [estimate, tapeRef, layers.levels, layers.trend, overlays, tfPack]);
 
   const projBull = useMemo(() => {
-    if (!layers.projection || !scenarios.bull) return null;
+    if (!layers.projection || scenario !== "bull") return null;
     return coercePath(
       tfPack?.projection_bull || estimate?.projection_bull || estimate?.projection || overlays?.projection,
       unitRow,
       tapeRef
     );
-  }, [layers.projection, scenarios.bull, tfPack, estimate, overlays, tapeRef]);
+  }, [layers.projection, scenario, tfPack, estimate, overlays, tapeRef]);
 
   const projBear = useMemo(() => {
-    if (!layers.projection || !scenarios.bear) return null;
+    if (!layers.projection || scenario !== "bear") return null;
     return coercePath(tfPack?.projection_bear || estimate?.projection_bear, unitRow, tapeRef);
-  }, [layers.projection, scenarios.bear, tfPack, estimate, tapeRef]);
+  }, [layers.projection, scenario, tfPack, estimate, tapeRef]);
 
   const projExtras = useMemo(() => {
     const vals = [];
     for (const p of [projBull, projBear]) {
       for (const pt of p?.path || []) vals.push(pt.mid, pt.lo, pt.hi);
     }
-    for (const z of [...demandZones, ...supplyZones]) vals.push(z.lo, z.hi);
+    const zones = scenario === "bull" ? demandZones : scenario === "bear" ? supplyZones : [];
+    for (const z of zones) vals.push(z.lo, z.hi);
     return vals;
-  }, [projBull, projBear, demandZones, supplyZones]);
+  }, [projBull, projBear, demandZones, supplyZones, scenario]);
 
   const domain = useMemo(
     () =>
@@ -505,10 +599,28 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
   const disclaimer = asciiClean(
     estimate?.disclaimer || overlays?.disclaimer || tfPack?.disclaimer || ESTIMATE_DISC
   );
-  const rationaleNote = asciiClean(tfPack?.rationale || estimate?.rationale || "");
+  const rationaleNote = asciiClean(
+    (scenario === "bull"
+      ? (tfPack?.why?.why_bull || [])[0] || tfPack?.rationale
+      : scenario === "bear"
+        ? (tfPack?.why?.why_bear || [])[0] || tfPack?.rationale
+        : tfPack?.rationale) || estimate?.rationale || ""
+  );
 
   const toggleLayer = (id) => setLayers((prev) => ({ ...prev, [id]: !prev[id] }));
-  const toggleScenario = (id) => setScenarios((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const selectScenario = (id) => {
+    const next = scenario === id ? null : id;
+    setScenario(next);
+    if (!next || typeof onScenarioExplain !== "function") return;
+    const line = formatScenarioSpeak(tf, next, tfPack, estimate);
+    if (line) onScenarioExplain({ text: line, tf, scenario: next });
+  };
+
+  const changeTf = (nextTf) => {
+    setTf(nextTf);
+    // Overlays reload from by_tf[nextTf]. Keep scenario selection; speak only on Bullish/Bearish tap.
+  };
 
   function buildChannel(projection, cls) {
     if (!projection?.path?.length || !candles.length) return null;
@@ -542,9 +654,15 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
           <p className="aim-desk-chart-kicker">Desk map | XRP/RLUSD</p>
           <h3>Smart chart</h3>
           <p className="aim-desk-chart-sub">
-            Public book + desk OfferCreates. Commander overlays per TF ({ESTIMATE_LABEL}).
+            Public book + desk OfferCreates. Pick Bullish or Bearish for this TF ({ESTIMATE_LABEL}).
             {historyNote ? ` | ${historyNote}` : ""}
             {biasNote ? ` | ${biasNote}` : ""}
+            {estimate?.refresh_sec || estimate?.plan?.refresh_sec
+              ? ` | Plan refresh ~${estimate?.refresh_sec || estimate?.plan?.refresh_sec}s`
+              : ""}
+            {estimate?.preferred_scenario || estimate?.plan?.preferred_scenario
+              ? ` | Prefer ${asciiClean(estimate?.preferred_scenario || estimate?.plan?.preferred_scenario)}`
+              : ""}
           </p>
         </div>
         <div className="aim-desk-chart-controls">
@@ -554,7 +672,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
                 key={opt.id}
                 type="button"
                 className={`aim-desk-chart-tf${tf === opt.id ? " is-on" : ""}`}
-                onClick={() => setTf(opt.id)}
+                onClick={() => changeTf(opt.id)}
               >
                 {opt.label}
               </button>
@@ -577,8 +695,8 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
               <button
                 key={opt.id}
                 type="button"
-                className={`aim-desk-chart-layer is-scenario is-${opt.id}${scenarios[opt.id] ? " is-on" : ""}`}
-                onClick={() => toggleScenario(opt.id)}
+                className={`aim-desk-chart-layer is-scenario is-${opt.id}${scenario === opt.id ? " is-on" : ""}`}
+                onClick={() => selectScenario(opt.id)}
               >
                 {opt.label}
               </button>
@@ -605,6 +723,11 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
         {layers.levels && (estimate?.rsi != null || tfPack?.levels?.rsi != null) ? (
           <span>RSI {Number(estimate?.rsi ?? tfPack?.levels?.rsi).toFixed(1)}</span>
         ) : null}
+        {scenario ? (
+          <span className={`aim-desk-chart-scenario-tag is-${scenario}`}>
+            {scenario === "bull" ? "Bullish" : "Bearish"} | {tf}
+          </span>
+        ) : null}
         <span className="aim-desk-chart-est-tag">{ESTIMATE_LABEL}</span>
       </div>
 
@@ -627,7 +750,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
             })}
 
             {/* Demand = green 50% opacity boxes; Supply = red 50% opacity boxes */}
-            {layers.levels
+            {layers.levels && scenario === "bull"
               ? demandZones.map((z, i) => (
                   <rect
                     key={`dem-${i}-${z.lo}`}
@@ -640,7 +763,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
                   />
                 ))
               : null}
-            {layers.levels
+            {layers.levels && scenario === "bear"
               ? supplyZones.map((z, i) => (
                   <rect
                     key={`sup-${i}-${z.hi}`}
@@ -684,7 +807,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
               );
             })}
 
-            {layers.projection && projBars > 0 ? (
+            {layers.projection && scenario && projBars > 0 ? (
               <line
                 className="aim-desk-chart-now"
                 x1={xAt(candles.length - 1)}
@@ -745,7 +868,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
               );
             })}
 
-            {layers.projection && (projBull || projBear) ? (
+            {layers.projection && scenario && (projBull || projBear) ? (
               <text className="aim-desk-chart-proj-label" x={W - PAD.r - 4} y={PAD.t + 12} textAnchor="end">
                 {ESTIMATE_LABEL} | not guaranteed
               </text>

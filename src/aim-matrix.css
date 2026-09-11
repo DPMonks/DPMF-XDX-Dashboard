@@ -1116,3 +1116,19 @@ body.aim-drawer-open #root {
   .aim-drawer-body .aim-desk-chart-plot svg { max-height: 280px; }
 }
 
+
+.aim-desk-chart-scenario-tag {
+  color: #f8fafc;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.2);
+}
+.aim-desk-chart-scenario-tag.is-bull {
+  background: rgba(74, 222, 128, 0.22);
+  color: #bbf7d0;
+}
+.aim-desk-chart-scenario-tag.is-bear {
+  background: rgba(248, 113, 113, 0.22);
+  color: #fecaca;
+}

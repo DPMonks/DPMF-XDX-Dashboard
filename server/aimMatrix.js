@@ -1423,6 +1423,11 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
         why_bull: (Array.isArray(whyRow?.why_bull) ? whyRow.why_bull : []).map((b) => scrubText(b)).filter(Boolean).slice(0, 4),
         why_bear: (Array.isArray(whyRow?.why_bear) ? whyRow.why_bear : []).map((b) => scrubText(b)).filter(Boolean).slice(0, 4),
         active_scenario: scrubText(whyRow?.active_scenario || ""),
+        preferred_scenario: scrubText(row.preferred_scenario || whyRow?.active_scenario || ""),
+        scenarios: row.scenarios && typeof row.scenarios === "object" ? {
+          bullish: row.scenarios.bullish || null,
+          bearish: row.scenarios.bearish || null,
+        } : null,
         disclaimer: scrubText(row.disclaimer || ""),
       };
     }
@@ -1503,6 +1508,21 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
     by_tf,
     overlays,
     active_scenario: scrubText(src.active_scenario || src.why?.active_scenario || overlaysIn?.active_scenario || ""),
+    preferred_scenario: scrubText(src.preferred_scenario || src.plan?.preferred_scenario || overlaysIn?.preferred_scenario || src.active_scenario || ""),
+    plan: src.plan && typeof src.plan === "object" ? {
+      plan_id: scrubText(src.plan.plan_id || ""),
+      planned_at: scrubText(src.plan.planned_at || ""),
+      refresh_sec: numberOrNull(src.plan.refresh_sec) || 300,
+      timeframes: Array.isArray(src.plan.timeframes) ? src.plan.timeframes.map(scrubText).filter(Boolean) : ["5m", "15m", "1h", "1D"],
+      scenarios_ready: Array.isArray(src.plan.scenarios_ready) ? src.plan.scenarios_ready.map(scrubText).filter(Boolean) : ["bullish", "bearish"],
+      preferred_scenario: scrubText(src.plan.preferred_scenario || ""),
+      note: scrubText(src.plan.note || ""),
+      label: scrubText(src.plan.label || "Estimate by AI-Matrix"),
+      disclaimer: scrubText(src.plan.disclaimer || "Estimate by AI-Matrix - not guaranteed."),
+    } : null,
+    plan_id: scrubText(src.plan_id || src.plan?.plan_id || ""),
+    planned_at: scrubText(src.planned_at || src.plan?.planned_at || ""),
+    refresh_sec: numberOrNull(src.refresh_sec ?? src.plan?.refresh_sec) || 300,
     rationale: scrubText(src.rationale || src.why?.rationale || overlaysIn?.rationale || ""),
     why_bullets: (Array.isArray(src.why_bullets) ? src.why_bullets : Array.isArray(src.why?.why_bullets) ? src.why.why_bullets : Array.isArray(overlaysIn?.why_bullets) ? overlaysIn.why_bullets : [])
       .map((b) => scrubText(b))
