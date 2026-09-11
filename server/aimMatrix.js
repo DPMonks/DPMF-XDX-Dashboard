@@ -1406,6 +1406,7 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
     for (const tf of ["5m", "15m", "1h", "1D"]) {
       const row = byTfIn[tf];
       if (!row || typeof row !== "object") continue;
+      const whyRow = row.why && typeof row.why === "object" ? row.why : null;
       by_tf[tf] = {
         tf,
         demand: (Array.isArray(row.demand) ? row.demand : []).map(scrubZone).filter(Boolean).slice(0, 4),
@@ -1414,6 +1415,14 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
         projection_bear: scrubProj(row.projection_bear),
         trend: row.trend && typeof row.trend === "object" ? row.trend : null,
         levels: row.levels && typeof row.levels === "object" ? row.levels : null,
+        rationale: scrubText(row.rationale || whyRow?.rationale || ""),
+        why_bullets: (Array.isArray(row.why_bullets) ? row.why_bullets : Array.isArray(whyRow?.why_bullets) ? whyRow.why_bullets : [])
+          .map((b) => scrubText(b))
+          .filter(Boolean)
+          .slice(0, 8),
+        why_bull: (Array.isArray(whyRow?.why_bull) ? whyRow.why_bull : []).map((b) => scrubText(b)).filter(Boolean).slice(0, 4),
+        why_bear: (Array.isArray(whyRow?.why_bear) ? whyRow.why_bear : []).map((b) => scrubText(b)).filter(Boolean).slice(0, 4),
+        active_scenario: scrubText(whyRow?.active_scenario || ""),
         disclaimer: scrubText(row.disclaimer || ""),
       };
     }
@@ -1493,6 +1502,29 @@ function pickCommanderEstimate(intents = [], commanderMeta = {}) {
     supply,
     by_tf,
     overlays,
+    active_scenario: scrubText(src.active_scenario || src.why?.active_scenario || overlaysIn?.active_scenario || ""),
+    rationale: scrubText(src.rationale || src.why?.rationale || overlaysIn?.rationale || ""),
+    why_bullets: (Array.isArray(src.why_bullets) ? src.why_bullets : Array.isArray(src.why?.why_bullets) ? src.why.why_bullets : Array.isArray(overlaysIn?.why_bullets) ? overlaysIn.why_bullets : [])
+      .map((b) => scrubText(b))
+      .filter(Boolean)
+      .slice(0, 8),
+    why_bull: (Array.isArray(src.why_bull) ? src.why_bull : Array.isArray(src.why?.why_bull) ? src.why.why_bull : [])
+      .map((b) => scrubText(b))
+      .filter(Boolean)
+      .slice(0, 4),
+    why_bear: (Array.isArray(src.why_bear) ? src.why_bear : Array.isArray(src.why?.why_bear) ? src.why.why_bear : [])
+      .map((b) => scrubText(b))
+      .filter(Boolean)
+      .slice(0, 4),
+    why: src.why && typeof src.why === "object" ? {
+      active_scenario: scrubText(src.why.active_scenario || ""),
+      rationale: scrubText(src.why.rationale || ""),
+      why_bullets: (Array.isArray(src.why.why_bullets) ? src.why.why_bullets : []).map((b) => scrubText(b)).filter(Boolean).slice(0, 8),
+      why_bull: (Array.isArray(src.why.why_bull) ? src.why.why_bull : []).map((b) => scrubText(b)).filter(Boolean).slice(0, 4),
+      why_bear: (Array.isArray(src.why.why_bear) ? src.why.why_bear : []).map((b) => scrubText(b)).filter(Boolean).slice(0, 4),
+      label: scrubText(src.why.label || "Estimate by AI-Matrix"),
+      disclaimer: scrubText(src.why.disclaimer || "Estimate by AI-Matrix - not guaranteed."),
+    } : null,
     trade_horizon: scrubText(src.trade_horizon || ""),
     atr_bps: atrBps,
     chart_reason: scrubText(src.chart_reason || ""),
@@ -1872,7 +1904,7 @@ function classifyAimQuestion(raw) {
   }
   if (/\b(order ?book|best bid|best ask|spread)\b/.test(q)) return { intent: "orderbook" };
   if (/\b(smart swap|swap)\b/.test(q)) return { intent: "swap" };
-  if (/\b(smart chart|desk chart|aim[- ]?desk|commander estimate|estimate by ai[- ]?matrix|projection|bullish|bearish|demand (zone|box|area)|supply (zone|box|area)|support|resistance|fair mid|xrp\/rlusd.*(chart|estimate|overlay)|overlay)\b/.test(q)) {
+  if (/\b(smart chart|desk chart|aim[- ]?desk|commander estimate|estimate by ai[- ]?matrix|projection|bullish|bearish|demand (zone|box|area)|supply (zone|box|area)|support|resistance|fair mid|xrp\/rlusd.*(chart|estimate|overlay)|overlay|why .*(estimate|bull|bear|projection|chart|bias|score)|why (bullish|bearish)|rationale)\b/.test(q)) {
     return { intent: "estimate" };
   }
   if (/\b(trade chart|trading chart|price chart|chart)\b/.test(q)) return { intent: "chart" };
@@ -2316,38 +2348,74 @@ function answerEstimateQuestion(question, estimate) {
     add("No live XRP/RLUSD Commander estimate on the board yet. Soft-refresh AI-Matrix and ask again after the next Commander tick.");
     return bits.join(" ");
   }
-  const fair = formatPxAim(est.fair_mid || est.mid);
-  if (fair) add(`XRP/RLUSD fair mid ${fair} RLUSD per XRP (quote-per-base).`);
-  if (est.bias_hour) add(`Hour bias ${scrubText(est.bias_hour)}.`);
-  if (est.bias_day) add(`Day bias ${scrubText(est.bias_day)}.`);
-  if (est.score_bias || est.signal) add(`Score bias ${scrubText(est.score_bias || est.signal)}.`);
-  if (est.trade_score != null && Number.isFinite(Number(est.trade_score))) {
-    add(`TradeScore ${Number(est.trade_score).toFixed(4)}.`);
-  }
+
+  const wantWhy = /\b(why|reason|rationale|because|explain|what drives|how come)\b/.test(q);
   const wantBull = /\bbull/.test(q);
   const wantBear = /\bbear/.test(q);
   const tfHit = (q.match(/\b(1d|1h|15m|5m)\b/) || [])[0];
   const byTf = est.by_tf || est.overlays?.by_tf || {};
   const tfKey = tfHit === "1d" ? "1D" : tfHit || null;
   const pack = (tfKey && byTf[tfKey]) || byTf["1h"] || byTf["1D"] || null;
-  if (/\b(demand|support|buy zone|green)\b/.test(q)) {
+  const why = pack?.why || est.why || {};
+  const active = scrubText(why.active_scenario || est.active_scenario || est.score_bias || "");
+  const rationale = scrubText(pack?.rationale || est.rationale || why.rationale || "");
+  const bullets = (Array.isArray(pack?.why_bullets) && pack.why_bullets.length
+    ? pack.why_bullets
+    : Array.isArray(est.why_bullets) && est.why_bullets.length
+      ? est.why_bullets
+      : Array.isArray(why.why_bullets)
+        ? why.why_bullets
+        : []
+  ).map((b) => scrubText(b)).filter(Boolean);
+
+  if (wantWhy || wantBull || wantBear || /\b(estimate|projection|overlay|chart)\b/.test(q)) {
+    if (rationale) add(rationale);
+    else if (active === "bullish" || active === "long") add("Bullish estimate on the live board.");
+    else if (active === "bearish" || active === "short") add("Bearish estimate on the live board.");
+    else if (active) add(`Active scenario ${active}.`);
+    if (tfKey) add(`Timeframe ${tfKey}.`);
+    const sideBullets = wantBull
+      ? (why.why_bull || est.why_bull || [])
+      : wantBear
+        ? (why.why_bear || est.why_bear || [])
+        : bullets;
+    for (const b of (sideBullets || []).slice(0, wantWhy ? 6 : 3)) add(b);
+    if (wantWhy && !sideBullets?.length && bullets.length) {
+      for (const b of bullets.slice(0, 5)) add(b);
+    }
+  }
+
+  const fair = formatPxAim(est.fair_mid || est.mid);
+  if (fair && !wantWhy) add(`XRP/RLUSD fair mid ${fair} RLUSD per XRP.`);
+  if (!wantWhy) {
+    if (est.bias_hour) add(`Hour bias ${scrubText(est.bias_hour)}.`);
+    if (est.bias_day) add(`Day bias ${scrubText(est.bias_day)}.`);
+    if (est.score_bias || est.signal) add(`Score bias ${scrubText(est.score_bias || est.signal)}.`);
+  }
+
+  if (/\b(demand|support|buy zone|green)\b/.test(q) || wantWhy) {
     const zones = pack?.demand || est.demand || [];
     if (zones.length) {
       const z = zones[0];
       const lo = formatPxAim(z.lo);
       const hi = formatPxAim(z.hi);
-      if (lo && hi) add(`Demand box (green, 50% opacity on chart): ${lo} to ${hi}.`);
-    } else add("No demand box published on this tick.");
+      if (lo && hi && !bits.some((x) => x.includes(`${lo}-${hi}`) || x.includes(`${lo} to ${hi}`))) {
+        add(`Demand box (green): ${lo} to ${hi}.`);
+      }
+    }
   }
-  if (/\b(supply|resist|sell zone|red)\b/.test(q)) {
+  if (/\b(supply|resist|sell zone|red)\b/.test(q) || wantWhy) {
     const zones = pack?.supply || est.supply || [];
     if (zones.length) {
       const z = zones[0];
       const lo = formatPxAim(z.lo);
       const hi = formatPxAim(z.hi);
-      if (lo && hi) add(`Supply box (red, 50% opacity on chart): ${lo} to ${hi}.`);
-    } else add("No supply box published on this tick.");
+      if (lo && hi && !bits.some((x) => x.includes(`${lo}-${hi}`) || x.includes(`${lo} to ${hi}`))) {
+        add(`Supply box (red): ${lo} to ${hi}.`);
+      }
+    }
   }
+
   const scrubPath = (proj, label) => {
     if (!proj?.path?.length) return;
     const last = proj.path[proj.path.length - 1];
@@ -2356,11 +2424,13 @@ function answerEstimateQuestion(question, estimate) {
     const hi = formatPxAim(last?.hi);
     if (mid) add(`${label} path to bar ${proj.path.length}: mid ${mid}${lo && hi ? ` channel ${lo}-${hi}` : ""}.`);
   };
-  if (wantBull || (!wantBear && /\b(projection|overlay|estimate|ahead|forward)\b/.test(q))) {
-    scrubPath(pack?.projection_bull || est.projection_bull || est.projection, "Bullish");
-  }
-  if (wantBear || (!wantBull && /\b(projection|overlay|estimate|ahead|forward)\b/.test(q))) {
-    scrubPath(pack?.projection_bear || est.projection_bear, "Bearish");
+  if (!wantWhy) {
+    if (wantBull || (!wantBear && /\b(projection|overlay|estimate|ahead|forward)\b/.test(q))) {
+      scrubPath(pack?.projection_bull || est.projection_bull || est.projection, "Bullish");
+    }
+    if (wantBear || (!wantBull && /\b(projection|overlay|estimate|ahead|forward)\b/.test(q))) {
+      scrubPath(pack?.projection_bear || est.projection_bear, "Bearish");
+    }
   }
   if (/\b(entry|sl|stop|tp|take)\b/.test(q)) {
     const entry = formatPxAim(est.entry);
@@ -2370,7 +2440,7 @@ function answerEstimateQuestion(question, estimate) {
     if (sl) add(`SL ${sl}.`);
     if (tp) add(`TP ${tp}.`);
   }
-  if (/\b(sma|ema|trend)\b/.test(q)) {
+  if (/\b(sma|ema|trend)\b/.test(q) && !wantWhy) {
     const smaS = formatPxAim(est.sma_short);
     const smaL = formatPxAim(est.sma_long);
     const emaS = formatPxAim(est.ema_short);
@@ -2378,11 +2448,10 @@ function answerEstimateQuestion(question, estimate) {
     if (smaS || smaL) add(`SMA short ${smaS || "n/a"}, long ${smaL || "n/a"}.`);
     if (emaS || emaL) add(`EMA short ${emaS || "n/a"}, long ${emaL || "n/a"}.`);
   }
-  if (tfKey) add(`Timeframe focus ${tfKey}.`);
-  add("Toggle Trend, Levels, Projection, Bullish, and Bearish on the AI-Matrix smart chart under this chat.");
-  add("I only cite published Commander numbers. No invented prices.");
+  add("Drawn on the AI-Matrix smart chart under this chat. I only cite published Commander numbers.");
   return bits.join(" ");
 }
+
 
 function answerAimQuestion(question, ctx, scan, site = null, holders = null, lpHolders = null, markets = null, xrplUniverse = null) {
   const classified = classifyAimQuestion(question);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { getLiquidPairAmm, getLiquidPairBook, getPrices } from "../api/indexer";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { bookBands } from "../chart/overlays";
@@ -502,7 +502,10 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
 
   const last = candles[candles.length - 1];
   const lastPx = num(last?.c) || bands.mid || livePrice;
-  const disclaimer = asciiClean(estimate?.disclaimer || overlays?.disclaimer || tfPack?.disclaimer || ESTIMATE_DISC);
+  const disclaimer = asciiClean(
+    estimate?.disclaimer || overlays?.disclaimer || tfPack?.disclaimer || ESTIMATE_DISC
+  );
+  const rationaleNote = asciiClean(tfPack?.rationale || estimate?.rationale || "");
 
   const toggleLayer = (id) => setLayers((prev) => ({ ...prev, [id]: !prev[id] }));
   const toggleScenario = (id) => setScenarios((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -751,7 +754,7 @@ export default function AimDeskSmartChart({ deskOrders = [], estimate = null }) 
         )}
       </div>
 
-      <p className="aim-desk-chart-disclaimer">{disclaimer}</p>
+      <p className="aim-desk-chart-disclaimer">{disclaimer}{rationaleNote ? ` | ${rationaleNote}` : ""}</p>
 
       <ul className="aim-desk-chart-legend" aria-label="Desk order legend">
         {deskMarks.slice(0, 8).map((m) => (
