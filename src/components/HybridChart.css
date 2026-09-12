@@ -1593,3 +1593,21 @@
   }
 }
 
+
+.hybrid-clear-ai {
+  width: auto !important;
+  min-width: 52px;
+  padding: 0 8px !important;
+  margin-right: 4px;
+  font-size: 10px !important;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: #9ad4ff !important;
+  border-color: rgba(61, 139, 255, 0.45) !important;
+}
+.hybrid-clear-ai:hover:not(:disabled),
+.hybrid-clear-ai:focus-visible {
+  color: #ffffff !important;
+  border-color: rgba(0, 234, 255, 0.7) !important;
+}

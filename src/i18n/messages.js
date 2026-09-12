@@ -100,6 +100,8 @@ const en = {
   hybridChart: "Hybrid chart",
   chartTools: "Chart tools",
   chartClear: "Clear drawings",
+  chartClearAi: "Clear AI",
+  chartClearAiTitle: "Clear AI tools (keeps your drawings)",
   chartPointer: "Pointer",
   chartLines: "Lines",
   chartFibGroup: "Fib",

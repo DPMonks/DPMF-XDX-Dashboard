@@ -3,6 +3,8 @@
 import { useSyncExternalStore } from "react";
 
 let snapshot = null;
+/** @type {Map<string, { priority: number, value: object|null }>} */
+const publishers = new Map();
 const listeners = new Set();
 
 function emit() {
@@ -15,15 +17,55 @@ function emit() {
   });
 }
 
-export function publishChartSnapshot(next) {
-  const value = next && typeof next === "object" ? next : null;
+function pickWinningSnapshot() {
+  let best = null;
+  let bestPri = -Infinity;
+  for (const row of publishers.values()) {
+    if (!row?.value) continue;
+    const pri = Number(row.priority) || 0;
+    if (pri > bestPri) {
+      bestPri = pri;
+      best = row.value;
+    }
+  }
+  return best;
+}
+
+function recomputeSnapshot() {
+  const next = pickWinningSnapshot();
   try {
-    if (JSON.stringify(snapshot) === JSON.stringify(value)) return;
+    if (JSON.stringify(snapshot) === JSON.stringify(next)) return;
   } catch {
     /* replace */
   }
-  snapshot = value;
+  snapshot = next;
   emit();
+}
+
+/**
+ * Publish a HybridChart snapshot.
+ * Higher priority wins when multiple charts are mounted (AIM embed > main TradingChart).
+ * @param {object|null} next
+ * @param {{ source?: string, priority?: number }} [opts]
+ */
+export function publishChartSnapshot(next, opts = {}) {
+  const source = String(opts.source || "main").slice(0, 32);
+  const priority = Number.isFinite(Number(opts.priority)) ? Number(opts.priority) : source === "aim" ? 10 : 1;
+  const value = next && typeof next === "object" ? { ...next, _source: source, _priority: priority } : null;
+  if (!value) {
+    publishers.delete(source);
+  } else {
+    publishers.set(source, { priority, value });
+  }
+  recomputeSnapshot();
+}
+
+/** Drop a publisher (call on HybridChart unmount so the other chart can win). */
+export function releaseChartSnapshot(source = "main") {
+  const key = String(source || "main").slice(0, 32);
+  if (!publishers.has(key)) return;
+  publishers.delete(key);
+  recomputeSnapshot();
 }
 
 export function getChartSnapshot() {
@@ -65,7 +107,7 @@ function pickSwingHighLow(candles = []) {
 function slimCandles(candles = []) {
   const rows = Array.isArray(candles) ? candles : [];
   return rows
-    .slice(-48)
+    .slice(-64)
     .map((c) => ({
       t: Number(c?.t),
       o: Number(c?.o),
@@ -80,6 +122,15 @@ function slimCandles(candles = []) {
         Number.isFinite(c.l) &&
         Number.isFinite(c.c)
     );
+}
+
+export function sameChartPair(a, b) {
+  const left = String(a || "").replace(/\s+/g, "").toUpperCase();
+  const right = String(b || "").replace(/\s+/g, "").toUpperCase();
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const [rb, rq] = right.split("/");
+  return Boolean(rb && rq && left === `${rq}/${rb}`);
 }
 
 export function buildChartSnapshot({
@@ -102,6 +153,8 @@ export function buildChartSnapshot({
   lastClose = null,
   livePrice = null,
   candles = [],
+  xrpLead = null,
+  relatedPairs = null,
 } = {}) {
   const kinds = {};
   for (const row of Array.isArray(drawings) ? drawings : []) {
@@ -117,8 +170,21 @@ export function buildChartSnapshot({
   };
   const candleRows = slimCandles(candles);
   const swings = pickSwingHighLow(candleRows);
+  const pairNorm = String(pair || "").replace(/\s+/g, "").toUpperCase() || null;
+  const lead =
+    xrpLead && typeof xrpLead === "object"
+      ? {
+          pair: String(xrpLead.pair || "XRP/RLUSD").replace(/\s+/g, "").toUpperCase(),
+          bias: xrpLead.bias ? String(xrpLead.bias).slice(0, 24) : null,
+          fair_mid: round(xrpLead.fair_mid),
+          note: xrpLead.note ? String(xrpLead.note).slice(0, 160) : null,
+        }
+      : null;
+  const related = Array.isArray(relatedPairs)
+    ? relatedPairs.map((p) => String(p || "").replace(/\s+/g, "").toUpperCase()).filter(Boolean).slice(0, 6)
+    : null;
   return {
-    pair: String(pair || "").replace(/\s+/g, "").toUpperCase() || null,
+    pair: pairNorm,
     timeframe: String(timeframe || "") || null,
     active_tool: tool === "none" || !tool ? "none" : String(tool),
     ma_type: String(maType || "sma"),
@@ -150,6 +216,11 @@ export function buildChartSnapshot({
       last: swings.last,
     },
     candles: candleRows,
+    multi_pair: {
+      active: pairNorm,
+      xrp_lead: lead,
+      related: related,
+    },
     at: new Date().toISOString(),
   };
 }

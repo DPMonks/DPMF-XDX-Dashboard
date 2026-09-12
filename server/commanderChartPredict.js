@@ -714,6 +714,239 @@ export function answerChartToolsQuestion(chartContext) {
   return scrub(bits.join(" "));
 }
 
+
+function samePair(a, b) {
+  const left = String(a || "").replace(/\s+/g, "").toUpperCase();
+  const right = String(b || "").replace(/\s+/g, "").toUpperCase();
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const [rb, rq] = right.split("/");
+  return Boolean(rb && rq && left === `${rq}/${rb}`);
+}
+
+/** Commander estimate feed is XRP/RLUSD-keyed. */
+export function estimateMatchesChartPair(estimate, chartContext) {
+  const estPair = String(estimate?.pair || "XRP/RLUSD").replace(/\s+/g, "").toUpperCase();
+  const chartPair = String(chartContext?.pair || "").replace(/\s+/g, "").toUpperCase();
+  if (!chartPair) return true;
+  return samePair(estPair, chartPair);
+}
+
+function isXdxPair(pair) {
+  const p = String(pair || "").replace(/\s+/g, "").toUpperCase();
+  return p.startsWith("XDX/") || p.endsWith("/XDX");
+}
+
+function isXrpLeadPair(pair) {
+  return samePair(pair, "XRP/RLUSD") || samePair(pair, "XRP/USD");
+}
+
+function wantsCrossCurrency(question, chartContext) {
+  const q = String(question || "");
+  const pair = String(chartContext?.pair || "");
+  if (isXdxPair(pair) || isXrpLeadPair(pair)) return true;
+  return /\b(xrp|xdx)\b/i.test(q) && /\b(xrp|xdx|rlusd)\b/i.test(q);
+}
+
+/**
+ * Measured-move % from support area to prior resistance (or bearish inverse).
+ * Trade scoring prefers clear % gain paths, not vague edge.
+ */
+export function scoreMeasuredMovePct(side, supportPx, resistPx) {
+  const s = num(supportPx);
+  const r = num(resistPx);
+  if (!(s > 0) || !(r > 0)) return null;
+  if (side === "bear") {
+    if (!(s < r)) return null;
+    return ((r - s) / r) * 100;
+  }
+  if (!(r > s)) return null;
+  return ((r - s) / s) * 100;
+}
+
+function formatPct(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return (Math.round(n * 10) / 10).toFixed(1);
+}
+
+/**
+ * Scan candle history for repeating swing support/resistance and score % gain.
+ * Soft recommend only (never a hard block). Prefer biggest realistic % for the visible history.
+ */
+/** Soft expectation bands: lower TFs = smaller %; higher TFs = larger opportunities. */
+export function timeframeGainExpectation(timeframe) {
+  const tf = String(timeframe || "").toUpperCase();
+  if (tf === "5M" || tf === "5") return { min: 0.2, sweet: 0.6, label: "5m" };
+  if (tf === "15M" || tf === "15") return { min: 0.35, sweet: 1.2, label: "15m" };
+  if (tf === "1H" || tf === "60" || tf === "1HR") return { min: 0.8, sweet: 3.0, label: "1H" };
+  if (tf === "4H") return { min: 1.5, sweet: 5.0, label: "4H" };
+  if (tf === "1D" || tf === "D" || tf === "1DAY") return { min: 2.0, sweet: 8.0, label: "1D" };
+  return { min: 0.4, sweet: 2.0, label: tf || "tf" };
+}
+
+function findNextResistanceWithTrend(rows, side = "bull") {
+  if (!Array.isArray(rows) || rows.length < 6) return null;
+  const highs = [];
+  const lows = [];
+  for (let i = 2; i < rows.length - 2; i += 1) {
+    const h = num(rows[i].h);
+    const l = num(rows[i].l);
+    if (h == null || l == null) continue;
+    const leftH = Math.max(num(rows[i - 1].h) || 0, num(rows[i - 2].h) || 0);
+    const rightH = Math.max(num(rows[i + 1].h) || 0, num(rows[i + 2].h) || 0);
+    const leftL = Math.min(num(rows[i - 1].l) ?? Infinity, num(rows[i - 2].l) ?? Infinity);
+    const rightL = Math.min(num(rows[i + 1].l) ?? Infinity, num(rows[i + 2].l) ?? Infinity);
+    if (h >= leftH && h >= rightH) highs.push({ i, t: rows[i].t, price: h });
+    if (l <= leftL && l <= rightL) lows.push({ i, t: rows[i].t, price: l });
+  }
+  const live = num(rows[rows.length - 1]?.c);
+  if (side === "bear") {
+    const resist = highs.length ? highs[highs.length - 1] : null;
+    const support = lows.length ? lows[lows.length - 1] : null;
+    let trend = null;
+    if (highs.length >= 2) {
+      const a = highs[highs.length - 2];
+      const b = highs[highs.length - 1];
+      if (b.price < a.price) trend = { a, b, role: "resistance_trend" };
+    }
+    return { support, resistance: resist, trend, live };
+  }
+  const support = lows.length ? lows[lows.length - 1] : null;
+  let resistance = null;
+  for (let i = highs.length - 1; i >= 0; i -= 1) {
+    if (live == null || highs[i].price >= live * 0.998) {
+      resistance = highs[i];
+      break;
+    }
+  }
+  if (!resistance && highs.length) resistance = highs[highs.length - 1];
+  let trend = null;
+  if (lows.length >= 2) {
+    const a = lows[lows.length - 2];
+    const b = lows[lows.length - 1];
+    if (b.price > a.price) trend = { a, b, role: "support_trend" };
+  }
+  return { support, resistance, trend, live };
+}
+
+/**
+ * Best historical % stretch on visible candles for this TF (not a one-candle spike).
+ * Scores support area -> reclaim prior / next resistance together with trendline context.
+ */
+export function analysePatternSetups(chartContext, side = "bull") {
+  const rows = candleRows(chartContext);
+  if (rows.length < 10) return null;
+  const want = side === "bear" ? "bear" : "bull";
+  const tf = scrub(chartContext?.timeframe) || "";
+  const expect = timeframeGainExpectation(tf);
+  const struct = findNextResistanceWithTrend(rows, want);
+  if (!struct?.support || !struct?.resistance) return null;
+
+  let bestHist = 0;
+  const win = Math.max(6, Math.min(24, Math.floor(rows.length / 2)));
+  for (let i = 0; i + win < rows.length; i += 1) {
+    let lo = Infinity;
+    let hi = 0;
+    for (let j = i; j <= i + win; j += 1) {
+      const l = num(rows[j].l);
+      const h = num(rows[j].h);
+      if (l != null) lo = Math.min(lo, l);
+      if (h != null) hi = Math.max(hi, h);
+    }
+    if (lo > 0 && hi > lo) {
+      const pct = want === "bear" ? ((hi - lo) / hi) * 100 : ((hi - lo) / lo) * 100;
+      if (pct > bestHist) bestHist = pct;
+    }
+  }
+
+  const pct = scoreMeasuredMovePct(want, struct.support.price, struct.resistance.price);
+  if (pct == null || pct < expect.min * 0.5) return null;
+
+  const horizonBias = expect.label === "1H" || expect.label === "4H" || expect.label === "1D" ? "medium_large" : "short";
+  let quality = "mid_path";
+  const live = struct.live;
+  if (want === "bull") {
+    if (live != null && live <= struct.support.price * 1.012) quality = "at_support";
+    else if (live != null && live >= struct.resistance.price * 0.995) quality = "extended";
+  } else if (live != null && live >= struct.resistance.price * 0.988) quality = "at_resistance";
+  else if (live != null && live <= struct.support.price * 1.005) quality = "extended";
+
+  const feeEdgeOk = bestHist >= Math.max(0.4, expect.min);
+  const preferMediumLarge = horizonBias === "medium_large" && feeEdgeOk;
+
+  return {
+    side: want,
+    support: struct.support.price,
+    resistance: struct.resistance.price,
+    pct,
+    hist_stretch_pct: Math.round(bestHist * 10) / 10,
+    entry: want === "bull" ? struct.support.price : struct.resistance.price,
+    target: want === "bull" ? struct.resistance.price : struct.support.price,
+    quality,
+    repeats: 1,
+    timeframe: expect.label,
+    horizon: horizonBias,
+    prefer_medium_large: preferMediumLarge,
+    fee_edge_ok: feeEdgeOk,
+    trend: struct.trend
+      ? {
+          role: struct.trend.role,
+          a: struct.trend.a.price,
+          b: struct.trend.b.price,
+        }
+      : null,
+  };
+}
+
+function patternRecommendText(setup, timeframe) {
+  if (!setup) return null;
+  const pct = formatPct(setup.pct);
+  const s = formatPx(setup.support);
+  const r = formatPx(setup.resistance);
+  const tf = scrub(timeframe || setup.timeframe) || "this timeframe";
+  if (!pct || !s || !r) return null;
+  const bits = [];
+  const hist = formatPct(setup.hist_stretch_pct);
+  if (setup.side === "bull") {
+    bits.push(`Preferred % path on ${tf}: support near ${s} toward next resistance near ${r} (about ${pct}% measured move).`);
+  } else {
+    bits.push(`Preferred % path on ${tf}: resistance near ${r} toward next support near ${s} (about ${pct}% measured move).`);
+  }
+  if (setup.trend?.role === "support_trend") {
+    const a = formatPx(setup.trend.a);
+    const b = formatPx(setup.trend.b);
+    if (a && b) bits.push(`Read next resistance together with the rising support trendline (${a} to ${b}), not as a lone horizontal.`);
+  } else if (setup.trend?.role === "resistance_trend") {
+    const a = formatPx(setup.trend.a);
+    const b = formatPx(setup.trend.b);
+    if (a && b) bits.push(`Read next support together with the falling resistance trendline (${a} to ${b}), not as a lone horizontal.`);
+  } else {
+    bits.push("Pair the horizontal target with the active diagonal trend when both are present.");
+  }
+  if (hist) bits.push(`History stretch on this chart is about ${hist}% peak-to-trough over multi-bar windows (not a one-candle spike).`);
+  if (setup.horizon === "short") {
+    bits.push("5m/15m paths are smaller/shorter % by design. Prefer steering size toward clearer 1H/1D opportunities when those clear fee edge.");
+  } else if (setup.prefer_medium_large) {
+    bits.push("Medium-large timeframe opportunity clears a soft fee-edge lookback. Prefer sizing/steering here when the support-to-resistance path is clean.");
+  }
+  if (setup.quality === "extended") {
+    bits.push("Setup looks extended versus that path. Prefer wait-for-level or smaller size rather than chasing. Soft recommend only; cost-plus-fee profit gate remains the only hard block.");
+  } else if (setup.quality === "mid_path") {
+    bits.push("Prefer the clearer reclaim/reject at the named level over stacking mid-path entries that often go underwater.");
+  } else {
+    bits.push(`Trade scoring is % gain on ${tf}, not vague edge. Soft steer only; never hard-block for pattern reasons.`);
+  }
+  return scrub(bits.join(" "));
+}
+
+
+function learningScopeNote() {
+  return scrub(
+    "Learning today is Teach lessons plus prediction likely-log and resolve. Full auto bad-trade ML is not live yet."
+  );
+}
+
 function theoryText(side, chartContext, built, estimate) {
   const pair = scrub(chartContext?.pair) || "this pair";
   const tf = scrub(chartContext?.timeframe) || "this timeframe";
@@ -778,10 +1011,18 @@ function theoryText(side, chartContext, built, estimate) {
         : "Next-move theory: look for rejection under the mapped supply band, then a push toward or through the prior swing low. This is a prediction, not fact."
     );
   }
-  if (estimate?.fair_mid > 0 || estimate?.mid > 0) {
+  const useEstimate = estimateMatchesChartPair(estimate, chartContext);
+  if (useEstimate && (estimate?.fair_mid > 0 || estimate?.mid > 0)) {
     const fair = formatPx(estimate.fair_mid || estimate.mid);
-    if (fair) bits.push(`Desk fair mid sits near ${fair} as context only, also an estimate.`);
+    if (fair && samePair(chartContext?.pair, "XRP/RLUSD")) {
+      bits.push(`Desk fair mid sits near ${fair} as context only, also an estimate.`);
+    }
   }
+  const setup = analysePatternSetups(chartContext, side);
+  const rec = patternRecommendText(setup, chartContext?.timeframe);
+  if (rec) bits.push(rec);
+  for (const note of crossCurrencyNote(side, chartContext, useEstimate ? estimate : null)) bits.push(note);
+  bits.push(learningScopeNote());
   return scrub(bits.join(" "));
 }
 
@@ -794,7 +1035,7 @@ export function answerVisitorPrediction(question, chartContext, estimate) {
   else if (side === "bear") bits.push(`You are calling a bearish path on ${pair}.`);
   else bits.push(`Noted your market call on ${pair}.`);
   bits.push("I will not guarantee your levels or the desk view.");
-  if (estimate?.fair_mid > 0 || estimate?.mid > 0) {
+  if (estimateMatchesChartPair(estimate, chartContext) && (estimate?.fair_mid > 0 || estimate?.mid > 0) && samePair(pair, "XRP/RLUSD")) {
     const fair = formatPx(estimate.fair_mid || estimate.mid);
     const bias = scrub(estimate.score_bias || estimate.signal || estimate.bias_hour || "");
     if (fair) {
@@ -804,10 +1045,17 @@ export function answerVisitorPrediction(question, chartContext, estimate) {
           : `For comparison only, desk Estimate by AI-Matrix fair mid is about ${fair}. Also not guaranteed.`
       );
     }
+  } else if (!estimateMatchesChartPair(estimate, chartContext)) {
+    bits.push("Desk estimate feed is XRP/RLUSD-keyed, so I am scoring this active pair from its own candles only.");
   } else {
     bits.push("Desk estimate is soft right now, so I am not forcing a compare.");
   }
+  const setup = analysePatternSetups(chartContext, side || "bull");
+  const rec = patternRecommendText(setup, chartContext?.timeframe);
+  if (rec) bits.push(rec);
+  for (const note of crossCurrencyNote(side || "bull", chartContext, estimate)) bits.push(note);
   bits.push("Ask me to lay a bullish or bearish tool set on HybridChart if you want my estimate drawings.");
+  bits.push(learningScopeNote());
   const levels = [];
   const pxHits = String(question || "").match(/\b\d+(?:\.\d+)?\b/g) || [];
   for (const hit of pxHits.slice(0, 6)) {
@@ -854,8 +1102,15 @@ export function answerChartPredict(question, estimate, chartContext, classified,
     return answerVisitorPrediction(q, chartContext, estimate);
   }
 
-  const pair = scrub(chartContext?.pair) || "XRP/RLUSD";
+  const pair = scrub(chartContext?.pair) || null;
+  if (!pair) {
+    return {
+      text: scrub("Open a HybridChart pair tab first so I bind tools to the active pair. I will not default to XDX/RLUSD when another tab is selected."),
+      chart_action: null,
+    };
+  }
   const tf = scrub(chartContext?.timeframe) || null;
+  const estForPair = estimateMatchesChartPair(estimate, chartContext) ? estimate : null;
   const toolsPeek = wantTools(q);
   const pendingAsk =
     pendingChartAction &&
@@ -894,8 +1149,8 @@ export function answerChartPredict(question, estimate, chartContext, classified,
     }
   }
 
-  const built = buildCommanderPredictionDrawings(side, chartContext, estimate, q);
-  const text = theoryText(side, chartContext, built, estimate);
+  const built = buildCommanderPredictionDrawings(side, chartContext, estForPair, q);
+  const text = theoryText(side, chartContext, built, estForPair);
   const narrate = [...(built.narrate_steps || [])];
   narrate.push({ id: "close", text });
 
@@ -909,7 +1164,7 @@ export function answerChartPredict(question, estimate, chartContext, classified,
       label: "Estimate by AI-Matrix",
       drawings: built.drawings,
       narrate_steps: narrate,
-      show_estimate: Boolean(estimate && (estimate.fair_mid > 0 || estimate.by_tf)),
+      show_estimate: Boolean(estForPair && (estForPair.fair_mid > 0 || estForPair.by_tf) && samePair(pair, "XRP/RLUSD")),
     },
   };
 }

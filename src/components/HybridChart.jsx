@@ -48,7 +48,7 @@ import {
   pendingFromExecution,
 } from "../wallet/ledgerOrders";
 import { useWallet } from "../context/useWallet";
-import { buildChartSnapshot, publishChartSnapshot } from "../context/chartSnapshot";
+import { buildChartSnapshot, publishChartSnapshot, releaseChartSnapshot, sameChartPair } from "../context/chartSnapshot";
 import { formatQuotePerBase, formatPercent } from "../utils/format";
 import { isPhoneDevice } from "../xaman/xamanClient";
 import { useI18n } from "../i18n/useI18n";
@@ -189,10 +189,18 @@ export default function HybridChart({
 
   useEffect(() => {
     if (!chartAction || !chartAction.seq) return;
+    const actionPair = chartAction.pair ? String(chartAction.pair).replace(/\s+/g, "").toUpperCase() : null;
+    // Only apply Commander actions to the currently selected pair tab.
+    if (actionPair && !sameChartPair(actionPair, pair)) {
+      return undefined;
+    }
     if (chartAction.type === "show_estimate" && chartAction.side) {
-      setEstimateSide(chartAction.side);
-    } else if (chartAction.type === "clear_estimate") {
+      if (sameChartPair(pair, "XRP/RLUSD")) setEstimateSide(chartAction.side);
+    } else if (chartAction.type === "clear_estimate" || chartAction.type === "clear_ai") {
       setEstimateSide(null);
+      if (chartAction.type === "clear_ai") {
+        setDrawings((rows) => rows.filter((row) => !(row && (row.commander || row.source === "commander"))));
+      }
     }
     // ask_side is chat-only; no overlay change until side chosen
     if (chartAction.type !== "lay_tools") return undefined;
@@ -331,7 +339,7 @@ export default function HybridChart({
     };
     // candles/view/plotHeight intentionally read fresh at effect start
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartAction]);
+  }, [chartAction, pair]);
 
   useEffect(() => {
     if (!usesCexTape(pair)) {
@@ -607,9 +615,11 @@ export default function HybridChart({
   });
   const tapeRef = Number(candles[candles.length - 1]?.c) || Number(bands.mid) || livePrice || null;
   const aimDeskMarks = deskOrders ? buildDeskMarks(deskOrders, pair, tapeRef) : [];
-  const aimEstimateMarks = estimate ? buildEstimateMarks(estimate, timeframe, tapeRef) : [];
+  const estimatePair = String(estimate?.pair || "XRP/RLUSD").replace(/\s+/g, "").toUpperCase();
+  const estimateMatchesPair = Boolean(estimate) && sameChartPair(estimatePair, pair);
+  const aimEstimateMarks = estimateMatchesPair ? buildEstimateMarks(estimate, timeframe, tapeRef) : [];
   const aimEstimateScenario =
-    estimate && estimateSide
+    estimateMatchesPair && estimateSide
       ? buildEstimateScenarioOverlay(estimate, timeframe, estimateSide, tapeRef)
       : null;
   const estimateFutureBars = Math.max(0, Number(aimEstimateScenario?.bars || aimEstimateScenario?.path?.length || 0));
@@ -617,6 +627,25 @@ export default function HybridChart({
 
   useEffect(() => {
     const last = candles.length ? candles[candles.length - 1] : null;
+    const source = aimEmbed ? "aim" : "main";
+    const priority = aimEmbed ? 10 : 1;
+    const xrpLead =
+      estimate && sameChartPair(estimate?.pair || "XRP/RLUSD", "XRP/RLUSD")
+        ? {
+            pair: "XRP/RLUSD",
+            bias: estimate.score_bias || estimate.signal || estimate.bias_hour || null,
+            fair_mid: estimate.fair_mid || estimate.mid || null,
+            note: "CEX XRP/RLUSD lead soft context for XDX pairs",
+          }
+        : null;
+    const relatedPairs =
+      pair === "XDX/XRP" || pair === "XRP/XDX"
+        ? ["XRP/RLUSD", "XDX/RLUSD"]
+        : String(pair || "").startsWith("XDX/")
+          ? ["XRP/RLUSD", "XDX/XRP"]
+          : sameChartPair(pair, "XRP/RLUSD")
+            ? ["XDX/XRP", "XDX/RLUSD"]
+            : null;
     publishChartSnapshot(
       buildChartSnapshot({
         pair,
@@ -630,17 +659,21 @@ export default function HybridChart({
         showArb,
         hollow,
         deskMarksCount: Array.isArray(aimDeskMarks) ? aimDeskMarks.length : 0,
-        estimateOn: Boolean(estimate) && ((Array.isArray(aimEstimateMarks) && aimEstimateMarks.length > 0) || Boolean(aimEstimateScenario)),
-        estimateSide: estimateSide || null,
+        estimateOn: estimateMatchesPair && ((Array.isArray(aimEstimateMarks) && aimEstimateMarks.length > 0) || Boolean(aimEstimateScenario)),
+        estimateSide: estimateMatchesPair ? estimateSide || null : null,
         drawings,
         viewMin: view?.min,
         viewMax: view?.max,
         lastClose: last?.c,
         livePrice,
         candles,
-      })
+        xrpLead,
+        relatedPairs,
+      }),
+      { source, priority }
     );
   }, [
+    aimEmbed,
     pair,
     timeframe,
     tool,
@@ -656,11 +689,19 @@ export default function HybridChart({
     aimEstimateScenario,
     estimateSide,
     estimate,
+    estimateMatchesPair,
     drawings,
     view,
     candles,
     livePrice,
   ]);
+
+  useEffect(() => {
+    const source = aimEmbed ? "aim" : "main";
+    return () => {
+      releaseChartSnapshot(source);
+    };
+  }, [aimEmbed]);
 
   const showAimOverlays = Boolean(deskOrders || estimate || aimEstimateScenario);
   const events = microEvents({
@@ -715,6 +756,23 @@ export default function HybridChart({
 
   function clearDrawings() {
     setDrawings([]);
+    setSelected(null);
+    setPending(null);
+    setGhost(null);
+  }
+
+  /** Clear Commander/AI analytical tools only; keep user-placed drawings. */
+  function clearAiTools() {
+    if (aiRunRef.current?.cancel) {
+      try {
+        aiRunRef.current.cancel();
+      } catch {
+        /* ignore */
+      }
+    }
+    setAiCursor({ visible: false, x: 0, y: 0, phase: "", tool: null });
+    setEstimateSide(null);
+    setDrawings((rows) => rows.filter((row) => !(row && (row.commander || row.source === "commander"))));
     setSelected(null);
     setPending(null);
     setGhost(null);
@@ -1041,6 +1099,15 @@ export default function HybridChart({
                 />
                 {t.showLedgerOrders}
               </label>
+              <button
+                type="button"
+                className="hybrid-clear-ai"
+                title={t.chartClearAiTitle || "Clear AI tools (keeps your drawings)"}
+                aria-label={t.chartClearAiTitle || "Clear AI tools (keeps your drawings)"}
+                onClick={clearAiTools}
+              >
+                {t.chartClearAi || "Clear AI"}
+              </button>
               <button
                 type="button"
                 aria-label={t.chartZoomOut}
