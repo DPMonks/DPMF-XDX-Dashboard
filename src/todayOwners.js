@@ -167,7 +167,7 @@ export function buildTodayOwnersPayload({ source, holders = [], offset = 0 } = {
       snapshot_day: utcDay(asOf),
       present: false,
       catching_up: true,
-      count: rows.length ? Number(source?.count || rows.length) : 0,
+      count: Number(source?.count || rows.length) || 0,
       source: source?.kind || "none",
     };
   }

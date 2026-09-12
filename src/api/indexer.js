@@ -687,6 +687,26 @@ async function withXrplToBackup(overview, prices, change) {
   }
 }
 
+
+function preferLedgerCount(endpointBody, overviewCount) {
+  const fromEndpoint = numberOrNull(endpointBody?.count);
+  const fromOverview = numberOrNull(overviewCount);
+  const catching = Boolean(endpointBody?.catching_up) || endpointBody?.present === false;
+  if (catching && fromOverview != null && fromOverview > 0) {
+    return { count: Math.max(fromEndpoint || 0, fromOverview) };
+  }
+  if (fromEndpoint != null && fromEndpoint > 0 && fromOverview != null && fromOverview > 0) {
+    // Partial today/live scans can under-count; keep the healthier on-ledger figure.
+    if (fromEndpoint < fromOverview * 0.5 || fromOverview - fromEndpoint > 500) {
+      return { count: fromOverview };
+    }
+    return { count: Math.max(fromEndpoint, fromOverview) };
+  }
+  if (fromEndpoint != null && fromEndpoint > 0) return { count: fromEndpoint };
+  if (fromOverview != null && fromOverview > 0) return { count: fromOverview };
+  return { count: fromEndpoint ?? fromOverview ?? null };
+}
+
 export async function getTokenDetails(onPartial) {
   const [overview, prices, change] = await Promise.all([
     api.overview().catch(() => ({})),
@@ -716,12 +736,13 @@ export async function getTokenDetails(onPartial) {
         numberOrNull(issuerLocked?.circulating),
       issued: numberOrNull(backed.overview.issued ?? backed.overview.issued_xdx) ?? numberOrNull(issuerLocked?.issued),
     },
-    holders: numberOrNull(holders?.count) ? holders : { count: backed.overview.holder_count },
-    trustlines: numberOrNull(trustlines?.count) ? trustlines : { count: backed.overview.trustline_count },
-    lpHolders: numberOrNull(lpHolders?.count) ? lpHolders : { count: backed.overview.lp_holder_count },
-    lpTrustlines: numberOrNull(lpTrustlines?.count)
-      ? lpTrustlines
-      : { count: backed.overview.lp_trustline_count },
+    holders: preferLedgerCount(holders, backed.overview.holder_count ?? backed.overview.holders),
+    trustlines: preferLedgerCount(
+      trustlines,
+      backed.overview.trustline_count ?? backed.overview.trustlines
+    ),
+    lpHolders: preferLedgerCount(lpHolders, backed.overview.lp_holder_count),
+    lpTrustlines: preferLedgerCount(lpTrustlines, backed.overview.lp_trustline_count),
   });
 }
 

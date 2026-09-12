@@ -1378,7 +1378,9 @@ body {
   font-weight: 600;
   color: #d8caff;
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
@@ -5470,5 +5472,26 @@ body {
 
   .neon-card:hover {
     box-shadow: 0 0 20px rgba(200, 100, 255, 0.25);
+  }
+}
+
+/* Keep holders/trustlines (and other tile values) fully readable on phone/tablet */
+@media (max-width: 900px) {
+  .token-details-grid {
+    grid-auto-rows: minmax(88px, auto);
+  }
+  .token-detail {
+    overflow: visible;
+    height: auto;
+    min-height: 88px;
+  }
+  .token-detail-value {
+    white-space: nowrap;
+    overflow: visible;
+    font-size: 14px;
+  }
+  .token-detail-label {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }
