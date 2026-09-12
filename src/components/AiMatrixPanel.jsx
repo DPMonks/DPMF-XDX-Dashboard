@@ -21,6 +21,54 @@ function ago(iso) {
   return `${Math.round(sec / 3600)}h ago`;
 }
 
+function isAimMobileViewport() {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches;
+}
+
+/** Throttle typewriter reveal updates on mobile to cut layout churn. */
+function createRevealProgress(applyChars, { minMs = 90, minStep = 8 } = {}) {
+  let lastAt = 0;
+  let lastChars = -1;
+  let pending = null;
+  let timer = 0;
+  const flush = () => {
+    timer = 0;
+    if (pending == null) return;
+    const chars = pending;
+    pending = null;
+    lastAt = Date.now();
+    lastChars = chars;
+    applyChars(chars);
+  };
+  return {
+    onProgress({ chars }) {
+      if (!isAimMobileViewport()) {
+        applyChars(chars);
+        return;
+      }
+      pending = chars;
+      const now = Date.now();
+      const due = now - lastAt >= minMs || chars - lastChars >= minStep;
+      if (due) {
+        if (timer) {
+          clearTimeout(timer);
+          timer = 0;
+        }
+        flush();
+        return;
+      }
+      if (!timer) timer = window.setTimeout(flush, Math.max(16, minMs - (now - lastAt)));
+    },
+    flush() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = 0;
+      }
+      flush();
+    },
+  };
+}
+
 export default function AiMatrixPanel({ onChartPropsChange = null, showInlineChart = true } = {}) {
   const { walletAddress } = useWallet();
   const chartSnapshot = useChartSnapshot();
@@ -125,11 +173,16 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     return () => document.removeEventListener("mousedown", onDoc);
   }, [langMenuOpen]);
 
-  // Keep the chat log pinned to the newest line while conversation flows / types.
+  // Pin newest line inside the capped chat viewport (do not grow the page).
   useEffect(() => {
     const el = chatLogRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    const id = requestAnimationFrame(() => {
+      const node = chatLogRef.current;
+      if (!node) return;
+      node.scrollTop = node.scrollHeight;
+    });
+    return () => cancelAnimationFrame(id);
   }, [localChat]);
 
   async function onSend(event) {
@@ -246,24 +299,28 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
           seen.add(step.id || step.text);
           if (step.id === "close") {
             // Speak theory as the closing line on the main bubble
-            spoken = await speakCommander(step.text || reply, {
-              voiceOn,
-              lang: replyLang,
-              onProgress: ({ chars }) => {
+            {
+              const reveal = createRevealProgress((chars) => {
                 if (myGen !== sendGenRef.current) return;
                 setLocalChat((rows) =>
                   rows.map((r) => (r.id === replyId ? { ...r, reveal: chars, speaking: true } : r))
                 );
-              },
-              onDone: () => {
-                if (myGen !== sendGenRef.current) return;
-                setLocalChat((rows) =>
-                  rows.map((r) =>
-                    r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r
-                  )
-                );
-              },
-            });
+              });
+              spoken = await speakCommander(step.text || reply, {
+                voiceOn,
+                lang: replyLang,
+                onProgress: reveal.onProgress,
+                onDone: () => {
+                  reveal.flush();
+                  if (myGen !== sendGenRef.current) return;
+                  setLocalChat((rows) =>
+                    rows.map((r) =>
+                      r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r
+                    )
+                  );
+                },
+              });
+            }
             continue;
           }
           if (step.id === "done") break;
@@ -281,24 +338,28 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
               narrate: true,
             },
           ]);
-          await speakCommander(step.text, {
-            voiceOn,
-            lang: replyLang,
-            onProgress: ({ chars }) => {
+          {
+            const reveal = createRevealProgress((chars) => {
               if (myGen !== sendGenRef.current) return;
               setLocalChat((rows) =>
                 rows.map((r) => (r.id === lineId ? { ...r, reveal: chars, speaking: true } : r))
               );
-            },
-            onDone: () => {
-              if (myGen !== sendGenRef.current) return;
-              setLocalChat((rows) =>
-                rows.map((r) =>
-                  r.id === lineId ? { ...r, reveal: step.text.length, speaking: false } : r
-                )
-              );
-            },
-          });
+            });
+            await speakCommander(step.text, {
+              voiceOn,
+              lang: replyLang,
+              onProgress: reveal.onProgress,
+              onDone: () => {
+                reveal.flush();
+                if (myGen !== sendGenRef.current) return;
+                setLocalChat((rows) =>
+                  rows.map((r) =>
+                    r.id === lineId ? { ...r, reveal: step.text.length, speaking: false } : r
+                  )
+                );
+              },
+            });
+          }
         }
         unsub();
         setLocalChat((rows) =>
@@ -331,24 +392,28 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
             speaking: true,
           },
         ]);
-        spoken = await speakCommander(reply, {
-          voiceOn,
-          lang: replyLang,
-          onProgress: ({ chars }) => {
+        {
+          const reveal = createRevealProgress((chars) => {
             if (myGen !== sendGenRef.current) return;
             setLocalChat((rows) =>
               rows.map((r) => (r.id === replyId ? { ...r, reveal: chars, speaking: true } : r))
             );
-          },
-          onDone: () => {
-            if (myGen !== sendGenRef.current) return;
-            setLocalChat((rows) =>
-              rows.map((r) =>
-                r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r
-              )
-            );
-          },
-        });
+          });
+          spoken = await speakCommander(reply, {
+            voiceOn,
+            lang: replyLang,
+            onProgress: reveal.onProgress,
+            onDone: () => {
+              reveal.flush();
+              if (myGen !== sendGenRef.current) return;
+              setLocalChat((rows) =>
+                rows.map((r) =>
+                  r.id === replyId ? { ...r, reveal: reply.length, speaking: false } : r
+                )
+              );
+            },
+          });
+        }
         if (myGen !== sendGenRef.current) return;
         setLocalChat((rows) =>
           rows.map((r) =>
@@ -380,29 +445,33 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     setLocalChat((rows) =>
       rows.map((r) => (r.id === message.id ? { ...r, speaking: true, needsPlay: false } : r))
     );
-    await playPendingCommanderAudio({
-      text: message.text || "",
-      onProgress: ({ chars }) => {
+    {
+      const reveal = createRevealProgress((chars) => {
         setLocalChat((rows) =>
           rows.map((r) => (r.id === message.id ? { ...r, reveal: chars, speaking: true } : r))
         );
-      },
-      onDone: () => {
-        setLocalChat((rows) =>
-          rows.map((r) =>
-            r.id === message.id
-              ? {
-                  ...r,
-                  reveal: (message.text || "").length,
-                  speaking: false,
-                  voiceEngine: "N1-ryan-natural",
-                  needsPlay: false,
-                }
-              : r
-          )
-        );
-      },
-    });
+      });
+      await playPendingCommanderAudio({
+        text: message.text || "",
+        onProgress: reveal.onProgress,
+        onDone: () => {
+          reveal.flush();
+          setLocalChat((rows) =>
+            rows.map((r) =>
+              r.id === message.id
+                ? {
+                    ...r,
+                    reveal: (message.text || "").length,
+                    speaking: false,
+                    voiceEngine: "N1-ryan-natural",
+                    needsPlay: false,
+                  }
+                : r
+            )
+          );
+        },
+      });
+    }
   }
 
   const liveAgents = data?.agents || [];

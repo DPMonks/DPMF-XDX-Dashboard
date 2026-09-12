@@ -78,7 +78,7 @@
 }
 .aim-moves ul,
 .aim-moves-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.55rem; max-height: none; overflow: visible; }
-.aim-moves-list { transition: opacity 0.28s ease, transform 0.28s ease; }
+.aim-moves-list { transition: opacity 0.28s ease, transform 0.28s ease; will-change: opacity, transform; contain: layout; }
 .aim-moves-list.is-swap { opacity: 0; transform: translateY(8px) scale(0.985); filter: blur(1px); }
 .aim-moves-list:not(.is-swap) li { animation: aim-move-in 0.34s ease both; animation-delay: calc(var(--aim-move-i, 0) * 55ms); }
 @keyframes aim-move-in {
@@ -117,6 +117,8 @@
   display: grid;
   gap: 0.45rem;
   transition: opacity 0.26s ease, transform 0.26s ease;
+  will-change: opacity, transform;
+  contain: layout;
 }
 .aim-desk-pulse-list.is-swap { opacity: 0; transform: translateY(6px) scale(0.985); }
 .aim-desk-pulse-list li {
@@ -146,10 +148,14 @@
   .aim-desk-pulse { display: block; }
   .aim-desk-board { display: none !important; }
 
+  .aim-matrix { gap: 0.55rem; }
+  .aim-matrix-head { gap: 0.45rem; }
+  .aim-matrix-head-main { gap: 0.4rem; }
+
   .aim-moves {
-    padding: 0.65rem 0.7rem;
+    padding: 0.5rem 0.55rem;
   }
-  .aim-moves h3 { font-size: 0.95rem; margin: 0; }
+  .aim-moves h3 { font-size: 0.9rem; margin: 0; }
   .aim-moves li span,
   .aim-moves-list li span {
     display: -webkit-box;
@@ -161,21 +167,115 @@
     word-break: break-word;
   }
   .aim-moves li {
-    gap: 0.1rem;
-    padding: 0.35rem 0;
+    gap: 0.08rem;
+    padding: 0.28rem 0;
   }
 
-  /* Keep under-agent lists bounded so the drawer does not become a tall block */
+  /* Cap Commander chat: internal scroll only — avoid one tall sticky block */
+  .aim-chat,
+  .aim-drawer-panel .aim-chat,
+  .aim-drawer-body .aim-chat {
+    min-height: 0 !important;
+    max-height: none;
+    padding: 0.55rem 0.55rem 0.6rem;
+  }
+  .aim-chat-head { margin: 0 0 0.45rem; gap: 0.5rem; }
+  .aim-chat-head h3 { font-size: 0.92rem; }
+  .aim-commander-avatar { width: 2.25rem; height: 2.25rem; }
+  .aim-commander-status { font-size: 0.75rem; }
+  .aim-chat-log,
+  .aim-drawer-body .aim-chat-log,
+  .aim-drawer-panel .aim-chat-log {
+    min-height: 120px !important;
+    max-height: min(34vh, 240px) !important;
+    overflow: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 0.5rem;
+    gap: 0.4rem;
+    contain: layout paint;
+  }
+  .aim-bubble {
+    padding: 0.35rem 0.5rem;
+    border-radius: 8px;
+  }
+  .aim-bubble p { margin: 0.12rem 0 0; font-size: 0.86rem; line-height: 1.35; }
+  .aim-bubble small { font-size: 0.68rem; }
+  .aim-chat-form { gap: 0.4rem; }
+  .aim-chat-form input,
+  .aim-chat-form button {
+    padding: 0.5rem 0.65rem;
+    font-size: 0.86rem;
+  }
+
+  /* Compact agent strip; reserved height reduces status-refresh jump */
+  .aim-agent-strip,
+  .aim-drawer-panel .aim-agent-strip {
+    gap: 0.4rem;
+    align-items: stretch;
+  }
+  .aim-agent-chip,
+  .aim-drawer-panel .aim-agent-chip {
+    padding: 0.45rem 0.5rem;
+    border-radius: 10px;
+    min-height: 6.35rem;
+    box-sizing: border-box;
+  }
+  .aim-agent-chip .aim-agent-role { font-size: 0.66rem; margin: 0.1rem 0 0.05rem; }
+  .aim-agent-chip p { margin: 0.18rem 0; font-size: 0.82rem; }
+  .aim-agent-logo-wrap { width: 1.55rem; height: 1.55rem; }
+
+  /* Stable rotate slots (3 recent / 2 pulse) — no collapse mid-swap */
   .aim-drawer-body .aim-moves ul,
   .aim-drawer-body .aim-moves-list,
   .aim-drawer-body .aim-desk-pulse-list {
     max-height: none;
     overflow: visible;
   }
-  .aim-drawer-body .aim-chat-log {
-    min-height: 220px;
-    max-height: min(42vh, 320px);
-    overflow: auto;
+  .aim-drawer-body .aim-moves-list {
+    min-height: 6.9rem;
+  }
+  .aim-drawer-body .aim-desk-pulse-list {
+    min-height: 4.85rem;
+  }
+  .aim-desk-pulse { padding: 0.5rem 0.55rem; }
+  .aim-desk-pulse-note { margin: 0 0 0.35rem; font-size: 0.72rem; }
+  .aim-desk-pulse-list { gap: 0.3rem; }
+  .aim-desk-pulse-list li { padding: 0.28rem 0.1rem; }
+
+  .aim-drawer-body {
+    padding: 0.65rem 0.7rem max(0.85rem, env(safe-area-inset-bottom, 0px));
+  }
+  .aim-drawer-head {
+    padding: max(0.65rem, env(safe-area-inset-top, 0px)) 0.75rem 0.55rem 0.85rem;
+  }
+  .aim-drawer-title { font-size: 1.05rem; }
+
+  /* Chart TF / pair chips: horizontal scroll, no width explosion */
+  .aim-drawer-body .aim-merged-chart { padding: 0.55rem; gap: 0.45rem; }
+  .aim-drawer-body .aim-merged-chart-head { gap: 0.45rem; }
+  .aim-drawer-body .aim-merged-chart h3 { font-size: 0.95rem; }
+  .aim-drawer-body .hybrid-ranges,
+  .aim-drawer-body .aim-desk-chart-tfs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .aim-drawer-body .hybrid-chart .range,
+  .aim-drawer-body .aim-desk-chart-tf {
+    flex: 0 0 auto;
+  }
+  .aim-drawer-body .hybrid-pairs,
+  .aim-drawer-body .hybrid-topbar {
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
 @media (max-width: 960px) {
@@ -470,7 +570,7 @@
   }
   .aim-agent-chip,
   .aim-drawer-panel .aim-agent-chip {
-    min-height: 7.25rem;
+    min-height: 6.5rem;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -654,8 +754,15 @@
 @media (prefers-reduced-motion: reduce) {
   .aim-drawer-panel,
   .aim-drawer-backdrop,
-  body.aim-drawer-open #root {
+  body.aim-drawer-open #root,
+  .aim-moves-list,
+  .aim-desk-pulse-list,
+  .aim-edge-tab {
     transition-duration: 0.01ms !important;
+  }
+  .aim-moves-list:not(.is-swap) li,
+  .aim-desk-pulse-list:not(.is-swap) li {
+    animation: none !important;
   }
   body.aim-drawer-open #root { transform: none; }
 }
@@ -1109,13 +1216,25 @@
   display: inline-block;
 }
 @media (max-width: 900px) {
-  .aim-desk-chart { padding: 0.65rem 0.7rem; }
+  .aim-desk-chart { padding: 0.55rem 0.6rem; }
   .aim-desk-chart-head { flex-direction: column; align-items: stretch; }
-  .aim-desk-chart-plot { min-height: 240px; }
-  .aim-desk-chart-plot svg { max-height: 300px; }
-  .aim-desk-chart-sub { font-size: 0.74rem; }
-  .aim-drawer-body .aim-desk-chart-plot { min-height: 220px; }
-  .aim-drawer-body .aim-desk-chart-plot svg { max-height: 280px; }
+  .aim-desk-chart-controls { align-items: stretch; width: 100%; }
+  .aim-desk-chart-tfs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+  .aim-desk-chart-tf { flex: 0 0 auto; padding: 0.3rem 0.45rem; font-size: 0.72rem; }
+  .aim-desk-chart-layers { justify-content: flex-start; }
+  .aim-desk-chart-plot { min-height: 220px; }
+  .aim-desk-chart-plot svg { max-height: 280px; }
+  .aim-desk-chart-sub { font-size: 0.72rem; }
+  .aim-drawer-body .aim-desk-chart-plot { min-height: 200px; }
+  .aim-drawer-body .aim-desk-chart-plot svg { max-height: 260px; }
 }
 
 
