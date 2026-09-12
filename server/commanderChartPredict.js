@@ -28,10 +28,20 @@ function formatPx(v) {
 const CMD_COLOR = {
   bull: "#98f050",
   bear: "#ff5d73",
+  support: "#98f050",
+  resistance: "#ff5d73",
   fib: "#3d8bff",
   level: "#ffe14a",
   trend: "#c770ff",
 };
+
+/** Green support / red resistance for structure trendlines. */
+export function trendLineColor(role) {
+  const r = String(role || "").toLowerCase();
+  if (r === "support" || r === "demand" || r === "support_trend") return CMD_COLOR.support;
+  if (r === "resistance" || r === "supply" || r === "resistance_trend") return CMD_COLOR.resistance;
+  return CMD_COLOR.trend;
+}
 
 const MIN_TREND_BARS = 4;
 
@@ -163,8 +173,8 @@ export function isValidDiagonal(a, b, { minBars = MIN_TREND_BARS } = {}) {
   if (i1 != null && i2 != null && Math.abs(i2 - i1) < minBars) return false;
   // Meaningful time span (avoid synthetic 1ms stubs)
   if (Math.abs(t2 - t1) < 60_000) return false;
-  // Must have price slope (not a horizontal disguised as trend when used as fib extremes at one x)
-  if (p1 === p2) return false;
+  // Near-horizontal is OK for framing support/resist (wick-anchored). Reject only zero time span.
+  // Tiny equal-price spans still qualify when bars/time are far enough apart.
   return true;
 }
 
@@ -299,16 +309,22 @@ export function detectTrendAnchors(chartContext, side) {
       }
     } else {
       const lows = localSwingLows(rows, 2);
+      // Prefer higher lows, then accept descending/near-flat wick lows (wedge/channel support).
+      let rising = null;
+      let any = null;
       for (let i = 0; i < lows.length; i += 1) {
         for (let j = i + 1; j < lows.length; j += 1) {
           const a = lows[i];
           const b = lows[j];
           if (b.index - a.index < MIN_TREND_BARS) continue;
-          // Prefer higher lows for support
-          if (b.price >= a.price * 0.998 && isValidDiagonal(a, b)) {
-            return { a, b, last: rows[rows.length - 1], rows, source: "candles_trend", side, role: "support" };
-          }
+          if (!isValidDiagonal(a, b)) continue;
+          if (!any) any = { a, b };
+          if (b.price >= a.price * 0.998 && !rising) rising = { a, b };
         }
+      }
+      const pick = rising || any;
+      if (pick) {
+        return { a: pick.a, b: pick.b, last: rows[rows.length - 1], rows, source: "candles_trend", side, role: "support" };
       }
       if (lows.length >= 2) {
         const a = lows[0];
@@ -329,7 +345,7 @@ export function detectTrendAnchors(chartContext, side) {
   // Last resort: spaced points on visible range using candle times when possible
   const fibLike = detectStructureSwings(chartContext, side);
   if (!fibLike?.a || !fibLike?.b) return null;
-  // Do NOT use fib A/B (impulse high/low) as trend — rebuild from thirds of the series
+  // Do NOT use fib A/B (impulse high/low) as trend .  rebuild from thirds of the series
   const rows2 = fibLike.rows || [];
   if (rows2.length >= 8) {
     const n = rows2.length;
@@ -346,6 +362,57 @@ export function detectTrendAnchors(chartContext, side) {
     }
   }
   return null;
+}
+
+/**
+ * Pair support (green) + resistance (red) on candle wicks to frame a breakout zone.
+ * Shapes: descending/ascending wedge, channel, single slant pair, triangle.
+ */
+export function detectTrendFrame(chartContext) {
+  const support = detectTrendAnchors(chartContext, "bull");
+  const resistance = detectTrendAnchors(chartContext, "bear");
+  if (!support?.a || !support?.b || !resistance?.a || !resistance?.b) return null;
+  if (!isValidDiagonal(support.a, support.b) || !isValidDiagonal(resistance.a, resistance.b)) return null;
+  // Resistance should sit above support at both anchors when possible
+  const gapA = num(resistance.a.price) - num(support.a.price);
+  const gapB = num(resistance.b.price) - num(support.b.price);
+  if (!(gapA > 0) && !(gapB > 0)) return null;
+  const sSlope = (support.b.price - support.a.price) / Math.max(1, Math.abs((support.b.index ?? 0) - (support.a.index ?? 0)));
+  const rSlope = (resistance.b.price - resistance.a.price) / Math.max(1, Math.abs((resistance.b.index ?? 0) - (resistance.a.index ?? 0)));
+  let shape = "structure_channel";
+  const narrowing = gapA > 0 && gapB > 0 && gapB < gapA * 0.88;
+  const widening = gapA > 0 && gapB > 0 && gapB > gapA * 1.12;
+  if (narrowing) {
+    if (rSlope < 0 && sSlope <= 0.0000001) shape = "descending_wedge";
+    else if (rSlope >= 0 && sSlope > 0) shape = "ascending_wedge";
+    else if (rSlope < 0 && sSlope > 0) shape = "symmetrical_triangle";
+    else shape = "wedge";
+  } else if (widening) {
+    shape = rSlope < 0 ? "expanding_channel" : "expanding_structure";
+  } else if (Math.abs(rSlope - sSlope) <= Math.max(Math.abs(rSlope), Math.abs(sSlope), 1e-12) * 0.45) {
+    if (rSlope < -1e-12) shape = "descending_channel";
+    else if (rSlope > 1e-12) shape = "ascending_channel";
+    else shape = "horizontal_channel";
+  } else if (rSlope < 0 && sSlope > 0) {
+    shape = "symmetrical_triangle";
+  }
+  const rows = support.rows || resistance.rows || candleRows(chartContext);
+  const last = rows.length ? rows[rows.length - 1] : null;
+  // Acute breakout tip: later gap / projected meet zone
+  const breakout = {
+    upper: resistance.b.price,
+    lower: support.b.price,
+    mid: (resistance.b.price + support.b.price) / 2,
+  };
+  return {
+    support: { ...support, role: "support" },
+    resistance: { ...resistance, role: "resistance" },
+    shape,
+    breakout,
+    last,
+    rows,
+    source: "candles_frame",
+  };
 }
 
 /** Infer bull/bear from visible candles when user did not specify. */
@@ -387,7 +454,7 @@ export function inferSideFromChart(chartContext, hint = null) {
 function wantTools(question) {
   const q = String(question || "").toLowerCase();
   const fib = /\bfib(onacci)?\b|\bretrace(ment)?\b|\bfibext\b|\bextension\b|\bgolden\b/.test(q);
-  const explicitTrend = /\btrend(\s*line)?s?\b|\bstructure\b|\bchannel\b/.test(q);
+  const explicitTrend = /\btrend(\s*line)?s?\b|\bstructure\b|\bchannel\b|\bwedge\b/.test(q);
   const supportOrResist = /\b(support|resist(ance)?|demand|supply)\b/.test(q);
   const lineWord = /\b(line|hline|horizontal|level)s?\b/.test(q);
   // "support line" / "place support" => horizontal support (hline). "support trendline" => diagonal.
@@ -407,8 +474,20 @@ function wantTools(question) {
     (supportOrResist && lineWord && !explicitTrend);
   const multi = /\b(and|plus|with|also|stack|combo|all (the )?tools|full (kit|set))\b/.test(q);
   const countOne =
-    /\b(1|one|single|a)\s+(trend(\s*line)?|support|resist|hline|line)\b/.test(q) ||
-    /\b(lay|draw|place)\s+(1|one|me\s+a|a)\b/.test(q);
+    /\b(1|one|single)\s+(trend(\s*line)?|support|resist|hline|line)\b/.test(q) ||
+    /\b(lay|draw|place)\s+(1|one)\b/.test(q);
+  const namedOneSide =
+    (/\b(support|demand|higher\s*lows?)\b/.test(q) && !/\b(resist(ance)?|supply)\b/.test(q)) ||
+    (/\b(resist(ance)?|supply|lower\s*highs?)\b/.test(q) && !/\b(support|demand)\b/.test(q));
+  const pluralOrFrame =
+    /\btrend\s*lines\b|\btrends\b|\bchannel\b|\bwedge\b|\bboth\s+(sides?|lines)|support\s*(and|&|\+)\s*resist|resist\s*(and|&|\+)\s*support|frame|breakout\s*zone\b/.test(
+      q
+    );
+  // Prefer green+red pair when user asks for trendlines without naming only one side.
+  const pairTrends =
+    Boolean(pluralOrFrame) ||
+    Boolean(trend && !namedOneSide && !countOne && !fib) ||
+    Boolean(multi && trend);
   const supportOrResistTrendOnly =
     supportOrResist &&
     explicitTrend &&
@@ -417,25 +496,35 @@ function wantTools(question) {
 
   if (supportLineOnly) {
     // One support/resist horizontal; optional diagonal only if they also said trend
-    return { fib: false, trend: false, hline: true, multi: false, maxTrends: 0, maxHlines: 1, supportLine: true };
+    return { fib: false, trend: false, hline: true, multi: false, maxTrends: 0, maxHlines: 1, supportLine: true, pairTrends: false };
   }
   if (supportOrResistTrendOnly || (trend && !fib && !hline && !multi && !/\b(prediction|predict|estimate|projection)\b/.test(q))) {
-    return { fib: false, trend: true, hline: false, multi: false, maxTrends: 1, maxHlines: 0 };
+    return {
+      fib: false,
+      trend: true,
+      hline: false,
+      multi: false,
+      maxTrends: pairTrends && !namedOneSide ? 2 : 1,
+      maxHlines: 0,
+      pairTrends: pairTrends && !namedOneSide,
+    };
   }
   if (fib && !trend && !hline && !multi) {
-    return { fib: true, trend: false, hline: false, multi: false, maxTrends: 0, maxHlines: 0 };
+    return { fib: true, trend: false, hline: false, multi: false, maxTrends: 0, maxHlines: 0, pairTrends: false };
   }
   if (!fib && !trend && !hline) {
-    return { fib: true, trend: true, hline: true, multi: true, maxTrends: 1, maxHlines: 3 };
+    // Full prediction kit: include support+resistance trend pair when structure allows.
+    return { fib: true, trend: true, hline: true, multi: true, maxTrends: 2, maxHlines: 3, pairTrends: true };
   }
   return {
     fib: fib || (multi && !trend && !hline),
     trend: trend || multi,
     hline: hline || multi,
     multi,
-    maxTrends: countOne ? 1 : 1,
+    maxTrends: countOne ? 1 : pairTrends ? 2 : 1,
     maxHlines: supportLineOnly ? 1 : 3,
     supportLine: supportLineOnly,
+    pairTrends: Boolean(pairTrends && !countOne),
   };
 }
 
@@ -471,6 +560,11 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
     return { drawings: [], structure: null, tools, narrate_steps: [], side };
   }
 
+  const frame =
+    tools.trend && (tools.pairTrends || (tools.maxTrends || 0) >= 2)
+      ? detectTrendFrame(chartContext)
+      : null;
+
   narrate_steps.push({
     id: "open",
     text: scrub(
@@ -478,11 +572,13 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
         ? side === "bull"
           ? "Placing a bullish support line on the recent swing low."
           : "Placing a bearish resistance line on the recent swing high."
-        : tools.trend && !tools.fib
-          ? side === "bull"
-            ? "Laying one support trendline on the higher lows."
-            : "Laying one resistance trendline on the lower highs."
-          : `Laying ${side === "bull" ? "bullish" : "bearish"} HybridChart tools on the visible swings.`
+        : tools.trend && !tools.fib && frame?.support && frame?.resistance
+          ? `Laying green support and red resistance on candle wicks to frame a ${String(frame.shape || "structure").replace(/_/g, " ")} breakout zone.`
+          : tools.trend && !tools.fib
+            ? side === "bull"
+              ? "Laying one green support trendline on the swing lows."
+              : "Laying one red resistance trendline on the swing highs."
+            : `Laying ${side === "bull" ? "bullish" : "bearish"} HybridChart tools on the visible swings.`
     ),
   });
 
@@ -518,41 +614,72 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
     );
   }
 
-  if (tools.trend && trendStructure?.a && trendStructure?.b && isValidDiagonal(trendStructure.a, trendStructure.b)) {
-    const a = pointPayload(trendStructure.a);
-    const b = pointPayload(trendStructure.b);
-    // Hard reject vertical / same-x before apply
-    if (a.t !== b.t && Math.abs(a.t - b.t) >= 60_000) {
-      narrate_steps.push({ id: "tool:trend", text: "Selecting the trendline tool." });
-      narrate_steps.push({
-        id: "anchor:trend:a",
-        text: scrub(
-          side === "bull"
-            ? `Anchoring the earlier swing low near ${formatPx(a.price)}.`
-            : `Anchoring the earlier swing high near ${formatPx(a.price)}.`
-        ),
-      });
-      narrate_steps.push({
-        id: "anchor:trend:b",
-        text: scrub(
-          side === "bull"
-            ? `Anchoring the later swing low near ${formatPx(b.price)} for support.`
-            : `Anchoring the later swing high near ${formatPx(b.price)} for resistance.`
-        ),
-      });
-      drawings.push(
-        tagCommander({
-          kind: "trend",
-          color: CMD_COLOR.trend,
-          a,
-          b,
-          strokeWidth: 2,
-          lineStyle: "solid",
-          role: trendStructure.role || (side === "bull" ? "support" : "resistance"),
-        })
-      );
-      // Cap at 1 trendline when requested
-      void tools.maxTrends;
+  function pushTrend(structure, roleLabel) {
+    if (!structure?.a || !structure?.b || !isValidDiagonal(structure.a, structure.b)) return false;
+    const a = pointPayload(structure.a);
+    const b = pointPayload(structure.b);
+    if (a.t === b.t || Math.abs(a.t - b.t) < 60_000) return false;
+    const role = structure.role || roleLabel || (side === "bull" ? "support" : "resistance");
+    const color = trendLineColor(role);
+    narrate_steps.push({ id: `tool:trend:${role}`, text: "Selecting the trendline tool." });
+    narrate_steps.push({
+      id: `anchor:trend:${role}:a`,
+      text: scrub(
+        role === "support"
+          ? `Anchoring the earlier swing low wick near ${formatPx(a.price)}.`
+          : `Anchoring the earlier swing high wick near ${formatPx(a.price)}.`
+      ),
+    });
+    narrate_steps.push({
+      id: `anchor:trend:${role}:b`,
+      text: scrub(
+        role === "support"
+          ? `Anchoring the later swing low wick near ${formatPx(b.price)} for green support.`
+          : `Anchoring the later swing high wick near ${formatPx(b.price)} for red resistance.`
+      ),
+    });
+    drawings.push(
+      tagCommander({
+        kind: "trend",
+        color,
+        a,
+        b,
+        strokeWidth: 2,
+        lineStyle: "solid",
+        role,
+      })
+    );
+    return true;
+  }
+
+  let trendsLaid = 0;
+  if (tools.trend) {
+    if (frame?.support && frame?.resistance && (tools.pairTrends || (tools.maxTrends || 0) >= 2)) {
+      if (pushTrend(frame.support, "support")) trendsLaid += 1;
+      if (trendsLaid < (tools.maxTrends || 2) && pushTrend(frame.resistance, "resistance")) trendsLaid += 1;
+      if (trendsLaid >= 2) {
+        const tipHi = formatPx(frame.breakout?.upper);
+        const tipLo = formatPx(frame.breakout?.lower);
+        narrate_steps.push({
+          id: "frame:breakout",
+          text: scrub(
+            tipHi && tipLo
+              ? `Framing an acute breakout zone between about ${tipLo} and ${tipHi}. Watch either side.`
+              : "Framing an acute breakout zone between the green and red lines. Watch either side."
+          ),
+        });
+      }
+    }
+    if (trendsLaid === 0 && trendStructure?.a && trendStructure?.b) {
+      if (pushTrend(trendStructure, trendStructure.role || (side === "bull" ? "support" : "resistance"))) {
+        trendsLaid += 1;
+      }
+    }
+    // If pair requested but only one side locked, try the other side alone
+    if (trendsLaid === 1 && (tools.pairTrends || (tools.maxTrends || 0) >= 2)) {
+      const otherSide = side === "bull" ? "bear" : "bull";
+      const other = detectTrendAnchors(chartContext, otherSide);
+      if (other) pushTrend(other, other.role || (otherSide === "bull" ? "support" : "resistance"));
     }
   }
 
@@ -617,10 +744,16 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
         id: `anchor:hline:${lvl.role}`,
         text: scrub(`Anchoring ${lvl.role.replace(/_/g, " ")} near ${formatPx(px)}.`),
       });
+      const hColor =
+        String(lvl.role) === "support"
+          ? CMD_COLOR.support
+          : String(lvl.role) === "resistance"
+            ? CMD_COLOR.resistance
+            : CMD_COLOR.level;
       drawings.push(
         tagCommander({
           kind: "hline",
-          color: CMD_COLOR.level,
+          color: hColor,
           t: lvl.t || Date.now(),
           price: px,
           strokeWidth: 2,
@@ -655,21 +788,25 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
     }
   }
 
-  return { drawings, structure, tools, narrate_steps, side, trendStructure, fibStructure };
+  return { drawings, structure, tools, narrate_steps, side, trendStructure, fibStructure, frame };
 }
 
-function patternName(side, structure, tools) {
+function patternName(side, structure, tools, frame) {
   if (tools?.supportLine || (tools?.hline && !tools?.fib && !tools?.trend)) {
     return side === "bull" ? "horizontal support line" : "horizontal resistance line";
   }
+  if (frame?.shape && tools?.trend) {
+    const nice = String(frame.shape).replace(/_/g, " ");
+    return `${nice} (green support + red resistance)`;
+  }
   if (tools?.trend && !tools?.fib) {
-    return side === "bull" ? "rising support trendline" : "falling resistance trendline";
+    return side === "bull" ? "green support trendline on swing lows" : "red resistance trendline on swing highs";
   }
   if (tools?.fib && tools?.trend) {
     return side === "bull" ? "bullish impulse with Fibonacci pullback map" : "bearish impulse with Fibonacci continuation map";
   }
   if (tools?.fib) return side === "bull" ? "Fibonacci retracement on the upswing" : "Fibonacci retracement on the downswing";
-  if (tools?.trend) return side === "bull" ? "rising structure trendline" : "falling structure trendline";
+  if (tools?.trend) return side === "bull" ? "green support structure trendline" : "red resistance structure trendline";
   return "support and resistance levels";
 }
 
@@ -739,6 +876,22 @@ function isXdxPair(pair) {
 
 function isXrpLeadPair(pair) {
   return samePair(pair, "XRP/RLUSD") || samePair(pair, "XRP/USD");
+}
+
+function crossCurrencyNote(side, chartContext, estimate) {
+  const notes = [];
+  const pair = String(chartContext?.pair || "");
+  if (!wantsCrossCurrency("", chartContext) && !isXdxPair(pair)) return notes;
+  if (isXdxPair(pair) || samePair(pair, "XRP/RLUSD") || samePair(pair, "XRP/USD")) {
+    notes.push(
+      scrub(
+        "Cross-currency: softer XRP versus RLUSD can pressure XDX/XRP and related XDX pairs; firmer XRP can ease that pressure. Soft context only."
+      )
+    );
+  }
+  void side;
+  void estimate;
+  return notes;
 }
 
 function wantsCrossCurrency(question, chartContext) {
@@ -956,15 +1109,29 @@ function theoryText(side, chartContext, built, estimate) {
     bits.push("I could not lock a clear swing on the visible candles yet. Keep the HybridChart open and ask me to place the support line again.");
     return scrub(bits.join(" "));
   }
-  const pattern = patternName(side, built.structure, built.tools);
+  const pattern = patternName(side, built.structure, built.tools, built.frame);
   bits.push(`Laying a ${pattern} on ${pair} ${tf}.`);
-  if (built.tools?.trend && built.trendStructure) {
+  if (built.frame?.support && built.frame?.resistance) {
+    const sA = formatPx(built.frame.support.a.price);
+    const sB = formatPx(built.frame.support.b.price);
+    const rA = formatPx(built.frame.resistance.a.price);
+    const rB = formatPx(built.frame.resistance.b.price);
+    bits.push(`Green support joins candle wick lows near ${sA} and ${sB}.`);
+    bits.push(`Red resistance joins candle wick highs near ${rA} and ${rB}.`);
+    const tipLo = formatPx(built.frame.breakout?.lower);
+    const tipHi = formatPx(built.frame.breakout?.upper);
+    if (tipLo && tipHi) {
+      bits.push(`Those lines frame an acute breakout zone around ${tipLo} to ${tipHi}.`);
+    } else {
+      bits.push("Those lines frame an acute breakout zone for the next decisive move.");
+    }
+  } else if (built.tools?.trend && built.trendStructure) {
     const aPx = formatPx(built.trendStructure.a.price);
     const bPx = formatPx(built.trendStructure.b.price);
     bits.push(
       side === "bull"
-        ? `Support trendline joins swing lows near ${aPx} and ${bPx}.`
-        : `Resistance trendline joins swing highs near ${aPx} and ${bPx}.`
+        ? `Green support trendline joins swing low wicks near ${aPx} and ${bPx}.`
+        : `Red resistance trendline joins swing high wicks near ${aPx} and ${bPx}.`
     );
   } else if (built.fibStructure) {
     const aPx = formatPx(built.fibStructure.a.price);
@@ -983,11 +1150,20 @@ function theoryText(side, chartContext, built, estimate) {
     );
   }
   if (built.tools?.trend) {
-    bits.push(
-      side === "bull"
-        ? "The diagonal tracks rising support between those lows; a clean hold keeps the bullish continuation theory alive."
-        : "The diagonal tracks falling resistance between those highs; acceptance below keeps the bearish continuation theory alive."
-    );
+    if (built.frame?.support && built.frame?.resistance) {
+      bits.push(
+        "Structure is wick-anchored, not mid-body guesses. A clean break and hold above red resistance favours the buy path; a clean break and hold below green support favours the sell path."
+      );
+      bits.push(
+        "If the setup is worth trading I prepare both buy and sell eventualities at that breakout zone. Soft recommend only; cost-plus-fee profit gate stays the only hard block."
+      );
+    } else {
+      bits.push(
+        side === "bull"
+          ? "The green diagonal tracks support between those lows; a clean hold keeps the bullish continuation theory alive."
+          : "The red diagonal tracks resistance between those highs; acceptance below keeps the bearish continuation theory alive."
+      );
+    }
   }
   if (built.tools?.supportLine || (built.tools?.hline && !built.tools?.fib && !built.tools?.trend)) {
     bits.push(
@@ -1003,6 +1179,10 @@ function theoryText(side, chartContext, built, estimate) {
       side === "bull"
         ? "Next-move theory: watch for a hold above that support. This is a prediction, not fact."
         : "Next-move theory: watch for rejection under that resistance. This is a prediction, not fact."
+    );
+  } else if (built.frame?.support && built.frame?.resistance) {
+    bits.push(
+      "Next-move theory: wait for the breakout or breakdown from the framed zone, then favour continuation in that direction. This is a prediction, not fact."
     );
   } else {
     bits.push(
@@ -1021,6 +1201,12 @@ function theoryText(side, chartContext, built, estimate) {
   const setup = analysePatternSetups(chartContext, side);
   const rec = patternRecommendText(setup, chartContext?.timeframe);
   if (rec) bits.push(rec);
+  // Soft both-sides prep when a framed structure or estimate kit is on the chart
+  if (built.frame?.support && built.frame?.resistance) {
+    const alt = analysePatternSetups(chartContext, side === "bull" ? "bear" : "bull");
+    const altRec = patternRecommendText(alt, chartContext?.timeframe);
+    if (altRec) bits.push(scrub(`Other side: ${altRec}`));
+  }
   for (const note of crossCurrencyNote(side, chartContext, useEstimate ? estimate : null)) bits.push(note);
   bits.push(learningScopeNote());
   return scrub(bits.join(" "));
