@@ -120,6 +120,8 @@ const en = {
   chartCandles: "Candles",
   chartRibbonLine: "Ribbon line",
   chartArbitrage: "Arbitrage",
+  chartAmmRibbon: "AMM S/R ribbon",
+  chartAmmRibbonPad: "Ribbon pad",
   chartVolumeWave: "Volume wave",
   chartRsi: "RSI",
   chartRsiPeriod: "Length",

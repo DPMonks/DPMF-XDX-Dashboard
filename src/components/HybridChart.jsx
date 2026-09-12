@@ -24,6 +24,7 @@ import { fullViewPriceHeight } from "../chart/fullView";
 import { quotePerXdx } from "../chart/pairQuote";
 import {
   ammRebalanceTrail,
+  ammSupportResistanceRibbon,
   arbitrageWindow,
   bookBands,
   heatmapDots,
@@ -145,6 +146,8 @@ export default function HybridChart({
   const [magnet, setMagnet] = useState(false);
   const [hollow, setHollow] = useState(false);
   const [showArb, setShowArb] = useState(false);
+  const [showAmmRibbon, setShowAmmRibbon] = useState(false);
+  const [ammRibbonBps, setAmmRibbonBps] = useState(0);
   const [maType, setMaType] = useState("sma");
   const [maPeriods, setMaPeriods] = useState([50]);
   const [showVolume, setShowVolume] = useState(true);
@@ -596,6 +599,7 @@ export default function HybridChart({
   const walls = liquidityWalls(book);
   const header = bookHeader(book);
   const arb = arbitrageWindow(ammPrice, header.mid || livePrice);
+  const ammRibbon = ammSupportResistanceRibbon(ammPrice, header.mid || livePrice, { padBps: ammRibbonBps });
   const autoView = smartView(candles, { rangeId: "Max", spread: bands.spread, now });
   const view = scalePriceView(autoView, { zoom: priceZoom, shift: priceShift });
   const heat = heatmapDots(trades.filter((row) => !row.pool || String(row.pool).toUpperCase() === pair));
@@ -669,6 +673,8 @@ export default function HybridChart({
         candles,
         xrpLead,
         relatedPairs,
+        ammRibbon,
+        showAmmRibbon,
       }),
       { source, priority }
     );
@@ -683,6 +689,9 @@ export default function HybridChart({
     showVolume,
     showRsi,
     showArb,
+    showAmmRibbon,
+    ammRibbonBps,
+    ammRibbon,
     hollow,
     aimDeskMarks,
     aimEstimateMarks,
@@ -960,6 +969,22 @@ export default function HybridChart({
           <input type="checkbox" checked={showArb} onChange={(event) => setShowArb(event.target.checked)} />
           {t.chartArbitrage}
         </label>
+        <label className="hybrid-toggle">
+          <input type="checkbox" checked={showAmmRibbon} onChange={(event) => setShowAmmRibbon(event.target.checked)} />
+          {t.chartAmmRibbon || "AMM S/R ribbon"}
+        </label>
+        {showAmmRibbon ? (
+          <label className="hybrid-toggle">
+            {t.chartAmmRibbonPad || "Ribbon pad"}
+            <select value={ammRibbonBps} onChange={(event) => setAmmRibbonBps(Number(event.target.value))}>
+              {[0, 5, 10, 25, 50].map((bps) => (
+                <option key={bps} value={bps}>
+                  {bps} bps
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <div className="hybrid-ind">
           <label className="hybrid-toggle">
             <input type="checkbox" checked={showVolume} onChange={(event) => setShowVolume(event.target.checked)} />
@@ -1161,6 +1186,7 @@ export default function HybridChart({
             showRsi={showRsi}
             showArb={showArb}
             showLedgerOrders={showLedgerOrders}
+            ammRibbon={showAmmRibbon ? ammRibbon : null}
             aimDeskMarks={aimDeskMarks}
             aimEstimateMarks={aimEstimateMarks}
             aimEstimateScenario={aimEstimateScenario}

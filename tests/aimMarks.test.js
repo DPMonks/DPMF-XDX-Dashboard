@@ -5,6 +5,10 @@ import {
   classifyDeskMarkStyle,
   deskMarkAskPrompt,
   deskMarkColor,
+  deskMarkPaintColor,
+  deskMarkTouchClusterFlags,
+  DESK_CLUSTER_PURPLE,
+  DESK_CLUSTER_TOOLTIP,
 } from "../src/chart/aimMarks.js";
 
 test("classifyDeskMarkStyle splits filled vs resting", () => {
@@ -44,4 +48,23 @@ test("deskMarkAskPrompt is ASCII without em dashes", () => {
   assert.match(prompt, /XRP\/RLUSD/);
   assert.match(prompt, /2\.1/);
   assert.equal(/[\u2010-\u2015\u2212]/.test(prompt), false);
+});
+
+test("deskMarkTouchClusterFlags paints purple only for touching centres", () => {
+  const isolated = deskMarkTouchClusterFlags([
+    { x: 10, y: 10, r: 3.6 },
+    { x: 100, y: 100, r: 3.6 },
+  ]);
+  assert.deepEqual(isolated, [false, false]);
+
+  const touching = deskMarkTouchClusterFlags([
+    { x: 10, y: 10, r: 3.6 },
+    { x: 16, y: 10, r: 3.6 },
+    { x: 200, y: 200, r: 3.6 },
+  ]);
+  assert.deepEqual(touching, [true, true, false]);
+  assert.equal(deskMarkPaintColor({ side: "buy", color: "#26a69a" }, true), DESK_CLUSTER_PURPLE);
+  assert.equal(deskMarkPaintColor({ side: "sell", color: "#ef5350" }, false), "#ef5350");
+  assert.equal(/[\u2010-\u2015\u2212]/.test(DESK_CLUSTER_TOOLTIP), false);
+  assert.match(DESK_CLUSTER_TOOLTIP, /Tight cluster/);
 });

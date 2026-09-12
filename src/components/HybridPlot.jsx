@@ -8,6 +8,12 @@ import { applyPlaceOffset, canMoveHandle, clickIsPan, drawingToolbarAnchor, hitP
 import { hideToolPreview, paintPlaceMark, paintToolPreview } from "../chart/paintPreview";
 import ChartDrawings from "./ChartDrawings";
 import ChartEditBar from "./ChartEditBar";
+import {
+  DESK_CLUSTER_TOOLTIP,
+  deskMarkDotRadius,
+  deskMarkPaintColor,
+  deskMarkTouchClusterFlags,
+} from "../chart/aimMarks";
 
 const VOL_H = 72;
 const RSI_H = 72;
@@ -47,6 +53,7 @@ export default function HybridPlot({
   showRsi = true,
   showArb = false,
   showLedgerOrders = false,
+  ammRibbon = null,
   aimDeskMarks = [],
   aimEstimateMarks = [],
   aimEstimateScenario = null,
@@ -147,6 +154,32 @@ export default function HybridPlot({
   const yTicks = useMemo(() => priceTicks(scale.min, scale.max, TICK_COUNT), [scale.min, scale.max]);
   const xTicks = useMemo(() => scale.ticks(TICK_COUNT), [scale]);
   const volumes = useMemo(() => volumeWaveValues(candles), [candles]);
+  const laidAimDeskMarks = useMemo(() => {
+    const rows = Array.isArray(aimDeskMarks) ? aimDeskMarks : [];
+    if (!rows.length) return [];
+    const lastT = candles.length ? candles[candles.length - 1].t : null;
+    const laid = rows.map((m, i) => {
+      const y = scale.y(m.price);
+      if (!Number.isFinite(y)) return null;
+      const xFromT = m.t != null ? scale.x(m.t) : null;
+      const x =
+        Number.isFinite(xFromT)
+          ? xFromT
+          : Number.isFinite(scale.x(lastT))
+            ? scale.x(lastT) - 10 - (i % 5) * 7
+            : PAD.l + 14 + (i % 5) * 8;
+      if (!Number.isFinite(x)) return null;
+      const resting = m.style === "resting" || m.resting;
+      const r = deskMarkDotRadius(m);
+      return { m, i, x, y, r, resting };
+    }).filter(Boolean);
+    const flags = deskMarkTouchClusterFlags(laid.map((row) => ({ x: row.x, y: row.y, r: row.r })));
+    return laid.map((row, idx) => ({
+      ...row,
+      inCluster: Boolean(flags[idx]),
+      color: deskMarkPaintColor(row.m, flags[idx]),
+    }));
+  }, [aimDeskMarks, candles, scale]);
   const seenSet = new Set(seenTs);
   const freshBars = candles
     .map((row) => row.t)
@@ -779,6 +812,21 @@ export default function HybridPlot({
             />
           ) : null}
 
+          {ammRibbon && Number(ammRibbon.support) > 0 && Number(ammRibbon.resistance) > Number(ammRibbon.support) ? (
+            <g className="hybrid-amm-ribbon" pointerEvents="none">
+              <rect
+                className="hybrid-amm-ribbon-band"
+                x={PAD.l}
+                y={scale.y(ammRibbon.resistance)}
+                width={innerW}
+                height={Math.max(1.5, scale.y(ammRibbon.support) - scale.y(ammRibbon.resistance))}
+              />
+              <text className="hybrid-amm-ribbon-label" x={PAD.l + 6} y={scale.y(ammRibbon.resistance) - 4}>
+                AMM S/R
+              </text>
+            </g>
+          ) : null}
+
           {(showArb ? walls : []).map((wall) => (
             <rect
               key={`wall-${wall.side}-${wall.price}`}
@@ -1041,23 +1089,10 @@ export default function HybridPlot({
             );
           })}
 
-          {(aimDeskMarks || []).map((m, i) => {
-            const y = scale.y(m.price);
-            if (!Number.isFinite(y)) return null;
-            const lastT = candles.length ? candles[candles.length - 1].t : null;
-            const xFromT = m.t != null ? scale.x(m.t) : null;
-            const x =
-              Number.isFinite(xFromT)
-                ? xFromT
-                : Number.isFinite(scale.x(lastT))
-                  ? scale.x(lastT) - 10 - (i % 5) * 7
-                  : PAD.l + 14 + (i % 5) * 8;
-            const color = m.color || (m.side === "sell" ? DOWN : UP);
-            const resting = m.style === "resting" || m.resting;
-            return (
+          {laidAimDeskMarks.map(({ m, i, x, y, r, resting, inCluster, color }) => (
               <g
                 key={m.key || `aim-desk-${i}`}
-                className={`hybrid-aim-desk is-${m.side} is-${resting ? "resting" : "filled"}`}
+                className={`hybrid-aim-desk is-${m.side} is-${resting ? "resting" : "filled"}${inCluster ? " is-cluster" : ""}`}
                 style={{ cursor: onAimDeskMarkClick ? "pointer" : "default" }}
                 onPointerDown={(event) => {
                   if (!onAimDeskMarkClick) return;
@@ -1072,20 +1107,20 @@ export default function HybridPlot({
                   onAimDeskMarkClick(m);
                 }}
               >
+                {inCluster ? <title>{DESK_CLUSTER_TOOLTIP}</title> : null}
                 <circle className="hybrid-aim-desk-hit" cx={x} cy={y} r={10} fill="transparent" />
                 <circle
                   className="hybrid-aim-desk-dot"
                   cx={x}
                   cy={y}
-                  r={resting ? 4.2 : 3.6}
+                  r={r}
                   fill={resting ? "none" : color}
                   stroke={color}
                   strokeWidth={resting ? 1.6 : 1.1}
                   opacity={resting ? 0.55 : 0.95}
                 />
               </g>
-            );
-          })}
+            ))}
 
           {ghost?.next > 0 ? (
             <g className="hybrid-ghost">

@@ -36,7 +36,7 @@ import {
 } from "../src/chart/candles.js";
 import { bucketTime, CHART_PAIRS, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
-import { ammImpact, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, percentile, scalePriceView, shiftAfterPriceZoom, smartView, zoomPriceScale } from "../src/chart/overlays.js";
+import { ammImpact, ammSupportResistanceRibbon, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, percentile, scalePriceView, shiftAfterPriceZoom, smartView, zoomPriceScale } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { fullViewPriceHeight } from "../src/chart/fullView.js";
@@ -1080,4 +1080,17 @@ test("composePairCandles clips absurd close spike on XDX DEX tape", () => {
   assert.ok(spike);
   assert.ok(spike.c < 1, `composed close should be clipped, got ${spike.c}`);
   assert.ok(spike.h < 1);
+});
+
+test("ammSupportResistanceRibbon builds support/resistance from AMM vs mid", () => {
+  const rib = ammSupportResistanceRibbon(2.0, 2.02, { padBps: 0 });
+  assert.ok(rib);
+  assert.equal(rib.support, 2.0);
+  assert.equal(rib.resistance, 2.02);
+  assert.equal(rib.amm_price, 2.0);
+  assert.equal(rib.mid, 2.02);
+  const padded = ammSupportResistanceRibbon(2.0, 2.02, { padBps: 50 });
+  assert.ok(padded.support < 2.0);
+  assert.ok(padded.resistance > 2.02);
+  assert.equal(ammSupportResistanceRibbon(0, 2), null);
 });

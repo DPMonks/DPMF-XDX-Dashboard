@@ -102,6 +102,85 @@ export function deskMarkColor(side) {
   return normalizeDeskSide(side) === "sell" ? SELL_DOT : BUY_DOT;
 }
 
+/** Brand violet for touch/overlap desk-mark clusters (zoom-in cue). Never use commander yellow on desk dots. */
+export const DESK_CLUSTER_PURPLE = "#c770ff";
+export const DESK_CLUSTER_TOOLTIP = "Tight cluster. Zoom in for detail.";
+
+/** Visual radius of the painted desk dot (matches HybridPlot). */
+export function deskMarkDotRadius(mark = {}) {
+  const resting = mark.style === "resting" || mark.resting;
+  return resting ? 4.2 : 3.6;
+}
+
+/**
+ * Screen-space touch clusters: centres within r_i + r_j form an edge;
+ * any connected component of size >= 2 is a tight cluster.
+ * @param {{ x:number, y:number, r?:number }[]} points
+ * @returns {boolean[]} true when that index is in a touch cluster
+ */
+export function deskMarkTouchClusterFlags(points = []) {
+  const n = Array.isArray(points) ? points.length : 0;
+  const flags = Array(n).fill(false);
+  if (n < 2) return flags;
+  const rOf = (p) => {
+    const r = Number(p?.r);
+    return Number.isFinite(r) && r > 0 ? r : 3.6;
+  };
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (i) => {
+    let x = i;
+    while (parent[x] !== x) x = parent[x];
+    let y = i;
+    while (y !== x) {
+      const next = parent[y];
+      parent[y] = x;
+      y = next;
+    }
+    return x;
+  };
+  const unite = (a, b) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[rb] = ra;
+  };
+  for (let i = 0; i < n; i += 1) {
+    const a = points[i];
+    const ax = Number(a?.x);
+    const ay = Number(a?.y);
+    if (!Number.isFinite(ax) || !Number.isFinite(ay)) continue;
+    const ra = rOf(a);
+    for (let j = i + 1; j < n; j += 1) {
+      const b = points[j];
+      const bx = Number(b?.x);
+      const by = Number(b?.y);
+      if (!Number.isFinite(bx) || !Number.isFinite(by)) continue;
+      const rb = rOf(b);
+      const dx = ax - bx;
+      const dy = ay - by;
+      const lim = ra + rb;
+      if (dx * dx + dy * dy <= lim * lim) unite(i, j);
+    }
+  }
+  const sizes = Object.create(null);
+  for (let i = 0; i < n; i += 1) {
+    const root = find(i);
+    sizes[root] = (sizes[root] || 0) + 1;
+  }
+  for (let i = 0; i < n; i += 1) {
+    if (sizes[find(i)] >= 2) flags[i] = true;
+  }
+  return flags;
+}
+
+/**
+ * Resolve paint color for a desk mark after cluster detection.
+ * Isolated marks keep green/red; touch-cluster members go purple.
+ */
+export function deskMarkPaintColor(mark = {}, inCluster = false) {
+  if (inCluster) return DESK_CLUSTER_PURPLE;
+  return mark.color || deskMarkColor(mark.side);
+}
+
 function pickTactic(row = {}) {
   return asciiClean(
     row.tactic ||

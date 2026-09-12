@@ -155,6 +155,8 @@ export function buildChartSnapshot({
   candles = [],
   xrpLead = null,
   relatedPairs = null,
+  ammRibbon = null,
+  showAmmRibbon = false,
 } = {}) {
   const kinds = {};
   for (const row of Array.isArray(drawings) ? drawings : []) {
@@ -170,6 +172,20 @@ export function buildChartSnapshot({
   };
   const candleRows = slimCandles(candles);
   const swings = pickSwingHighLow(candleRows);
+  const ribbonIn = ammRibbon && typeof ammRibbon === "object" ? ammRibbon : null;
+  const ammRibbonOut = ribbonIn
+    ? {
+        support: round(ribbonIn.support),
+        resistance: round(ribbonIn.resistance),
+        amm_price: round(ribbonIn.amm_price ?? ribbonIn.ammPrice),
+        mid: round(ribbonIn.mid),
+        pct: round(ribbonIn.pct),
+        pad_bps: Number.isFinite(Number(ribbonIn.pad_bps ?? ribbonIn.padBps))
+          ? Math.max(0, Math.round(Number(ribbonIn.pad_bps ?? ribbonIn.padBps)))
+          : 0,
+        ui_visible: Boolean(showAmmRibbon),
+      }
+    : null;
   const pairNorm = String(pair || "").replace(/\s+/g, "").toUpperCase() || null;
   const lead =
     xrpLead && typeof xrpLead === "object"
@@ -199,6 +215,7 @@ export function buildChartSnapshot({
       desk_marks_count: Number(deskMarksCount) || 0,
       estimate: Boolean(estimateOn),
       estimate_side: estimateSide === "bear" || estimateSide === "bull" ? estimateSide : null,
+      amm_ribbon: Boolean(showAmmRibbon),
     },
     price: {
       last_close: round(lastClose),
@@ -221,6 +238,8 @@ export function buildChartSnapshot({
       xrp_lead: lead,
       related: related,
     },
+    // Always include AMM S/R ribbon bounds for Commander when computable (UI toggle only affects ui_visible / overlays.amm_ribbon).
+    amm_ribbon: ammRibbonOut,
     at: new Date().toISOString(),
   };
 }

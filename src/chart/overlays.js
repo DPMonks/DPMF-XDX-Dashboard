@@ -109,6 +109,34 @@ export function arbitrageWindow(ammPrice, mid) {
   };
 }
 
+/**
+ * AMM support/resistance ribbon from AMM spot vs book/spot mid.
+ * lo/hi are the arb window bounds; optional padBps widens the band for short-TF cues.
+ * Always compute for Commander chart_context; UI overlay is optional.
+ */
+export function ammSupportResistanceRibbon(ammPrice, mid, { padBps = 0 } = {}) {
+  const amm = Number(ammPrice);
+  const book = Number(mid);
+  if (!(amm > 0) || !(book > 0)) return null;
+  let lo = Math.min(amm, book);
+  let hi = Math.max(amm, book);
+  const centre = (lo + hi) / 2;
+  const pad = centre * (Math.max(0, Number(padBps) || 0) / 10_000);
+  lo = Math.max(0, lo - pad);
+  hi = hi + pad;
+  if (!(hi > lo)) return null;
+  const pct = ((book - amm) / amm) * 100;
+  return {
+    support: lo,
+    resistance: hi,
+    amm_price: amm,
+    mid: book,
+    pct,
+    pad_bps: Math.max(0, Number(padBps) || 0),
+    width: hi - lo,
+  };
+}
+
 export function heatmapDots(trades = [], { now = Date.now(), maxAgeMs = 24 * 3_600_000 } = {}) {
   return (Array.isArray(trades) ? trades : [])
     .map((row) => {
