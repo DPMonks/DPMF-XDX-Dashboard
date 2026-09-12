@@ -118,7 +118,7 @@ const en = {
   chartHollow: "Hollow candles",
   chartPlotMode: "Chart render",
   chartCandles: "Candles",
-  chartRibbonLine: "Ribbon line",
+  chartRibbonLine: "AMM channel",
   chartArbitrage: "Arbitrage",
   chartAmmRibbon: "AMM S/R ribbon",
   chartAmmRibbonPad: "Ribbon pad",

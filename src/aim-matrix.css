@@ -607,6 +607,13 @@
   inset: 0;
   z-index: 9500;
   pointer-events: none;
+  --aim-panel-w: min(560px, 48vw, 100%);
+}
+@media (min-width: 901px) and (max-width: 1200px) {
+  .aim-drawer-root { --aim-panel-w: min(520px, 52vw); }
+}
+@media (min-width: 1201px) {
+  .aim-drawer-root { --aim-panel-w: min(560px, 42vw); }
 }
 .aim-drawer-root.is-open {
   pointer-events: auto;
@@ -635,7 +642,7 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(560px, 48vw, 100%);
+  width: var(--aim-panel-w);
   max-width: 100%;
   display: flex;
   flex-direction: column;
@@ -730,12 +737,12 @@
 
 @media (min-width: 901px) and (max-width: 1200px) {
   .aim-drawer-panel {
-    width: min(520px, 52vw);
+    width: var(--aim-panel-w);
   }
 }
 @media (min-width: 1201px) {
   .aim-drawer-panel {
-    width: min(560px, 42vw);
+    width: var(--aim-panel-w);
   }
 }
 
@@ -1259,18 +1266,8 @@
 .aim-drawer-root.has-chart-pane .aim-drawer-backdrop {
   /* Dim only behind the right panel; left chart stays clear */
   left: auto;
-  width: min(560px, 42vw);
+  width: var(--aim-panel-w);
   background: rgba(5, 5, 8, 0.35);
-}
-@media (min-width: 901px) and (max-width: 1200px) {
-  .aim-drawer-root.has-chart-pane .aim-drawer-backdrop {
-    width: min(520px, 52vw);
-  }
-}
-@media (min-width: 1201px) {
-  .aim-drawer-root.has-chart-pane .aim-drawer-backdrop {
-    width: min(560px, 42vw);
-  }
 }
 
 .aim-drawer-chart-pane {
@@ -1284,7 +1281,10 @@
     top: 0;
     left: 0;
     bottom: 0;
-    right: min(560px, 42vw);
+    right: var(--aim-panel-w);
+    width: auto;
+    max-width: none;
+    min-width: 0;
     z-index: 2;
     padding: 0.65rem 0.75rem 0.75rem;
     box-sizing: border-box;
@@ -1292,16 +1292,6 @@
     overflow: hidden;
     overscroll-behavior: contain;
     pointer-events: auto;
-  }
-}
-@media (min-width: 901px) and (max-width: 1200px) {
-  .aim-drawer-root.is-open.has-chart-pane .aim-drawer-chart-pane {
-    right: min(520px, 52vw);
-  }
-}
-@media (min-width: 1201px) {
-  .aim-drawer-root.is-open.has-chart-pane .aim-drawer-chart-pane {
-    right: min(560px, 42vw);
   }
 }
 
@@ -1339,8 +1329,19 @@
 }
 .aim-drawer-chart-pane .hybrid-plot-wrap .hybrid-svg,
 .aim-drawer-chart-pane .hybrid-plot {
+  width: 100%;
+  min-width: 0;
   min-height: 160px;
-  height: 100%;
+  height: auto;
+}
+.aim-drawer-chart-pane .hybrid-chart,
+.aim-drawer-chart-pane .aim-merged-chart,
+.aim-drawer-chart-pane .hybrid-body,
+.aim-drawer-chart-pane .hybrid-main,
+.aim-drawer-chart-pane .hybrid-plot-wrap {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
 }
 
 .aim-merged-chart {

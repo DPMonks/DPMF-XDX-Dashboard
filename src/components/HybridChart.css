@@ -89,11 +89,33 @@
 
 .hybrid-topbar {
   flex: 0 0 auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   min-height: 36px;
   padding: 5px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  overflow-x: auto;
+  overflow-x: hidden;
+}
+
+.hybrid-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.hybrid-options-toggles,
+.hybrid-options-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+  width: 100%;
 }
 
 .hybrid-body {
@@ -346,6 +368,8 @@
 .hybrid-plot {
   position: relative;
   padding: 0;
+  width: 100%;
+  min-width: 0;
   background: #000000;
   overscroll-behavior: contain;
 }
@@ -548,7 +572,7 @@
 .hybrid-ma,
 .hybrid-ind {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
@@ -728,7 +752,8 @@
 }
 
 .hybrid-ma select,
-.hybrid-ind select {
+.hybrid-ind select,
+.hybrid-options-fields select {
   background: var(--dpmf-bg-elevated);
   color: var(--dpmf-text-muted);
   border: 1px solid var(--dpmf-border-soft);
@@ -1411,13 +1436,17 @@
 
 .hybrid-chart.is-aim-embed {
   min-height: 0;
+  width: 100%;
+  max-width: none;
   height: auto;
 }
 
 .hybrid-chart.is-aim-embed .hybrid-topbar,
+.hybrid-chart.is-aim-embed .hybrid-options,
 .hybrid-chart.is-aim-embed .hybrid-ranges,
 .hybrid-chart.is-aim-embed .hybrid-footer,
 .hybrid-chart.is-fullview .hybrid-topbar,
+.hybrid-chart.is-fullview .hybrid-options,
 .hybrid-chart.is-fullview .hybrid-ranges {
   flex: 0 0 auto;
 }
@@ -1432,7 +1461,8 @@
 .hybrid-chart.is-aim-embed .hybrid-svg,
 .hybrid-chart.is-fullview .hybrid-plot,
 .hybrid-chart.is-fullview .hybrid-svg {
-  height: 100%;
+  width: 100%;
+  height: auto;
   min-height: 160px;
 }
 
@@ -1470,12 +1500,12 @@
   .aim-drawer-body .hybrid-pairs,
   .aim-drawer-body .hybrid-topbar,
   .aim-drawer-body .hybrid-ma,
-  .aim-drawer-body .hybrid-ind {
+  .aim-drawer-body .hybrid-ind,
+  .aim-drawer-body .hybrid-options,
+  .aim-drawer-chart-pane .hybrid-options {
     max-width: 100%;
     min-width: 0;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
+    overflow-x: hidden;
   }
 }
 
@@ -1544,15 +1574,43 @@
 
 .hybrid-plot-mode {
   display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  height: 24px;
+  border: 1px solid var(--dpmf-border-soft);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--dpmf-bg-elevated);
+  flex: 0 0 auto;
 }
 
-.hybrid-plot-mode .pair-chip {
-  min-height: 32px;
-  padding: 4px 10px;
-  font-size: 12px;
+.hybrid-plot-mode button {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  margin: 0;
+  border: 0;
+  border-right: 1px solid var(--dpmf-border-soft);
+  border-radius: 0;
+  background: transparent;
+  color: var(--dpmf-text-muted);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hybrid-plot-mode button:last-child {
+  border-right: 0;
+}
+
+.hybrid-plot-mode button.is-on,
+.hybrid-plot-mode button[aria-pressed="true"] {
+  background: rgba(199, 112, 255, 0.22);
+  color: var(--dpmf-text-main);
 }
 
 .hybrid-ribbon-band {
@@ -1586,10 +1644,14 @@
 }
 
 @media (max-width: 900px) {
-  .hybrid-plot-mode .pair-chip {
-    min-height: 44px;
-    padding: 8px 12px;
-    font-size: 13px;
+  .hybrid-plot-mode {
+    height: 28px;
+  }
+  .hybrid-plot-mode button {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: 12px;
   }
 }
 

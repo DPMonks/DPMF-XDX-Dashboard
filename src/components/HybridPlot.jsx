@@ -111,7 +111,25 @@ export default function HybridPlot({
   const onPricePanRef = useRef(onPricePan);
   const scaleRef = useRef(null);
   const uid = useId().replace(/:/g, "");
-  const width = 960;
+  const [width, setWidth] = useState(960);
+
+  useEffect(() => {
+    const node = box.current;
+    if (!node) return undefined;
+    const apply = (raw) => {
+      const next = Math.round(Number(raw) || 0);
+      if (!Number.isFinite(next) || next < 80) return;
+      setWidth((cur) => (Math.abs(cur - next) < 1 ? cur : next));
+    };
+    apply(node.clientWidth || node.getBoundingClientRect().width);
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver((entries) => {
+      const measured = entries[0]?.contentRect?.width;
+      if (Number.isFinite(measured) && measured > 0) apply(measured);
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, []);
   const volH = showVolume ? VOL_H : 0;
   const rsiH = showRsi ? RSI_H : 0;
   const volTop = PAD.t + PRICE_H + (volH ? 4 : 0);

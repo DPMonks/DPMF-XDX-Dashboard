@@ -20,7 +20,7 @@ import {
 import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../chart/indicators";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { defaultCexLimit, fetchCexCandles, usesCexTape } from "../chart/cexCandles";
-import { fullViewPriceHeight } from "../chart/fullView";
+import { boxPriceHeight, fullViewPriceHeight } from "../chart/fullView";
 import { quotePerXdx } from "../chart/pairQuote";
 import {
   ammRebalanceTrail,
@@ -815,6 +815,8 @@ export default function HybridChart({
     };
   }, [selected, fullView]);
 
+  const [embedBoxH, setEmbedBoxH] = useState(0);
+
   useEffect(() => {
     if (!fullView) return undefined;
     const prev = document.body.style.overflow;
@@ -830,6 +832,28 @@ export default function HybridChart({
       window.removeEventListener("orientationchange", onResize);
     };
   }, [fullView]);
+
+  useEffect(() => {
+    if (!aimEmbed || fullView) {
+      setEmbedBoxH(0);
+      return undefined;
+    }
+    const node = plotWrapRef.current;
+    if (!node) return undefined;
+    const apply = (raw) => {
+      const next = Math.round(Number(raw) || 0);
+      if (!Number.isFinite(next) || next < 80) return;
+      setEmbedBoxH((cur) => (Math.abs(cur - next) < 2 ? cur : next));
+    };
+    apply(node.clientHeight);
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver((entries) => {
+      const measured = entries[0]?.contentRect?.height;
+      if (Number.isFinite(measured) && measured > 0) apply(measured);
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, [aimEmbed, fullView, showVolume, showRsi]);
 
   function applyZoom(directionOrEvent, maybeRatio) {
     const fromEvent = directionOrEvent && typeof directionOrEvent === "object";
@@ -890,7 +914,9 @@ export default function HybridChart({
 
   const plotHeight = fullView
     ? fullViewPriceHeight(viewH, { volume: showVolume, rsi: showRsi })
-    : undefined;
+    : aimEmbed && embedBoxH
+      ? boxPriceHeight(embedBoxH, { volume: showVolume, rsi: showRsi })
+      : undefined;
   const chart = (
     <div className={`hybrid-chart${showArb && arb?.highlight ? " is-arb" : ""}${fullView ? " is-fullview" : ""}${aimEmbed ? " is-aim-embed" : ""}`}>
       {fullView ? (
@@ -945,26 +971,13 @@ export default function HybridChart({
             </label>
           ))}
         </div>
+      </div>
+      <div className="hybrid-options">
+        <div className="hybrid-options-toggles">
         <label className="hybrid-toggle">
           <input type="checkbox" checked={hollow} onChange={(event) => setHollow(event.target.checked)} />
           {t.chartHollow}
         </label>
-        <div className="hybrid-plot-mode" role="group" aria-label={t.chartPlotMode || "Chart render"}>
-          <button
-            type="button"
-            className={plotMode === "candles" ? "pair-chip active" : "pair-chip"}
-            onClick={() => setPlotMode("candles")}
-          >
-            {t.chartCandles || "Candles"}
-          </button>
-          <button
-            type="button"
-            className={plotMode === "ribbon" ? "pair-chip active" : "pair-chip"}
-            onClick={() => setPlotMode("ribbon")}
-          >
-            {t.chartRibbonLine || "Ribbon line"}
-          </button>
-        </div>
         <label className="hybrid-toggle">
           <input type="checkbox" checked={showArb} onChange={(event) => setShowArb(event.target.checked)} />
           {t.chartArbitrage}
@@ -973,6 +986,36 @@ export default function HybridChart({
           <input type="checkbox" checked={showAmmRibbon} onChange={(event) => setShowAmmRibbon(event.target.checked)} />
           {t.chartAmmRibbon || "AMM S/R ribbon"}
         </label>
+        <label className="hybrid-toggle">
+          <input type="checkbox" checked={showVolume} onChange={(event) => setShowVolume(event.target.checked)} />
+          {t.chartVolumeWave}
+        </label>
+        <label className="hybrid-toggle">
+          <input type="checkbox" checked={showRsi} onChange={(event) => setShowRsi(event.target.checked)} />
+          {t.chartRsi}
+        </label>
+        </div>
+        <div className="hybrid-options-fields">
+        <div className="hybrid-plot-mode" role="group" aria-label={t.chartPlotMode || "Chart render"}>
+          <button
+            type="button"
+            className={plotMode === "candles" ? "is-on" : undefined}
+            aria-pressed={plotMode === "candles"}
+            title={t.chartCandles || "Candles"}
+            onClick={() => setPlotMode("candles")}
+          >
+            {t.chartCandles || "Candles"}
+          </button>
+          <button
+            type="button"
+            className={plotMode === "ribbon" ? "is-on" : undefined}
+            aria-pressed={plotMode === "ribbon"}
+            title={t.chartRibbonLine || "AMM channel"}
+            onClick={() => setPlotMode("ribbon")}
+          >
+            {t.chartRibbonLine || "AMM channel"}
+          </button>
+        </div>
         {showAmmRibbon ? (
           <label className="hybrid-toggle">
             {t.chartAmmRibbonPad || "Ribbon pad"}
@@ -985,72 +1028,40 @@ export default function HybridChart({
             </select>
           </label>
         ) : null}
-        <div className="hybrid-ind">
-          <label className="hybrid-toggle">
-            <input type="checkbox" checked={showVolume} onChange={(event) => setShowVolume(event.target.checked)} />
-            {t.chartVolumeWave}
-          </label>
-          <label className="hybrid-toggle">
-            <input type="checkbox" checked={showRsi} onChange={(event) => setShowRsi(event.target.checked)} />
-            {t.chartRsi}
-          </label>
-          {showRsi ? (
-            <>
-              <label className="hybrid-toggle">
-                {t.chartRsiPeriod}
-                <select value={rsiPeriod} onChange={(event) => setRsiPeriod(Number(event.target.value))}>
-                  {RSI_PERIODS.map((period) => (
-                    <option key={period} value={period}>
-                      {period}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="hybrid-toggle">
-                {t.chartRsiOverbought}
-                <select value={rsiOverbought} onChange={(event) => setRsiOverbought(Number(event.target.value))}>
-                  {RSI_OVERBOUGHT.map((level) => (
-                    <option key={level} value={level}>
-                      {level}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="hybrid-toggle">
-                {t.chartRsiOversold}
-                <select value={rsiOversold} onChange={(event) => setRsiOversold(Number(event.target.value))}>
-                  {RSI_OVERSOLD.map((level) => (
-                    <option key={level} value={level}>
-                      {level}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </>
-          ) : null}
-        </div>
-        <div className="hybrid-zoom" role="group" aria-label={t.chartZoom}>
-          <button
-            type="button"
-            aria-label={t.chartZoomOut}
-            disabled={visibleCount >= ZOOM_BAR_MAX}
-            onClick={() => applyZoom(-1)}
-          >
-            −
-          </button>
-          <button
-            type="button"
-            aria-label={t.chartZoomIn}
-            disabled={visibleCount <= ZOOM_BAR_MIN}
-            onClick={() => applyZoom(1)}
-          >
-            +
-          </button>
-          {phone && !fullView ? (
-            <button type="button" className="hybrid-fullview-enter" onClick={() => setFullView(true)}>
-              {t.chartFullView}
-            </button>
-          ) : null}
+        {showRsi ? (
+          <>
+            <label className="hybrid-toggle">
+              {t.chartRsiPeriod}
+              <select value={rsiPeriod} onChange={(event) => setRsiPeriod(Number(event.target.value))}>
+                {RSI_PERIODS.map((period) => (
+                  <option key={period} value={period}>
+                    {period}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="hybrid-toggle">
+              {t.chartRsiOverbought}
+              <select value={rsiOverbought} onChange={(event) => setRsiOverbought(Number(event.target.value))}>
+                {RSI_OVERBOUGHT.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="hybrid-toggle">
+              {t.chartRsiOversold}
+              <select value={rsiOversold} onChange={(event) => setRsiOversold(Number(event.target.value))}>
+                {RSI_OVERSOLD.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : null}
         </div>
       </div>
 

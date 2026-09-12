@@ -39,7 +39,7 @@ import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/cha
 import { ammImpact, ammSupportResistanceRibbon, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, percentile, scalePriceView, shiftAfterPriceZoom, smartView, zoomPriceScale } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
-import { fullViewPriceHeight } from "../src/chart/fullView.js";
+import { boxPriceHeight, fullViewPriceHeight } from "../src/chart/fullView.js";
 import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, formatPriceLabel, priceLabelWidth, priceTicks, timeTagOrigin, timeTagWidth, timeTicks } from "../src/chart/axis.js";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, rsi, rsiForWindow, volumeWaveValues, wavePath } from "../src/chart/indicators.js";
 import {
@@ -956,6 +956,12 @@ test("full view plot height fills the leftover phone viewport after chrome and p
   assert.equal(fullViewPriceHeight(800, { volume: true, rsi: true }), 484);
   assert.equal(fullViewPriceHeight(500, { volume: false, rsi: false }), 344);
   assert.equal(fullViewPriceHeight(200, { volume: true, rsi: true }), 240);
+});
+
+test("boxPriceHeight uses the measured plot wrap so the shared AIM chart fills leftover width", () => {
+  assert.equal(boxPriceHeight(520, { volume: true, rsi: true }), 312);
+  assert.equal(boxPriceHeight(400, { volume: false, rsi: false }), 348);
+  assert.equal(boxPriceHeight(100, { volume: true, rsi: true }), 220);
 });
 
 test("appendLiveClose updates the current UTC day instead of inventing a second candle", () => {
