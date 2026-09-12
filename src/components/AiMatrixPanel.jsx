@@ -94,8 +94,6 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   const sendMessageRef = useRef(null);
   const handledAskSeqRef = useRef(0);
   const sendGenRef = useRef(0);
-  const [movePage, setMovePage] = useState(0);
-  const [moveSwap, setMoveSwap] = useState(false);
   const [pulsePage, setPulsePage] = useState(0);
   const [pulseSwap, setPulseSwap] = useState(false);
 
@@ -525,35 +523,12 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     };
   });
   const movements = data?.movements || [];
-  const MOVE_PAGE_SIZE = 3;
-  const MOVE_HOLD_MS = 1400;
-  const movePool = Array.isArray(movements) ? movements.slice(0, 18) : [];
-  const movePageCount = Math.max(1, Math.ceil(Math.max(movePool.length, 1) / MOVE_PAGE_SIZE));
-  const movePageSafe = movePage % movePageCount;
-  const visibleMoves = movePool.slice(
-    movePageSafe * MOVE_PAGE_SIZE,
-    movePageSafe * MOVE_PAGE_SIZE + MOVE_PAGE_SIZE
-  );
-
-  useEffect(() => {
-    setMovePage(0);
-  }, [movePool.length]);
-
-  useEffect(() => {
-    if (movePool.length <= MOVE_PAGE_SIZE) return undefined;
-    let fadeTimer = 0;
-    const tick = window.setInterval(() => {
-      setMoveSwap(true);
-      fadeTimer = window.setTimeout(() => {
-        setMovePage((p) => (p + 1) % Math.ceil(movePool.length / MOVE_PAGE_SIZE));
-        setMoveSwap(false);
-      }, 280);
-    }, MOVE_HOLD_MS);
-    return () => {
-      window.clearInterval(tick);
-      if (fadeTimer) window.clearTimeout(fadeTimer);
-    };
-  }, [movePool.length]);
+  const movePool = Array.isArray(movements) ? movements.slice(0, 24) : [];
+  function recentMovesFor(agentId, limit = 3) {
+    return movePool
+      .filter((m) => String(m.agent_id || m.from || m.id || "") === String(agentId))
+      .slice(0, limit);
+  }
 
   // Compact mobile desk pulse: one live line per agent, rotate 2 at a time
   const pulsePool = agents.map((a) => {
@@ -684,7 +659,19 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     <div className="aim-matrix" onPointerDown={() => { if (voiceOn) unlockCommanderAudio(); }}>
       <div className="aim-matrix-head">
         <div className="aim-matrix-head-main">
-          <p className="aim-matrix-kicker">Observe-only | ephemeral chat | no wallets shown</p>
+          {(() => {
+            const live =
+              data?.desk?.phase === "live" ||
+              data?.desk_phase === "live" ||
+              data?.desk?.read_only === false ||
+              data?.read_only === false;
+            const mode = data?.desk?.trade_mode || data?.trade_mode || (live ? "live" : "internal");
+            return (
+              <p className="aim-matrix-kicker">
+                {live ? `LIVE desk | ${mode}` : "Internal desk"} | ephemeral chat | no wallets shown
+              </p>
+            );
+          })()}
         <div className="aim-matrix-actions">
           <div className="aim-toolbar-item aim-lang">
             <span className="aim-toolbar-kicker">XDX | Language</span>
@@ -840,11 +827,12 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
       ) : null}
 
       <div className="aim-agent-strip" role="list">
-        {agents.map(
-          (agent) => (
+        {agents.map((agent) => {
+            const agentMoves = recentMovesFor(agent.id, 3);
+            return (
             <article
               key={agent.id}
-              className="aim-agent-chip"
+              className="aim-agent-chip is-roomy"
               role="listitem"
               title={[agent.role || aimAgentRole(agent.id), agent.identity || aimAgentProfile(agent.id)?.identity].filter(Boolean).join(", ")}
             >
@@ -858,7 +846,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
               {(agent.role || aimAgentRole(agent.id)) ? (
                 <p className="aim-agent-role">{agent.role || aimAgentRole(agent.id)}</p>
               ) : null}
-              <p>{agent.status || "-"}</p>
+              <p className="aim-agent-status">{agent.status || "-"}</p>
               <small>{ago(agent.last_seen_at)}</small>
               {agent.meta?.pools?.pool_count != null ? (
                 <small className="aim-meta">Pools {agent.meta.pools.pool_count}</small>
@@ -868,40 +856,22 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
               ) : agent.meta?.skill?.summary ? (
                 <small className="aim-meta">{String(agent.meta.skill.summary).slice(0, 42)}</small>
               ) : null}
+              <div className="aim-agent-moves" aria-label={`Recent movement for ${agent.label || aimAgentLabel(agent.id)}`}>
+                <h4>Recent movement</h4>
+                <ul>
+                  {agentMoves.map((m, idx) => (
+                    <li key={`${m.id || agent.id}-${idx}`}>
+                      <span>{m.summary || "Move"}</span>
+                      <small>{ago(m.created_at)}</small>
+                    </li>
+                  ))}
+                  {!agentMoves.length ? <li className="aim-empty">No recent moves</li> : null}
+                </ul>
+              </div>
             </article>
-          )
-        )}
-      </div>
-
-
-      <section className="aim-moves neon-inset" aria-live="polite">
-        <div className="aim-moves-head">
-          <h3>Recent movement</h3>
-          {movePool.length > MOVE_PAGE_SIZE ? (
-            <div className="aim-moves-pips" aria-hidden="true">
-              {Array.from({ length: movePageCount }).map((_, i) => (
-                <i key={i} className={i === movePageSafe ? "is-on" : ""} />
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <ul className={`aim-moves-list${moveSwap ? " is-swap" : ""}`}>
-          {visibleMoves.map((m, idx) => {
-            const moveAgentId = m.agent_id || m.from || m.id;
-            return (
-              <li key={`${m.id || moveAgentId}-${movePageSafe}-${idx}`} style={{ "--aim-move-i": idx }}>
-                <div className="aim-row-agent">
-                  <AimAgentAvatar agentId={moveAgentId} label={m.label} size="sm" />
-                  <b><AimAgentName label={m.label} agentId={moveAgentId} /></b>
-                </div>
-                <span>{m.summary}</span>
-                <small>{ago(m.created_at)}</small>
-              </li>
             );
           })}
-          {!movePool.length ? <li className="aim-empty">No movement yet.</li> : null}
-        </ul>
-      </section>
+      </div>
 
       <section className="aim-desk-pulse neon-inset" aria-live="polite" aria-label="Live desk pulse">
         <div className="aim-moves-head">
