@@ -2105,6 +2105,7 @@ export async function aimStatusPayload() {
     const movements = intents.rows.map((r) => ({
       id: r.id,
       agent: publicAgentId(r.agent_id),
+      agent_id: publicAgentId(r.agent_id),
       label: agentLabel(r.agent_id),
       role: agentRole(r.agent_id),
       kind: scrubText(r.kind),

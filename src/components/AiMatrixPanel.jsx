@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAimStatus, postAimChat, getAimLocale, classicAimWallet } from "../api/aim";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
 import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
-import { AIM_AGENT_IDS, AIM_COMMANDER_AVATAR, aimAgentLabel, aimAgentRole, aimAgentProfile } from "../aimAgentNames";
+import { AIM_AGENT_IDS, AIM_COMMANDER_AVATAR, aimAgentLabel, aimAgentRole, aimAgentProfile, resolveAimAgentId } from "../aimAgentNames";
 import AimAgentName from "./AimAgentName";
 import AimAgentAvatar from "./AimAgentAvatar";
 import { useWallet } from "../context/useWallet";
@@ -524,10 +524,63 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   });
   const movements = data?.movements || [];
   const movePool = Array.isArray(movements) ? movements.slice(0, 24) : [];
+  function moveAgentKey(m) {
+    const raw = m?.agent || m?.agent_id || m?.from || "";
+    return resolveAimAgentId(raw) || String(raw).toLowerCase();
+  }
+  function synthMovesFromAgent(agent, limit = 3) {
+    if (!agent) return [];
+    const out = [];
+    const prop = agent.proposal || agent.meta?.trade_proposal || {};
+    const fill = agent.last_fill || agent.meta?.last_fill || prop?.exec || null;
+    if (fill?.submitted) {
+      out.push({
+        id: `synth-fill-${agent.id}`,
+        agent: agent.id,
+        agent_id: agent.id,
+        kind: "trade_execution",
+        summary: `Fill ${fill.engine_result || "ok"}${prop?.pair ? ` | ${prop.pair}` : ""}`,
+        created_at: fill.filled_at || fill.timestamp || agent.last_seen_at || null,
+      });
+    } else if (fill?.blocked_by) {
+      const reason = fill.blocked_by_display || fill.blocked_by || "gated";
+      out.push({
+        id: `synth-block-${agent.id}`,
+        agent: agent.id,
+        agent_id: agent.id,
+        kind: "trade_blocked",
+        summary: `Held | ${String(reason).slice(0, 48)}`,
+        created_at: fill.timestamp || agent.last_seen_at || null,
+      });
+    }
+    if (prop?.action || prop?.pair) {
+      out.push({
+        id: `synth-prop-${agent.id}`,
+        agent: agent.id,
+        agent_id: agent.id,
+        kind: "trade_proposal",
+        summary: [prop.action, prop.pair, prop.urgency].filter(Boolean).join(" | ") || "Desk proposal",
+        created_at: prop.timestamp || prop.t || agent.last_seen_at || null,
+      });
+    }
+    if (agent.meta?.skill?.summary && out.length < limit) {
+      out.push({
+        id: `synth-skill-${agent.id}`,
+        agent: agent.id,
+        agent_id: agent.id,
+        kind: "skill_observe",
+        summary: String(agent.meta.skill.summary).slice(0, 64),
+        created_at: agent.last_seen_at || null,
+      });
+    }
+    return out.slice(0, limit);
+  }
   function recentMovesFor(agentId, limit = 3) {
-    return movePool
-      .filter((m) => String(m.agent_id || m.from || m.id || "") === String(agentId))
-      .slice(0, limit);
+    const want = resolveAimAgentId(agentId) || String(agentId || "").toLowerCase();
+    const fromPool = movePool.filter((m) => moveAgentKey(m) === want).slice(0, limit);
+    if (fromPool.length) return fromPool;
+    const live = byId[want] || byId[agentId] || agents.find((a) => a.id === want || a.id === agentId);
+    return synthMovesFromAgent(live, limit);
   }
 
   // Compact mobile desk pulse: one live line per agent, rotate 2 at a time
@@ -861,7 +914,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
                 <ul>
                   {agentMoves.map((m, idx) => (
                     <li key={`${m.id || agent.id}-${idx}`}>
-                      <span>{m.summary || "Move"}</span>
+                      <span>{m.summary || m.kind || "Move"}</span>
                       <small>{ago(m.created_at)}</small>
                     </li>
                   ))}
