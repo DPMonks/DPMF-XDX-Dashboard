@@ -7,6 +7,40 @@ export function median(values = []) {
   return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
 }
 
+/** Linear-interpolation percentile for positive finite samples (p in 0..100). */
+export function percentile(values = [], p = 50) {
+  const nums = values.map(Number).filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+  if (!nums.length) return 0;
+  if (nums.length === 1) return nums[0];
+  const pct = Math.min(100, Math.max(0, Number(p) || 0));
+  const idx = (pct / 100) * (nums.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return nums[lo];
+  const t = idx - lo;
+  return nums[lo] * (1 - t) + nums[hi] * t;
+}
+
+/** IQR fences from positive samples; falls back to min/max when too few points. */
+export function iqrFences(values = [], k = 1.5) {
+  const nums = values.map(Number).filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+  if (!nums.length) return { lo: 0, hi: 1, q1: 0, q3: 0, iqr: 0 };
+  if (nums.length < 4) {
+    return { lo: nums[0], hi: nums[nums.length - 1], q1: nums[0], q3: nums[nums.length - 1], iqr: 0 };
+  }
+  const q1 = percentile(nums, 25);
+  const q3 = percentile(nums, 75);
+  const iqr = Math.max(0, q3 - q1);
+  const mult = Number(k) > 0 ? Number(k) : 1.5;
+  return {
+    q1,
+    q3,
+    iqr,
+    lo: Math.max(0, q1 - mult * iqr),
+    hi: q3 + mult * iqr,
+  };
+}
+
 export function liquidityWalls(book = {}, { multiple = 2 } = {}) {
   const rows = [...(book.bids || []), ...(book.asks || [])].filter(
     (row) => Number(row?.price) > 0 && Number(row?.base_size) > 0 && !row.placeholder
@@ -181,17 +215,41 @@ export function microEvents({
   return events.slice(0, 4);
 }
 
-export function smartView(candles = [], { rangeId = "1M", spread, now = Date.now() } = {}) {
+export function smartView(candles = [], { rangeId = "1M", spread, now = Date.now(), robust = true } = {}) {
   const days =
     { "1D": 1, "5D": 5, "1M": 30, "3M": 90, "6M": 180, "1Y": 365, "5Y": 365 * 5 }[rangeId] ?? 30;
   const start = rangeId === "Max" ? candles[0]?.t : now - days * 86_400_000;
   const visible = candles.filter((row) => row.t >= (start || 0));
   const use = visible.length ? visible : candles.slice(-30);
   if (!use.length) return { start: now - 30 * 86_400_000, end: now, min: 0, max: 1 };
-  const lows = use.map((row) => Number(row.l || row.c));
-  const highs = use.map((row) => Number(row.h || row.c));
-  let min = Math.min(...lows);
-  let max = Math.max(...highs);
+  const lows = use.map((row) => Number(row.l || row.c)).filter((value) => value > 0);
+  const highs = use.map((row) => Number(row.h || row.c)).filter((value) => value > 0);
+  const closes = use.map((row) => Number(row.c || row.o)).filter((value) => value > 0);
+  let min;
+  let max;
+  if (robust && use.length >= 5 && lows.length && highs.length) {
+    // Ignore extreme tails for y-domain (percentile + IQR). Clipped candles already
+    // tame thin AMM prints; this is a second line of defense for scale.
+    const loPct = percentile(lows, 5);
+    const hiPct = percentile(highs, 95);
+    const closeFence = iqrFences(closes, 2.5);
+    const hiFence = iqrFences(highs, 2.5);
+    const loFence = iqrFences(lows, 2.5);
+    min = Math.min(loPct, loFence.lo || loPct, closeFence.lo || loPct);
+    max = Math.max(hiPct, hiFence.hi || hiPct, closeFence.hi || hiPct);
+    const last = closes[closes.length - 1];
+    if (last > 0 && last >= min && last <= max * 1.05) {
+      min = Math.min(min, last);
+      max = Math.max(max, last);
+    } else if (last > 0 && last < min) {
+      min = last;
+    } else if (last > 0 && last > max && last <= max * 1.25) {
+      max = last;
+    }
+  } else {
+    min = Math.min(...lows);
+    max = Math.max(...highs);
+  }
   const pad = (max - min) * (Number(spread) > 0 && spread / ((min + max) / 2) > 0.02 ? 0.18 : 0.08);
   if (!(max > min)) {
     min *= 0.98;

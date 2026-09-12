@@ -102,8 +102,8 @@ export function composePairCandles({
     } else if (!isDailyOrLonger(interval)) {
       candles = ticksToCandles(cexTape, interval, { continuous: false });
     }
-    // Keep CEX bodies intact; DEX mid/book/desk remain overlays.
-    candles = clipCandleWicks(candles, wickClipOptions());
+    // Mild CEX clip; DEX mid/book/desk remain overlays. Stronger clip applied for XDX pairs.
+    candles = clipCandleWicks(candles, wickClipOptions({ pair: name }));
     return windowed ? windowCandles(candles, range, now) : candles;
   }
 
@@ -165,7 +165,7 @@ export function composePairCandles({
     // XRP/RLUSD without CEX: do not invent dense flat/wick session bars from daily.
     // Keep coarse daily tape until /api/chart/cex-candles arrives.
     if (name === "XRP/RLUSD") {
-      candles = clipCandleWicks(candles, wickClipOptions());
+      candles = clipCandleWicks(candles, wickClipOptions({ pair: name }));
       return windowed ? windowCandles(candles, range, now) : candles;
     }
     const step = intervalMs(interval);
@@ -184,8 +184,8 @@ export function composePairCandles({
     candles = [...intraMap.values()].sort((left, right) => left.t - right.t);
     candles = appendLiveClose(candles, livePrice, now, interval);
   }
-  // Display path: clip absurd wick extremes from thin AMM/swap prints (keeps body).
-  candles = clipCandleWicks(candles, wickClipOptions());
+  // Display path: clip absurd wick/close extremes from thin AMM/swap prints.
+  candles = clipCandleWicks(candles, wickClipOptions({ pair: name }));
   return windowed ? windowCandles(candles, range, now) : candles;
 }
 

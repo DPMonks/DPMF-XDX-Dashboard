@@ -31,10 +31,12 @@ import {
   windowLastBars,
   zoomVisibleBars,
   clipCandleWicks,
+  wickClipOptions,
+  wickClipPairDefaults,
 } from "../src/chart/candles.js";
 import { bucketTime, CHART_PAIRS, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
-import { ammImpact, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, scalePriceView, shiftAfterPriceZoom, zoomPriceScale } from "../src/chart/overlays.js";
+import { ammImpact, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, percentile, scalePriceView, shiftAfterPriceZoom, smartView, zoomPriceScale } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { fullViewPriceHeight } from "../src/chart/fullView.js";
@@ -1009,4 +1011,73 @@ test("composePairCandles clips locked wick spikes for display", () => {
   assert.equal(spike.o, 0.02);
   assert.ok(spike.h < 1);
   assert.ok(spike.h >= Math.max(spike.o, spike.c));
+});
+
+test("clipCandleWicks caps absurd close from thin AMM print so scale stays sane", () => {
+  const rows = [
+    { t: 1, o: 0.02, h: 0.021, l: 0.019, c: 0.02, v: 1 },
+    { t: 2, o: 0.02, h: 0.0215, l: 0.0195, c: 0.0205, v: 1 },
+    { t: 3, o: 0.0205, h: 0.021, l: 0.02, c: 0.0208, v: 1 },
+    { t: 4, o: 0.0208, h: 0.0212, l: 0.0202, c: 0.021, v: 1 },
+    { t: 5, o: 20000, h: 20000, l: 20000, c: 20000, v: 0.01, source: "trade" },
+  ];
+  const clipped = clipCandleWicks(rows, wickClipOptions({ pair: "XDX/RLUSD" }));
+  assert.ok(clipped[4].c < 1, `close should be clipped, got ${clipped[4].c}`);
+  assert.ok(clipped[4].h < 1);
+  assert.ok(clipped[4].o < 1);
+  assert.equal(clipped[4].outlier, true);
+  assert.equal(clipped[4].rawC, 20000);
+  assert.equal(clipped.length, 5);
+});
+
+test("smartView robust domain ignores a single extreme high for y-scale", () => {
+  const rows = [];
+  const t0 = Date.parse("2026-09-01T00:00:00.000Z");
+  for (let i = 0; i < 20; i += 1) {
+    const c = 0.02 + i * 0.0001;
+    rows.push({ t: t0 + i * 3600_000, o: c, h: c * 1.01, l: c * 0.99, c, v: 1 });
+  }
+  rows.push({ t: t0 + 20 * 3600_000, o: 0.022, h: 20000, l: 0.021, c: 0.022, v: 1 });
+  const view = smartView(rows, { rangeId: "Max", now: t0 + 20 * 3600_000, robust: true });
+  assert.ok(view.max < 100, `robust max should stay near price, got ${view.max}`);
+  assert.ok(view.max > view.min);
+  assert.ok(percentile([1, 2, 3, 4, 5], 50) === 3);
+});
+
+test("wickClipPairDefaults tightens XDX vs CEX XRP/RLUSD", () => {
+  const xdx = wickClipPairDefaults("XDX/XRP");
+  const cex = wickClipPairDefaults("XRP/RLUSD");
+  assert.ok(xdx.closeRatioCap < cex.closeRatioCap);
+  assert.ok(xdx.atrMult < cex.atrMult);
+});
+
+test("composePairCandles clips absurd close spike on XDX DEX tape", () => {
+  const t = Date.parse("2021-11-18T00:00:00.000Z");
+  const candles = composePairCandles({
+    pair: "XDX/XRP",
+    interval: "1D",
+    range: "Max",
+    locked: {
+      pairs: {
+        "XDX/XRP": {
+          candles: [
+            { t: t - 2 * 86_400_000, o: 0.02, h: 0.021, l: 0.019, c: 0.02, v: 1 },
+            { t: t - 86_400_000, o: 0.02, h: 0.021, l: 0.019, c: 0.0205, v: 1 },
+            { t, o: 20000, h: 20000, l: 20000, c: 20000, v: 0.01 },
+            { t: t + 86_400_000, o: 0.021, h: 0.022, l: 0.02, c: 0.0215, v: 1 },
+          ],
+        },
+      },
+      xrpUsd: [],
+    },
+    sparkline: [],
+    trades: [],
+    livePrice: 0.0215,
+    now: t + 86_400_000,
+    windowed: false,
+  });
+  const spike = candles.find((row) => row.t === t);
+  assert.ok(spike);
+  assert.ok(spike.c < 1, `composed close should be clipped, got ${spike.c}`);
+  assert.ok(spike.h < 1);
 });

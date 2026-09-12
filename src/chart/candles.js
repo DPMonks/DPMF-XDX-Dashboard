@@ -563,7 +563,7 @@ export function atr(candles = [], period = 14) {
   return sma(ranges, period);
 }
 
-/** Defaults for display wick clipping (thin AMM / passive swap prints). */
+/** Defaults for display wick/close clipping (thin AMM / passive swap prints). */
 export const WICK_CLIP_DEFAULTS = {
   enabled: true,
   atrPeriod: 14,
@@ -571,7 +571,37 @@ export const WICK_CLIP_DEFAULTS = {
   bodyMult: 8,
   maxFrac: 0.75,
   floorFrac: 0.005,
+  closeClip: true,
+  closeMult: 8,
+  closeRatioCap: 4,
+  closeMinSamples: 3,
 };
+
+/** Stronger defaults for thin DEX/XDX AMM tapes vs CEX XRP/RLUSD. */
+export function wickClipPairDefaults(pair = "") {
+  const name = String(pair || "").toUpperCase();
+  if (name.includes("XDX")) {
+    return {
+      atrMult: 4,
+      bodyMult: 5,
+      maxFrac: 0.35,
+      closeClip: true,
+      closeMult: 5,
+      closeRatioCap: 3,
+    };
+  }
+  if (name === "XRP/RLUSD" || name === "XRP/USD") {
+    return {
+      atrMult: 8,
+      bodyMult: 10,
+      maxFrac: 0.9,
+      closeClip: true,
+      closeMult: 12,
+      closeRatioCap: 8,
+    };
+  }
+  return {};
+}
 
 function envFlag(name) {
   try {
@@ -600,14 +630,22 @@ function envNumber(name, fallback) {
 /** Read VITE_CHART_WICK_* flags for Hybrid / AIM compose display clipping. */
 export function wickClipOptions(overrides = {}) {
   const enabledFlag = envFlag("VITE_CHART_WICK_CLIP");
+  const closeFlag = envFlag("VITE_CHART_WICK_CLOSE_CLIP");
+  const pairDefaults = wickClipPairDefaults(overrides.pair);
+  const base = { ...WICK_CLIP_DEFAULTS, ...pairDefaults };
+  const { pair: _pair, ...rest } = overrides;
   return {
-    enabled: enabledFlag == null ? WICK_CLIP_DEFAULTS.enabled : enabledFlag,
-    atrPeriod: envNumber("VITE_CHART_WICK_ATR_PERIOD", WICK_CLIP_DEFAULTS.atrPeriod),
-    atrMult: envNumber("VITE_CHART_WICK_ATR_MULT", WICK_CLIP_DEFAULTS.atrMult),
-    bodyMult: envNumber("VITE_CHART_WICK_BODY_MULT", WICK_CLIP_DEFAULTS.bodyMult),
-    maxFrac: envNumber("VITE_CHART_WICK_MAX_FRAC", WICK_CLIP_DEFAULTS.maxFrac),
-    floorFrac: envNumber("VITE_CHART_WICK_FLOOR_FRAC", WICK_CLIP_DEFAULTS.floorFrac),
-    ...overrides,
+    enabled: enabledFlag == null ? base.enabled : enabledFlag,
+    atrPeriod: envNumber("VITE_CHART_WICK_ATR_PERIOD", base.atrPeriod),
+    atrMult: envNumber("VITE_CHART_WICK_ATR_MULT", base.atrMult),
+    bodyMult: envNumber("VITE_CHART_WICK_BODY_MULT", base.bodyMult),
+    maxFrac: envNumber("VITE_CHART_WICK_MAX_FRAC", base.maxFrac),
+    floorFrac: envNumber("VITE_CHART_WICK_FLOOR_FRAC", base.floorFrac),
+    closeClip: closeFlag == null ? base.closeClip !== false : closeFlag,
+    closeMult: envNumber("VITE_CHART_WICK_CLOSE_MULT", base.closeMult),
+    closeRatioCap: envNumber("VITE_CHART_WICK_CLOSE_RATIO", base.closeRatioCap),
+    closeMinSamples: envNumber("VITE_CHART_WICK_CLOSE_SAMPLES", base.closeMinSamples),
+    ...rest,
   };
 }
 
@@ -618,9 +656,20 @@ function medianPositive(values = []) {
   return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
 }
 
+function clampPrice(value, lo, hi) {
+  const n = Number(value);
+  if (!(n > 0)) return n;
+  let out = n;
+  if (Number.isFinite(lo) && lo > 0) out = Math.max(out, lo);
+  if (Number.isFinite(hi) && hi > 0) out = Math.min(out, hi);
+  return out;
+}
+
 /**
- * Display-only: clip absurd wick highs/lows from thin AMM/swap prints.
- * Keeps the real open/close body. Scale is robust (body + close-to-close), not polluted high-low ATR.
+ * Display-only: clip absurd wick highs/lows AND extreme open/close outliers
+ * from thin AMM/swap prints so they cannot blow the HybridChart price scale.
+ * Keeps real history timestamps; does not invent candles. Marks clipped rows
+ * with outlier + rawO/H/L/C for optional muted markers.
  */
 export function clipCandleWicks(candles = [], opts = {}) {
   const cfg = { ...WICK_CLIP_DEFAULTS, ...opts };
@@ -632,46 +681,142 @@ export function clipCandleWicks(candles = [], opts = {}) {
   const bodyMult = Number(cfg.bodyMult) > 0 ? Number(cfg.bodyMult) : WICK_CLIP_DEFAULTS.bodyMult;
   const maxFrac = Number(cfg.maxFrac) > 0 ? Number(cfg.maxFrac) : WICK_CLIP_DEFAULTS.maxFrac;
   const floorFrac = Number(cfg.floorFrac) > 0 ? Number(cfg.floorFrac) : WICK_CLIP_DEFAULTS.floorFrac;
+  const closeClip = cfg.closeClip !== false;
+  const closeMult = Number(cfg.closeMult) > 0 ? Number(cfg.closeMult) : WICK_CLIP_DEFAULTS.closeMult;
+  const closeRatioCap = Number(cfg.closeRatioCap) > 1 ? Number(cfg.closeRatioCap) : WICK_CLIP_DEFAULTS.closeRatioCap;
+  const closeMinSamples = Math.max(2, Math.trunc(Number(cfg.closeMinSamples) || WICK_CLIP_DEFAULTS.closeMinSamples));
+
+  const closes = list.map((row) => {
+    const c = Number(row.c);
+    const o = Number(row.o);
+    return c > 0 ? c : o > 0 ? o : 0;
+  });
+  const isCarry = (row) => {
+    const srcName = String(row?.source || "");
+    return srcName === "carry" || srcName === "session";
+  };
+  const globalMed = medianPositive(
+    closes.filter((value, index) => value > 0 && !isCarry(list[index]))
+  ) || medianPositive(closes.filter((value) => value > 0));
 
   const robustRanges = list.map((row, index) => {
+    if (isCarry(row)) return 0;
     const open = Number(row.o) > 0 ? Number(row.o) : Number(row.c);
     const close = Number(row.c) > 0 ? Number(row.c) : open;
     if (!(open > 0) || !(close > 0)) return 0;
     const body = Math.abs(close - open);
-    const prev = index > 0 ? Number(list[index - 1].c) : close;
+    let prev = close;
+    for (let j = index - 1; j >= 0; j -= 1) {
+      if (!isCarry(list[j]) && Number(list[j].c) > 0) {
+        prev = Number(list[j].c);
+        break;
+      }
+    }
     const gap = prev > 0 ? Math.abs(close - prev) : 0;
     return Math.max(body, gap);
   });
 
   return list.map((row, index) => {
-    const open = Number(row.o);
-    const close = Number(row.c);
-    const high = Number(row.h);
-    const low = Number(row.l);
+    let open = Number(row.o);
+    let close = Number(row.c);
+    let high = Number(row.h);
+    let low = Number(row.l);
     if (!(open > 0) || !(close > 0)) return { ...row };
+
+    const rawO = open;
+    const rawH = high;
+    const rawL = low;
+    const rawC = close;
+    let outlier = false;
+
+    const priorCloses = [];
+    for (let j = Math.max(0, index - atrPeriod); j < index; j += 1) {
+      if (closes[j] > 0 && !isCarry(list[j])) priorCloses.push(closes[j]);
+    }
+    const neighborCloses = [];
+    const neighborStart = Math.max(0, index - atrPeriod);
+    const neighborEnd = Math.min(list.length, index + atrPeriod + 1);
+    for (let j = neighborStart; j < neighborEnd; j += 1) {
+      if (j === index) continue;
+      if (closes[j] > 0 && !isCarry(list[j])) neighborCloses.push(closes[j]);
+    }
+    const allReal = list
+      .map((item, i) => (closes[i] > 0 && !isCarry(item) ? closes[i] : 0))
+      .filter((value) => value > 0);
+    const refPool =
+      priorCloses.length >= closeMinSamples
+        ? priorCloses
+        : neighborCloses.length >= closeMinSamples
+          ? neighborCloses
+          : allReal.length
+            ? allReal
+            : closes.filter((value) => value > 0);
+    const ref = medianPositive(refPool) || globalMed;
+    const absDevs = refPool.map((value) => Math.abs(value - ref));
+    const closeScale = Math.max(medianPositive(absDevs), ref * 0.002);
+    // Flat carry tapes make MAD tiny — only tighten below ratioCap when scale is meaningful.
+    const scaleUseful = ref > 0 && closeScale >= ref * 0.01;
+
+    if (closeClip && ref > 0) {
+      let hiBound = ref * closeRatioCap;
+      let loBound = ref / closeRatioCap;
+      if (scaleUseful) {
+        const absAllow = Math.max(closeMult * closeScale, ref * floorFrac);
+        hiBound = Math.min(hiBound, ref + absAllow);
+        loBound = Math.max(loBound, ref - absAllow);
+      }
+      loBound = Math.max(ref * 1e-9, loBound);
+      const nextC = clampPrice(close, loBound, hiBound);
+      const nextO = clampPrice(open, loBound, hiBound);
+      if (nextC !== close || nextO !== open) outlier = true;
+      close = nextC;
+      open = nextO;
+    }
 
     const bodyHi = Math.max(open, close);
     const bodyLo = Math.min(open, close);
     const mid = (open + close) / 2;
     const body = bodyHi - bodyLo;
     const from = Math.max(0, index - atrPeriod + 1);
-    const window = robustRanges.slice(from, index + 1).filter((value) => value >= 0);
+    const window = robustRanges.slice(from, index + 1).filter((value) => value > 0);
     const robust = medianPositive(window);
     const mean = window.length ? window.reduce((sum, value) => sum + value, 0) / window.length : 0;
-    const scale = Math.max(robust, mean, mid * 0.002, body);
-    let maxWick = Math.max(atrMult * scale, bodyMult * Math.max(body, mid * 0.001));
+    const scale = Math.max(
+      robust,
+      scaleUseful ? Math.min(mean, closeScale * closeMult) : 0,
+      mid * 0.002,
+      scaleUseful ? Math.min(body, closeScale * closeMult) : Math.min(body, mid * 0.05)
+    );
+    let maxWick = Math.max(
+      atrMult * scale,
+      bodyMult * Math.max(Math.min(body, scaleUseful ? closeScale * closeMult : mid * 0.05), mid * 0.001)
+    );
     maxWick = Math.min(maxWick, mid * maxFrac);
     maxWick = Math.max(maxWick, mid * floorFrac);
 
     const hiCap = bodyHi + maxWick;
     const loCap = Math.max(mid * 1e-9, bodyLo - maxWick);
-    const nextH = high > 0 ? Math.min(high, hiCap) : bodyHi;
-    const nextL = low > 0 ? Math.max(low, loCap) : bodyLo;
-    return {
+    let nextH = high > 0 ? Math.min(high, hiCap) : bodyHi;
+    let nextL = low > 0 ? Math.max(low, loCap) : bodyLo;
+    nextH = Math.max(nextH, bodyHi);
+    nextL = Math.min(nextL, bodyLo);
+    if (nextH !== high || nextL !== low) outlier = true;
+
+    const out = {
       ...row,
-      h: Math.max(nextH, bodyHi),
-      l: Math.min(nextL, bodyLo),
+      o: open,
+      h: nextH,
+      l: nextL,
+      c: close,
     };
+    if (outlier) {
+      out.outlier = true;
+      out.rawO = rawO;
+      out.rawH = rawH > 0 ? rawH : rawC;
+      out.rawL = rawL > 0 ? rawL : rawC;
+      out.rawC = rawC;
+    }
+    return out;
   });
 }
 

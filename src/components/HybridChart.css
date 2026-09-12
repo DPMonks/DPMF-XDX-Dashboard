@@ -464,6 +464,14 @@
   stroke-width: 1;
 }
 
+.hybrid-outlier-mark {
+  fill: rgba(255, 184, 77, 0.55);
+  stroke: rgba(255, 184, 77, 0.9);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+
 .hybrid-mid {
   stroke: #00eaff;
   stroke-width: 1.4;
