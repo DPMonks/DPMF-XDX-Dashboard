@@ -51,6 +51,8 @@ export default function HybridPlot({
   aimEstimateMarks = [],
   aimEstimateScenario = null,
   showAimOverlays = false,
+  plotMode = "candles",
+  onAimDeskMarkClick = null,
   locale,
   t,
   selectedIndex = null,
@@ -628,7 +630,7 @@ export default function HybridPlot({
       : null;
 
   return (
-    <div className={hollow ? "hybrid-plot is-hollow" : "hybrid-plot"} ref={box}>
+    <div className={`hybrid-plot${hollow ? " is-hollow" : ""}${plotMode === "ribbon" ? " is-ribbon" : ""}`} ref={box}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
@@ -797,7 +799,36 @@ export default function HybridPlot({
             />
           ) : null}
 
-          {candles.map((row) => {
+          {plotMode === "ribbon" ? (
+            (() => {
+              const hiPts = [];
+              const loPts = [];
+              const closePts = [];
+              for (const row of candles) {
+                const x = scale.x(row.t);
+                if (!Number.isFinite(x)) continue;
+                const yh = scale.y(row.h);
+                const yl = scale.y(row.l);
+                const yc = scale.y(row.c);
+                if (Number.isFinite(yh)) hiPts.push(`${x},${yh}`);
+                if (Number.isFinite(yl)) loPts.push(`${x},${yl}`);
+                if (Number.isFinite(yc)) closePts.push(`${x},${yc}`);
+              }
+              if (!closePts.length) return null;
+              return (
+                <g className="hybrid-ribbon" pointerEvents="none">
+                  {hiPts.length && loPts.length ? (
+                    <polygon
+                      className="hybrid-ribbon-band"
+                      points={[...hiPts, ...loPts.slice().reverse()].join(" ")}
+                    />
+                  ) : null}
+                  <polyline className="hybrid-ribbon-close" points={closePts.join(" ")} fill="none" />
+                </g>
+              );
+            })()
+          ) : (
+            candles.map((row) => {
             const x = scale.x(row.t);
             const up = row.c >= row.o;
             const color = up ? UP : DOWN;
@@ -840,7 +871,8 @@ export default function HybridPlot({
                 ) : null}
               </g>
             );
-          })}
+          })
+          )}
 
           {showArb && bands?.mid ? (
             <line className="hybrid-mid" x1={PAD.l} x2={width - PAD.r} y1={scale.y(bands.mid)} y2={scale.y(bands.mid)} />
@@ -1012,23 +1044,45 @@ export default function HybridPlot({
           {(aimDeskMarks || []).map((m, i) => {
             const y = scale.y(m.price);
             if (!Number.isFinite(y)) return null;
-            const xTag = PAD.l + 8 + (i % 3) * 78;
+            const lastT = candles.length ? candles[candles.length - 1].t : null;
+            const xFromT = m.t != null ? scale.x(m.t) : null;
+            const x =
+              Number.isFinite(xFromT)
+                ? xFromT
+                : Number.isFinite(scale.x(lastT))
+                  ? scale.x(lastT) - 10 - (i % 5) * 7
+                  : PAD.l + 14 + (i % 5) * 8;
+            const color = m.color || (m.side === "sell" ? DOWN : UP);
+            const resting = m.style === "resting" || m.resting;
             return (
-              <g key={m.key || `aim-desk-${i}`} className={`hybrid-aim-desk is-${m.side}`}>
-                <line
-                  x1={PAD.l}
-                  x2={width - PAD.r}
-                  y1={y}
-                  y2={y}
-                  stroke={m.color || "#7dd3fc"}
-                  strokeWidth={1.4}
-                  strokeDasharray={m.status === "proposal" ? "4 3" : undefined}
-                  opacity={0.88}
+              <g
+                key={m.key || `aim-desk-${i}`}
+                className={`hybrid-aim-desk is-${m.side} is-${resting ? "resting" : "filled"}`}
+                style={{ cursor: onAimDeskMarkClick ? "pointer" : "default" }}
+                onPointerDown={(event) => {
+                  if (!onAimDeskMarkClick) return;
+                  event.stopPropagation();
+                  event.preventDefault();
+                  onAimDeskMarkClick(m);
+                }}
+                onClick={(event) => {
+                  if (!onAimDeskMarkClick) return;
+                  event.stopPropagation();
+                  event.preventDefault();
+                  onAimDeskMarkClick(m);
+                }}
+              >
+                <circle className="hybrid-aim-desk-hit" cx={x} cy={y} r={10} fill="transparent" />
+                <circle
+                  className="hybrid-aim-desk-dot"
+                  cx={x}
+                  cy={y}
+                  r={resting ? 4.2 : 3.6}
+                  fill={resting ? "none" : color}
+                  stroke={color}
+                  strokeWidth={resting ? 1.6 : 1.1}
+                  opacity={resting ? 0.55 : 0.95}
                 />
-                <circle cx={xTag} cy={y} r={3.2} fill={m.color || "#7dd3fc"} />
-                <text x={xTag + 6} y={y - 3} fill={m.color || "#7dd3fc"} className="hybrid-aim-desk-label">
-                  {m.label} {m.side} {formatQuotePerBase(m.price, locale, quote)}
-                </text>
               </g>
             );
           })}

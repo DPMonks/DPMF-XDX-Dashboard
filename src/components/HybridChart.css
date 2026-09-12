@@ -396,7 +396,6 @@
 .hybrid-wallet-fill,
 .hybrid-aim-book,
 .hybrid-aim-est,
-.hybrid-aim-desk,
 .hybrid-heat,
 .hybrid-axis,
 .hybrid-pane-label,
@@ -1403,7 +1402,7 @@
 }
 
 .hybrid-aim-desk {
-  pointer-events: none;
+  pointer-events: all;
 }
 .hybrid-aim-desk-label {
   font-size: 10px;
@@ -1542,3 +1541,55 @@
 .hybrid-flyout-tool.is-ai-focus {
   box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.85);
 }
+
+.hybrid-plot-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.hybrid-plot-mode .pair-chip {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.hybrid-ribbon-band {
+  fill: rgba(125, 211, 252, 0.16);
+  stroke: none;
+}
+
+.hybrid-ribbon-close {
+  stroke: #7dd3fc;
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  fill: none;
+  filter: drop-shadow(0 0 4px rgba(125, 211, 252, 0.35));
+}
+
+.hybrid-aim-desk {
+  pointer-events: all;
+}
+
+.hybrid-aim-desk-hit {
+  pointer-events: all;
+}
+
+.hybrid-aim-desk-dot {
+  pointer-events: none;
+}
+
+.hybrid-aim-desk.is-buy .hybrid-aim-desk-dot {
+  /* color set inline */
+}
+
+@media (max-width: 900px) {
+  .hybrid-plot-mode .pair-chip {
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
+

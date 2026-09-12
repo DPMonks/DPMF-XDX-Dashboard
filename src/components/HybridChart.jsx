@@ -36,7 +36,8 @@ import {
   zoomPriceScale,
 } from "../chart/overlays";
 import { walletChartMarks } from "../chart/walletMarks";
-import { buildDeskMarks, buildEstimateMarks, buildEstimateScenarioOverlay } from "../chart/aimMarks";
+import { buildDeskMarks, buildEstimateMarks, buildEstimateScenarioOverlay, deskMarkAskPrompt } from "../chart/aimMarks";
+import { publishAimChatAsk } from "../context/aimChatAsk";
 import { useChartAction, publishChartNarrate } from "../context/chartAction";
 import { bookHeader, mergeOrderbookPayloads } from "../orderbook";
 import { walletOrdersFromBooks } from "../wallet/composeWallet";
@@ -177,6 +178,7 @@ export default function HybridChart({
   const phone = isPhoneDevice();
   const [fullView, setFullView] = useState(false);
   const [estimateSide, setEstimateSide] = useState(null); // bull | bear | null
+  const [plotMode, setPlotMode] = useState("candles"); // candles | ribbon
   const [aiCursor, setAiCursor] = useState({ visible: false, x: 0, y: 0, phase: "", tool: null });
   const bodyRef = useRef(null);
   const plotWrapRef = useRef(null);
@@ -813,6 +815,12 @@ export default function HybridChart({
     setPriceShift(0);
   }
 
+  function onAimDeskMarkClick(mark) {
+    const prompt = deskMarkAskPrompt(mark, { pair });
+    if (!prompt) return;
+    publishAimChatAsk({ text: prompt, mark, open: true, focus: true });
+  }
+
   const plotHeight = fullView
     ? fullViewPriceHeight(viewH, { volume: showVolume, rsi: showRsi })
     : undefined;
@@ -874,6 +882,22 @@ export default function HybridChart({
           <input type="checkbox" checked={hollow} onChange={(event) => setHollow(event.target.checked)} />
           {t.chartHollow}
         </label>
+        <div className="hybrid-plot-mode" role="group" aria-label={t.chartPlotMode || "Chart render"}>
+          <button
+            type="button"
+            className={plotMode === "candles" ? "pair-chip active" : "pair-chip"}
+            onClick={() => setPlotMode("candles")}
+          >
+            {t.chartCandles || "Candles"}
+          </button>
+          <button
+            type="button"
+            className={plotMode === "ribbon" ? "pair-chip active" : "pair-chip"}
+            onClick={() => setPlotMode("ribbon")}
+          >
+            {t.chartRibbonLine || "Ribbon line"}
+          </button>
+        </div>
         <label className="hybrid-toggle">
           <input type="checkbox" checked={showArb} onChange={(event) => setShowArb(event.target.checked)} />
           {t.chartArbitrage}
@@ -1074,6 +1098,8 @@ export default function HybridChart({
             aimEstimateMarks={aimEstimateMarks}
             aimEstimateScenario={aimEstimateScenario}
             showAimOverlays={showAimOverlays}
+            plotMode={plotMode}
+            onAimDeskMarkClick={deskOrders ? onAimDeskMarkClick : null}
             locale={locale}
             t={t}
             selectedIndex={selected}

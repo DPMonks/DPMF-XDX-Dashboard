@@ -8,6 +8,7 @@ import AimAgentAvatar from "./AimAgentAvatar";
 import { useWallet } from "../context/useWallet";
 import { useChartSnapshot } from "../context/chartSnapshot";
 import { getChartAction, publishChartAction, subscribeChartNarrate } from "../context/chartAction";
+import { clearAimChatAsk, useAimChatAsk } from "../context/aimChatAsk";
 import { AIM_ADMIN_WALLET } from "../constants/ledger";
 import AimDeskSmartChart from "./AimDeskSmartChart";
 
@@ -72,6 +73,7 @@ function createRevealProgress(applyChars, { minMs = 90, minStep = 8 } = {}) {
 export default function AiMatrixPanel({ onChartPropsChange = null, showInlineChart = true } = {}) {
   const { walletAddress } = useWallet();
   const chartSnapshot = useChartSnapshot();
+  const aimChatAsk = useAimChatAsk();
   // Only show Admin teach on when the same classic wallet will be sent on chat.
   const chatWallet = classicAimWallet(walletAddress);
   const isAimAdmin = Boolean(chatWallet) && chatWallet === AIM_ADMIN_WALLET;
@@ -87,6 +89,10 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   const [langSource, setLangSource] = useState("auto");
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const chatLogRef = useRef(null);
+  const chatFormRef = useRef(null);
+  const chatInputRef = useRef(null);
+  const sendMessageRef = useRef(null);
+  const handledAskSeqRef = useRef(0);
   const sendGenRef = useRef(0);
   const [movePage, setMovePage] = useState(0);
   const [moveSwap, setMoveSwap] = useState(false);
@@ -185,9 +191,8 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     return () => cancelAnimationFrame(id);
   }, [localChat]);
 
-  async function onSend(event) {
-    event.preventDefault();
-    const message = text.trim();
+  async function sendCommanderMessage(rawMessage) {
+    const message = String(rawMessage || "").trim();
     if (!message) return;
 
     // Interrupt any in-flight compose/speech so the user can barge in mid-reply.
@@ -439,6 +444,36 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     }
   }
 
+  async function onSend(event) {
+    event.preventDefault();
+    await sendCommanderMessage(text);
+  }
+
+  sendMessageRef.current = sendCommanderMessage;
+
+  useEffect(() => {
+    if (!aimChatAsk?.seq || !aimChatAsk.text) return;
+    if (aimChatAsk.seq === handledAskSeqRef.current) return;
+    handledAskSeqRef.current = aimChatAsk.seq;
+    const msg = String(aimChatAsk.text || "").trim();
+    if (!msg) return;
+    const focus = aimChatAsk.focus;
+    (async () => {
+      try {
+        if (focus) {
+          chatFormRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+          chatInputRef.current?.focus?.();
+        }
+        await new Promise((r) => window.setTimeout(r, 120));
+        await sendMessageRef.current?.(msg);
+      } finally {
+        clearAimChatAsk();
+      }
+    })();
+    // send via ref so the latest compose path is used without re-binding deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aimChatAsk]);
+
   async function onPlayVoice(message) {
     if (!message?.id) return;
     unlockCommanderAudio();
@@ -575,16 +610,16 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     const push = (row) => {
       if (!row || !(Number(row.price) > 0 || Number(row.iou_per_xrp) > 0 || Number(row.xrp_per_iou) > 0 || Number(row.limit_price) > 0)) return;
       const pair = String(row.pair || "XRP/RLUSD").replace(/\s+/g, "").toUpperCase();
-      if (pair && pair !== "XRP/RLUSD" && pair !== "RLUSD/XRP") return;
-      const key = `${row.agent_id || row.id || "x"}|${row.side || ""}|${row.price || row.iou_per_xrp || row.xrp_per_iou || row.limit_price}|${row.status || ""}`;
+      const key = `${row.agent_id || row.id || "x"}|${pair}|${row.side || ""}|${row.price || row.iou_per_xrp || row.xrp_per_iou || row.limit_price}|${row.status || ""}|${row.submitted ? 1 : 0}`;
       if (seen.has(key)) return;
       seen.add(key);
-      out.push({ ...row, pair: "XRP/RLUSD", key });
+      out.push({ ...row, pair, key });
     };
     for (const a of data?.desk?.orders || []) push(a);
-    for (const a of data?.desk?.agents || agents) {
+    for (const a of data?.desk?.agents || []) {
       const prop = a.proposal || a.meta?.trade_proposal || {};
       if (!prop?.action && !prop?.price && !prop?.xrp_per_iou && !prop?.iou_per_xrp && !prop?.limit_price) continue;
+      const submitted = !!a.last_fill?.submitted;
       push({
         agent_id: a.id,
         label: a.label || aimAgentLabel(a.id),
@@ -595,10 +630,36 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
         xrp_per_iou: prop.xrp_per_iou,
         iou_per_xrp: prop.iou_per_xrp,
         price_unit: prop.price_unit,
-        status: a.last_fill?.submitted ? "submitted" : prop.executable ? "open" : "proposal",
-        submitted: !!a.last_fill?.submitted,
+        status: submitted ? "submitted" : prop.executable ? "open" : "proposal",
+        submitted,
         open: String(prop.action || "").includes("OfferCreate"),
+        urgency: prop.urgency,
+        xrp_thesis: prop.xrp_thesis,
+        action: prop.action,
+        skill_summary: a.skill_summary || a.meta?.skill?.summary,
+        tactic: prop.urgency || prop.xrp_thesis || prop.action || a.skill_summary || null,
+        playbook: prop.xrp_thesis || a.skill_summary || null,
+        t: a.last_fill?.at || a.last_seen_at || null,
       });
+      const levels = Array.isArray(a.meta?.open_book_levels) ? a.meta.open_book_levels : [];
+      for (const lvl of levels) {
+        push({
+          agent_id: a.id,
+          label: a.label || aimAgentLabel(a.id),
+          pair: lvl.pair || prop.pair || "XRP/RLUSD",
+          side: lvl.side,
+          price: lvl.price,
+          iou_per_xrp: lvl.iou_per_xrp,
+          xrp_per_iou: lvl.xrp_per_iou,
+          price_unit: lvl.price_unit || "quote_per_base",
+          status: "open",
+          open: true,
+          submitted: false,
+          action: "OfferCreate",
+          tactic: prop.urgency || "open book",
+          playbook: prop.xrp_thesis || a.skill_summary || null,
+        });
+      }
     }
     return out;
   }, [data]);
@@ -760,8 +821,9 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
               Admin teach on. Start a lesson with Teach ... and Commander will log it with ack.
             </p>
           ) : null}
-          <form className="aim-chat-form" onSubmit={onSend}>
+          <form className="aim-chat-form" ref={chatFormRef} onSubmit={onSend}>
             <input
+              ref={chatInputRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Ask Commander (not saved)..."

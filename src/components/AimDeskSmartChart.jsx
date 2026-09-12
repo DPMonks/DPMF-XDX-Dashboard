@@ -8,7 +8,10 @@ export {
   asciiClean,
   buildDeskMarks,
   buildEstimateMarks,
+  classifyDeskMarkStyle,
   coerceQuotePerBase,
+  deskMarkAskPrompt,
+  deskMarkColor,
   inQuotePerBaseBand,
   normalizeDeskSide,
   quotePerBaseFromDeskOrder,
@@ -38,9 +41,10 @@ function AimDeskSmartChart({
           <p className="aim-merged-chart-kicker">Shared chart | Hybrid + AIM desk</p>
           <h3>Trading chart</h3>
           <p className="aim-merged-chart-sub">
-            Pair tabs, Hybrid/Dexscreener, MA/SMA, hollow candles, arbitrage, volume wave, RSI,
-            drawings, timeframes, CEX tape for XRP/RLUSD. Public book + desk OfferCreates for the
-            active pair. Estimate markers only (no Bullish/Bearish analysis UI).
+            Pair tabs, Hybrid/Dexscreener, Candles or Ribbon line, MA/SMA, hollow candles, arbitrage,
+            volume wave, RSI, drawings, timeframes, CEX tape for XRP/RLUSD. Public book + desk
+            fills/offers for the active pair (click a mark to ask Commander). Estimate markers only
+            (no Bullish/Bearish analysis UI).
           </p>
         </div>
         {showModeSwitch ? (

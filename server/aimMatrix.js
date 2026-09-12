@@ -1588,33 +1588,56 @@ function isXrpRlusdPair(pair) {
   return !p || p === "XRP/RLUSD" || p === "RLUSD/XRP";
 }
 
+function normalizeDeskChartPair(pair) {
+  const p = String(pair || "").replace(/\s+/g, "").toUpperCase();
+  if (!p) return "XRP/RLUSD";
+  if (p === "RLUSD/XRP") return "XRP/RLUSD";
+  if (p === "XRP/XDX") return "XDX/XRP";
+  if (p === "RLUSD/XDX") return "XDX/RLUSD";
+  if (p === "XIO/XDX") return "XDX/XIO";
+  return p;
+}
+
 function buildDeskChartOrders(deskAgents = [], intents = []) {
   const out = [];
   const seen = new Set();
   const push = (row) => {
-    if (!row || !isXrpRlusdPair(row.pair)) return;
-    const price = quotePerBaseFromAimPrice(row);
+    if (!row) return;
+    const pair = normalizeDeskChartPair(row.pair || "XRP/RLUSD");
+    const price = quotePerBaseFromAimPrice({ ...row, pair });
     if (!(price > 0)) return;
-    const key = `${row.agent_id}|${row.side}|${price.toFixed(8)}|${row.status || ""}`;
+    const side = normalizeAimOrderSide(row.side);
+    const submitted = !!row.submitted;
+    const status = scrubText(row.status || (submitted ? "submitted" : row.open ? "open" : "proposal"));
+    const key = `${row.agent_id}|${pair}|${side}|${price.toFixed(8)}|${status}|${submitted ? 1 : 0}`;
     if (seen.has(key)) return;
     seen.add(key);
+    const tactic = scrubText(row.tactic || row.urgency || row.xrp_thesis || row.skill_summary || row.action || "");
+    const playbook = scrubText(row.playbook || row.xrp_thesis || row.skill_summary || "");
     out.push({
       agent_id: publicAgentId(row.agent_id),
       label: agentLabel(row.agent_id),
-      pair: "XRP/RLUSD",
-      side: normalizeAimOrderSide(row.side),
+      pair,
+      side,
       price,
       iou_per_xrp: price,
       price_unit: "quote_per_base",
-      status: scrubText(row.status || "proposal"),
+      status,
       open: !!row.open,
-      submitted: !!row.submitted,
+      submitted,
       action: scrubText(row.action || "OfferCreate"),
+      urgency: scrubText(row.urgency || ""),
+      xrp_thesis: scrubText(row.xrp_thesis || ""),
+      skill_summary: scrubText(row.skill_summary || ""),
+      tactic: tactic || null,
+      playbook: playbook || null,
+      t: row.t || row.timestamp || row.created_at || null,
     });
   };
 
   for (const a of deskAgents) {
     const prop = a.proposal || {};
+    const submitted = !!a.last_fill?.submitted;
     push({
       agent_id: a.id,
       pair: prop.pair || "XRP/RLUSD",
@@ -1625,15 +1648,19 @@ function buildDeskChartOrders(deskAgents = [], intents = []) {
       iou_per_xrp: prop.iou_per_xrp,
       price_unit: prop.price_unit,
       action: prop.action,
-      status: prop.executable ? "open" : "proposal",
+      status: submitted ? "submitted" : prop.executable ? "open" : "proposal",
       open: String(prop.action || "").includes("OfferCreate"),
-      submitted: !!a.last_fill?.submitted,
+      submitted,
+      urgency: prop.urgency,
+      xrp_thesis: prop.xrp_thesis,
+      skill_summary: a.skill_summary,
+      t: a.last_seen_at,
     });
     const levels = Array.isArray(a.meta?.open_book_levels) ? a.meta.open_book_levels : [];
     for (const lvl of levels) {
       push({
         agent_id: a.id,
-        pair: lvl.pair || "XRP/RLUSD",
+        pair: lvl.pair || prop.pair || "XRP/RLUSD",
         side: lvl.side,
         price: lvl.price,
         iou_per_xrp: lvl.iou_per_xrp,
@@ -1642,6 +1669,9 @@ function buildDeskChartOrders(deskAgents = [], intents = []) {
         action: "OfferCreate",
         status: "open",
         open: true,
+        urgency: prop.urgency,
+        xrp_thesis: prop.xrp_thesis,
+        skill_summary: a.skill_summary,
       });
     }
   }
@@ -1650,6 +1680,7 @@ function buildDeskChartOrders(deskAgents = [], intents = []) {
     if (!["trade_proposal", "trade_execution"].includes(String(row.kind || ""))) continue;
     const content = row.content && typeof row.content === "object" ? row.content : {};
     const prop = content.proposal || content.trade_proposal || content;
+    const submitted = !!(content.submitted || prop.submitted || String(row.kind) === "trade_execution");
     push({
       agent_id: row.agent_id,
       pair: prop.pair || content.pair || "XRP/RLUSD",
@@ -1660,12 +1691,16 @@ function buildDeskChartOrders(deskAgents = [], intents = []) {
       iou_per_xrp: prop.iou_per_xrp,
       price_unit: prop.price_unit,
       action: prop.action || content.action,
-      status: content.submitted || prop.submitted ? "submitted" : "proposal",
-      submitted: !!(content.submitted || prop.submitted),
-      open: String(prop.action || "").includes("OfferCreate"),
+      status: submitted ? "submitted" : "proposal",
+      submitted,
+      open: !submitted && String(prop.action || "").includes("OfferCreate"),
+      urgency: prop.urgency || content.urgency,
+      xrp_thesis: prop.xrp_thesis || content.xrp_thesis,
+      skill_summary: content.skill_summary,
+      t: row.created_at || content.filled_at || content.timestamp,
     });
   }
-  return out.slice(0, 48);
+  return out.slice(0, 64);
 }
 
 function pickCommanderEstimate(intents = [], commanderMeta = {}) {
@@ -2066,7 +2101,7 @@ export async function aimStatusPayload() {
               xrp_per_iou: numberOrNull(lvl?.xrp_per_iou),
               price_unit: scrubText(lvl?.price_unit || "quote_per_base"),
             }))
-            .filter((lvl) => isXrpRlusdPair(lvl.pair) && (lvl.price > 0 || lvl.iou_per_xrp > 0 || lvl.xrp_per_iou > 0))
+            .filter((lvl) => lvl.price > 0 || lvl.iou_per_xrp > 0 || lvl.xrp_per_iou > 0)
             .slice(0, 12)
         : [];
       return {

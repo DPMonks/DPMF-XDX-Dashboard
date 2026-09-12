@@ -85,8 +85,39 @@ export function asciiClean(v) {
     .trim();
 }
 
+const BUY_DOT = "#26a69a";
+const SELL_DOT = "#ef5350";
+
 /**
- * Desk OfferCreate / proposal marks for the active chart pair.
+ * Filled = solid; resting/open/proposal = faded hollow.
+ */
+export function classifyDeskMarkStyle(row = {}) {
+  const status = String(row.status || "").toLowerCase();
+  const submitted = Boolean(row.submitted) || status === "submitted" || status === "filled" || status === "fill" || status === "executed";
+  if (submitted) return "filled";
+  return "resting";
+}
+
+export function deskMarkColor(side) {
+  return normalizeDeskSide(side) === "sell" ? SELL_DOT : BUY_DOT;
+}
+
+function pickTactic(row = {}) {
+  return asciiClean(
+    row.tactic ||
+      row.playbook ||
+      row.urgency ||
+      row.xrp_thesis ||
+      row.skill_summary ||
+      row.action ||
+      row.rationale ||
+      ""
+  );
+}
+
+/**
+ * Desk OfferCreate / fill marks for the active chart pair only.
+ * Minimal dots: solid green/red fills, faded hollow resting offers. No agent colours on plot.
  */
 export function buildDeskMarks(deskOrders = [], pair = "XRP/RLUSD", refPx = null) {
   return (Array.isArray(deskOrders) ? deskOrders : [])
@@ -96,18 +127,54 @@ export function buildDeskMarks(deskOrders = [], pair = "XRP/RLUSD", refPx = null
       const rowPair = String(row.pair || pair).replace(/\s+/g, "").toUpperCase();
       if (rowPair && !samePair(rowPair, pair)) return null;
       const agentId = row.agent_id || row.agent || row.id || "agent";
+      const side = normalizeDeskSide(row.side || row.limit_side || row.trade_direction);
+      const status = row.status || (row.submitted ? "submitted" : row.open ? "open" : "proposal");
+      const style = classifyDeskMarkStyle({ ...row, status, submitted: row.submitted });
+      const tactic = pickTactic(row);
+      const tRaw = row.t ?? row.timestamp ?? row.filled_at ?? row.created_at ?? row.when ?? null;
+      const t = tRaw == null ? null : Number.isFinite(Number(tRaw)) ? Number(tRaw) : Date.parse(tRaw);
       return {
         kind: "desk",
-        key: row.key || `${agentId}-${price}-${idx}`,
+        key: row.key || `${agentId}-${side}-${price}-${style}-${idx}`,
         agent_id: agentId,
         label: asciiClean(row.label || agentId || "Desk"),
-        side: normalizeDeskSide(row.side || row.limit_side || row.trade_direction),
+        side,
         price,
-        status: row.status || (row.submitted ? "submitted" : row.open ? "open" : "proposal"),
-        color: AIM_DESK_AGENT_COLORS[agentId] || "#7dd3fc",
+        status,
+        style,
+        filled: style === "filled",
+        resting: style === "resting",
+        color: deskMarkColor(side),
+        pair: String(pair || rowPair || "").replace(/\s+/g, "").toUpperCase() || "XRP/RLUSD",
+        tactic: tactic || null,
+        playbook: asciiClean(row.playbook || row.xrp_thesis || row.skill_summary || "") || null,
+        urgency: asciiClean(row.urgency || "") || null,
+        action: asciiClean(row.action || "") || null,
+        t: Number.isFinite(t) ? t : null,
       };
     })
     .filter(Boolean);
+}
+
+/** ASCII prompt for Commander when a desk mark is clicked (no em/en dashes). */
+export function deskMarkAskPrompt(mark = {}, { pair } = {}) {
+  if (!mark || !(Number(mark.price) > 0)) return "";
+  const side = normalizeDeskSide(mark.side);
+  const px = Number(mark.price);
+  const pairLabel = asciiClean(mark.pair || pair || "XRP/RLUSD");
+  const agent = asciiClean(mark.agent_id || mark.label || "agent");
+  const style = mark.style || classifyDeskMarkStyle(mark);
+  const bits = [
+    `Explain the AIM chart mark for agent ${agent}.`,
+    `Pair ${pairLabel}, ${side} at ${px}.`,
+    style === "filled" ? "This is a filled trade (solid mark)." : "This is a resting offer (faded hollow mark).",
+  ];
+  if (mark.tactic) bits.push(`Tactic or playbook hint: ${mark.tactic}.`);
+  if (mark.playbook && mark.playbook !== mark.tactic) bits.push(`Playbook: ${mark.playbook}.`);
+  if (mark.urgency) bits.push(`Urgency: ${mark.urgency}.`);
+  if (mark.action) bits.push(`Action: ${mark.action}.`);
+  bits.push("Which agent placed it and what tactic or playbook put the order or fill there?");
+  return asciiClean(bits.join(" "));
 }
 
 /**
