@@ -326,6 +326,8 @@ const en = {
   createPoolXdxAmount: "XDX amount",
   createPoolQuoteAmount: "{asset} amount",
   createPoolAvailable: "Available {amount} {asset}",
+  tradeUsdMarkMissing: "No USD mark",
+  tradeBalanceUnknown: "not loaded",
   createPoolFee: "Initial trading fee",
   createPoolFeeHint: "Trading fee determines swap cost and LP earnings.",
   createPoolPreview: "Pool preview",

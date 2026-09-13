@@ -58,6 +58,8 @@ import {
   depositValueSplit,
   formatLinkedQty,
   linkedDepositAmounts,
+  usdEqualOpposingAmounts,
+  expectedDoubleLpTokens,
   saneOpposingReserve,
   lpHeldForPair,
   sanitizeQtyInput,
@@ -755,3 +757,54 @@ test("a leftover executed payload cannot close a newly opened trade panel", () =
     true
   );
 });
+
+test("add LP opposing estimate is USD-equal at live marks", () => {
+  const equal = usdEqualOpposingAmounts({
+    editedSide: "xdx",
+    amount: "100",
+    xdxUsd: 0.1,
+    quoteUsd: 2,
+  });
+  assert.ok(equal);
+  assert.ok(Math.abs(equal.usd - 10) < 1e-9);
+  assert.ok(Math.abs(equal.quote - 5) < 1e-9);
+
+  const linked = linkedDepositAmounts({
+    editedSide: "xdx",
+    amount: "100",
+    quoteQty: "",
+    reserveBase: 1000,
+    reserveQuote: 513.37834,
+    preferUsdEqual: true,
+    xdxUsd: 0.1,
+    quoteUsd: 2,
+  });
+  assert.equal(linked.basis, "usd");
+  assert.ok(Math.abs(Number(linked.quoteInput) - 5) < 1e-6);
+
+  // Pool ratio would be wildly different; USD path must win when marks exist.
+  const poolOnly = linkedDepositAmounts({
+    editedSide: "xdx",
+    amount: "100",
+    reserveBase: 1000,
+    reserveQuote: 513.37834,
+    preferUsdEqual: false,
+  });
+  assert.ok(Math.abs(poolOnly.quote - 51.337834) < 1e-6);
+  assert.ok(Math.abs(linked.quote - poolOnly.quote) > 1);
+
+  const fromQuote = linkedDepositAmounts({
+    editedSide: "quote",
+    amount: "",
+    quoteQty: "10",
+    preferUsdEqual: true,
+    xdxUsd: 0.5,
+    quoteUsd: 2,
+  });
+  assert.equal(fromQuote.basis, "usd");
+  assert.ok(Math.abs(fromQuote.xdx - 40) < 1e-9);
+  assert.ok(Math.abs(expectedDoubleLpTokens(100, 50, 1000, 500, 200) - 20) < 1e-9);
+  assert.ok(Math.abs(expectedDoubleLpTokens(100, 10, 1000, 500, 200) - 4) < 1e-9);
+});
+
+

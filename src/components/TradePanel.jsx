@@ -9,6 +9,7 @@ import {
   ammDepositTx,
   ammWithdrawTx,
   expectedLpTokens,
+  expectedDoubleLpTokens,
   expectedSingleLpTokens,
   expectedSingleWithdraw,
   extraTrustLinesNeeded,
@@ -189,6 +190,13 @@ export default function TradePanel({
       ? Number(price)
       : markerPx || implied || Number(spotPrice) || 0;
   const quoteReserve = reserves.quote;
+  const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
+  const quoteUsdMarket = quoteUnitUsd({ quoteId, pool: reserves, prices, allowImplied: false });
+  const quoteUsdImplied = quoteUnitUsd({ quoteId, pool: reserves, prices, allowImplied: true });
+  // Live API/book marks first; on-platform AMM implied only when sizing add-LP fiat.
+  const quoteUsd = quoteUsdMarket || (action === "addLp" ? quoteUsdImplied : 0) || 0;
+  const markReady = xdxUsd > 0 && quoteUsd > 0;
+  const linkUsdEqual = action === "addLp" && !isSingleLp && markReady;
   const linked = linkedDepositAmounts({
     editedSide,
     amount,
@@ -196,16 +204,24 @@ export default function TradePanel({
     price: px,
     reserveBase: reserves.base,
     reserveQuote: quoteReserve,
-    preferMark: !isLp,
+    preferMark: !isLp || linkUsdEqual,
+    preferUsdEqual: linkUsdEqual,
+    xdxUsd,
+    quoteUsd,
   });
   const total = tradeTotal(linked.xdx || amount, px);
   const quoteHint = predictedQuoteOut(linked.xdx || amount, px, reserves.base, quoteReserve, {
-    preferMark: !isLp,
+    preferMark: !isLp || linkUsdEqual,
   });
   const shownAmount = linked.xdxInput;
   const shownQuoteQty = linked.quoteInput;
   const typedXdx = Number(amount) || 0;
   const typedQuote = Number(quoteQty) || 0;
+  const displayXdx = action === "addLp" && !isSingleLp ? linked.xdx || typedXdx : typedXdx;
+  const displayQuote =
+    action === "addLp" && !isSingleLp ? linked.quote || Number(shownQuoteQty) || typedQuote : typedQuote;
+  // Prefer USD-equal amounts for display and the signed deposit. TF_TWO_ASSET
+  // still limits the on-ledger share to the pool ratio; LP out uses the tighter side.
   const addXdx = isSingleLp ? (singleAsset === "xdx" ? typedXdx : 0) : linked.xdx || typedXdx;
   const addQuote = isSingleLp
     ? singleAsset === "quote"
@@ -218,9 +234,7 @@ export default function TradePanel({
         singleAsset === "quote" ? quoteReserve : reserves.base,
         reserves.lpSupply
       )
-    : expectedLpTokens(addXdx || amount, reserves.base, reserves.lpSupply);
-  const xdxUsd = xdxUnitUsd({ pool: reserves, prices });
-  const quoteUsd = quoteUnitUsd({ quoteId, pool: reserves, prices, allowImplied: false });
+    : expectedDoubleLpTokens(addXdx || amount, addQuote, reserves.base, quoteReserve, reserves.lpSupply);
   const withdrawLp = lpAmount || amount;
   const doubleWithdraw = expectedWithdraw(withdrawLp, reserves.base, reserves.quote, reserves.lpSupply);
   const singleOut = isSingleRemove
@@ -251,8 +265,8 @@ export default function TradePanel({
             : typedQuote * quoteUsd,
       }
     : depositValueSplit({
-        xdxAmount: action === "removeLp" ? withdraw.base : typedXdx,
-        quoteAmount: action === "removeLp" ? withdraw.quote : typedQuote,
+        xdxAmount: action === "removeLp" ? withdraw.base : action === "addLp" ? displayXdx : typedXdx,
+        quoteAmount: action === "removeLp" ? withdraw.quote : action === "addLp" ? displayQuote : typedQuote,
         xdxUsd,
         quoteUsd,
       });
@@ -849,8 +863,22 @@ export default function TradePanel({
               autoComplete="off"
               min="0"
               step="any"
-              value={isLp ? amount : shownAmount}
-              placeholder={isLp && !amount && linked.xdxInput ? linked.xdxInput : undefined}
+              value={
+                action === "addLp" && !isSingleLp
+                  ? editedSide === "xdx"
+                    ? amount
+                    : shownAmount
+                  : isLp
+                    ? amount
+                    : shownAmount
+              }
+              placeholder={
+                action === "addLp" && !isSingleLp
+                  ? undefined
+                  : isLp && !amount && linked.xdxInput
+                    ? linked.xdxInput
+                    : undefined
+              }
               onChange={(event) => {
                 const next = isLp ? sanitizeQtyInput(event.target.value) : event.target.value;
                 if (next == null) return;
@@ -861,13 +889,19 @@ export default function TradePanel({
             {action === "addLp" ? (
               <>
                 <span className="trade-field-usd">
-                  {xdxUsd > 0 && typedXdx > 0 ? formatUsd(typedXdx * xdxUsd, locale) : "—"}
+                  {xdxUsd > 0 && displayXdx > 0
+                    ? formatUsd(displayXdx * xdxUsd, locale)
+                    : displayXdx > 0
+                      ? t.tradeUsdMarkMissing || "No USD mark"
+                      : ""}
                 </span>
                 <span className="trade-field-usd">
                   {(t.createPoolAvailable || "Available {amount} {asset}")
                     .replace(
                       "{amount}",
-                      signedIn && available.xdx != null ? formatToken(available.xdx, locale, 6) : "—"
+                      signedIn
+                        ? formatToken(available.xdx != null ? available.xdx : 0, locale, 6)
+                        : t.tradeBalanceUnknown || "not loaded"
                     )
                     .replace("{asset}", "XDX")}
                 </span>
@@ -943,8 +977,22 @@ export default function TradePanel({
               autoComplete="off"
               min="0"
               step="any"
-              value={isLp ? quoteQty : shownQuoteQty}
-              placeholder={isLp && !quoteQty && linked.quoteInput ? linked.quoteInput : undefined}
+              value={
+                action === "addLp" && !isSingleLp
+                  ? editedSide === "quote"
+                    ? quoteQty
+                    : shownQuoteQty
+                  : isLp
+                    ? quoteQty
+                    : shownQuoteQty
+              }
+              placeholder={
+                action === "addLp" && !isSingleLp
+                  ? undefined
+                  : isLp && !quoteQty && linked.quoteInput
+                    ? linked.quoteInput
+                    : undefined
+              }
               onChange={(event) => {
                 const next = isLp ? sanitizeQtyInput(event.target.value) : event.target.value;
                 if (next == null) return;
@@ -955,13 +1003,19 @@ export default function TradePanel({
             {action === "addLp" ? (
               <>
                 <span className="trade-field-usd">
-                  {quoteUsd > 0 && typedQuote > 0 ? formatUsd(typedQuote * quoteUsd, locale) : "—"}
+                  {quoteUsd > 0 && displayQuote > 0
+                    ? formatUsd(displayQuote * quoteUsd, locale)
+                    : displayQuote > 0
+                      ? t.tradeUsdMarkMissing || "No USD mark"
+                      : ""}
                 </span>
                 <span className="trade-field-usd">
                   {(t.createPoolAvailable || "Available {amount} {asset}")
                     .replace(
                       "{amount}",
-                      signedIn && available.quote != null ? formatToken(available.quote, locale, 6) : "—"
+                      signedIn
+                        ? formatToken(available.quote != null ? available.quote : 0, locale, 6)
+                        : t.tradeBalanceUnknown || "not loaded"
                     )
                     .replace("{asset}", quote.label)}
                 </span>

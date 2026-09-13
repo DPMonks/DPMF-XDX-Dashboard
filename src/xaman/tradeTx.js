@@ -721,6 +721,29 @@ export function sanitizeQtyInput(raw) {
   return clipped;
 }
 
+export function usdEqualOpposingAmounts({
+  editedSide = "xdx",
+  amount,
+  quoteQty,
+  xdxUsd,
+  quoteUsd,
+} = {}) {
+  const xUsd = Number(xdxUsd);
+  const qUsd = Number(quoteUsd);
+  if (!(xUsd > 0) || !(qUsd > 0)) return null;
+  const side = editedSide === "quote" ? "quote" : "xdx";
+  if (side === "quote") {
+    const quote = Number(quoteQty);
+    if (!(quote > 0)) return null;
+    const usd = quote * qUsd;
+    return { xdx: usd / xUsd, quote, usd };
+  }
+  const xdx = Number(amount);
+  if (!(xdx > 0)) return null;
+  const usd = xdx * xUsd;
+  return { xdx, quote: usd / qUsd, usd };
+}
+
 export function linkedDepositAmounts({
   editedSide = "xdx",
   amount,
@@ -729,8 +752,40 @@ export function linkedDepositAmounts({
   reserveBase,
   reserveQuote,
   preferMark = false,
+  preferUsdEqual = false,
+  xdxUsd,
+  quoteUsd,
 } = {}) {
   const side = editedSide === "quote" ? "quote" : "xdx";
+  if (preferUsdEqual) {
+    const equal = usdEqualOpposingAmounts({
+      editedSide: side,
+      amount,
+      quoteQty,
+      xdxUsd,
+      quoteUsd,
+    });
+    if (equal) {
+      if (side === "quote") {
+        return {
+          xdx: equal.xdx > 0 ? equal.xdx : 0,
+          quote: equal.quote > 0 ? equal.quote : 0,
+          xdxInput: equal.xdx > 0 ? formatLinkedQty(equal.xdx) : "",
+          quoteInput: quoteQty == null ? "" : String(quoteQty),
+          basis: "usd",
+          usd: equal.usd,
+        };
+      }
+      return {
+        xdx: equal.xdx > 0 ? equal.xdx : 0,
+        quote: equal.quote > 0 ? equal.quote : 0,
+        xdxInput: amount == null ? "" : String(amount),
+        quoteInput: equal.quote > 0 ? formatLinkedQty(equal.quote) : "",
+        basis: "usd",
+        usd: equal.usd,
+      };
+    }
+  }
   if (side === "quote") {
     const quote = Number(quoteQty);
     const xdx = predictedXdxFromQuote(quoteQty, price, reserveBase, reserveQuote, { preferMark });
@@ -739,6 +794,7 @@ export function linkedDepositAmounts({
       quote: quote > 0 ? quote : 0,
       xdxInput: xdx > 0 ? formatLinkedQty(xdx) : "",
       quoteInput: quoteQty == null ? "" : String(quoteQty),
+      basis: preferMark ? "mark" : "pool",
     };
   }
   const xdx = Number(amount);
@@ -748,6 +804,7 @@ export function linkedDepositAmounts({
     quote: quote > 0 ? quote : 0,
     xdxInput: amount == null ? "" : String(amount),
     quoteInput: quote > 0 ? formatLinkedQty(quote) : "",
+    basis: preferMark ? "mark" : "pool",
   };
 }
 
@@ -830,6 +887,13 @@ export function expectedLpTokens(xdxAmount, reserveBase, lpSupply) {
   const qty = Number(xdxAmount);
   if (!(base > 0) || !(supply > 0) || !(qty > 0)) return 0;
   return (qty / base) * supply;
+}
+
+export function expectedDoubleLpTokens(xdxAmount, quoteAmount, reserveBase, reserveQuote, lpSupply) {
+  const fromXdx = expectedLpTokens(xdxAmount, reserveBase, lpSupply);
+  const fromQuote = expectedLpTokens(quoteAmount, reserveQuote, lpSupply);
+  if (fromXdx > 0 && fromQuote > 0) return Math.min(fromXdx, fromQuote);
+  return fromXdx || fromQuote || 0;
 }
 
 export function expectedSingleLpTokens(deposit, reserve, lpSupply) {
