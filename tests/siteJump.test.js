@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { AIM_MATRIX_ID, SITE_JUMP_IDS, jumpLockOffset, pageTravelPercent, readJumpHash, sectionAtLockLine, siteJumpItems, trailChromeOffset } from "../src/siteJump.js";
+import { AIM_MATRIX_ID, DECK_FOCUS_EVENT, SITE_JUMP_IDS, focusDeck, jumpLockOffset, pageTravelPercent, readJumpHash, sectionAtLockLine, siteJumpItems, trailChromeOffset } from "../src/siteJump.js";
 
 test("site jump catalog covers the eleven decks plus AI-Matrix overlay", () => {
   assert.equal(SITE_JUMP_IDS.length, 11);
@@ -24,4 +24,19 @@ test("travel percent and lock line follow the page", () => {
     getBoundingClientRect: () => ({ top: id === "swap" ? -4 : id === "wallet" ? -80 : 120 }),
   });
   assert.equal(sectionAtLockLine(["wallet", "swap", "pools"], 72, lookup), "swap");
+});
+
+test("focusDeck emits deck focus for deferred hydration", () => {
+  const seen = [];
+  const handler = (event) => seen.push(event.detail?.id);
+  globalThis.window = {
+    dispatchEvent(event) {
+      handler(event);
+      return true;
+    },
+  };
+  focusDeck("trading");
+  assert.equal(DECK_FOCUS_EVENT, "xdx:deck-focus");
+  assert.deepEqual(seen, ["trading"]);
+  delete globalThis.window;
 });

@@ -4,6 +4,7 @@ import {
   AIM_MATRIX_ID,
   AIM_OVERLAY_EVENT,
   SITE_JUMP_IDS,
+  focusDeck,
   jumpLockOffset,
   openAimOverlay,
   pageTravelPercent,
@@ -140,6 +141,7 @@ export default function SiteJump() {
         setActive(AIM_MATRIX_ID);
         openAimOverlay();
       } else if (want) {
+        focusDeck(want);
         scrollToDeck(want);
       }
     }
@@ -148,6 +150,7 @@ export default function SiteJump() {
       const next = readJumpHash(window.location.hash);
       if (!next) return;
       setActive(next);
+      focusDeck(next);
       if (next === AIM_MATRIX_ID) {
         openAimOverlay();
         return;
@@ -175,6 +178,7 @@ export default function SiteJump() {
     setLocking(id);
     setActive(id);
     setOpen(false);
+    focusDeck(id);
     if (id === AIM_MATRIX_ID) {
       if (window.history?.replaceState) window.history.replaceState(null, "", `#${id}`);
       openAimOverlay();

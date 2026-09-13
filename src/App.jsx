@@ -1,24 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
-import "./aim-matrix.css";
 
 import ConnectWallet from "./components/ConnectWallet";
-import TradeExecuted from "./components/TradeExecuted";
-import TradePanel from "./components/TradePanel";
 import XdxTrustline from "./components/XdxTrustline";
 import { useI18n } from "./i18n/useI18n";
 import TokenDetails from "./components/TokenDetails";
-import RichList from "./components/RichList";
-import AmmCard from "./components/AmmCard";
-import CreatePoolCard from "./components/CreatePoolCard";
-import VotingContainer from "./components/governance/VotingContainer";
-import OrderBook from "./components/OrderBook";
-import XdxSwapPanel from "./components/XdxSwapPanel";
 import SiteJump from "./components/SiteJump";
 import ConnectedWallet from "./components/ConnectedWallet";
 import Footer from "./components/Footer";
-import AiMatrixDrawer from "./components/AiMatrixDrawer";
 import Skeleton from "./components/Skeleton";
+import DeckGate from "./components/DeckGate";
 import { handshake } from "./api";
 import { INDEXER_ORIGIN, getAmm, getTopHolders, getTopLp, getWalletLp } from "./api/indexer";
 import { interfaceLinkState } from "./utils/interfaceLink";
@@ -51,6 +42,15 @@ import {
 const TradingChart = lazy(() => import("./components/TradingChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 const TokenDetailsChart = lazy(() => import("./components/TokenDetailsChart"));
+const OrderBook = lazy(() => import("./components/OrderBook"));
+const XdxSwapPanel = lazy(() => import("./components/XdxSwapPanel"));
+const RichList = lazy(() => import("./components/RichList"));
+const AmmCard = lazy(() => import("./components/AmmCard"));
+const CreatePoolCard = lazy(() => import("./components/CreatePoolCard"));
+const VotingContainer = lazy(() => import("./components/governance/VotingContainer"));
+const TradePanel = lazy(() => import("./components/TradePanel"));
+const TradeExecuted = lazy(() => import("./components/TradeExecuted"));
+const AiMatrixDrawer = lazy(() => import("./components/AiMatrixDrawer"));
 
 export default function App() {
   const { t } = useI18n();
@@ -186,13 +186,29 @@ export default function App() {
       }
     }
 
-    load().catch(() => {});
-    const id = setInterval(() => {
+    let intervalId = 0;
+    let idleId = 0;
+    function startLists() {
+      if (cancelled) return;
       load().catch(() => {});
-    }, 60000);
+      intervalId = window.setInterval(() => {
+        load().catch(() => {});
+      }, 60000);
+    }
+    // Handshake already started above; delay heavy list fetches so first paint stays free.
+    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(startLists, { timeout: 900 });
+    } else {
+      idleId = window.setTimeout(startLists, 120);
+    }
     return () => {
       cancelled = true;
-      clearInterval(id);
+      if (typeof window !== "undefined" && typeof window.cancelIdleCallback === "function" && idleId) {
+        window.cancelIdleCallback(idleId);
+      } else {
+        clearTimeout(idleId);
+      }
+      clearInterval(intervalId);
     };
   }, [paintLp]);
 
@@ -349,6 +365,19 @@ export default function App() {
 
   const linkState = interfaceLinkState(link, t);
 
+  useEffect(() => {
+    let idleId = 0;
+    const warm = () => {
+      import("./components/AiMatrixDrawer").catch(() => {});
+    };
+    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(warm, { timeout: 2500 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+    idleId = window.setTimeout(warm, 1200);
+    return () => clearTimeout(idleId);
+  }, []);
+
   return (
     <div className="dashboard-container">
       <div className="site-chrome">
@@ -398,123 +427,163 @@ export default function App() {
 
         <section className="dashboard-card neon-card" id="trading">
           <h2 className="card-title">{t.tradingChart}</h2>
-          <Suspense fallback={<Skeleton height={300} />}>
-            <TradingChart />
-          </Suspense>
-          <XdxSwapPanel />
-          <div className="orderbook-wrap" id="orderbook">
-            <h3 className="card-title orderbook-title">{t.orderbook}</h3>
-            <OrderBook />
-          </div>
+          <DeckGate
+            id="trading"
+            ids={["trading", "swap", "orderbook"]}
+            placeholderIds={["swap", "orderbook"]}
+            minHeight={520}
+            rootMargin="400px 0px"
+          >
+            <Suspense fallback={<Skeleton height={300} />}>
+              <TradingChart />
+            </Suspense>
+            <Suspense fallback={<Skeleton height={180} />}>
+              <XdxSwapPanel />
+            </Suspense>
+            <div className="orderbook-wrap" id="orderbook">
+              <h3 className="card-title orderbook-title">{t.orderbook}</h3>
+              <Suspense fallback={<Skeleton height={240} />}>
+                <OrderBook />
+              </Suspense>
+            </div>
+          </DeckGate>
         </section>
 
         <section className="dashboard-card neon-card" id="activity">
           <h2 className="card-title">{t.activityChart}</h2>
-          <Suspense fallback={<Skeleton height={300} />}>
-            <ActivityChart />
-          </Suspense>
+          <DeckGate id="activity" minHeight={360}>
+            <Suspense fallback={<Skeleton height={300} />}>
+              <ActivityChart />
+            </Suspense>
+          </DeckGate>
         </section>
 
         <div className="lists-row">
           <section className="dashboard-card neon-card" id="holders">
             <h2 className="card-title">{t.topHolders}</h2>
-            <RichList
-              className="is-xdx-owners"
-              rows={holders}
-              loading={holdersLoading}
-              error={errors.holders}
-              valueKey="balance"
-              unit="XDX"
-              shareTotal={XDX_TOTAL_SUPPLY}
-              emptyLabel={t.emptyHolders}
-              searchPlaceholder={t.searchHolders}
-              freshness={holderFreshness}
-            />
+            <DeckGate id="holders" minHeight={320}>
+              <Suspense fallback={<Skeleton height={280} />}>
+                <RichList
+                  className="is-xdx-owners"
+                  rows={holders}
+                  loading={holdersLoading}
+                  error={errors.holders}
+                  valueKey="balance"
+                  unit="XDX"
+                  shareTotal={XDX_TOTAL_SUPPLY}
+                  emptyLabel={t.emptyHolders}
+                  searchPlaceholder={t.searchHolders}
+                  freshness={holderFreshness}
+                />
+              </Suspense>
+            </DeckGate>
           </section>
 
           <section className="dashboard-card neon-card" id="lp-owners">
             <h2 className="card-title">{t.lpHolders}</h2>
-            <RichList
-              className="is-lp-holders"
-              rows={lpHolders}
-              loading={lpLoading}
-              error={errors.lp}
-              valueKey="lp_balance"
-              unit="LP"
-              showPair
-              defaultPair="XDX/XRP"
-              focusPair={lpFocusPair}
-              focusAt={lpFocusAt}
-              pairOptions={ammData.map((row) => row.pool_name || row.pool).filter(Boolean)}
-              emptyLabel={t.emptyLp}
-              searchPlaceholder={t.searchLp}
-              freshness={lpFreshness}
-            />
+            <DeckGate id="lp-owners" minHeight={320}>
+              <Suspense fallback={<Skeleton height={280} />}>
+                <RichList
+                  className="is-lp-holders"
+                  rows={lpHolders}
+                  loading={lpLoading}
+                  error={errors.lp}
+                  valueKey="lp_balance"
+                  unit="LP"
+                  showPair
+                  defaultPair="XDX/XRP"
+                  focusPair={lpFocusPair}
+                  focusAt={lpFocusAt}
+                  pairOptions={ammData.map((row) => row.pool_name || row.pool).filter(Boolean)}
+                  emptyLabel={t.emptyLp}
+                  searchPlaceholder={t.searchLp}
+                  freshness={lpFreshness}
+                />
+              </Suspense>
+            </DeckGate>
           </section>
         </div>
 
-        <CreatePoolCard pools={ammData} onJoinExisting={openTrade} onCreated={refreshLists} />
+        <DeckGate id="create-pool" placeholderIds={["create-pool"]} minHeight={280}>
+          <Suspense fallback={<Skeleton height={240} />}>
+            <CreatePoolCard pools={ammData} onJoinExisting={openTrade} onCreated={refreshLists} />
+          </Suspense>
+        </DeckGate>
 
         <section className="dashboard-card neon-card amm-pools-card" id="pools">
           <h2 className="card-title">{t.ammPools}</h2>
-          <AmmCard
-            pools={ammData}
-            loading={ammLoading}
-            error={errors.amm}
-            onAddLiquidity={(pool) =>
-              openTrade({
-                action: "addLp",
-                pair: pool.pool || pool.pool_name,
-                quote: pool.quote,
-                quote_issuer: pool.quote_issuer,
-                quote_hex: pool.quote_hex,
-                amm: pool.amm_account,
-                lp_currency: pool.lp_currency,
-              })
-            }
-            onRemoveLiquidity={(pool) =>
-              openTrade({
-                action: "removeLp",
-                pair: pool.pool || pool.pool_name,
-                quote: pool.quote,
-                quote_issuer: pool.quote_issuer,
-                quote_hex: pool.quote_hex,
-                amm: pool.amm_account,
-                lp_currency: pool.lp_currency,
-              })
-            }
-          />
+          <DeckGate id="pools" minHeight={320}>
+            <Suspense fallback={<Skeleton height={280} />}>
+              <AmmCard
+                pools={ammData}
+                loading={ammLoading}
+                error={errors.amm}
+                onAddLiquidity={(pool) =>
+                  openTrade({
+                    action: "addLp",
+                    pair: pool.pool || pool.pool_name,
+                    quote: pool.quote,
+                    quote_issuer: pool.quote_issuer,
+                    quote_hex: pool.quote_hex,
+                    amm: pool.amm_account,
+                    lp_currency: pool.lp_currency,
+                  })
+                }
+                onRemoveLiquidity={(pool) =>
+                  openTrade({
+                    action: "removeLp",
+                    pair: pool.pool || pool.pool_name,
+                    quote: pool.quote,
+                    quote_issuer: pool.quote_issuer,
+                    quote_hex: pool.quote_hex,
+                    amm: pool.amm_account,
+                    lp_currency: pool.lp_currency,
+                  })
+                }
+              />
+            </Suspense>
+          </DeckGate>
         </section>
 
         <section className="dashboard-card neon-card governance-card" id="governance">
           <h2 className="card-title">{t.poolGovernance}</h2>
-          <VotingContainer />
+          <DeckGate id="governance" minHeight={280}>
+            <Suspense fallback={<Skeleton height={240} />}>
+              <VotingContainer />
+            </Suspense>
+          </DeckGate>
         </section>
 
       </div>
 
       <Footer />
       {tradeAction ? (
-        <TradePanel
-          key={tradeAction.openId || `${tradeAction.action}-${tradeAction.quote}`}
-          action={tradeAction.action}
-          initialQuote={tradeAction.quote}
-          initialAmount={tradeAction.amount}
-          quoteExtra={tradeAction}
-          initialPools={ammData}
-          resumeUuid={tradeAction.resumeUuid}
-          resumeTxjson={tradeAction.resumeTxjson}
-          onClose={(next) => {
-            if (next?.action) {
-              setTradeAction({ ...normalizeTradeRequest(next), openId: Date.now() });
-              return;
-            }
-            setTradeAction(null);
-          }}
-        />
+        <Suspense fallback={null}>
+          <TradePanel
+            key={tradeAction.openId || `${tradeAction.action}-${tradeAction.quote}`}
+            action={tradeAction.action}
+            initialQuote={tradeAction.quote}
+            initialAmount={tradeAction.amount}
+            quoteExtra={tradeAction}
+            initialPools={ammData}
+            resumeUuid={tradeAction.resumeUuid}
+            resumeTxjson={tradeAction.resumeTxjson}
+            onClose={(next) => {
+              if (next?.action) {
+                setTradeAction({ ...normalizeTradeRequest(next), openId: Date.now() });
+                return;
+              }
+              setTradeAction(null);
+            }}
+          />
+        </Suspense>
       ) : null}
-      <TradeExecuted />
-      <AiMatrixDrawer />
+      <Suspense fallback={null}>
+        <TradeExecuted />
+      </Suspense>
+      <Suspense fallback={null}>
+        <AiMatrixDrawer />
+      </Suspense>
     </div>
   );
 }

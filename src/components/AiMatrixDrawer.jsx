@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/useI18n";
 import {
   AIM_MATRIX_ID,
@@ -7,8 +7,11 @@ import {
   openAimOverlay,
   readJumpHash,
 } from "../siteJump";
-import AiMatrixPanel from "./AiMatrixPanel";
-import AimDeskSmartChart from "./AimDeskSmartChart";
+import Skeleton from "./Skeleton";
+import "../aim-matrix.css";
+
+const AiMatrixPanel = lazy(() => import("./AiMatrixPanel"));
+const AimDeskSmartChart = lazy(() => import("./AimDeskSmartChart"));
 
 const SWIPE_CLOSE_PX = 72;
 
@@ -37,6 +40,10 @@ export default function AiMatrixDrawer() {
   const [open, setOpen] = useState(() =>
     typeof window === "undefined" ? false : readJumpHash(window.location.hash) === AIM_MATRIX_ID
   );
+  // Hydrate AIM panel/chart only after first open so decks paint without AIM/Commander work.
+  const [contentReady, setContentReady] = useState(() =>
+    typeof window === "undefined" ? false : readJumpHash(window.location.hash) === AIM_MATRIX_ID
+  );
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [chartProps, setChartProps] = useState({ deskOrders: [], estimate: null });
@@ -57,6 +64,9 @@ export default function AiMatrixDrawer() {
       return { deskOrders, estimate };
     });
   }, []);
+  useEffect(() => {
+    if (open) setContentReady(true);
+  }, [open]);
   const touchRef = useRef(null);
   const openRef = useRef(open);
   openRef.current = open;
@@ -231,13 +241,15 @@ export default function AiMatrixDrawer() {
           aria-label={t.close || "Close"}
           onClick={closeFromUi}
         />
-        {showDesktopChart ? (
+        {showDesktopChart && contentReady ? (
           <div className="aim-drawer-chart-pane" aria-label="Merged trading chart">
-            <AimDeskSmartChart
-              deskOrders={chartProps.deskOrders}
-              estimate={chartProps.estimate}
-              fillHeight
-            />
+            <Suspense fallback={<Skeleton height={420} />}>
+              <AimDeskSmartChart
+                deskOrders={chartProps.deskOrders}
+                estimate={chartProps.estimate}
+                fillHeight
+              />
+            </Suspense>
           </div>
         ) : null}
         <aside
@@ -264,10 +276,14 @@ export default function AiMatrixDrawer() {
             </button>
           </header>
           <div className="aim-drawer-body">
-            <AiMatrixPanel
-              onChartPropsChange={handleChartPropsChange}
-              showInlineChart={showInlineChart}
-            />
+            {contentReady ? (
+              <Suspense fallback={<Skeleton height={320} />}>
+                <AiMatrixPanel
+                  onChartPropsChange={handleChartPropsChange}
+                  showInlineChart={showInlineChart}
+                />
+              </Suspense>
+            ) : null}
           </div>
         </aside>
       </div>

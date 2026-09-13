@@ -17,6 +17,14 @@ export const AIM_MATRIX_ID = "ai-matrix";
 
 export const AIM_OVERLAY_EVENT = "xdx:aim-overlay";
 
+/** Fired when JUMP TO / hash targets a deck so DeckGate can hydrate before scroll. */
+export const DECK_FOCUS_EVENT = "xdx:deck-focus";
+
+export function focusDeck(id) {
+  if (typeof window === "undefined" || !id) return;
+  window.dispatchEvent(new CustomEvent(DECK_FOCUS_EVENT, { detail: { id } }));
+}
+
 export function siteJumpItems(t = {}) {
   return [
     { id: "wallet", short: t.jumpWallet || "Wallet", label: t.connectedWallet || "Connected Wallet" },
