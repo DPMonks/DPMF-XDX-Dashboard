@@ -115,8 +115,11 @@ test("live amm_info updates the ratio box after an LP deposit or withdraw", () =
     reserve_asset: 40000000,
     reserve_currency: 80000,
     lp_supply: 40000,
+    xdxUsd: 0.00004,
+    quote_usd: 1,
     xdx_pct: 50,
     quote_pct: 50,
+    split_basis: "usd",
   };
   const live = {
     reserve_xdx: 51709564.3635,
@@ -128,8 +131,9 @@ test("live amm_info updates the ratio box after an LP deposit or withdraw", () =
   assert.equal(next.reserve_asset, 51709564.3635);
   assert.equal(next.reserve_currency, 59.8319);
   assert.equal(next.lp_supply, 44896.6467);
-  assert.ok(next.xdx_pct > 99);
-  assert.ok(next.quote_pct < 1);
+  assert.ok(next.xdx_pct > 95);
+  assert.ok(next.quote_pct < 5);
+  assert.equal(next.split_basis, "usd");
   const leakedLive = applyLivePoolReserves(catalog, {
     reserve_xdx: 51709564.3635,
     reserve_currency: 56027.4283,

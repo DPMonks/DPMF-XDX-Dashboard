@@ -208,3 +208,47 @@ test("detectQuoteUsd prefers live USD then XDX pool implied for any quote", () =
   });
   assert.ok(fromUsd.quotePct > 90);
 });
+
+
+test("preferUsdPoolSplit is USD-weighted for skewed raw amounts (XDX/XIO-like)", () => {
+  const balanced = preferUsdPoolSplit({
+    reserveXdx: 75_280_000,
+    reserveQuote: 149,
+    lpSupply: 84_720,
+    xdxUsd: 0.0000529,
+    // no market quoteUsd — must not fall back to raw unit/LP ratios
+  });
+  assert.ok(balanced);
+  assert.equal(balanced.basis, "usd_pool");
+  assert.ok(Math.abs(balanced.xdxPct - 50) < 0.2);
+  assert.ok(Math.abs(balanced.quotePct - 50) < 0.2);
+
+  const marketSkew = preferUsdPoolSplit({
+    reserveXdx: 75_280_000,
+    reserveQuote: 149,
+    lpSupply: 84_720,
+    xdxUsd: 0.0000529,
+    quoteUsd: 100, // quote much richer → quote-heavy
+  });
+  assert.equal(marketSkew.basis, "usd");
+  assert.ok(marketSkew.quotePct > 60);
+  assert.ok(marketSkew.xdxPct < 40);
+});
+
+test("preferUsdPoolSplit never returns raw unit/LP bars when USD cannot be valued", () => {
+  assert.equal(
+    preferUsdPoolSplit({
+      reserveXdx: 75_280_000,
+      reserveQuote: 149,
+      lpSupply: 84_720,
+    }),
+    null
+  );
+  assert.equal(
+    preferUsdPoolSplit({
+      reserveXdx: 149,
+      lpSupply: 84_720,
+    }),
+    null
+  );
+});

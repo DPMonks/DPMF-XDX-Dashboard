@@ -1,6 +1,8 @@
-// XDX share of the LP vs the rest. Do not infer an equal-value quote —
-// that forces every bar to 50/50. Prefer XDX compared to LP token supply
-// (the LP total); if that is missing, compare XDX to the opposing reserve.
+// AMM composition bars are USD value-weighted (XDX USD vs quote USD).
+// Market quote USD is preferred; if missing, pool-implied quote USD (at the
+// pool's own spot) is used so a balanced AMM reads ~50/50. Never fall back to
+// raw token counts or XDX-vs-LP-supply ratios — those produce nonsense bars
+// like 0.2% / 99.8% on skewed raw-amount pools.
 
 import { isXrpMicroFallback } from "./recordedPrice.js";
 
@@ -234,17 +236,27 @@ export function preferUsdPoolSplit({
   xdxUsd,
   quoteUsd,
 } = {}) {
-  const usd = poolAssetSplit({ reserveXdx, reserveQuote, xdxUsd, quoteUsd });
-  if (usd) return { ...usd, basis: "usd", reserveQuote: Number(reserveQuote) || null };
-  const units = resolvePoolSplit({
+  void lpSupply;
+  void price;
+  const quote = Number(reserveQuote);
+  const market = poolAssetSplit({ reserveXdx, reserveQuote: quote, xdxUsd, quoteUsd });
+  if (market) {
+    return { ...market, basis: "usd", reserveQuote: quote > 0 ? quote : null };
+  }
+  // Pool-mark USD: value both sides at the pool spot. Constant-product AMMs
+  // are equal-value at that mark, so missing market quote USD still yields a
+  // truthful ~50/50 bar instead of a raw-unit distortion.
+  const implied = impliedQuoteUsd({ reserveXdx, reserveQuote: quote, xdxUsd });
+  const pooled = poolAssetSplit({
     reserveXdx,
-    reserveQuote,
-    lpSupply,
-    price,
+    reserveQuote: quote,
     xdxUsd,
-    quoteUsd,
+    quoteUsd: implied,
   });
-  return units ? { ...units, basis: units.inferred ? "inferred" : "units" } : null;
+  if (pooled) {
+    return { ...pooled, basis: "usd_pool", reserveQuote: quote > 0 ? quote : null };
+  }
+  return null;
 }
 
 export function detectQuoteUsd({ quoteId, pool, prices, allowImplied = true } = {}) {

@@ -274,6 +274,7 @@ function withPoolSplit(row, fallbackXdxUsd, fallbackXrpUsd, prices = {}) {
     xdx_pct: split?.xdxPct ?? null,
     quote_pct: split?.quotePct ?? null,
     lead: split?.lead || null,
+    split_basis: split?.basis || null,
   };
 }
 
