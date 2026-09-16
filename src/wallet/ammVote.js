@@ -29,7 +29,7 @@ export function feeUnitsFromPercent(percent) {
 
 export function formatFeePercent(percent, locale = "en") {
   const n = Number(percent);
-  if (!Number.isFinite(n)) return "—";
+  if (!Number.isFinite(n)) return "-";
   return `${n.toLocaleString(locale, {
     minimumFractionDigits: 0,
     maximumFractionDigits: n < 0.01 ? 4 : n < 1 ? 3 : 2,
@@ -142,6 +142,8 @@ export function pairFromVoteAssets(asset, asset2) {
     if (!row || row.currency === "XRP") return "XRP";
     return quoteTickerFromCurrency(row.currency, row.issuer) || "XRP";
   });
+  // Only real XDX AMMs - never invent XDX/BTC from an unrelated LP.
+  if (!codes.includes("XDX")) return "";
   const quote = codes.find((code) => code !== "XDX") || "XRP";
   return `XDX/${quote}`;
 }
@@ -221,7 +223,7 @@ export function activityFromAmmVoteTx(row, address) {
 
 export function formatVoteWeight(weightPct, locale = "en") {
   const n = Number(weightPct);
-  if (!Number.isFinite(n)) return "—";
+  if (!Number.isFinite(n)) return "-";
   return `${n.toLocaleString(locale, {
     minimumFractionDigits: 0,
     maximumFractionDigits: n < 1 ? 3 : 2,

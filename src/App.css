@@ -4362,15 +4362,14 @@ body {
 
 .wallet-income-assets {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 11ch;
-  column-gap: 0.75rem;
-  row-gap: 0.2rem;
+  grid-template-columns: minmax(0, max-content) 11ch;
+  column-gap: 0.55rem;
+  row-gap: 0.15rem;
   align-items: baseline;
-  justify-content: stretch;
-  width: 100%;
+  justify-content: start;
+  width: max-content;
   max-width: 100%;
-  line-height: 1.25;
-  box-sizing: border-box;
+  line-height: 1.2;
 }
 
 .wallet-income-assets .wallet-income-amt,
@@ -4400,7 +4399,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-align: left;letter-spacing: 0.02em;
+  letter-spacing: 0.02em;
 }
 
 .wallet-income-assets .is-plus {
@@ -4415,21 +4414,11 @@ body {
 
 .wallet-income-table td.is-pool-share {
   white-space: normal;
-  width: 48%;
-  min-width: 12rem;
-  vertical-align: middle;
-}
-.wallet-income-table th:nth-child(2),
-.wallet-income-table td.is-lp,
-.wallet-income-table td.is-lp-add {
-  width: 48%;
-  min-width: 12rem;
 }
 
 @media (max-width: 900px) {
   .wallet-income-assets {
     grid-template-columns: minmax(0, 1fr) 11ch;
-    column-gap: 0.65rem;
     width: 100%;
   }
 }
@@ -4437,7 +4426,7 @@ body {
 @media (max-width: 560px) {
   .wallet-income-assets {
     grid-template-columns: minmax(0, 1fr) 11ch;
-    column-gap: 0.5rem;
+    column-gap: 0.4rem;
     width: 100%;
   }
 }

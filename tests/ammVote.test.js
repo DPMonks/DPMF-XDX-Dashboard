@@ -41,6 +41,13 @@ test("pairFromVoteAssets tags XDX/XIO from the XIO hex or issuer", () => {
   assert.equal(displayVotePair("XDX/5553444300000000000000000000000000000000"), "XDX/USDC");
 });
 
+
+test("pairFromVoteAssets returns empty for non-XDX AMMs (no invented XDX/BTC)", () => {
+  assert.equal(pairFromVoteAssets({ currency: "BTC", issuer: "rBtc" }, { currency: "ETH", issuer: "rEth" }), "");
+  assert.equal(pairFromVoteAssets({ currency: "XRP" }, { currency: "BTC", issuer: "rBtc" }), "");
+  assert.equal(pairFromVoteAssets({ currency: "TRUMP", issuer: "rTrump" }, { currency: "XRP" }), "");
+});
+
 test("fee units map 0.25% to 250 and back", () => {
   assert.equal(feeUnitsFromPercent(0.25), 250);
   assert.equal(feePercentFromUnits(250), 0.25);

@@ -9,7 +9,7 @@ import {
   earliestHeldDay,
   fillContinuousVolumeDays,
   incomePairBalance,
-  incomePairChoices,
+  catalogIncomePairs, incomePairChoices,
   incomePairTotals,
   incomeHeldPoolRows,
   poolShareAssets,
@@ -810,4 +810,23 @@ test("fee XDX splits into both pool assets for display", () => {
   assert.equal(assets.assetXdx, 50);
   assert.equal(assets.assetQuote, 0.2);
   assert.equal(assets.quoteAsset, "XRP");
+});
+
+
+test("income pair choices keep only exchange-catalog pools the wallet holds", () => {
+  const pairs = incomePairChoices({
+    positions: [
+      { pool: "XDX/XRP", lp_balance: 10 },
+      { pool: "XDX/BTC", lp_balance: 5 },
+      { pool: "XDX/ETH", lp_balance: 3 },
+      { pool: "XDX/XIO", lp_balance: 2 },
+    ],
+    pools: [
+      { pool: "XDX/XRP" },
+      { pool: "XDX/XIO" },
+      { pool: "XDX/RLUSD" },
+      { pool: "XDX/XSQUAD" },
+    ],
+  });
+  assert.deepEqual(pairs, ["ALL", "XDX/XRP", "XDX/XIO"]);
 });
