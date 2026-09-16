@@ -642,6 +642,8 @@ test("XDX/XAH fee days follow XDX market history, not only today", () => {
     { pair: "XDX/XRP", xdx: 2_000_000, timestamp: "2026-08-26T00:00:00.000Z" },
     { pair: "XDX/XRP", xdx: 1_000_000, timestamp: "2026-08-27T00:00:00.000Z" },
   ];
+  // Include XAH in the live catalog for this unit test of fee-day projection.
+  const catalog = [{ pool: "XDX/XAH", quote: "XAH" }];
   const rows = incomeRowsForPair({
     pair: "XDX/XAH",
     now,
@@ -658,6 +660,7 @@ test("XDX/XAH fee days follow XDX market history, not only today", () => {
         volume24hXdx: 500_000,
       },
     ],
+    pools: catalog,
     prices: { xdxUsd: 0.00004, xdxVolumeDays: marketDays },
   });
   const days = rows.map((row) => row.date);
@@ -817,6 +820,34 @@ test("fee XDX splits into both pool assets for display", () => {
   assert.equal(assets.quoteAsset, "XRP");
 });
 
+
+test("income pair choices fall back to featured when catalog is empty", () => {
+  const pairs = incomePairChoices({
+    positions: [
+      { pool: "XDX/XRP", lp_balance: 10 },
+      { pool: "XDX/BTC", lp_balance: 5 },
+      { pool: "XDX/ETH", lp_balance: 3 },
+      { pool: "XDX/XIO", lp_balance: 2 },
+      { pool: "XDX/OVO", lp_balance: 1 },
+    ],
+    pools: [],
+  });
+  assert.deepEqual(pairs, ["ALL", "XDX/XRP", "XDX/XIO"]);
+});
+
+test("income pair choices remap held LP hex to catalog names", () => {
+  const pairs = incomePairChoices({
+    positions: [
+      { pool: "XDX/BTC", lp_balance: 10, amm_account: "rAmmXrp1", lp_currency: "03ABCDEF" },
+      { pool: "XDX/ETH", lp_balance: 4, amm_account: "rJunk", lp_currency: "03JUNK" },
+    ],
+    pools: [
+      { pool: "XDX/XRP", amm_account: "rAmmXrp1", lp_currency: "03ABCDEF" },
+      { pool: "XDX/RLUSD" },
+    ],
+  });
+  assert.deepEqual(pairs, ["ALL", "XDX/XRP"]);
+});
 
 test("income pair choices keep only exchange-catalog pools the wallet holds", () => {
   const pairs = incomePairChoices({

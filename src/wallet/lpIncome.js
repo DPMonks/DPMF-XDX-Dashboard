@@ -43,7 +43,7 @@ export function isAllIncomePairs(value) {
 export function catalogIncomePairs(pools = []) {
   const names = (Array.isArray(pools) ? pools : [])
     .map((row) => normalizeWalletPair(row?.pool || row?.pool_name || row?.pair || row))
-    .filter((name) => isXdxAmmPair(name));
+    .filter((name) => isXdxAmmPair(name) && !looksLikeXrplAddress(name.split("/")[1]));
   return [...new Set(names)].sort((left, right) => {
     if (left === DEFAULT_INCOME_PAIR) return -1;
     if (right === DEFAULT_INCOME_PAIR) return 1;
@@ -51,14 +51,46 @@ export function catalogIncomePairs(pools = []) {
   });
 }
 
+/** Live AMM catalog when present; otherwise featured exchange pairs (never unrestricted held). */
+export function incomeAllowlistPairs(pools = []) {
+  const catalog = catalogIncomePairs(pools);
+  return catalog.length ? catalog : [...INCOME_FEATURED_PAIRS];
+}
+
+function catalogPairLookup(pools = []) {
+  const byAmm = new Map();
+  const byHex = new Map();
+  for (const pool of Array.isArray(pools) ? pools : []) {
+    const name = normalizeWalletPair(pool?.pool || pool?.pool_name || pool?.pair);
+    if (!name || !isXdxAmmPair(name) || looksLikeXrplAddress(name.split("/")[1])) continue;
+    const amm = String(pool?.amm_account || pool?.amm || "").toLowerCase();
+    const hex = String(pool?.lp_currency || pool?.lp_currency_hex || "").toUpperCase();
+    if (amm) byAmm.set(amm, name);
+    if (hex) byHex.set(hex, name);
+  }
+  return { byAmm, byHex };
+}
+
+/** Remap a position/activity row to a catalog pair via amm_account / LP hex; drop address-like quotes. */
+export function remapIncomePairName(row, pools = []) {
+  if (!row) return "";
+  const { byAmm, byHex } = catalogPairLookup(pools);
+  const amm = String(row.amm_account || row.amm || "").toLowerCase();
+  const hex = String(row.lp_currency || row.lp_currency_hex || row.lpCurrency || "").toUpperCase();
+  if (amm && byAmm.has(amm)) return byAmm.get(amm);
+  if (hex && byHex.has(hex)) return byHex.get(hex);
+  const named = normalizeWalletPair(row.pool || row.pool_name || row.pair || row);
+  if (!named || looksLikeXrplAddress(named.split("/")[1])) return "";
+  return named;
+}
+
 export function heldIncomePairs(positions = [], pools = []) {
+  const allow = new Set(incomeAllowlistPairs(pools));
   const held = (Array.isArray(positions) ? positions : [])
     .filter((row) => num(row?.lp_balance) > 0)
-    .map((row) => normalizeWalletPair(row?.pool || row?.pool_name || row?.pair || row))
-    .filter((name) => isXdxAmmPair(name));
-  const catalog = catalogIncomePairs(pools);
-  const names = catalog.length ? held.filter((name) => catalog.includes(name)) : held;
-  return [...new Set(names)].sort((left, right) => {
+    .map((row) => remapIncomePairName(row, pools))
+    .filter((name) => isXdxAmmPair(name) && allow.has(name));
+  return [...new Set(held)].sort((left, right) => {
     if (left === DEFAULT_INCOME_PAIR) return -1;
     if (right === DEFAULT_INCOME_PAIR) return 1;
     return left.localeCompare(right);
@@ -96,25 +128,14 @@ export function isXdxAmmPair(value) {
 }
 
 export function remapIncomeActivity(activity = [], positions = [], pools = []) {
-  const catalog = [...(Array.isArray(positions) ? positions : []), ...(Array.isArray(pools) ? pools : [])];
+  const allow = new Set(incomeAllowlistPairs(pools));
+  const lookupPools = [...(Array.isArray(pools) ? pools : []), ...(Array.isArray(positions) ? positions : [])];
   return (Array.isArray(activity) ? activity : [])
     .map((row) => {
       if (!row) return null;
-      const named = normalizeWalletPair(row.pair || row.pool);
-      if (isXdxAmmPair(named) && !looksLikeXrplAddress(named.split("/")[1])) {
-        return { ...row, pair: named, pool: named };
-      }
-      const amm = String(row.amm || row.amm_account || "").toLowerCase();
-      const hex = String(row.lpCurrency || row.lp_currency || "").toUpperCase();
-      const match = catalog.find((item) => {
-        const itemAmm = String(item?.amm_account || item?.amm || "").toLowerCase();
-        const itemHex = String(item?.lp_currency || item?.lp_currency_hex || "").toUpperCase();
-        return (amm && itemAmm === amm) || (hex && itemHex === hex);
-      });
-      const remapped = normalizeWalletPair(
-        match?.pool || match?.pool_name || match?.pair || named
-      );
+      const remapped = remapIncomePairName(row, lookupPools) || normalizeWalletPair(row.pair || row.pool);
       if (!isXdxAmmPair(remapped) || looksLikeXrplAddress(remapped.split("/")[1])) return null;
+      if (!allow.has(remapped)) return null;
       return { ...row, pair: remapped, pool: remapped };
     })
     .filter(Boolean);

@@ -13,7 +13,7 @@ import { catalogXdxVolume24h, catalogXdxVolume7d, dailyPricesFromOhlc, dailyXdxF
 import { looksLikeXrpPerXdx, saneXrpUsd } from "../utils/recordedPrice.js";
 import { mergeWalletActivity, mergeWalletOrders, pendingFor } from "./ledgerOrders.js";
 import { isNativeXrpQuote, lineCounterparty, lineCurrencyCodes, sameIssuedCurrency } from "../utils/currency.js";
-import { isXdxAmmPair, lpFeeIncomeRows } from "./lpIncome.js";
+import { INCOME_FEATURED_PAIRS, isXdxAmmPair, lpFeeIncomeRows } from "./lpIncome.js";
 
 const LP_CURRENCY_RE = /^03[A-F0-9]{38}$/i;
 
@@ -301,12 +301,16 @@ export function positionsFromLines(lines = [], pools = []) {
     if (amm) byAccount.set(amm, pool);
     if (hex) byHex.set(hex, pool);
   }
+  const poolList = Array.isArray(pools) ? pools : [];
+  const featured = new Set(INCOME_FEATURED_PAIRS);
   const out = [];
   for (const holding of holdings) {
     const catalog =
       byAccount.get(String(holding.amm_account || "").toLowerCase()) ||
       byHex.get(holding.lp_currency) ||
       null;
+    // Never invent XDX/BTC etc from a non-catalog LP trustline.
+    if (!catalog && poolList.length) continue;
     const pair =
       resolveLpPairName(
         {
@@ -317,13 +321,16 @@ export function positionsFromLines(lines = [], pools = []) {
         catalog?.pool || catalog?.pool_name || catalog?.pair
       ) || "";
     if (!pair) continue;
+    if (!catalog && !featured.has(pair)) continue;
+    const labeled =
+      (catalog && normalizeWalletPair(catalog.pool || catalog.pool_name || catalog.pair)) || pair;
     const position = lpPositionFromPool(
       holding.lp_balance,
       mergeLpPoolSource(
-        { ...holding, pool: pair, pool_name: pair, pair },
+        { ...holding, pool: labeled, pool_name: labeled, pair: labeled },
         catalog
       ),
-      pair
+      labeled
     );
     if (position) out.push(position);
   }
@@ -828,12 +835,15 @@ export function catalogPairKeys(pools = []) {
 }
 
 export function positionInExchangeCatalog(position, catalogKeys) {
-  if (!catalogKeys || catalogKeys.size === 0) return true;
+  const pair = normalizeWalletPair(position?.pool || position?.pool_name || position?.pair);
+  // Empty/wrong catalog: only featured exchange pairs, never unrestricted trustlines.
+  if (!catalogKeys || catalogKeys.size === 0) {
+    return Boolean(pair && INCOME_FEATURED_PAIRS.includes(pair));
+  }
   const amm = String(position?.amm_account || "").toLowerCase();
   if (amm && catalogKeys.has(`amm:${amm}`)) return true;
   const hex = String(position?.lp_currency || "").toUpperCase();
   if (hex && catalogKeys.has(`lp:${hex}`)) return true;
-  const pair = normalizeWalletPair(position?.pool || position?.pool_name || position?.pair);
   return Boolean(pair && catalogKeys.has(pair));
 }
 
