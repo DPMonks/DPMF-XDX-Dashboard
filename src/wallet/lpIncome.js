@@ -53,6 +53,7 @@ export function catalogIncomePairs(pools = []) {
 
 /** Live AMM catalog when present; otherwise featured exchange pairs (never unrestricted held). */
 export function incomeAllowlistPairs(pools = []) {
+  // Live AMM catalog when present (all real pools, including XDX/BTC etc). Featured only if catalog empty.
   const catalog = catalogIncomePairs(pools);
   return catalog.length ? catalog : [...INCOME_FEATURED_PAIRS];
 }

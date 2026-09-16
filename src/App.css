@@ -4362,15 +4362,16 @@ body {
 
 .wallet-income-assets {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 11ch;
-  column-gap: 0.75rem;
-  row-gap: 0.2rem;
+  grid-template-columns: max-content 11ch;
+  column-gap: 0.55rem;
+  row-gap: 0.15rem;
   align-items: baseline;
-  justify-content: stretch;
-  width: 100%;
+  justify-content: start;
+  width: max-content;
   max-width: 100%;
   line-height: 1.25;
   box-sizing: border-box;
+  margin-right: auto;
 }
 
 .wallet-income-assets .wallet-income-amt,
@@ -4415,21 +4416,29 @@ body {
 
 .wallet-income-table td.is-pool-share {
   white-space: normal;
+  width: auto;
+  min-width: 0;
+  vertical-align: middle;
+  text-align: left;
 }
 
 @media (max-width: 900px) {
   .wallet-income-assets {
-    grid-template-columns: minmax(0, 1fr) 11ch;
-    column-gap: 0.65rem;
-    width: 100%;
+    grid-template-columns: max-content 11ch;
+    column-gap: 0.5rem;
+    width: max-content;
+    max-width: 100%;
+    justify-content: start;
   }
 }
 
 @media (max-width: 560px) {
   .wallet-income-assets {
-    grid-template-columns: minmax(0, 1fr) 11ch;
-    column-gap: 0.5rem;
-    width: 100%;
+    grid-template-columns: max-content 11ch;
+    column-gap: 0.4rem;
+    width: max-content;
+    max-width: 100%;
+    justify-content: start;
   }
 }
 
