@@ -440,16 +440,16 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
                     <td className={hold ? "is-lp is-pool-share" : "is-lp-add is-pool-share"}>
                       {hasAssets ? (
                         <span className="wallet-income-assets">
-                          <span className="wallet-income-asset-line">
+                          <b className="wallet-income-amt">
                             {hold ? null : <span className="is-plus">+</span>}
-                            <b className="wallet-income-amt">{formatToken(assetXdx, locale, 4)}</b>
-                            <span className="wallet-income-ticker"> XDX</span>
-                          </span>
-                          <span className="wallet-income-asset-line">
+                            {formatToken(assetXdx, locale, 4)}
+                          </b>
+                          <span className="wallet-income-ticker">XDX</span>
+                          <b className="wallet-income-amt">
                             {hold ? null : <span className="is-plus">+</span>}
-                            <b className="wallet-income-amt">{formatToken(assetQuote, locale, 4)}</b>
-                            <span className="wallet-income-ticker"> {quoteLabel}</span>
-                          </span>
+                            {formatToken(assetQuote, locale, 4)}
+                          </b>
+                          <span className="wallet-income-ticker">{quoteLabel}</span>
                         </span>
                       ) : (
                         ""
