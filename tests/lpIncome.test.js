@@ -14,6 +14,8 @@ import {
   incomeHeldPoolRows,
   poolShareAssets,
   enrichFeeRowAssets,
+  feeRowAssetsUsd,
+  saneAssetUsdMark,
   feeXdxFromLpTokens,
   mergeFrozenFees,
   incomeRowsForPair,
@@ -509,10 +511,11 @@ test("recorded fee USD stays frozen when the live mark moves", () => {
   assert.ok(older);
   assert.equal(older.kind, "fee");
   assert.equal(older.lpEarned, 2);
-  assert.equal(older.usd, 7.25);
-  // Legacy recorded rows lacked assets; convert LP fee tokens via share x reserves.
   assert.ok(older.assetXdx > 0);
   assert.ok(older.assetQuote > 0);
+  // Frozen 7.25 is replaced by assets x live/day marks when available.
+  assert.notEqual(older.usd, 7.25);
+  assert.ok(older.usd > 0);
 });
 
 test("mergeFrozenFees backfills assets onto legacy LP-only fee rows", () => {
@@ -521,7 +524,8 @@ test("mergeFrozenFees backfills assets onto legacy LP-only fee rows", () => {
     [{ date: "2026-09-01", pair: "XDX/XRP", lpTokens: 1.5, usd: 9, assetXdx: 12, assetQuote: 0.003, quoteAsset: "XRP", kind: "fee" }]
   );
   assert.equal(merged.length, 1);
-  assert.equal(merged[0].usd, 0.42);
+  // Assets present: accept corrected incoming USD instead of first-wins frozen junk.
+  assert.equal(merged[0].usd, 9);
   assert.equal(merged[0].assetXdx, 12);
   assert.equal(merged[0].assetQuote, 0.003);
   assert.equal(merged[0].quoteAsset, "XRP");
@@ -572,7 +576,8 @@ test("incomeRowsForPair fills assets for any held wallet using recorded legacy r
   assert.ok(day);
   assert.ok(day.assetXdx > 0);
   assert.ok(day.assetQuote > 0);
-  assert.equal(day.usd, 1.25);
+  // Revalue from assets x marks (50 XDX * 0.00004 + 0.1 XRP * 2).
+  assert.ok(Math.abs(day.usd - (50 * 0.00004 + 0.1 * 2)) < 1e-9);
   // Zero-USD legacy row still shows assets after conversion (readable, not blank).
   const prior = rows.find((row) => row.date === "2026-09-07");
   assert.ok(prior);
@@ -829,4 +834,25 @@ test("income pair choices keep only exchange-catalog pools the wallet holds", ()
     ],
   });
   assert.deepEqual(pairs, ["ALL", "XDX/XRP", "XDX/XIO"]);
+});
+
+
+test("fee row USD is assets x marks; RLUSD peg overrides insane quote marks", () => {
+  const row = {
+    date: "2026-09-15",
+    pair: "XDX/RLUSD",
+    assetXdx: 6754.4592,
+    assetQuote: 0.3767,
+    quoteAsset: "RLUSD",
+    lpTokens: 1,
+    kind: "fee",
+    usd: 0.0753,
+  };
+  // Insane RLUSD mark (~0.2) previously produced USD < RLUSD amount.
+  const book = { xdxUsd: 0.0000474, xrpUsd: 2.8, RLUSD: 0.2, quotes: { RLUSD: 0.2 } };
+  const usd = feeRowAssetsUsd(row, book, { pool: "XDX/RLUSD", quote: "RLUSD" });
+  const expected = 6754.4592 * 0.0000474 + 0.3767 * 1;
+  assert.ok(Math.abs(usd - expected) < 1e-6);
+  assert.ok(usd > row.assetQuote);
+  assert.ok(Math.abs(saneAssetUsdMark("RLUSD", book) - 1) < 1e-12);
 });
