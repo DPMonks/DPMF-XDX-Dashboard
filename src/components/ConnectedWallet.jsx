@@ -363,7 +363,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
   return (
     <section className={`wallet-book wallet-income${empty ? " is-empty" : " is-filled"}`}>
       <div className="wallet-income-head">
-        <h3>{t.lpPassiveIncome || "LP Earning/Passive income"}</h3>
+        <h3>{t.lpPassiveIncome || "POOL EARNING/PASSIVE INCOME"}</h3>
         <div className="wallet-income-tools">
           <label className="wallet-lp-select wallet-income-select">
             <span className="sr-only">{t.incomePairSelect || t.incomePair || "Pair"}</span>
@@ -381,18 +381,6 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
             </select>
           </label>
           <div className="wallet-income-totals">
-            {!allPairs ? (
-              <p className="wallet-income-total" aria-label={t.incomeTotalLp || "Total LP"}>
-                {empty || !(totals.lp > 0) ? (
-                  "—"
-                ) : (
-                  <>
-                    {formatToken(totals.lp, locale, 4)}
-                    <small>{t.incomeLpTokens || "LP"}</small>
-                  </>
-                )}
-              </p>
-            ) : null}
             <p className="wallet-income-total is-usd" aria-label={t.incomeUsd || "USD"}>
               {empty || !(totals.usd > 0) ? "—" : formatUsd(totals.usd, locale)}
             </p>
@@ -422,7 +410,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
           <thead>
             <tr>
               <th>{allPairs ? t.incomePair || "Pair" : t.incomeDate || "Date"}</th>
-              <th>{allPairs ? t.incomeLpBalance || "LP Balance" : t.incomeLpAdded || t.incomeLpTokens || "LP"}</th>
+              <th>{t.incomePoolShareAssets || "Assets"}</th>
               <th>{t.incomeUsd || "USD"}</th>
             </tr>
           </thead>
@@ -435,10 +423,13 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
               </tr>
             ) : (
               visible.map((row) => {
-                const amount = Number(row.lpEarned ?? row.lpBalance ?? row.lpTokens);
                 const hold = row.kind === "hold" || allPairs;
+                const assetXdx = Number(row.assetXdx) || 0;
+                const assetQuote = Number(row.assetQuote) || 0;
+                const hasAssets = assetXdx > 0 || assetQuote > 0;
+                const quoteLabel = row.quoteAsset || String(row.pair || "").split("/")[1] || "";
                 return (
-                  <tr key={`${row.date || "hold"}-${row.pair}-${amount}`}>
+                  <tr key={`${row.date || "hold"}-${row.pair}-${assetXdx}-${assetQuote}-${row.usd || 0}`}>
                     <td>
                       {hold ? (
                         <span className="wallet-income-day">{row.pair}</span>
@@ -446,21 +437,23 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
                         <span className="wallet-income-day">{row.date}</span>
                       )}
                     </td>
-                    <td className={hold ? "is-lp" : "is-lp-add"}>
-                      {amount > 0 ? (
-                        hold ? (
-                          formatToken(amount, locale, 4)
-                        ) : (
-                          <>
-                            <span className="is-plus">+</span>
-                            <span className="is-add">{formatToken(amount, locale, 4)}</span>
-                          </>
-                        )
+                    <td className={hold ? "is-lp is-pool-share" : "is-lp-add is-pool-share"}>
+                      {hasAssets ? (
+                        <span className="wallet-income-assets">
+                          <b>
+                            {hold ? "" : <span className="is-plus">+</span>}
+                            {formatToken(assetXdx, locale, 4)} XDX
+                          </b>
+                          <i>
+                            {hold ? "" : <span className="is-plus">+</span>}
+                            {formatToken(assetQuote, locale, 4)} {quoteLabel}
+                          </i>
+                        </span>
                       ) : (
                         ""
                       )}
                     </td>
-                    <td className="is-earn">{amount > 0 && Number(row.usd) > 0 ? formatUsd(row.usd, locale) : ""}</td>
+                    <td className="is-earn">{hasAssets && Number(row.usd) > 0 ? formatUsd(row.usd, locale) : ""}</td>
                   </tr>
                 );
               })
