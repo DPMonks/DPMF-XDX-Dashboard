@@ -13,6 +13,9 @@ import {
   incomePairTotals,
   incomeHeldPoolRows,
   poolShareAssets,
+  enrichFeeRowAssets,
+  feeXdxFromLpTokens,
+  mergeFrozenFees,
   incomeRowsForPair,
   isXdxAmmPair,
   lpDepositIncomeRows,
@@ -507,6 +510,73 @@ test("recorded fee USD stays frozen when the live mark moves", () => {
   assert.equal(older.kind, "fee");
   assert.equal(older.lpEarned, 2);
   assert.equal(older.usd, 7.25);
+  // Legacy recorded rows lacked assets; convert LP fee tokens via share x reserves.
+  assert.ok(older.assetXdx > 0);
+  assert.ok(older.assetQuote > 0);
+});
+
+test("mergeFrozenFees backfills assets onto legacy LP-only fee rows", () => {
+  const merged = mergeFrozenFees(
+    [{ date: "2026-09-01", pair: "XDX/XRP", lpTokens: 1.5, usd: 0.42, kind: "fee" }],
+    [{ date: "2026-09-01", pair: "XDX/XRP", lpTokens: 1.5, usd: 9, assetXdx: 12, assetQuote: 0.003, quoteAsset: "XRP", kind: "fee" }]
+  );
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].usd, 0.42);
+  assert.equal(merged[0].assetXdx, 12);
+  assert.equal(merged[0].assetQuote, 0.003);
+  assert.equal(merged[0].quoteAsset, "XRP");
+});
+
+test("enrichFeeRowAssets converts legacy LP fee tokens into pool assets", () => {
+  const pool = {
+    pool: "XDX/XRP",
+    quote: "XRP",
+    reserve_asset: 50_000,
+    reserve_currency: 100,
+    lp_supply: 1_000,
+  };
+  const feeXdx = feeXdxFromLpTokens(2, pool);
+  assert.equal(feeXdx, 100);
+  const enriched = enrichFeeRowAssets(
+    { date: "2026-09-08", pair: "XDX/XRP", lpTokens: 2, usd: 1.1, kind: "fee" },
+    pool
+  );
+  assert.equal(enriched.assetXdx, 50);
+  assert.equal(enriched.assetQuote, 0.1);
+  assert.equal(enriched.usd, 1.1);
+});
+
+test("incomeRowsForPair fills assets for any held wallet using recorded legacy rows", () => {
+  const rows = incomeRowsForPair({
+    pair: "XDX/XRP",
+    recordedRows: [
+      { date: "2026-09-08", pair: "XDX/XRP", lpTokens: 2, usd: 1.25, kind: "fee" },
+      { date: "2026-09-07", pair: "XDX/XRP", lpTokens: 1, usd: 0, kind: "fee" },
+    ],
+    positions: [
+      {
+        pool: "XDX/XRP",
+        quote: "XRP",
+        reserve_asset: 50_000,
+        reserve_currency: 100,
+        lp_supply: 1_000,
+        lp_balance: 50,
+        trading_fee: 1000,
+      },
+    ],
+    historyActivity: [{ side: "addLp", pair: "XDX/XRP", lp: 50, timestamp: "2026-08-01T10:00:00.000Z" }],
+    xdxUsd: 0.00004,
+    xrpUsd: 2,
+  });
+  const day = rows.find((row) => row.date === "2026-09-08");
+  assert.ok(day);
+  assert.ok(day.assetXdx > 0);
+  assert.ok(day.assetQuote > 0);
+  assert.equal(day.usd, 1.25);
+  // Zero-USD legacy row still shows assets after conversion (readable, not blank).
+  const prior = rows.find((row) => row.date === "2026-09-07");
+  assert.ok(prior);
+  assert.ok(prior.assetXdx > 0);
 });
 
 test("pair fee days start on the first LP hold and skip deposit-sized rows", () => {

@@ -427,6 +427,7 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
                 const assetXdx = Number(row.assetXdx) || 0;
                 const assetQuote = Number(row.assetQuote) || 0;
                 const hasAssets = assetXdx > 0 || assetQuote > 0;
+                const usdValue = Number(row.usd) || 0;
                 const quoteLabel = row.quoteAsset || String(row.pair || "").split("/")[1] || "";
                 return (
                   <tr key={`${row.date || "hold"}-${row.pair}-${assetXdx}-${assetQuote}-${row.usd || 0}`}>
@@ -452,10 +453,15 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
                           <span className="wallet-income-ticker">{quoteLabel}</span>
                         </span>
                       ) : (
-                        ""
+                        <span className="wallet-income-assets">
+                          <b className="wallet-income-amt">0</b>
+                          <span className="wallet-income-ticker">XDX</span>
+                          <b className="wallet-income-amt">0</b>
+                          <span className="wallet-income-ticker">{quoteLabel || "QUOTE"}</span>
+                        </span>
                       )}
                     </td>
-                    <td className="is-earn">{hasAssets && Number(row.usd) > 0 ? formatUsd(row.usd, locale) : ""}</td>
+                    <td className="is-earn">{usdValue > 0 ? formatUsd(usdValue, locale) : ""}</td>
                   </tr>
                 );
               })
