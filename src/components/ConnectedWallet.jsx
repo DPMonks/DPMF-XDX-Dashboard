@@ -441,23 +441,31 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
                     <td className={hold ? "is-lp is-pool-share" : "is-lp-add is-pool-share"}>
                       {hasAssets ? (
                         <span className="wallet-income-assets">
-                          <b className="wallet-income-amt">
-                            {hold ? null : <span className="is-plus">+</span>}
-                            {formatToken(assetXdx, locale, 4)}
-                          </b>
-                          <span className="wallet-income-ticker">XDX</span>
-                          <b className="wallet-income-amt">
-                            {hold ? null : <span className="is-plus">+</span>}
-                            {formatToken(assetQuote, locale, 4)}
-                          </b>
-                          <span className="wallet-income-ticker">{quoteLabel}</span>
+                          <span className="wallet-income-line">
+                            <b className="wallet-income-amt">
+                              {hold ? null : <span className="is-plus">+</span>}
+                              {formatToken(assetXdx, locale, 4)}
+                            </b>
+                            <span className="wallet-income-ticker">XDX</span>
+                          </span>
+                          <span className="wallet-income-line">
+                            <b className="wallet-income-amt">
+                              {hold ? null : <span className="is-plus">+</span>}
+                              {formatToken(assetQuote, locale, 4)}
+                            </b>
+                            <span className="wallet-income-ticker">{quoteLabel}</span>
+                          </span>
                         </span>
                       ) : (
                         <span className="wallet-income-assets">
-                          <b className="wallet-income-amt">0</b>
-                          <span className="wallet-income-ticker">XDX</span>
-                          <b className="wallet-income-amt">0</b>
-                          <span className="wallet-income-ticker">{quoteLabel || "QUOTE"}</span>
+                          <span className="wallet-income-line">
+                            <b className="wallet-income-amt">0</b>
+                            <span className="wallet-income-ticker">XDX</span>
+                          </span>
+                          <span className="wallet-income-line">
+                            <b className="wallet-income-amt">0</b>
+                            <span className="wallet-income-ticker">{quoteLabel || "QUOTE"}</span>
+                          </span>
                         </span>
                       )}
                     </td>
