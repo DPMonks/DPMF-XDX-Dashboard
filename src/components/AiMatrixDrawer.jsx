@@ -141,12 +141,32 @@ export default function AiMatrixDrawer() {
     if (isMobile) {
       document.body.classList.add("aim-mobile");
       setAimPageFrozen(true);
-      const prev = document.body.style.overflow;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      const prev = {
+        overflow: document.body.style.overflow,
+        position: document.body.style.position,
+        top: document.body.style.top,
+        width: document.body.style.width,
+        left: document.body.style.left,
+        right: document.body.style.right,
+      };
+      // iOS-safe lock: fixed body so underlying page cannot steal scroll / hide chrome.
       document.body.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.left = "0";
+      document.body.style.right = "0";
+      document.body.style.width = "100%";
       return () => {
-        document.body.style.overflow = prev;
+        document.body.style.overflow = prev.overflow;
+        document.body.style.position = prev.position;
+        document.body.style.top = prev.top;
+        document.body.style.width = prev.width;
+        document.body.style.left = prev.left;
+        document.body.style.right = prev.right;
         document.body.classList.remove("aim-drawer-open", "aim-mobile");
         setAimPageFrozen(false);
+        window.scrollTo(0, scrollY);
       };
     }
     setAimPageFrozen(false);
@@ -157,25 +177,26 @@ export default function AiMatrixDrawer() {
     };
   }, [open, isMobile]);
 
-  // Mobile AIM: always land at the top of the deck (open + after contentReady).
+  // Mobile AIM: land at top once when opening (do not keep fighting user scroll).
   useEffect(() => {
     if (!open || !isMobile) return undefined;
+    let cancelled = false;
     const scrollAimTop = () => {
+      if (cancelled) return;
       const body = document.querySelector(".aim-drawer-body");
       if (body) body.scrollTop = 0;
-      const panel = document.querySelector(".aim-drawer-panel");
-      if (panel) panel.scrollTop = 0;
     };
     scrollAimTop();
     const raf = window.requestAnimationFrame(scrollAimTop);
-    const t1 = window.setTimeout(scrollAimTop, 50);
-    const t2 = window.setTimeout(scrollAimTop, 300);
+    const t1 = window.setTimeout(scrollAimTop, 80);
     return () => {
+      cancelled = true;
       window.cancelAnimationFrame(raf);
       window.clearTimeout(t1);
-      window.clearTimeout(t2);
     };
-  }, [open, isMobile, contentReady]);
+    // intentionally only when open flips on mobile, not on every contentReady tick
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isMobile]);
 
   function openFromUi() {
     setDragging(false);
@@ -212,8 +233,8 @@ export default function AiMatrixDrawer() {
     const dx = touch.clientX - start.x;
     const dy = touch.clientY - start.y;
     if (!start.axis) {
-      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
-      start.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      if (Math.abs(dx) < 14 && Math.abs(dy) < 14) return;
+      start.axis = Math.abs(dx) > Math.abs(dy) * 1.35 ? "x" : "y";
       if (start.axis === "y") {
         touchRef.current = null;
         if (dragging) setDragging(false);

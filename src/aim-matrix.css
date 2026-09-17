@@ -679,7 +679,13 @@
   padding: max(0.85rem, env(safe-area-inset-top, 0px)) 1rem 0.75rem 1.1rem;
   border-bottom: 1px solid rgba(120, 220, 255, 0.16);
   flex: 0 0 auto;
-  touch-action: pan-y;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(8, 10, 18, 0.98);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  touch-action: manipulation;
 }
 .aim-drawer-kicker {
   margin: 0;
@@ -714,7 +720,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
   padding: 0.9rem 1rem max(1rem, env(safe-area-inset-bottom, 0px));
@@ -1442,4 +1448,59 @@ body.aim-drawer-open:not(.aim-mobile) {
 /* Keep last paint visible while main-page polls are frozen for mobile AIM. */
 body.aim-page-frozen .dashboard-container {
   contain: layout style;
+}
+
+/* Mobile AIM: lighter chrome, pinned close, less blocky cards */
+@media (max-width: 900px) {
+  .aim-drawer-panel {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  .aim-drawer-head {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    flex-shrink: 0;
+    padding-top: max(0.55rem, env(safe-area-inset-top, 0px));
+    padding-bottom: 0.5rem;
+  }
+  .aim-drawer-close {
+    flex: 0 0 auto;
+    min-height: 40px;
+    min-width: 64px;
+    padding: 0.4rem 0.75rem;
+  }
+  .aim-drawer-body {
+    overscroll-behavior-y: none;
+    padding-top: 0.5rem;
+  }
+  .aim-agent-chip,
+  .aim-drawer-panel .aim-agent-chip {
+    min-height: 0;
+    padding: 0.55rem 0.65rem 0.6rem;
+  }
+  .aim-agent-chip.is-roomy {
+    min-height: 0;
+  }
+  .aim-drawer-body .aim-moves-list {
+    min-height: 0;
+  }
+  .aim-drawer-body .aim-desk-pulse-list {
+    min-height: 0;
+  }
+  .aim-drawer-body .aim-merged-chart-sub {
+    display: none;
+  }
+  .aim-drawer-body .aim-merged-chart-head h3 {
+    font-size: 0.9rem;
+  }
+  .aim-matrix {
+    gap: 0.45rem;
+  }
+  .aim-chat-log,
+  .aim-drawer-body .aim-chat-log,
+  .aim-drawer-panel .aim-chat-log {
+    min-height: 96px !important;
+    max-height: min(28vh, 200px) !important;
+  }
 }
