@@ -353,7 +353,7 @@ export default function HybridChart({
     }
     let cancelled = false;
     async function loadCex() {
-      if (isAimPageFrozen()) return;
+      if (!aimEmbed && isAimPageFrozen()) return;
       try {
         const want = defaultCexLimit(timeframe, loadedBars);
         const payload = await fetchCexCandles({ interval: timeframe, limit: want });
@@ -368,10 +368,10 @@ export default function HybridChart({
       }
     }
     const start = setTimeout(loadCex, 0);
-    const id = setInterval(() => { if (!isAimPageFrozen()) loadCex(); }, 60_000);
+    const id = setInterval(() => { if (aimEmbed || !isAimPageFrozen()) loadCex(); }, 60_000);
     function onAimThaw() {
       if (typeof cancelled !== "undefined" && cancelled) return;
-      if (isAimPageFrozen()) return;
+      if (!aimEmbed && isAimPageFrozen()) return;
       try { loadCex(); } catch { /* ignore */ }
     }
     window.addEventListener("dpmf-aim-page-thaw", onAimThaw);
@@ -386,7 +386,7 @@ export default function HybridChart({
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (isAimPageFrozen()) return;
+      if (!aimEmbed && isAimPageFrozen()) return;
       try {
         const [nextBooks, nextPools, nextPrices, nextFlows, nextSpark, liquidBook, liquidAmm] =
           await Promise.all([
@@ -462,11 +462,11 @@ export default function HybridChart({
       }
     }
     const start = setTimeout(load, 0);
-    const id = setInterval(() => { if (!isAimPageFrozen()) load(); }, 30000);
+    const id = setInterval(() => { if (aimEmbed || !isAimPageFrozen()) load(); }, 30000);
     window.addEventListener("dpmf-wallet-refresh", load);
     function onAimThaw() {
       if (typeof cancelled !== "undefined" && cancelled) return;
-      if (isAimPageFrozen()) return;
+      if (!aimEmbed && isAimPageFrozen()) return;
       try { load(); } catch { /* ignore */ }
     }
     window.addEventListener("dpmf-aim-page-thaw", onAimThaw);
@@ -489,7 +489,7 @@ export default function HybridChart({
     }
     let cancelled = false;
     async function loadLedger() {
-      if (isAimPageFrozen()) return;
+      if (!aimEmbed && isAimPageFrozen()) return;
       const [offers, activity] = await Promise.all([
         getWalletOffers(walletAddress).catch(() => []),
         getWalletActivity(walletAddress).catch(() => []),
@@ -499,7 +499,7 @@ export default function HybridChart({
       setLedgerFills(activity);
     }
     const start = setTimeout(loadLedger, 0);
-    const id = setInterval(() => { if (!isAimPageFrozen()) loadLedger(); }, 15000);
+    const id = setInterval(() => { if (aimEmbed || !isAimPageFrozen()) loadLedger(); }, 15000);
     function onTrade(event) {
       const pending = pendingFromExecution(event.detail, walletAddress);
       if (pending?.order) {
@@ -516,7 +516,7 @@ export default function HybridChart({
     window.addEventListener("dpmf-wallet-refresh", loadLedger);
     function onAimThaw() {
       if (typeof cancelled !== "undefined" && cancelled) return;
-      if (isAimPageFrozen()) return;
+      if (!aimEmbed && isAimPageFrozen()) return;
       try { loadLedger(); } catch { /* ignore */ }
     }
     window.addEventListener("dpmf-aim-page-thaw", onAimThaw);

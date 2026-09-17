@@ -75,7 +75,7 @@ function AimDeskSmartChart({
         <HybridChart
           deskOrders={deskOrders}
           estimate={estimate}
-          aimEmbed={fillHeight}
+          aimEmbed
           initialPair="XRP/RLUSD"
         />
       ) : (
