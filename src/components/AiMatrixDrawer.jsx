@@ -157,7 +157,23 @@ export default function AiMatrixDrawer() {
       document.body.style.left = "0";
       document.body.style.right = "0";
       document.body.style.width = "100%";
+      const onTouchMove = (event) => {
+        let el = event.target;
+        if (el && el.nodeType === 3) el = el.parentElement;
+        if (el && typeof el.closest === "function") {
+          if (
+            el.closest(
+              ".aim-drawer-body, .aim-chat-log, .hybrid-pairs, .hybrid-topbar, .hybrid-ranges, .aim-desk-chart-tfs, .aim-drawer-panel"
+            )
+          ) {
+            return;
+          }
+        }
+        if (event.cancelable) event.preventDefault();
+      };
+      document.addEventListener("touchmove", onTouchMove, { passive: false });
       return () => {
+        document.removeEventListener("touchmove", onTouchMove);
         document.body.style.overflow = prev.overflow;
         document.body.style.position = prev.position;
         document.body.style.top = prev.top;
