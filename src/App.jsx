@@ -388,6 +388,7 @@ export default function App() {
   }, []);
 
   return (
+    <>
     <div className="dashboard-container">
       <div className="site-chrome">
         <header className="dashboard-header neon-border">
@@ -590,9 +591,11 @@ export default function App() {
       <Suspense fallback={null}>
         <TradeExecuted />
       </Suspense>
+
+    </div>
       <Suspense fallback={null}>
         <AiMatrixDrawer />
       </Suspense>
-    </div>
+    </>
   );
 }

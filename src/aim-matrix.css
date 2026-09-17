@@ -660,6 +660,7 @@
   overflow: hidden;
   overscroll-behavior: contain;
   touch-action: manipulation;
+  z-index: 5;
 }
 .aim-drawer-root.is-dragging .aim-drawer-panel {
   will-change: transform;
@@ -1290,7 +1291,7 @@
     width: auto;
     max-width: none;
     min-width: 0;
-    z-index: 2;
+    z-index: 1;
     padding: 0.65rem 0.75rem 0.75rem;
     box-sizing: border-box;
     background: rgba(6, 8, 14, 0.96);
@@ -1521,3 +1522,18 @@ body.aim-page-frozen .dashboard-container {
     max-height: min(28vh, 200px) !important;
   }
 }
+
+/* Desktop AIM: keep side panel above chart pane and always on-screen when open */
+@media (min-width: 901px) {
+  .aim-drawer-root.is-open .aim-drawer-panel {
+    transform: translate3d(0, 0, 0);
+    z-index: 5;
+  }
+  .aim-drawer-root.is-open.has-chart-pane .aim-drawer-chart-pane {
+    z-index: 1;
+  }
+  .aim-drawer-root.is-open:not(.is-dragging) .aim-drawer-panel {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
