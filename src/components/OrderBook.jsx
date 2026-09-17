@@ -14,6 +14,7 @@ import {
 import { formatQuotePerBase, formatToken, formatUsdPrice, formatWhen } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
+import { isAimPageFrozen } from "../pageLive";
 
 function depthWidth(value, max) {
   const size = Number(value || 0);
@@ -108,6 +109,7 @@ export default function OrderBook() {
     let cancelled = false;
 
     async function load() {
+      if (isAimPageFrozen()) return;
       const [one, all] = await Promise.allSettled([
         getOrderbook(pair),
         getOrderbooks(),
@@ -126,8 +128,21 @@ export default function OrderBook() {
     }
 
     const timeout = setTimeout(load, 50);
-    const id = setInterval(load, 30000);
+    const id = setInterval(() => {
+      if (!isAimPageFrozen()) load();
+    }, 30000);
+    function onAimThaw() {
+      if (cancelled) return;
+      if (isAimPageFrozen()) return;
+      try {
+        load();
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener("dpmf-aim-page-thaw", onAimThaw);
     return () => {
+      window.removeEventListener("dpmf-aim-page-thaw", onAimThaw);
       cancelled = true;
       clearTimeout(timeout);
       clearInterval(id);

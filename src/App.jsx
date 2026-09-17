@@ -38,6 +38,7 @@ import {
   lpHeldForPair,
   normalizeTradeRequest,
 } from "./xaman/tradeTx";
+import { isAimPageFrozen } from "./pageLive";
 
 const TradingChart = lazy(() => import("./components/TradingChart"));
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
@@ -166,6 +167,7 @@ export default function App() {
     }
 
     async function load() {
+      if (isAimPageFrozen()) return;
       const hsPromise = handshake();
       hsPromise.then((hs) => applyLink(hs)).catch(() => {});
 
@@ -192,6 +194,7 @@ export default function App() {
       if (cancelled) return;
       load().catch(() => {});
       intervalId = window.setInterval(() => {
+        if (isAimPageFrozen()) return;
         load().catch(() => {});
       }, 60000);
     }
@@ -201,8 +204,14 @@ export default function App() {
     } else {
       idleId = window.setTimeout(startLists, 120);
     }
+    function onAimThaw() {
+      if (cancelled) return;
+      load().catch(() => {});
+    }
+    window.addEventListener("dpmf-aim-page-thaw", onAimThaw);
     return () => {
       cancelled = true;
+      window.removeEventListener("dpmf-aim-page-thaw", onAimThaw);
       if (typeof window !== "undefined" && typeof window.cancelIdleCallback === "function" && idleId) {
         window.cancelIdleCallback(idleId);
       } else {

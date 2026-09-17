@@ -753,9 +753,10 @@
 }
 
 @media (max-width: 900px) {
+  /* Parallax on #root composites the whole main page and hurts AIM scroll; disabled. */
   body.aim-drawer-open #root {
-    transition: transform 0.48s cubic-bezier(0.25, 0.8, 0.25, 1);
-    transform: translate3d(-12px, 0, 0);
+    transition: none;
+    transform: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1436,3 +1437,9 @@ body.aim-drawer-open:not(.aim-mobile) {
 }
 .aim-agent-moves li small { opacity: 0.65; font-size: 0.68rem; }
 .aim-agent-status { font-weight: 600; }
+
+
+/* Keep last paint visible while main-page polls are frozen for mobile AIM. */
+body.aim-page-frozen .dashboard-container {
+  contain: layout style;
+}

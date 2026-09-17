@@ -11,6 +11,7 @@ import {
 import { changeDirection } from "../utils/valueFlash";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
+import { isAimPageFrozen } from "../pageLive";
 
 function Detail({ label, value, hint, amount }) {
   const [flash, setFlash] = useState(null);
@@ -61,6 +62,7 @@ export default function TokenDetails() {
     let cancelled = false;
 
     async function load() {
+      if (isAimPageFrozen()) return;
       try {
         const next = await getTokenDetails((partial) => {
           if (!cancelled) {
@@ -80,8 +82,15 @@ export default function TokenDetails() {
     }
 
     load();
-    const id = setInterval(load, 30000);
+    const id = setInterval(() => { if (!isAimPageFrozen()) load(); }, 30000);
+    function onAimThaw() {
+      if (typeof cancelled !== "undefined" && cancelled) return;
+      if (isAimPageFrozen()) return;
+      try { load(); } catch { /* ignore */ }
+    }
+    window.addEventListener("dpmf-aim-page-thaw", onAimThaw);
     return () => {
+      window.removeEventListener("dpmf-aim-page-thaw", onAimThaw);
       cancelled = true;
       clearInterval(id);
     };

@@ -44,6 +44,7 @@ import {
   remapIncomeActivity,
   writeRecordedLpIncome,
 } from "../wallet/lpIncome";
+import { isAimPageFrozen } from "../pageLive";
 
 function XrpColumn({ label, tone, percent, value, locale, empty }) {
   return (
@@ -441,31 +442,23 @@ function WalletIncomePanel({ address, snapshotRows, positions, pools, priceBook,
                     <td className={hold ? "is-lp is-pool-share" : "is-lp-add is-pool-share"}>
                       {hasAssets ? (
                         <span className="wallet-income-assets">
-                          <span className="wallet-income-line">
-                            <b className="wallet-income-amt">
-                              {hold ? null : <span className="is-plus">+</span>}
-                              {formatToken(assetXdx, locale, 4)}
-                            </b>
-                            <span className="wallet-income-ticker">XDX</span>
-                          </span>
-                          <span className="wallet-income-line">
-                            <b className="wallet-income-amt">
-                              {hold ? null : <span className="is-plus">+</span>}
-                              {formatToken(assetQuote, locale, 4)}
-                            </b>
-                            <span className="wallet-income-ticker">{quoteLabel}</span>
-                          </span>
+                          <b className="wallet-income-amt">
+                            {hold ? null : <span className="is-plus">+</span>}
+                            {formatToken(assetXdx, locale, 4)}
+                          </b>
+                          <span className="wallet-income-ticker">XDX</span>
+                          <b className="wallet-income-amt">
+                            {hold ? null : <span className="is-plus">+</span>}
+                            {formatToken(assetQuote, locale, 4)}
+                          </b>
+                          <span className="wallet-income-ticker">{quoteLabel}</span>
                         </span>
                       ) : (
                         <span className="wallet-income-assets">
-                          <span className="wallet-income-line">
-                            <b className="wallet-income-amt">0</b>
-                            <span className="wallet-income-ticker">XDX</span>
-                          </span>
-                          <span className="wallet-income-line">
-                            <b className="wallet-income-amt">0</b>
-                            <span className="wallet-income-ticker">{quoteLabel || "QUOTE"}</span>
-                          </span>
+                          <b className="wallet-income-amt">0</b>
+                          <span className="wallet-income-ticker">XDX</span>
+                          <b className="wallet-income-amt">0</b>
+                          <span className="wallet-income-ticker">{quoteLabel || "QUOTE"}</span>
                         </span>
                       )}
                     </td>
@@ -597,6 +590,7 @@ export default function ConnectedWallet() {
     let cancelled = false;
 
     async function load(fresh = false) {
+      if (isAimPageFrozen()) return;
       const next = await getConnectedWallet(walletAddress, { fresh }).catch(() =>
         emptyWalletSnapshot(walletAddress)
       );
@@ -613,7 +607,7 @@ export default function ConnectedWallet() {
     const retries = [];
     retries.push(window.setTimeout(() => load(false), 800));
     retries.push(window.setTimeout(() => load(true), 2800));
-    const id = setInterval(load, 30000);
+    const id = setInterval(() => { if (!isAimPageFrozen()) load(); }, 30000);
     function refreshConfirmed() {
       load(true);
       retries.push(window.setTimeout(() => load(true), 2500));
@@ -644,7 +638,14 @@ export default function ConnectedWallet() {
     window.addEventListener("dpmf-wallet-refresh", onRefresh);
     window.addEventListener("dpmf-trade-executed", onTrade);
     window.addEventListener("dpmf-function-confirmed", onTrade);
+    function onAimThaw() {
+      if (typeof cancelled !== "undefined" && cancelled) return;
+      if (isAimPageFrozen()) return;
+      try { load(); } catch { /* ignore */ }
+    }
+    window.addEventListener("dpmf-aim-page-thaw", onAimThaw);
     return () => {
+      window.removeEventListener("dpmf-aim-page-thaw", onAimThaw);
       cancelled = true;
       clearInterval(id);
       for (const timer of retries) window.clearTimeout(timer);

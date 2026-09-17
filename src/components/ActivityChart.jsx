@@ -21,6 +21,7 @@ import { LIST_PAGE_SIZE, pageSlice } from "../utils/pagination";
 import { useI18n } from "../i18n/useI18n";
 import PaginationBar from "./PaginationBar";
 import Skeleton from "./Skeleton";
+import { isAimPageFrozen } from "../pageLive";
 
 const METRICS = ["holders", "trustlines", "traders"];
 const RANGES = ["1H", "4H", "12H", "24H", "1W", "1M", "3M", "1Y", "Max"];
@@ -144,6 +145,7 @@ export default function ActivityChart() {
     let cancelled = false;
 
     async function load() {
+      if (isAimPageFrozen()) return;
       try {
         const [rows, tradeRows] = await Promise.all([
           getChartHistory(),
@@ -163,8 +165,15 @@ export default function ActivityChart() {
     }
 
     const timeout = setTimeout(load, 800);
-    const id = setInterval(load, 60000);
+    const id = setInterval(() => { if (!isAimPageFrozen()) load(); }, 60000);
+    function onAimThaw() {
+      if (typeof cancelled !== "undefined" && cancelled) return;
+      if (isAimPageFrozen()) return;
+      try { load(); } catch { /* ignore */ }
+    }
+    window.addEventListener("dpmf-aim-page-thaw", onAimThaw);
     return () => {
+      window.removeEventListener("dpmf-aim-page-thaw", onAimThaw);
       cancelled = true;
       clearTimeout(timeout);
       clearInterval(id);

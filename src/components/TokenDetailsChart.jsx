@@ -16,6 +16,7 @@ import {
 import { formatNumber, formatWhen } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 import Skeleton from "./Skeleton";
+import { isAimPageFrozen } from "../pageLive";
 
 export default function TokenDetailsChart() {
   const { t, locale } = useI18n();
@@ -33,6 +34,7 @@ export default function TokenDetailsChart() {
     let cancelled = false;
 
     async function load() {
+      if (isAimPageFrozen()) return;
       try {
         const rows = await getTokenDetailsHistory();
         if (!cancelled) {
@@ -48,8 +50,15 @@ export default function TokenDetailsChart() {
     }
 
     const timeout = setTimeout(load, 900);
-    const id = setInterval(load, 60000);
+    const id = setInterval(() => { if (!isAimPageFrozen()) load(); }, 60000);
+    function onAimThaw() {
+      if (typeof cancelled !== "undefined" && cancelled) return;
+      if (isAimPageFrozen()) return;
+      try { load(); } catch { /* ignore */ }
+    }
+    window.addEventListener("dpmf-aim-page-thaw", onAimThaw);
     return () => {
+      window.removeEventListener("dpmf-aim-page-thaw", onAimThaw);
       cancelled = true;
       clearTimeout(timeout);
       clearInterval(id);

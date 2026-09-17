@@ -8,6 +8,7 @@ import {
   readJumpHash,
 } from "../siteJump";
 import Skeleton from "./Skeleton";
+import { setAimPageFrozen } from "../pageLive";
 import "../aim-matrix.css";
 
 const AiMatrixPanel = lazy(() => import("./AiMatrixPanel"));
@@ -131,20 +132,50 @@ export default function AiMatrixDrawer() {
   }, [setOpenPanel]);
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open) {
+      setAimPageFrozen(false);
+      document.body.classList.remove("aim-drawer-open", "aim-mobile");
+      return undefined;
+    }
     document.body.classList.add("aim-drawer-open");
     if (isMobile) {
+      document.body.classList.add("aim-mobile");
+      setAimPageFrozen(true);
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = prev;
-        document.body.classList.remove("aim-drawer-open");
+        document.body.classList.remove("aim-drawer-open", "aim-mobile");
+        setAimPageFrozen(false);
       };
     }
+    setAimPageFrozen(false);
+    document.body.classList.remove("aim-mobile");
     return () => {
-      document.body.classList.remove("aim-drawer-open");
+      document.body.classList.remove("aim-drawer-open", "aim-mobile");
+      setAimPageFrozen(false);
     };
   }, [open, isMobile]);
+
+  // Mobile AIM: always land at the top of the deck (open + after contentReady).
+  useEffect(() => {
+    if (!open || !isMobile) return undefined;
+    const scrollAimTop = () => {
+      const body = document.querySelector(".aim-drawer-body");
+      if (body) body.scrollTop = 0;
+      const panel = document.querySelector(".aim-drawer-panel");
+      if (panel) panel.scrollTop = 0;
+    };
+    scrollAimTop();
+    const raf = window.requestAnimationFrame(scrollAimTop);
+    const t1 = window.setTimeout(scrollAimTop, 50);
+    const t2 = window.setTimeout(scrollAimTop, 300);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [open, isMobile, contentReady]);
 
   function openFromUi() {
     setDragging(false);
