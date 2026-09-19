@@ -1,14 +1,14 @@
 export const AIM_COMMAND_TOPICS = [
-  { id: "chat", label: "Chat", hint: "Talk normally. He works out intent and still learns.", placeholder: "Ask Commander..." },
-  { id: "trade", label: "Trade", hint: "Say it loosely. He maps buy or sell for the desk.", placeholder: "get me some XDX with RLUSD..." },
-  { id: "analyse", label: "Analyse", hint: "Ask him to hunt. Exact wording is not required.", placeholder: "find something that clears fees..." },
-  { id: "chart", label: "Chart", hint: "Orders, depth, ledger lines. He maps the ask.", placeholder: "put my orders on the chart..." },
-  { id: "predict", label: "Predict", hint: "Ask for a view. He lays tools on the active pair.", placeholder: "give me a bearish view..." },
-  { id: "trustline", label: "Trustlines", hint: "Name the asset. He adds or checks the line.", placeholder: "we still need XSQUAD..." },
-  { id: "liquidity", label: "Liquidity", hint: "Top up or pull a pool. XDX stays primary.", placeholder: "top up the XDX/XRP pool..." },
-  { id: "objective", label: "Objectives", hint: "Standing desk goals. Soft-remove only.", placeholder: "keep growing XIO/XRP arb..." },
-  { id: "desk", label: "Desk", hint: "Regime, live phases, what we work toward.", placeholder: "unlock the desk and go live..." },
-  { id: "venue", label: "Venue", hint: "Exchange and venue overview.", placeholder: "walk the XDX venue..." },
+  { id: "chat", label: "Chat", hint: "General talk. Commander stays autonomous and still learns.", placeholder: "Ask Commander..." },
+  { id: "trade", label: "Trade", hint: "Buy or sell XDX. Agents take the book.", placeholder: "buy XDX with XRP..." },
+  { id: "analyse", label: "Analyse", hint: "Hunt pairs for a fee-clear profitable trade.", placeholder: "analyse markets for a profitable trade..." },
+  { id: "chart", label: "Chart", hint: "Orders, depth, ledger lines on the chart.", placeholder: "show my orders..." },
+  { id: "predict", label: "Predict", hint: "Lay tools and estimates on the active pair.", placeholder: "draw a bullish prediction..." },
+  { id: "trustline", label: "Trustlines", hint: "Add or check trustlines on agent wallets.", placeholder: "add trustline XSQUAD..." },
+  { id: "liquidity", label: "Liquidity", hint: "AMM deposit or withdraw. XDX stays primary.", placeholder: "add liquidity XDX + XRP..." },
+  { id: "objective", label: "Objectives", hint: "Standing desk goals. Soft-remove only.", placeholder: "objective grow XIO/XRP arb..." },
+  { id: "desk", label: "Desk", hint: "Regime, bias, structure, what we work toward.", placeholder: "what is the desk view..." },
+  { id: "venue", label: "Venue", hint: "Exchange and venue overview.", placeholder: "show XDX venue..." },
 ];
 
 const TOPIC_IDS = new Set(AIM_COMMAND_TOPICS.map((row) => row.id));

@@ -4202,7 +4202,56 @@ export async function aimChatPayload(req) {
       teachRefused = true;
     }
 
-    if (teachRefused) {
+    
+    if (adminCommand && adminCommand.verb !== "draw_prediction") {
+      let ack = commandAckText(adminCommand, ctx.standing || applyStandingOrders([]));
+      if (commandPersistError) {
+        ack = `Order received but could not be stored just now. ${ack}`;
+      }
+      if (lang && lang !== "en" && lang !== "en-GB") {
+        ack = stripLongHyphens(await translateAimText(ack, lang));
+      }
+      ack = stripLongHyphens(stripSiteNoise(ack));
+      if (!String(ack).includes(" ack")) ack = `${String(ack).trimEnd()} ack`;
+      const topicChartAction = chartActionForCommand(adminCommand);
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          ephemeral: true,
+          lang,
+          lang_source: resolved.source,
+          is_admin: true,
+          wallet_present: true,
+          command_ack: true,
+          command_persisted: commandPersisted,
+          command_persist_error: commandPersistError,
+          command_topic: commandTopic,
+          standing_orders: standingOrdersPublic(ctx.standing),
+          extra_markets: ctx.standing?.extra_markets || [],
+          chart_context: chartContext || null,
+          chart_action: topicChartAction,
+          reply: {
+            from: "commander",
+            from_label: "Commander",
+            body: {
+              type: "commander_answer",
+              intent: "admin_command",
+              source: "admin_command",
+              text: ack,
+              command_ack: true,
+              verb: adminCommand.verb,
+            },
+            created_at: new Date().toISOString(),
+          },
+          llm: { ok: false, error: "not used", detail: "admin_command", model: null },
+          web: { skipped: true },
+          site: { skipped: true },
+        },
+      };
+    }
+
+if (teachRefused) {
       let refuseText =
         "I can help with the exchange and live chart. Durable training is limited to the verified admin wallet when it is connected here. Normal questions are still welcome.";
       if (lang && lang !== "en" && lang !== "en-GB") {
@@ -4623,24 +4672,6 @@ export async function aimChatPayload(req) {
     const chartActionOut = reply.chart_action || null;
 
 
-    if (adminCommand) {
-      let t = String(reply.text || "").trimEnd();
-      const echo = String(adminCommand.summary || "").trim();
-      if (echo && t.toLowerCase() === echo.toLowerCase()) {
-        t = "";
-      }
-      const dispatch =
-        adminCommand.verb === "draw_prediction"
-          ? ""
-          : commandPersisted
-            ? "Agents have the order."
-            : commandPersistError
-              ? "Order heard. Desk will retry the handoff."
-              : "";
-      t = [t, dispatch].filter(Boolean).join(" ");
-      if (!t.includes(" ack")) t = `${t} ack`.trim();
-      reply = { ...reply, text: t, command_ack: true, verb: adminCommand.verb };
-    }
 
     if (teachPersisted) {
       let t = String(reply.text || "").trimEnd();

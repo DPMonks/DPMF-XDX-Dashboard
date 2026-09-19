@@ -78,15 +78,15 @@ export function looksLikeAdminCommand(text) {
     /\b(increase|more|step up)\b.{0,20}\b(trades?|fills?|observe)\b/i.test(q) ||
     /\b(activate|enable|go)\b.{0,20}\b(all )?phases?\b/i.test(q) ||
     /\bgo live\b/i.test(q) ||
-    /\b(draw|lay|plot|give|use)\b.{0,40}\b(prediction|estimate|tools?|fib|trend|bearish|bullish)\b/i.test(q) ||
+    /\b(draw|lay|plot)\b.{0,28}\b(prediction|estimate|tools?|fib|trend)\b/i.test(q) ||
     /\bvortex\b.{0,40}\b(weekly|pool|amm)\b/i.test(q) ||
-    /\b(explore|hunt|scan|analyse|analyze|free.?think|find|spot)\b.{0,40}\b(ledger|xrpl|opportunit|markets?|pairs?|trade|fee)\b/i.test(q) ||
+    /\b(explore|hunt|scan|analyse|analyze|free.?think)\b.{0,40}\b(ledger|xrpl|opportunit|markets?|pairs?|trade)\b/i.test(q) ||
     /\bprofitable\b.{0,24}\b(trade|pair|market|opportunit)/i.test(q) ||
     /\bcounter\b.{0,20}\bbots?\b/i.test(q) ||
     /\b(route|direct)\b.{0,28}\bxdx\b/i.test(q) ||
     /\b(list|show)\b.{0,16}\b(standing )?orders?\b/i.test(q) ||
-    /\b(buy|sell|get|grab|pick up|accumulate|dump|offload)\b.{0,24}\bxdx\b/i.test(q) ||
-    /\b(add|remove|top up|pull)\b.{0,24}\b(liquidity|pool|amm)\b/i.test(q) ||
+    /\b(buy|sell)\b.{0,20}\bxdx\b/i.test(q) ||
+    /\b(add|remove)\b.{0,20}\bliquidity\b/i.test(q) ||
     /^\s*objective\b/i.test(q)
   );
 }
@@ -112,81 +112,22 @@ function extractLimitPrice(text) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-const ACTION_VERBS = new Set([
-  "trade_buy",
-  "trade_sell",
-  "analyse_markets",
-  "draw_prediction",
-  "trustline",
-  "trustline_remove",
-  "amm_deposit",
-  "amm_withdraw",
-  "set_objective",
-  "watch_market",
-  "activate_phases",
-  "increase_trades",
-  "observe",
-  "explore_ledger",
-  "counter_bots",
-  "route_xdx",
-  "vortex_weekly",
-  "cancel_all_orders",
-  "cancel_order",
-  "show_ledger_orders",
-  "hide_ledger_orders",
-  "remember",
-]);
-
-const EXPLICIT_ACTION_RE =
-  /\b(predict|prediction|trustline|buy xdx|sell xdx|draw|lay|plot|fib|add liquidity|go live|find a (fee|trade)|hunt|scan|fee.?clear)\b/i;
-const STATUS_QUESTION_RE =
-  /\b(which assets|what are we|who is|who are|what is (the )?(desk|spread|price|pair|timeframe|status)|are we (live|trading)|how (does|do|is|can)|walk me through|what timeframe)\b/i;
-const BUY_ISH_RE = /\b(buy|long|get|grab|pick(?:\s+up)?|take|accumulate|fill|need|want|scoop|lift)\b/i;
-const SELL_ISH_RE = /\b(sell|short|dump|offload|exit|flatten|unwind|let go)\b/i;
-const HUNT_ISH_RE = /\b(hunt|scan|look|find|spot|work out|analyse|analyze|edge|profit|fee.?clear|opportunit|pair|market|book|trade|asset)\b/i;
-const PREDICT_ISH_RE = /\b(predict|prediction|forecast|outlook|estimate|next (move|path|leg)|bearish|bullish|tools?|fib|trend)\b/i;
-const CHART_ISH_RE = /\b(orderbook|orders?|depth|chart|ledger|lines?|book)\b/i;
-const LIQ_ISH_RE = /\b(liquidity|pool|amm|deposit|withdraw|top up|pull (out|from))\b/i;
-
-function wantsTopicJob(text, topic) {
-  const q = String(text || "");
-  const topicId = normalizeCommandTopic(topic);
-  if (topicId === "chat" || STATUS_QUESTION_RE.test(q)) return false;
-  if (topicId === "predict" && PREDICT_ISH_RE.test(q)) return true;
-  if (topicId === "analyse" && HUNT_ISH_RE.test(q)) return true;
-  if (topicId === "trade" && (BUY_ISH_RE.test(q) || SELL_ISH_RE.test(q) || /\bxdx\b/i.test(q))) return true;
-  if (topicId === "trustline" && (extractNamedAsset(q) || /\b(trust|line|missing|activate|open)\b/i.test(q))) return true;
-  if (topicId === "liquidity" && LIQ_ISH_RE.test(q)) return true;
-  if (topicId === "chart" && CHART_ISH_RE.test(q)) return true;
-  if (topicId === "desk" && /\b(live|phase|unlock|start|trade|desk)\b/i.test(q)) return true;
-  if (topicId === "objective" && /\b(objective|goal|aim|target)\b/i.test(q)) return true;
-  return false;
-}
-
-export function isQuestionLike(text, topic = "chat") {
+function looksLikeQuery(text) {
   const q = String(text || "").trim();
   if (!q) return false;
-  if (EXPLICIT_ACTION_RE.test(q)) return false;
-  const looksQ =
-    /^(what|which|who|how|why|where|when|are|is|can|could|would|should|do|does|tell|walk)\b/i.test(q) || /\?\s*$/.test(q);
-  if (!looksQ) return false;
-  if (wantsTopicJob(q, topic)) return false;
-  return true;
-}
-
-export function isActionCommand(cmd) {
-  return !!(cmd && ACTION_VERBS.has(String(cmd.verb || "")));
-}
-
-export function intentForCommand(cmd) {
-  const verb = String(cmd?.verb || "");
-  if (verb === "draw_prediction") return "chart_predict";
-  if (verb === "analyse_markets" || verb === "explore_ledger" || verb === "watch_market") return "trade_opp";
-  if (verb === "trade_buy" || verb === "trade_sell") return "estimate";
-  if (verb === "show_orderbook" || verb === "show_chart") return "orderbook";
-  if (verb === "amm_deposit" || verb === "amm_withdraw" || verb === "show_pools") return "pools";
-  if (verb === "trustline" || verb === "trustline_check" || verb === "trustline_remove") return "help";
-  return null;
+  // Interrogatives, polite asks, and conversational chart/desk questions.
+  if (
+    /^(what|whats|what's|which|who|whose|how|why|where|when|are|is|am|can|could|would|should|do|does|did|give|tell|walk|explain|describe|show|use|please|help)\b/i.test(
+      q
+    )
+  ) {
+    return true;
+  }
+  if (/\?\s*$/.test(q)) return true;
+  if (/\b(right now|at the moment|currently)\b/i.test(q) && /\b(what|which|who|how|where)\b/i.test(q)) {
+    return true;
+  }
+  return false;
 }
 
 export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {}) {
@@ -211,27 +152,8 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
     };
   }
 
-  if (
-    /\b(give|use|draw|lay|plot|show|put)\b.{0,48}\b(prediction|predict|estimate|bearish|bullish)\b/i.test(q) ||
-    /\b(bearish|bullish)\s+prediction\b/i.test(q) ||
-    /\bpredict\b/i.test(q) ||
-    (topicId === "predict" && !isQuestionLike(q, topicId))
-  ) {
-    return {
-      verb: "draw_prediction",
-      topic: "predict",
-      durable: false,
-      pair: pairFromText || normalizeDeskPair(chartPair) || PRIMARY_DESK_PAIR,
-      side,
-      summary: `Draw a ${side || "chosen"} prediction on ${pairFromText || chartPair || PRIMARY_DESK_PAIR}.`,
-    };
-  }
-
-  if (
-    /\b(buy|sell)\b.{0,24}\bxdx\b/i.test(q) ||
-    (topicId === "trade" && (BUY_ISH_RE.test(q) || SELL_ISH_RE.test(q) || /\bxdx\b/i.test(q)) && !isQuestionLike(q, topicId))
-  ) {
-    const sell = SELL_ISH_RE.test(q) && !/\bbuy\b/i.test(q);
+  if (/\b(buy|sell)\b.{0,24}\bxdx\b/i.test(q) || (topicId === "trade" && /\b(buy|sell)\b/i.test(q))) {
+    const sell = /\bsell\b/i.test(q);
     const quote =
       extractNamedAsset(q) ||
       (/\brlusd\b/i.test(q) ? "RLUSD" : "") ||
@@ -255,9 +177,14 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
   }
 
   if (
-    /\b(analyse|analyze|hunt|scan|look|find|spot|work out)\b.{0,48}\b(market|pair|book|trade|opportunit|profit|ledger|xrpl|edge)\b/i.test(q) ||
+    /\b(analyse|analyze|hunt|scan)\b.{0,40}\b(market|pair|book|trade|opportunit|profit|ledger|xrpl)\b/i.test(q) ||
     /\bprofitable\b.{0,24}\b(trade|pair|market|opportunit)/i.test(q) ||
-    (topicId === "analyse" && !isQuestionLike(q, topicId) && HUNT_ISH_RE.test(q))
+    /\blook (to see|for|at)\b.{0,40}\b(opportunit|profit|pair|market|trade)\b/i.test(q) ||
+    (topicId === "analyse" &&
+      !looksLikeQuery(q) &&
+      !/\btrust\s*lines?\b/i.test(q) &&
+      !/\b(buy|sell)\b/i.test(q) &&
+      /\b(analyse|analyze|hunt|scan|opportunit|profit|markets?)\b/i.test(q))
   ) {
     return {
       verb: "analyse_markets",
@@ -271,12 +198,32 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
   }
 
   if (
-    /\b(add|set|upload|open|remove|check|activate|need|missing)\b.{0,40}\btrust\s*lines?\b/i.test(q) ||
-    /\btrustline\b/i.test(q) ||
-    (topicId === "trustline" &&
-      !isQuestionLike(q, topicId) &&
-      (extractNamedAsset(q) || /\b(add|activate|open|missing|need|have|trust|line)\b/i.test(q)))
+    /\b(draw|lay|plot)\b.{0,40}\b(prediction|estimate|tools?|fib|trend|chart)\b/i.test(q) ||
+    /\b(predict|prediction|estimate)\b/i.test(q) ||
+    (topicId === "predict" && !looksLikeQuery(q))
   ) {
+    // Questions still go to Commander chat (chart_predict). Imperative draw orders stay commands.
+    if (!looksLikeQuery(q) || /\b(draw|lay|plot)\b/i.test(q)) {
+      return {
+        verb: "draw_prediction",
+        topic: "predict",
+        durable: false,
+        pair: pairFromText || normalizeDeskPair(chartPair) || PRIMARY_DESK_PAIR,
+        side,
+        summary: `Draw a ${side || "chosen"} prediction on ${pairFromText || chartPair || PRIMARY_DESK_PAIR}.`,
+      };
+    }
+  }
+
+  if (
+    topicId === "trustline" ||
+    /\b(add|set|upload|open|remove|check)\b.{0,28}\btrust\s*lines?\b/i.test(q) ||
+    /\btrustline\b/i.test(q)
+  ) {
+    // Conversational asks ("what assets lack a trustline") stay in chat, not a stock ack.
+    if (looksLikeQuery(q) && !/\b(add|set|upload|open|remove)\b/i.test(q)) {
+      return { verb: "topic_query", topic: "trustline", durable: false, summary: q.slice(0, 180) };
+    }
     const asset = extractNamedAsset(q, { allowChartFallback: false, chartPair });
     const remove = /\b(remove|drop|close)\b/i.test(q);
     const check = /\b(check|have|walk)\b/i.test(q) && !/\badd\b/i.test(q);
@@ -301,11 +248,14 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
   }
 
   if (
-    (topicId === "liquidity" && !isQuestionLike(q, topicId)) ||
-    /\b(add|remove|show|top up|pull)\b.{0,28}\b(liquidity|pool|amm)\b/i.test(q)
+    (topicId === "liquidity" && !looksLikeQuery(q)) ||
+    /\b(add|remove|show)\b.{0,24}\b(liquidity|pool|amm)\b/i.test(q)
   ) {
+    if (looksLikeQuery(q) && !/\b(add|remove)\b/i.test(q)) {
+      return { verb: "topic_query", topic: "liquidity", durable: false, summary: q.slice(0, 180) };
+    }
     const quote = extractNamedAsset(q) || quoteFromPair(pairFromText) || "XRP";
-    const remove = /\b(remove|withdraw|pull)\b/i.test(q);
+    const remove = /\bremove\b/i.test(q);
     const show = /\bshow\b/i.test(q);
     return {
       verb: show ? "show_pools" : remove ? "amm_withdraw" : "amm_deposit",
@@ -320,10 +270,13 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
   }
 
   if (
-    (topicId === "objective" && !isQuestionLike(q, topicId)) ||
     /^\s*objective\b/i.test(q) ||
-    /\b(remove|what are)\b.{0,16}\bobjectives?\b/i.test(q)
+    /\b(remove|what are|list|show)\b.{0,16}\bobjectives?\b/i.test(q) ||
+    (topicId === "objective" && !looksLikeQuery(q) && /\b(objective|goal|target|aim to|work toward)\b/i.test(q))
   ) {
+    if (looksLikeQuery(q) && !/\b(remove|what are|list|show)\b.{0,16}\bobjectives?\b/i.test(q) && !/^\s*objective\b/i.test(q)) {
+      return { verb: "topic_query", topic: "objective", durable: false, summary: q.slice(0, 180) };
+    }
     const remove = /\bremove\b/i.test(q);
     const list = /\b(what are|list|show)\b.{0,16}\bobjectives?\b/i.test(q);
     const idx = Number((q.match(/\bobjective\s+(\d+)\b/i) || [])[1] || 0);
@@ -343,10 +296,7 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
     };
   }
 
-  if (
-    (topicId === "chart" && !isQuestionLike(q, topicId)) ||
-    /\b(show|hide|toggle|cancel|display|put|see)\b.{0,28}\b(orders?|orderbook|depth|chart|ledger|lines?|book)\b/i.test(q)
-  ) {
+  if (topicId === "chart" || /\b(show|hide|toggle|cancel|display)\b.{0,24}\b(orders?|orderbook|depth|chart|ledger)\b/i.test(q)) {
     if (/\bcancel all orders\b/i.test(q)) {
       return { verb: "cancel_all_orders", topic: "chart", durable: true, summary: "Cancel all open desk orders." };
     }
@@ -356,17 +306,14 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
     if (/\b(hide|off)\b.{0,16}\b(ledger )?orders\b/i.test(q)) {
       return { verb: "hide_ledger_orders", topic: "chart", durable: false, summary: "Hide ledger orders on the chart." };
     }
-    if (/\b(show|display|toggle|put|see)\b.{0,24}\b(ledger )?orders\b/i.test(q) || /\btoggle orders on chart\b/i.test(q)) {
+    if (/\b(show|display|toggle)\b.{0,20}\b(ledger )?orders\b/i.test(q) || /\btoggle orders on chart\b/i.test(q)) {
       return { verb: "show_ledger_orders", topic: "chart", durable: false, summary: "Show ledger orders on the HybridChart." };
     }
-    if (/\b(show|display|see|open)\b.{0,20}\b(orderbook|depth|book)\b/i.test(q)) {
+    if (/\b(show|display)\b.{0,16}\b(orderbook|depth)\b/i.test(q)) {
       return { verb: "show_orderbook", topic: "chart", durable: false, summary: "Show the live order book and depth." };
     }
-    if (/\b(show|focus|open)\b.{0,16}\bchart\b/i.test(q)) {
+    if (/\bshow chart\b/i.test(q)) {
       return { verb: "show_chart", topic: "chart", durable: false, summary: "Focus the shared HybridChart." };
-    }
-    if (topicId === "chart") {
-      return { verb: "show_ledger_orders", topic: "chart", durable: false, summary: "Show ledger orders on the HybridChart." };
     }
   }
 
@@ -393,12 +340,7 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
         : "Vortex opens a weekly XDX/??? pool after agents pick the quote.",
     };
   }
-  if (
-    /\b(activate|enable|unlock)\b.{0,24}\b(all )?phases?\b/i.test(q) ||
-    /\bgo live\b/i.test(q) ||
-    /\ball phases?\b/i.test(q) ||
-    (topicId === "desk" && !isQuestionLike(q, topicId) && /\b(live|unlock|start trading|dont sit|don't sit)\b/i.test(q))
-  ) {
+  if (/\b(activate|enable|unlock)\b.{0,24}\b(all )?phases?\b/i.test(q) || /\bgo live\b/i.test(q) || /\ball phases?\b/i.test(q)) {
     return { verb: "activate_phases", topic: "desk", durable: true, summary: "Activate all desk phases. Stay LIVE and trade." };
   }
   if (/\b(increase|more|step up|ramp)\b.{0,24}\b(trades?|fills?|size|observe)\b/i.test(q)) {
@@ -425,36 +367,19 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
     return { verb: "route_xdx", topic: "liquidity", durable: true, summary: "Direct traffic through XDX trading pools." };
   }
 
-  if (/^(hi|hello|hey|yo|gm|thanks|ok|okay|yes|no)\b/i.test(q)) return null;
-  if (topicId === "analyse" && !isQuestionLike(q, topicId) && q.split(/\s+/).length >= 2) {
-    return {
-      verb: "analyse_markets",
-      topic: "analyse",
-      durable: true,
-      pair: pairFromText,
-      summary: "Hunt watched markets and extra XRPL pairs for a fee-clear profitable trade. Agents report and take the edge.",
-    };
-  }
-  if (topicId === "trade" && !isQuestionLike(q, topicId) && q.split(/\s+/).length >= 2) {
-    const quote =
-      extractNamedAsset(q) ||
-      (/\brlusd\b/i.test(q) ? "RLUSD" : "") ||
-      (/\bxrp\b/i.test(q) ? "XRP" : "") ||
-      "XRP";
-    return {
-      verb: "increase_trades",
-      topic: "trade",
-      durable: true,
-      pair: normalizeDeskPair(`XDX/${quote}`) || `XDX/${quote}`,
-      quote,
-      summary: "Increase live trades across watched markets. Agents take fee-clear fills.",
-    };
-  }
-  if (topicId !== "chat" && isQuestionLike(q, topicId)) {
+  if (looksLikeQuery(q)) {
     return { verb: "topic_query", topic: topicId, durable: false, summary: q.slice(0, 180) };
   }
-  if (looksLikeAdminCommand(raw) && CMD_PREFIX_RE.test(raw)) {
-    return { verb: "remember", topic: topicId, durable: true, pair: pairFromText, summary: q.slice(0, 180) };
+  // Free-form standing notes only with an explicit command prefix (never echo random chat).
+  if (CMD_PREFIX_RE.test(raw)) {
+    return { verb: "remember", topic: topicId === "chat" ? "chat" : topicId, durable: true, pair: pairFromText, summary: q.slice(0, 180) };
+  }
+  // Non-chat topics: unknown non-query text is still a chat ask, not a durable order.
+  if (topicId !== "chat") {
+    return { verb: "topic_query", topic: topicId, durable: false, summary: q.slice(0, 180) };
+  }
+  if (looksLikeAdminCommand(raw)) {
+    return { verb: "remember", topic: "chat", durable: true, pair: pairFromText, summary: q.slice(0, 180) };
   }
   return null;
 }
@@ -462,8 +387,10 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
 export function isExecutableAdminCommand(text, { chartPair = "", topic = "chat" } = {}) {
   const topicId = normalizeCommandTopic(topic);
   const cmd = parseAdminCommand(text, { chartPair, topic: topicId });
-  if (!cmd || !isActionCommand(cmd)) return null;
-  if (isQuestionLike(text, topicId) && cmd.verb !== "draw_prediction") return null;
+  if (!cmd) return null;
+  // Always fall through to Commander chat for conversational / unanswered topic asks.
+  if (cmd.verb === "topic_query") return null;
+  if (cmd.verb === "remember" && !CMD_PREFIX_RE.test(String(text || ""))) return null;
   return cmd;
 }
 
@@ -480,16 +407,26 @@ export function commandAckText(cmd, standing) {
   }
   if (cmd.verb === "trustline") {
     return cmd.quote
-      ? `Agents will add the ${cmd.quote} trustline and activate when convenient. ack`
-      : "Agents will add the named trustline at desk choice. ack";
+      ? `Order taken. I am telling Prime, Flux, Vector, Vortex, Echo, and Ghost to add the ${cmd.quote} trustline on their wallets and keep it active. ack`
+      : "Order taken. I am telling all agents to add the named trustline on their wallets at desk choice. ack";
+  }
+  if (cmd.verb === "trustline_check") {
+    return cmd.quote
+      ? `Checking the ${cmd.quote} trustline across agent wallets now. I will report what is missing. ack`
+      : "Checking agent trustlines now. I will report what is missing. ack";
+  }
+  if (cmd.verb === "trustline_remove") {
+    return cmd.quote
+      ? `Order taken. Agents will remove the ${cmd.quote} trustline when the desk chooses. ack`
+      : "Order taken. Agents will remove the named trustline when the desk chooses. ack";
   }
   if (cmd.verb === "analyse_markets") {
-    return `${cmd.summary} Ghost and Vector hunt. Prime and Flux take a fee-clear fill. XRP/RLUSD stays the most liquid book. ack`;
+    return `Order taken. ${cmd.summary} I told Ghost and Vector to hunt, and Prime and Flux to take a fee-clear fill when they see one. ack`;
   }
   if (cmd.verb === "trade_buy" || cmd.verb === "trade_sell") {
-    return `${cmd.summary} ack`;
+    return `Order taken. ${cmd.summary} I passed it to the desk agents. ack`;
   }
-  return `${cmd.summary} Agents comply. XRP/RLUSD stays the most liquid book. ack`;
+  return `Order taken. ${cmd.summary} I told the agents and they will comply. ack`;
 }
 
 export function chartActionForCommand(cmd) {
@@ -524,7 +461,7 @@ export function applyStandingOrders(rows = []) {
     if (verb === "watch_market" && pair && pair !== PRIMARY_DESK_PAIR && !extra.includes(pair)) extra.push(pair);
     if (verb === "trustline") {
       const asset = quote || quoteFromPair(pair);
-      if (asset && asset !== "RLUSD" && asset !== "XRP" && !trustlines.includes(asset)) trustlines.push(asset);
+      if (asset && !trustlines.includes(asset)) trustlines.push(asset);
     }
     if (verb === "activate_phases") liveAllPhases = true;
     if (verb === "increase_trades" || verb === "trade_buy" || verb === "trade_sell") increaseTrades = true;
@@ -540,7 +477,11 @@ export function applyStandingOrders(rows = []) {
       vortexWeekly = { enabled: true, quote: quote || quoteFromPair(pair) || "" };
     }
     if (verb === "set_objective" && summary) objectives.push(summary.slice(0, 160));
-    if (summary && verb === "remember") mandate.push(summary.slice(0, 160));
+    if (summary && verb === "remember") {
+      // Drop chat questions that were wrongly stored as standing notes.
+      if (looksLikeQuery(summary)) continue;
+      mandate.push(summary.slice(0, 160));
+    }
   }
 
   const watch_pairs = [PRIMARY_DESK_PAIR, ...CORE_DESK_PAIRS.filter((p) => p !== PRIMARY_DESK_PAIR), ...extra].filter(
