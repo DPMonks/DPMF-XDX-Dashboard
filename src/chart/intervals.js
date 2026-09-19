@@ -1,4 +1,17 @@
-export const CHART_PAIRS = ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO"];
+export const CHART_PAIRS = ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO", "XDX/XSQUAD"];
+
+export function mergeChartPairs(extra = []) {
+  const extraNames = (Array.isArray(extra) ? extra : [])
+    .map((name) =>
+      String(name || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .replace(/-/g, "/")
+        .toUpperCase()
+    )
+    .filter((name) => /^[A-Z0-9$]{2,12}\/[A-Z0-9$]{2,12}$/.test(name));
+  return [...CHART_PAIRS, ...extraNames].filter((name, i, all) => name && all.indexOf(name) === i);
+}
 
 export const INTERVALS = [
   { id: "1m", label: "1m", ms: 60_000 },

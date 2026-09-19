@@ -241,7 +241,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
       });
       if (myGen !== sendGenRef.current) return;
       let reply = out.reply?.body?.text || "Queued.";
-      if (out.teach_ack && !String(reply).includes(" ack")) {
+      if ((out.teach_ack || out.command_ack) && !String(reply).includes(" ack")) {
         reply = `${String(reply).trimEnd()} ack`;
       }
       const chartAction =
@@ -695,14 +695,20 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   }, [data]);
 
   const commanderEstimate = data?.commander?.estimate || data?.desk?.estimate || null;
+  const standingOrders = data?.standing_orders || data?.desk?.standing_orders || null;
+  const extraChartPairs = useMemo(() => {
+    const watched = standingOrders?.watch_pairs || standingOrders?.extra_markets || [];
+    return (Array.isArray(watched) ? watched : []).filter((name) => String(name || "").toUpperCase() !== "XRP/RLUSD");
+  }, [standingOrders]);
 
   useEffect(() => {
     if (typeof onChartPropsChange !== "function") return;
     onChartPropsChange({
       deskOrders: deskChartOrders,
       estimate: commanderEstimate,
+      extraPairs: extraChartPairs,
     });
-  }, [deskChartOrders, commanderEstimate, onChartPropsChange]);
+  }, [deskChartOrders, commanderEstimate, extraChartPairs, onChartPropsChange]);
 
   const commanderStatus = data?.commander
     ? `${data.commander.status} | ${ago(data.commander.last_seen_at)}`
@@ -859,16 +865,59 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
             ) : null}
           </div>
           {isAimAdmin ? (
-            <p className="aim-admin-teach-hint" style={{ margin: "0 0 6px", fontSize: 12, opacity: 0.85 }}>
-              Admin teach on. Commander takes lessons, objectives, and XRPL direction from rDPMFBANK…va8. Start with Teach … or set an objective.
-            </p>
+            <div className="aim-admin-command">
+              <p className="aim-admin-teach-hint">
+                Admin command on. Standing orders persist. XRP/RLUSD stays the primary book. Teach … still logs lessons.
+              </p>
+              {(standingOrders?.extra_markets?.length ||
+                standingOrders?.live_all_phases ||
+                standingOrders?.increase_trades ||
+                standingOrders?.observe_more ||
+                standingOrders?.explore_ledger ||
+                standingOrders?.vortex_weekly ||
+                standingOrders?.route_xdx ||
+                standingOrders?.counter_bots ||
+                standingOrders?.trustlines?.length) ? (
+                <div className="aim-standing-orders" aria-label="Standing desk orders">
+                  {(standingOrders.extra_markets || []).map((pair) => (
+                    <span key={`m-${pair}`} className="aim-standing-chip">
+                      {pair}
+                    </span>
+                  ))}
+                  {standingOrders.live_all_phases ? (
+                    <span className="aim-standing-chip is-live">All phases LIVE</span>
+                  ) : null}
+                  {standingOrders.increase_trades ? (
+                    <span className="aim-standing-chip">More trades</span>
+                  ) : null}
+                  {standingOrders.observe_more ? (
+                    <span className="aim-standing-chip">Observe more</span>
+                  ) : null}
+                  {standingOrders.explore_ledger ? (
+                    <span className="aim-standing-chip">Hunt XRPL</span>
+                  ) : null}
+                  {standingOrders.vortex_weekly ? (
+                    <span className="aim-standing-chip">
+                      Vortex weekly {standingOrders.vortex_weekly.quote ? `XDX/${standingOrders.vortex_weekly.quote}` : "XDX/???"}
+                    </span>
+                  ) : null}
+                  {standingOrders.route_xdx ? <span className="aim-standing-chip">Route XDX</span> : null}
+                  {standingOrders.counter_bots ? <span className="aim-standing-chip">Counter bots</span> : null}
+                  {(standingOrders.trustlines || []).map((asset) => (
+                    <span key={`t-${asset}`} className="aim-standing-chip">
+                      Trust {asset}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ) : null}
           <form className="aim-chat-form" ref={chatFormRef} onSubmit={onSend}>
             <input
               ref={chatInputRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Ask Commander (not saved)..."
+              placeholder={isAimAdmin ? "Command Commander (standing orders saved)..." : "Ask Commander (not saved)..."}
               maxLength={2000}
             />
             <button type="submit" disabled={!text.trim()} title={busy ? "Stop current reply and send" : "Send"}>
@@ -878,7 +927,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
       </section>
 
       {showInlineChart ? (
-        <AimDeskSmartChart deskOrders={deskChartOrders} estimate={commanderEstimate} />
+        <AimDeskSmartChart deskOrders={deskChartOrders} estimate={commanderEstimate} extraPairs={extraChartPairs} />
       ) : null}
 
       <div className="aim-agent-strip" role="list">

@@ -34,7 +34,7 @@ import {
   wickClipOptions,
   wickClipPairDefaults,
 } from "../src/chart/candles.js";
-import { bucketTime, CHART_PAIRS, DEFAULT_INTERVAL, visibleBarsForInterval } from "../src/chart/intervals.js";
+import { bucketTime, CHART_PAIRS, DEFAULT_INTERVAL, mergeChartPairs, visibleBarsForInterval } from "../src/chart/intervals.js";
 import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
 import { ammImpact, ammSupportResistanceRibbon, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, percentile, scalePriceView, shiftAfterPriceZoom, smartView, zoomPriceScale } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
@@ -83,7 +83,18 @@ import {
 } from "../src/chart/drawings.js";
 
 test("CHART_PAIRS includes XRP/RLUSD hybrid pair", () => {
-  assert.deepEqual(CHART_PAIRS, ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO"]);
+  assert.deepEqual(CHART_PAIRS, ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO", "XDX/XSQUAD"]);
+});
+
+test("mergeChartPairs keeps core tabs and adds extra markets", () => {
+  assert.deepEqual(mergeChartPairs(["XDX/SOLO", "xrp-rlusd"]), [
+    "XDX/RLUSD",
+    "XDX/XRP",
+    "XRP/RLUSD",
+    "XDX/XIO",
+    "XDX/XSQUAD",
+    "XDX/SOLO",
+  ]);
 });
 
 test("bucketTime uses UTC midnight and Monday weeks", () => {

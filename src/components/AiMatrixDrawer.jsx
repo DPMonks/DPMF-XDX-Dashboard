@@ -47,22 +47,24 @@ export default function AiMatrixDrawer() {
   );
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const [chartProps, setChartProps] = useState({ deskOrders: [], estimate: null });
+  const [chartProps, setChartProps] = useState({ deskOrders: [], estimate: null, extraPairs: [] });
   const handleChartPropsChange = useCallback((next) => {
     setChartProps((prev) => {
       const deskOrders = next?.deskOrders || [];
       const estimate = next?.estimate || null;
+      const extraPairs = Array.isArray(next?.extraPairs) ? next.extraPairs : [];
       try {
         if (
           JSON.stringify(prev.deskOrders) === JSON.stringify(deskOrders) &&
-          JSON.stringify(prev.estimate) === JSON.stringify(estimate)
+          JSON.stringify(prev.estimate) === JSON.stringify(estimate) &&
+          JSON.stringify(prev.extraPairs || []) === JSON.stringify(extraPairs)
         ) {
           return prev;
         }
       } catch {
         /* replace below */
       }
-      return { deskOrders, estimate };
+      return { deskOrders, estimate, extraPairs };
     });
   }, []);
   if (open && !contentReady) setContentReady(true);
@@ -315,6 +317,7 @@ export default function AiMatrixDrawer() {
               <AimDeskSmartChart
                 deskOrders={chartProps.deskOrders}
                 estimate={chartProps.estimate}
+                extraPairs={chartProps.extraPairs}
                 fillHeight
               />
             </Suspense>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getAmm, getLiquidPairAmm, getLiquidPairBook, getOrderbooks, getPrices, getWalletActivity, getWalletOffers, getXdxFlows } from "../api/indexer";
 import { api } from "../api";
-import { CHART_PAIRS, DEFAULT_INTERVAL, INTERVALS, maHistoryPad, visibleBarsForInterval } from "../chart/intervals";
+import { DEFAULT_INTERVAL, INTERVALS, maHistoryPad, mergeChartPairs, visibleBarsForInterval } from "../chart/intervals";
 import {
   averagesForWindow,
   clampPanOffset,
@@ -134,10 +134,16 @@ export default function HybridChart({
   estimate = null,
   aimEmbed = false,
   initialPair = "XDX/RLUSD",
+  extraPairs = [],
 } = {}) {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
   const [pair, setPair] = useState(initialPair || "XDX/RLUSD");
+  const [sessionPairs, setSessionPairs] = useState([]);
+  const pairTabs = useMemo(
+    () => mergeChartPairs([...(Array.isArray(extraPairs) ? extraPairs : []), ...sessionPairs]),
+    [extraPairs, sessionPairs]
+  );
   const [timeframe, setTimeframe] = useState(DEFAULT_INTERVAL);
   const [tool, setTool] = useState("cursor");
   const [drawColor, setDrawColor] = useState("#3d8bff");
@@ -195,13 +201,16 @@ export default function HybridChart({
   /* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect -- apply Commander actions after paint */
   useEffect(() => {
     if (!chartAction || !chartAction.seq) return;
-    const actionPair = chartAction.pair ? String(chartAction.pair).replace(/\s+/g, "").toUpperCase() : null;
-    // Only apply Commander actions to the currently selected pair tab.
+    const actionPair = chartAction.pair ? String(chartAction.pair).replace(/\s+/g, "").replace(/-/g, "/").toUpperCase() : null;
     if (actionPair && !sameChartPair(actionPair, pair)) {
+      if (actionPair.includes("/") && !pairTabs.some((name) => sameChartPair(name, actionPair))) {
+        setSessionPairs((rows) => (rows.includes(actionPair) ? rows : [...rows, actionPair]));
+      }
+      setPair(actionPair);
       return undefined;
     }
     if (chartAction.type === "show_estimate" && chartAction.side) {
-      if (sameChartPair(pair, "XRP/RLUSD")) setEstimateSide(chartAction.side);
+      setEstimateSide(chartAction.side);
     } else if (chartAction.type === "clear_estimate" || chartAction.type === "clear_ai") {
       setEstimateSide(null);
       if (chartAction.type === "clear_ai") {
@@ -344,7 +353,7 @@ export default function HybridChart({
     };
     // candles/view/plotHeight intentionally read fresh at effect start
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartAction, pair]);
+  }, [chartAction, pair, pairTabs]);
   /* eslint-enable react-hooks/immutability */
 
   useEffect(() => {
@@ -951,7 +960,7 @@ export default function HybridChart({
       ) : null}
       <div className="hybrid-topbar">
         <div className="hybrid-pairs" role="tablist">
-          {CHART_PAIRS.map((name) => (
+          {pairTabs.map((name) => (
             <button
               key={name}
               type="button"

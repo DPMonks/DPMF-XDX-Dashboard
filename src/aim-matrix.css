@@ -51,6 +51,46 @@
   min-width: 0;
   box-sizing: border-box;
 }
+.aim-admin-command {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0 0 0.55rem;
+  min-width: 0;
+}
+.aim-admin-teach-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  opacity: 0.88;
+  color: #d7b6ff;
+}
+.aim-standing-orders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.aim-standing-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(199, 112, 255, 0.45);
+  background: rgba(80, 20, 120, 0.28);
+  color: #f3e8ff;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+.aim-standing-chip.is-live {
+  border-color: rgba(52, 211, 153, 0.55);
+  background: rgba(6, 78, 59, 0.35);
+  color: #bbf7d0;
+}
 .aim-chat-form input {
   flex: 1 1 auto;
   min-width: 0;
@@ -61,6 +101,7 @@
   background: rgba(0,0,0,0.25);
   color: inherit;
   padding: 0.65rem 0.75rem;
+  font-size: 16px;
   box-sizing: border-box;
 }
 .aim-chat-form button {
@@ -202,10 +243,19 @@
   .aim-bubble p { margin: 0.12rem 0 0; font-size: 0.86rem; line-height: 1.35; }
   .aim-bubble small { font-size: 0.68rem; }
   .aim-chat-form { gap: 0.4rem; }
-  .aim-chat-form input,
+  .aim-chat-form input {
+    padding: 0.55rem 0.7rem;
+    font-size: 16px;
+    min-height: 44px;
+  }
   .aim-chat-form button {
-    padding: 0.5rem 0.65rem;
-    font-size: 0.86rem;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.9rem;
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .aim-standing-chip {
+    font-size: 0.75rem;
   }
 
   /* Compact agent strip; reserved height reduces status-refresh jump */

@@ -13,6 +13,7 @@ function AimDeskSmartChart({
   estimate = null,
   fillHeight = false,
   showModeSwitch = true,
+  extraPairs = [],
 }) {
   const { t } = useI18n();
   const [mode, setMode] = useState("hybrid");
@@ -58,6 +59,7 @@ function AimDeskSmartChart({
           estimate={estimate}
           aimEmbed
           initialPair="XRP/RLUSD"
+          extraPairs={extraPairs}
         />
       ) : (
         <DexChart />

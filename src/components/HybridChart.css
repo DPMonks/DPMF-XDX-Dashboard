@@ -1341,10 +1341,11 @@
 
   .hybrid-chart .pair-chip {
     height: auto;
-    min-height: 36px;
-    min-width: 0;
-    padding: 8px 16px;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 8px 14px;
     border-radius: 8px;
+    font-size: 13px;
   }
 
   .hybrid-footer .trade-bar .connect-wallet-btn {

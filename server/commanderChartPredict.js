@@ -1350,7 +1350,7 @@ export function answerChartPredict(question, estimate, chartContext, classified,
       label: "Estimate by AI-Matrix",
       drawings: built.drawings,
       narrate_steps: narrate,
-      show_estimate: Boolean(estForPair && (estForPair.fair_mid > 0 || estForPair.by_tf) && samePair(pair, "XRP/RLUSD")),
+      show_estimate: Boolean(estForPair && (estForPair.fair_mid > 0 || estForPair.by_tf)),
     },
   };
 }
