@@ -56,6 +56,38 @@ test("regular questions are not executable commands", () => {
   assert.equal(looksLikeAdminCommand("watch XDX/XIO"), true);
 });
 
+test("xsquad trustline does not steal the open XRP/RLUSD chart pair", () => {
+  const cmd = parseAdminCommand("add the xsquad trustline to the agent wallets", {
+    chartPair: "XRP/RLUSD",
+  });
+  assert.equal(cmd.verb, "trustline");
+  assert.equal(cmd.quote, "XSQUAD");
+  assert.equal(cmd.pair, "XDX/XSQUAD");
+  assert.match(commandAckText(cmd, applyStandingOrders([cmd])), /XSQUAD/);
+  assert.doesNotMatch(commandAckText(cmd, applyStandingOrders([cmd])), /Add a RLUSD/);
+});
+
+test("analyse topic hunts markets for a profitable trade", () => {
+  const cmd = parseAdminCommand("look to see opportunity for profitable trade", { topic: "analyse" });
+  assert.equal(cmd.verb, "analyse_markets");
+  assert.equal(cmd.durable, true);
+  const standing = applyStandingOrders([cmd]);
+  assert.equal(standing.analyse_markets, true);
+});
+
+test("topic-scoped buy and trustline parse", () => {
+  const buy = parseAdminCommand("buy XDX with RLUSD", { topic: "trade" });
+  assert.equal(buy.verb, "trade_buy");
+  assert.equal(buy.quote, "RLUSD");
+  assert.equal(buy.order, "market");
+  const limit = parseAdminCommand("sell XDX limit at 1.25 for XRP", { topic: "trade" });
+  assert.equal(limit.verb, "trade_sell");
+  assert.equal(limit.order, "limit");
+  assert.equal(limit.price, 1.25);
+  const trust = isExecutableAdminCommand("add trustline XSQUAD", { topic: "trustline", chartPair: "XRP/RLUSD" });
+  assert.equal(trust.quote, "XSQUAD");
+});
+
 test("applyStandingOrders builds watch list on top of XRP/RLUSD", () => {
   const standing = applyStandingOrders([
     { verb: "watch_market", pair: "XDX/SOLO", summary: "Watch XDX/SOLO" },

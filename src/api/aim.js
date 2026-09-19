@@ -31,7 +31,16 @@ export function classicAimWallet(...candidates) {
 
 export async function postAimChat(
   message,
-  { lang = "auto", wallet = null, account = null, address = null, chart_context = null, chartContext = null } = {}
+  {
+    lang = "auto",
+    wallet = null,
+    account = null,
+    address = null,
+    chart_context = null,
+    chartContext = null,
+    pending_chart_action = null,
+    command_topic = null,
+  } = {}
 ) {
   const classic = classicAimWallet(wallet, account, address);
   const payload = { message, lang };
@@ -46,6 +55,10 @@ export async function postAimChat(
   if (snap && typeof snap === "object") {
     payload.chart_context = snap;
   }
+  if (pending_chart_action && typeof pending_chart_action === "object") {
+    payload.pending_chart_action = pending_chart_action;
+  }
+  if (command_topic) payload.command_topic = String(command_topic);
   const res = await fetch("/api/aim/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },

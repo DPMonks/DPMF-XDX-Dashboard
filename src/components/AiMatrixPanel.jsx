@@ -12,6 +12,7 @@ import { clearAimChatAsk, useAimChatAsk } from "../context/aimChatAsk";
 import { isAimAdminWallet } from "../constants/ledger";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import AimDeskSmartChart from "./AimDeskSmartChart";
+import { AIM_COMMAND_TOPICS, commandTopicMeta, normalizeCommandTopic } from "../aimCommandTopics";
 
 function ago(iso) {
   if (!iso) return "-";
@@ -97,6 +98,8 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   const sendGenRef = useRef(0);
   const [pulsePage, setPulsePage] = useState(0);
   const [pulseSwap, setPulseSwap] = useState(false);
+  const [commandTopic, setCommandTopic] = useState("chat");
+  const topicMeta = commandTopicMeta(commandTopic);
 
   const effectiveLang = langPref === "auto" ? suggestedLang : normalizeLang(langPref);
 
@@ -238,11 +241,15 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
         address: signedWallet,
         chart_context: chartSnapshot || null,
         pending_chart_action,
+        command_topic: isAimAdmin ? normalizeCommandTopic(commandTopic) : "chat",
       });
       if (myGen !== sendGenRef.current) return;
       let reply = out.reply?.body?.text || "Queued.";
       if ((out.teach_ack || out.command_ack) && !String(reply).includes(" ack")) {
         reply = `${String(reply).trimEnd()} ack`;
+      }
+      if (out.command_ack || out.standing_orders) {
+        refresh();
       }
       const chartAction =
         out.chart_action ||
@@ -815,7 +822,27 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
             decoding="async"
           />
           <div className="aim-chat-head-copy">
-            <h3>Commander chat</h3>
+            <div className="aim-chat-title-row">
+              <h3>Commander chat</h3>
+              {isAimAdmin ? (
+                <label className="aim-topic-wrap">
+                  <span className="aim-sr-only">Command topic</span>
+                  <select
+                    className="aim-topic-select"
+                    value={commandTopic}
+                    onChange={(e) => setCommandTopic(normalizeCommandTopic(e.target.value))}
+                    aria-label="Commander command topic"
+                    title={topicMeta.hint}
+                  >
+                    {AIM_COMMAND_TOPICS.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {row.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
             <p className="aim-commander-status" title="Commander looping and last seen">
               {commanderStatus}
             </p>
@@ -867,13 +894,16 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
           {isAimAdmin ? (
             <div className="aim-admin-command">
               <p className="aim-admin-teach-hint">
-                Admin command on. Standing orders persist. XRP/RLUSD stays the primary book. Teach … still logs lessons.
+                {topicMeta.id === "chat"
+                  ? "Admin command on. Topic Chat keeps him autonomous and learning. Switch the topic, then tell him what to do. Teach … still logs lessons."
+                  : `${topicMeta.hint} Agents comply. He still hunts on his own.`}
               </p>
               {(standingOrders?.extra_markets?.length ||
                 standingOrders?.live_all_phases ||
                 standingOrders?.increase_trades ||
                 standingOrders?.observe_more ||
                 standingOrders?.explore_ledger ||
+                standingOrders?.analyse_markets ||
                 standingOrders?.vortex_weekly ||
                 standingOrders?.route_xdx ||
                 standingOrders?.counter_bots ||
@@ -896,6 +926,9 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
                   {standingOrders.explore_ledger ? (
                     <span className="aim-standing-chip">Hunt XRPL</span>
                   ) : null}
+                  {standingOrders.analyse_markets ? (
+                    <span className="aim-standing-chip is-live">Hunt profitable trades</span>
+                  ) : null}
                   {standingOrders.vortex_weekly ? (
                     <span className="aim-standing-chip">
                       Vortex weekly {standingOrders.vortex_weekly.quote ? `XDX/${standingOrders.vortex_weekly.quote}` : "XDX/???"}
@@ -917,7 +950,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
               ref={chatInputRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder={isAimAdmin ? "Command Commander (standing orders saved)..." : "Ask Commander (not saved)..."}
+              placeholder={isAimAdmin ? topicMeta.placeholder : "Ask Commander (not saved)..."}
               maxLength={2000}
             />
             <button type="submit" disabled={!text.trim()} title={busy ? "Stop current reply and send" : "Send"}>

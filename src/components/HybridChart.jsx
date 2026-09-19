@@ -209,6 +209,11 @@ export default function HybridChart({
       setPair(actionPair);
       return undefined;
     }
+    if (chartAction.type === "show_ledger_orders") {
+      setShowLedgerOrders(true);
+    } else if (chartAction.type === "hide_ledger_orders") {
+      setShowLedgerOrders(false);
+    }
     if (chartAction.type === "show_estimate" && chartAction.side) {
       setEstimateSide(chartAction.side);
     } else if (chartAction.type === "clear_estimate" || chartAction.type === "clear_ai") {
