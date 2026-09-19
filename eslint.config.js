@@ -5,7 +5,14 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores([
+    "dist",
+    "fuzion-xio/**",
+    "fuzion-xio-api/**",
+    "fuzion-xio-build/**",
+    "handoff/**",
+    "data/**"
+  ]),
   {
     files: ['**/*.{js,jsx}'],
     extends: [

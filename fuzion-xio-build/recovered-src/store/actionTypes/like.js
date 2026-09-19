@@ -1,0 +1,6 @@
+export const actionTypes = {
+
+	LIKE_REQUEST: 'LIKE_REQUEST',
+	LIKE_SUCCESS: 'LIKE_SUCCESS',
+	LIKE_FAILURE: 'LIKE_FAILURE',
+};
