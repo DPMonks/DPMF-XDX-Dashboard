@@ -6,6 +6,7 @@ import {
   CORE_DESK_PAIRS,
   extractCommandPair,
   isExecutableAdminCommand,
+  isQuestionLike,
   looksLikeAdminCommand,
   normalizeDeskPair,
   parseAdminCommand,
@@ -54,6 +55,9 @@ test("regular questions are not executable commands", () => {
   assert.equal(isExecutableAdminCommand("how do trust lines work"), null);
   assert.equal(isExecutableAdminCommand("good morning commander"), null);
   assert.equal(looksLikeAdminCommand("watch XDX/XIO"), true);
+  assert.equal(isQuestionLike("which assets are we trading right now", "analyse"), true);
+  assert.equal(isQuestionLike("can you look for something profitable", "analyse"), false);
+  assert.equal(isQuestionLike("what is the spread?", "trade"), true);
 });
 
 test("xsquad trustline does not steal the open XRP/RLUSD chart pair", () => {
@@ -73,6 +77,35 @@ test("analyse topic hunts markets for a profitable trade", () => {
   assert.equal(cmd.durable, true);
   const standing = applyStandingOrders([cmd]);
   assert.equal(standing.analyse_markets, true);
+});
+
+test("loose wording still maps under the selected topic", () => {
+  const pred = parseAdminCommand("use the chart to give me a bearish prediction", { topic: "analyse", chartPair: "XRP/RLUSD" });
+  assert.equal(pred.verb, "draw_prediction");
+  assert.equal(pred.side, "bear");
+  assert.equal(isExecutableAdminCommand("which assets are we trading right now", { topic: "analyse" }), null);
+  const hunt = isExecutableAdminCommand("find a fee clear trade on the books", { topic: "analyse" });
+  assert.equal(hunt.verb, "analyse_markets");
+  const looseHunt = isExecutableAdminCommand("can you look for something profitable", { topic: "analyse" });
+  assert.equal(looseHunt.verb, "analyse_markets");
+  const buy = isExecutableAdminCommand("get me some XDX with RLUSD", { topic: "trade" });
+  assert.equal(buy.verb, "trade_buy");
+  assert.equal(buy.quote, "RLUSD");
+  const sell = isExecutableAdminCommand("offload XDX for XRP", { topic: "trade" });
+  assert.equal(sell.verb, "trade_sell");
+  const trust = isExecutableAdminCommand("we still need xsquad on the wallets", { topic: "trustline", chartPair: "XRP/RLUSD" });
+  assert.equal(trust.verb, "trustline");
+  assert.equal(trust.quote, "XSQUAD");
+  const chart = isExecutableAdminCommand("put my orders on", { topic: "chart" });
+  assert.equal(chart.verb, "show_ledger_orders");
+  const live = isExecutableAdminCommand("unlock the desk and start trading", { topic: "desk" });
+  assert.equal(live.verb, "activate_phases");
+  const view = isExecutableAdminCommand("give me a bearish view on this", { topic: "predict", chartPair: "XRP/RLUSD" });
+  assert.equal(view.verb, "draw_prediction");
+  assert.equal(view.side, "bear");
+  const liq = isExecutableAdminCommand("top up the XDX/XRP pool", { topic: "liquidity" });
+  assert.equal(liq.verb, "amm_deposit");
+  assert.equal(liq.quote, "XRP");
 });
 
 test("topic-scoped buy and trustline parse", () => {

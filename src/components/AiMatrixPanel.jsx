@@ -99,6 +99,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   const [pulsePage, setPulsePage] = useState(0);
   const [pulseSwap, setPulseSwap] = useState(false);
   const [commandTopic, setCommandTopic] = useState("chat");
+  const [topicMenuOpen, setTopicMenuOpen] = useState(false);
   const topicMeta = commandTopicMeta(commandTopic);
 
   const effectiveLang = langPref === "auto" ? suggestedLang : normalizeLang(langPref);
@@ -180,6 +181,15 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [langMenuOpen]);
+
+  useEffect(() => {
+    if (!topicMenuOpen) return undefined;
+    function onDoc(event) {
+      if (!event.target?.closest?.(".aim-topic-wrap")) setTopicMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [topicMenuOpen]);
 
   // Pin newest line inside the capped chat viewport (do not grow the page).
   useEffect(() => {
@@ -825,22 +835,39 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
             <div className="aim-chat-title-row">
               <h3>Commander chat</h3>
               {isAimAdmin ? (
-                <label className="aim-topic-wrap">
-                  <span className="aim-sr-only">Command topic</span>
-                  <select
-                    className="aim-topic-select"
-                    value={commandTopic}
-                    onChange={(e) => setCommandTopic(normalizeCommandTopic(e.target.value))}
+                <div className="aim-topic-wrap">
+                  <button
+                    type="button"
+                    className={`aim-topic-btn ${topicMenuOpen ? "is-open" : ""}`}
+                    onClick={() => setTopicMenuOpen((v) => !v)}
+                    aria-haspopup="listbox"
+                    aria-expanded={topicMenuOpen}
                     aria-label="Commander command topic"
                     title={topicMeta.hint}
                   >
-                    {AIM_COMMAND_TOPICS.map((row) => (
-                      <option key={row.id} value={row.id}>
-                        {row.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <span className="aim-topic-btn-value">{topicMeta.label}</span>
+                    <span className="aim-lang-chevron" aria-hidden="true" />
+                  </button>
+                  {topicMenuOpen ? (
+                    <div className="aim-topic-menu" role="listbox">
+                      {AIM_COMMAND_TOPICS.map((row) => (
+                        <button
+                          key={row.id}
+                          type="button"
+                          role="option"
+                          aria-selected={commandTopic === row.id}
+                          className={`aim-topic-option ${commandTopic === row.id ? "is-active" : ""}`}
+                          onClick={() => {
+                            setCommandTopic(normalizeCommandTopic(row.id));
+                            setTopicMenuOpen(false);
+                          }}
+                        >
+                          {row.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <p className="aim-commander-status" title="Commander looping and last seen">
@@ -895,7 +922,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
             <div className="aim-admin-command">
               <p className="aim-admin-teach-hint">
                 {topicMeta.id === "chat"
-                  ? "Admin command on. Topic Chat keeps him autonomous and learning. Switch the topic, then tell him what to do. Teach … still logs lessons."
+                  ? "Admin command on. Chat keeps him autonomous and learning. Switch the topic, then say it in your own words. He maps it and acts. Teach … still logs lessons."
                   : `${topicMeta.hint} Agents comply. He still hunts on his own.`}
               </p>
               {(standingOrders?.extra_markets?.length ||
@@ -936,9 +963,11 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
                   ) : null}
                   {standingOrders.route_xdx ? <span className="aim-standing-chip">Route XDX</span> : null}
                   {standingOrders.counter_bots ? <span className="aim-standing-chip">Counter bots</span> : null}
-                  {(standingOrders.trustlines || []).map((asset) => (
+                  {(standingOrders.trustlines || [])
+                    .filter((asset) => String(asset).toUpperCase() !== "RLUSD" && String(asset).toUpperCase() !== "XRP")
+                    .map((asset) => (
                     <span key={`t-${asset}`} className="aim-standing-chip">
-                      Trust {asset}
+                      Trustline {asset}
                     </span>
                   ))}
                 </div>
