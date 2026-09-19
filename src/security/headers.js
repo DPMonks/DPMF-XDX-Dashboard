@@ -37,6 +37,7 @@ export function contentSecurityPolicy({ development = false } = {}) {
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: https://xumm.app ${PUBLIC_SITE_ORIGIN} ${DEXSCREENER_ORIGINS}`,
     "font-src 'self' data:",
+    "media-src 'self' blob: data:",
     `connect-src ${connect}`,
     `frame-src ${DEXSCREENER_ORIGINS}`,
     "frame-ancestors 'self' https://dpmf.technology https://*.dpmf.technology https://xumm.app https://*.xumm.app https://xaman.app https://*.xaman.app",

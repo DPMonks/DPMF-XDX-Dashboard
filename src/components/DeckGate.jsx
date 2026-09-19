@@ -26,6 +26,7 @@ export default function DeckGate({
 
   const [active, setActive] = useState(() => {
     if (eager) return true;
+    if (typeof IntersectionObserver !== "function") return true;
     if (typeof window === "undefined") return false;
     const hash = readJumpHash(window.location.hash);
     return Boolean(hash && watch.includes(hash));
@@ -55,7 +56,6 @@ export default function DeckGate({
     const node = ref.current;
     if (!node) return undefined;
     if (typeof IntersectionObserver !== "function") {
-      setActive(true);
       return undefined;
     }
     const obs = new IntersectionObserver(

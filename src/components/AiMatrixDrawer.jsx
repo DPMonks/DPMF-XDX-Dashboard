@@ -65,12 +65,12 @@ export default function AiMatrixDrawer() {
       return { deskOrders, estimate };
     });
   }, []);
-  useEffect(() => {
-    if (open) setContentReady(true);
-  }, [open]);
+  if (open && !contentReady) setContentReady(true);
   const touchRef = useRef(null);
   const openRef = useRef(open);
-  openRef.current = open;
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   const syncHash = useCallback((wantOpen) => {
     if (typeof window === "undefined" || !window.history?.replaceState) return;

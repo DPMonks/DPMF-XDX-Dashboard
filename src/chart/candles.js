@@ -633,7 +633,8 @@ export function wickClipOptions(overrides = {}) {
   const closeFlag = envFlag("VITE_CHART_WICK_CLOSE_CLIP");
   const pairDefaults = wickClipPairDefaults(overrides.pair);
   const base = { ...WICK_CLIP_DEFAULTS, ...pairDefaults };
-  const { pair: _pair, ...rest } = overrides;
+  const rest = { ...overrides };
+  delete rest.pair;
   return {
     enabled: enabledFlag == null ? base.enabled : enabledFlag,
     atrPeriod: envNumber("VITE_CHART_WICK_ATR_PERIOD", base.atrPeriod),

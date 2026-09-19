@@ -8,7 +8,6 @@ import {
   LEDGER_FEE_XRP,
   ammDepositTx,
   ammWithdrawTx,
-  expectedLpTokens,
   expectedDoubleLpTokens,
   expectedSingleLpTokens,
   expectedSingleWithdraw,

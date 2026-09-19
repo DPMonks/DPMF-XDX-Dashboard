@@ -266,8 +266,8 @@ export function parseMathIntent(raw, scope = {}) {
       text.match(/(\d+(?:\.\d+)?)\s*percent\s+of\s+\$?\s*([\d,]+(?:\.\d+)?[kmb]?)/i);
     if (m) {
       const pct = Number(m[1]);
-      let base = null;
-      let baseLabel = m[2];
+      let base;
+      let baseLabel;
       const key = String(m[2]).toLowerCase().replace(/[^a-z0-9_]/g, "");
       if (key in scope) {
         base = scope[key];

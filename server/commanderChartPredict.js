@@ -688,8 +688,8 @@ export function buildCommanderPredictionDrawings(side, chartContext, estimate, q
     if (tools.supportLine || (tools.maxHlines === 1 && !tools.fib)) {
       // Single support/resist horizontal from recent swing (not estimate-dependent)
       const rows = candleRows(chartContext);
-      let px = null;
-      let tAt = null;
+      let px;
+      let tAt;
       if (side === "bull") {
         const swing = detectTrendAnchors(chartContext, "bull");
         const low = swing?.b || swing?.a || (rows.length ? { t: rows[rows.length - 1].t, price: findSwingLow(rows, Math.max(0, rows.length - 12), rows.length - 1)?.price } : null);

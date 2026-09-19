@@ -191,6 +191,8 @@ export default function HybridChart({
   const chartAction = useChartAction();
   const [viewH, setViewH] = useState(() => (typeof window !== "undefined" ? window.innerHeight : 700));
 
+  /* candles/view/plotHeight are computed later in this render; the effect runs after paint. */
+  /* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect -- apply Commander actions after paint */
   useEffect(() => {
     if (!chartAction || !chartAction.seq) return;
     const actionPair = chartAction.pair ? String(chartAction.pair).replace(/\s+/g, "").toUpperCase() : null;
@@ -239,7 +241,6 @@ export default function HybridChart({
       return undefined;
     }
 
-    const startRect = bodyEl.getBoundingClientRect();
     const start = { x: 24, y: 48 };
     setAiCursor({ visible: true, x: start.x, y: start.y, phase: "wake", tool: null });
 
@@ -344,11 +345,10 @@ export default function HybridChart({
     // candles/view/plotHeight intentionally read fresh at effect start
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartAction, pair]);
+  /* eslint-enable react-hooks/immutability */
 
   useEffect(() => {
     if (!usesCexTape(pair)) {
-      setCexCandles([]);
-      setCexMeta({ source: "", label: "" });
       return undefined;
     }
     let cancelled = false;
@@ -593,10 +593,7 @@ export default function HybridChart({
   const clampedPan = clampPanOffset(panOffset, series.length, visibleCount);
   if (Number.isFinite(clampedPan) && clampedPan !== panOffset) setPanOffset(clampedPan);
   const futureBarsBase = futureBarsFromPan(clampedPan);
-  const candles = useMemo(
-    () => windowBars(series, { bars: visibleCount, offset: clampedPan }),
-    [series, visibleCount, clampedPan]
-  );
+  const candles = windowBars(series, { bars: visibleCount, offset: clampedPan });
   const averages = useMemo(
     () =>
       averagesForWindow({
@@ -860,7 +857,6 @@ export default function HybridChart({
 
   useEffect(() => {
     if (!aimEmbed || fullView) {
-      setEmbedBoxH(0);
       return undefined;
     }
     const node = plotWrapRef.current;

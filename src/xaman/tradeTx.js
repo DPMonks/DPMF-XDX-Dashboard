@@ -556,7 +556,9 @@ export function unusedXrpCoversLines({ spendable, total, account, extraLines = 0
 
 /** Trust lines with limit 0 cannot receive IOUs — treat as missing. */
 export function lineLimitOk(row, min = 1) {
-  const lim = Number(row?.limit ?? row?.Limit ?? row?.limit_peer ?? 0);
+  const raw = row?.limit ?? row?.Limit ?? row?.limit_peer;
+  if (raw == null || raw === "") return true;
+  const lim = Number(raw);
   return Number.isFinite(lim) && lim >= min;
 }
 

@@ -9,7 +9,7 @@ import {
   earliestHeldDay,
   fillContinuousVolumeDays,
   incomePairBalance,
-  catalogIncomePairs, incomePairChoices,
+  incomePairChoices,
   incomePairTotals,
   incomeHeldPoolRows,
   poolShareAssets,

@@ -539,14 +539,6 @@ function splitPoolFee(row, feeXdx, xdxXrp) {
   return { xdx: feeXdx, quote: 0, quoteId: poolQuoteId(row) };
 }
 
-function usdForSplit(split, { xdxUsd, xrpUsd, rlusdUsd }) {
-  const xdxPart = num(xdxUsd) != null ? split.xdx * Number(xdxUsd) : 0;
-  let quotePart = 0;
-  if (split.quoteId === "XRP" && num(xrpUsd) != null) quotePart = split.quote * Number(xrpUsd);
-  else if (split.quoteId === "RLUSD") quotePart = split.quote * (num(rlusdUsd) || 1);
-  return xdxPart + quotePart;
-}
-
 export function lpPoolEarnings(
   positions = [],
   { flows = [], xdxUsd = null, xrpUsd = null, rlusdUsd = 1, xdxXrp = null, now = Date.now() } = {}

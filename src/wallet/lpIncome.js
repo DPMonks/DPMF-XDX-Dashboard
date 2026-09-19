@@ -1008,7 +1008,7 @@ export function feeXdxFromLpTokens(lpTokens, pool = {}) {
 export function enrichFeeRowAssets(row, pool = {}, book = null) {
   if (!row) return row;
   const hasAssets = num(row.assetXdx) > 0 || num(row.assetQuote) > 0;
-  let next = row;
+  let next;
   if (hasAssets) {
     next = {
       ...row,

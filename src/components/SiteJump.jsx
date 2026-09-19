@@ -53,9 +53,13 @@ export default function SiteJump() {
   const travelRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [locking, setLocking] = useState("");
-  const [active, setActive] = useState(() =>
-    typeof window === "undefined" ? SITE_JUMP_IDS[0] : readJumpHash(window.location.hash) || SITE_JUMP_IDS[0]
-  );
+  const [active, setActive] = useState(() => {
+    if (typeof window === "undefined") return SITE_JUMP_IDS[0];
+    const nav = performance.getEntriesByType?.("navigation")?.[0];
+    const isReload = nav?.type === "reload" || performance.navigation?.type === 1;
+    if (isReload) return SITE_JUMP_IDS[0];
+    return readJumpHash(window.location.hash) || SITE_JUMP_IDS[0];
+  });
   const items = siteJumpItems(t);
   const here = items.find((row) => row.id === active) || items[0];
 
@@ -134,11 +138,9 @@ export default function SiteJump() {
         window.history.replaceState(null, "", window.location.pathname + window.location.search);
       }
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      setActive(SITE_JUMP_IDS[0]);
     } else {
       const want = readJumpHash(window.location.hash);
       if (want === AIM_MATRIX_ID) {
-        setActive(AIM_MATRIX_ID);
         openAimOverlay();
       } else if (want) {
         focusDeck(want);

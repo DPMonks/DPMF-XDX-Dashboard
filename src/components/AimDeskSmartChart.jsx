@@ -3,25 +3,6 @@ import { useI18n } from "../i18n/useI18n";
 import DexChart from "./DexChart";
 import HybridChart from "./HybridChart";
 
-export {
-  AIM_DESK_AGENT_COLORS,
-  asciiClean,
-  buildDeskMarks,
-  buildEstimateMarks,
-  classifyDeskMarkStyle,
-  coerceQuotePerBase,
-  deskMarkAskPrompt,
-  deskMarkColor,
-  deskMarkDotRadius,
-  deskMarkPaintColor,
-  deskMarkTouchClusterFlags,
-  DESK_CLUSTER_PURPLE,
-  DESK_CLUSTER_TOOLTIP,
-  inQuotePerBaseBand,
-  normalizeDeskSide,
-  quotePerBaseFromDeskOrder,
-} from "../chart/aimMarks";
-
 /**
  * Shared AIM chart: full HybridChart (pairs, Hybrid/Dex modes, tools, TFs)
  * plus desk OfferCreates and Commander estimate markers.

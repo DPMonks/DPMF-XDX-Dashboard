@@ -105,8 +105,6 @@ function clearRevealLoops() {
   }
 }
 
-const TX_HASH_RE = /\b[A-Fa-f0-9]{64}\b/g;
-
 function emitProgress(onProgress, chars, total) {
   if (typeof onProgress !== "function") return;
   const n = Math.max(0, Math.min(total, chars | 0));
@@ -314,7 +312,7 @@ export async function speakCommander(text, { voiceOn = true, lang = "en", onProg
     return { mode: "typewriter", engine: lastEngine };
   }
 
-  let voiceHeader = COMMANDER_VOICE_TARGET.id;
+  let voiceHeader;
   let arrayBuffer;
   try {
     const res = await fetch("/api/aim/speak", {

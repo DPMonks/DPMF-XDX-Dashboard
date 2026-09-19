@@ -17,7 +17,7 @@ import {
 import {
   TF_SET_NO_RIPPLE,
   XDX_ISSUER,
-  XDX_TOTAL_SUPPLY,
+  XDX_TRUST_LIMIT,
   xdxTrustSetTxjson,
 } from "../src/constants/ledger.js";
 import { claimExecutedTrade, claimSignedWallet } from "../src/xaman/claimSignIn.js";
@@ -69,7 +69,7 @@ test("xdxTrustSetTxjson is a NoRipple TrustSet for the XDX issuer", () => {
   assert.equal(txjson.Flags, TF_SET_NO_RIPPLE);
   assert.equal(txjson.LimitAmount.currency, "XDX");
   assert.equal(txjson.LimitAmount.issuer, XDX_ISSUER);
-  assert.equal(txjson.LimitAmount.value, String(XDX_TOTAL_SUPPLY));
+  assert.equal(txjson.LimitAmount.value, XDX_TRUST_LIMIT);
   assert.equal(txjson.Account, "rTestAccount111111111111111111111");
   assert.equal(xdxTrustSetTxjson().Account, undefined);
 });

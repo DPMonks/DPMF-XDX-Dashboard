@@ -13,9 +13,6 @@ import {
   answerVisitorPrediction,
   resolvePredictSide,
   isSideAgnosticReply,
-  analysePatternSetups,
-  estimateMatchesChartPair,
-  scoreMeasuredMovePct,
 } from "./commanderChartPredict.js";
 
 /** No em/en dashes in Commander-facing text (chat + TTS). */
@@ -752,7 +749,7 @@ function looksLikeNaturalTradeDirection(text) {
   return false;
 }
 
-function looksLikeTeachLesson(text) {
+export function looksLikeTeachLesson(text) {
   return looksLikeExplicitTeachLesson(text) || looksLikeNaturalTradeDirection(text);
 }
 
@@ -950,7 +947,7 @@ function scrubChartContext(raw) {
   };
 }
 
-async function persistUserPrediction(db, { wallet, prediction, chartContext }) {
+export async function persistUserPrediction(db, { wallet, prediction, chartContext }) {
   if (!prediction || typeof prediction !== "object") return null;
   const content = {
     type: "user_prediction_hypothesis",
@@ -977,7 +974,7 @@ async function persistUserPrediction(db, { wallet, prediction, chartContext }) {
 }
 
 /** Light resolve hook: mark open visitor hypotheses vs last close when side+levels allow. Cadence: on chat. */
-async function maybeResolveUserPredictions(db, { chartContext, estimate } = {}) {
+export async function maybeResolveUserPredictions(db, { chartContext, estimate } = {}) {
   if (!db) return { checked: 0, resolved: 0 };
   const pair = scrubText(String(chartContext?.pair || "")).slice(0, 32);
   const last = Number(chartContext?.price?.live || chartContext?.price?.last_close || estimate?.fair_mid || 0);
@@ -1035,7 +1032,7 @@ async function maybeResolveUserPredictions(db, { chartContext, estimate } = {}) 
   return { checked: (rows.rows || []).length, resolved };
 }
 
-async function loadRecentUserPredictionLessons(db, { limit = 8 } = {}) {
+export async function loadRecentUserPredictionLessons(db, { limit = 8 } = {}) {
   try {
     const rows = await db.query(
       `SELECT id, content, created_at FROM aim_agent_memory
@@ -1170,7 +1167,7 @@ async function fetchAccountBalances(account) {
 }
 
 
-function parseAmountValue(raw) {
+export function parseAmountValue(raw) {
   if (raw == null) return 0;
   if (typeof raw === "object") return Number(raw.value || 0) || 0;
   const n = Number(raw);
@@ -1622,7 +1619,7 @@ function normalizeAimOrderSide(raw) {
   return "buy";
 }
 
-function isXrpRlusdPair(pair) {
+export function isXrpRlusdPair(pair) {
   const p = String(pair || "").replace(/\s+/g, "").toUpperCase();
   return !p || p === "XRP/RLUSD" || p === "RLUSD/XRP";
 }
@@ -2899,7 +2896,7 @@ async function loadAimChatContext(db) {
      LIMIT 48`
   );
 
-  let pools = null;
+  let pools;
   try {
     const rows = await db.query(
       `SELECT pool_name, quote, reserve_xdx, updated_at

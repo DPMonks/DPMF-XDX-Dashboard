@@ -25,6 +25,7 @@ import {
   TF_PARTIAL_PAYMENT,
   TF_SINGLE_ASSET,
   TF_TWO_ASSET,
+  BIG_TRUST_LIMIT,
   ammDepositTx,
   ammQuoteAsset,
   ammWithdrawTx,
@@ -325,7 +326,7 @@ test("LP TrustSet uses the pool LP hex and AMM account", () => {
   assert.equal(xrp.Flags, TF_SET_NO_RIPPLE);
   assert.equal(xrp.LimitAmount.currency, XDX_XRP_LP_HEX);
   assert.equal(xrp.LimitAmount.issuer, XDX_XRP_AMM);
-  assert.equal(xrp.LimitAmount.value, "100000000000");
+  assert.equal(xrp.LimitAmount.value, BIG_TRUST_LIMIT);
   const catalog = poolForQuote(quoteAsset("XIO"), [
     {
       pool: "XDX/XIO",
