@@ -1,3 +1,5 @@
+import { extractClassicAddress } from "../constants/ledger.js";
+
 export async function getAimStatus() {
   const res = await fetch("/api/aim/status", { headers: { Accept: "application/json" } });
   const data = await res.json().catch(() => ({}));
@@ -17,13 +19,12 @@ export async function getAimLocale() {
  * Server prefers an explicit r… in the message, else wallet/account/address.
  * Optional chart_context: live HybridChart snapshot (pair/TF/tools/MA/overlays).
  */
-const CLASSIC_ADDR_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
 
 /** Normalize a connected classic r… for AIM chat body (never seeds). */
 export function classicAimWallet(...candidates) {
   for (const raw of candidates) {
-    const classic = String(raw || "").trim();
-    if (classic && CLASSIC_ADDR_RE.test(classic)) return classic;
+    const classic = extractClassicAddress(raw);
+    if (classic) return classic;
   }
   return null;
 }

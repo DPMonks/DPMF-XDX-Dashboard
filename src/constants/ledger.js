@@ -63,8 +63,38 @@ export const XDX_XSQUAD_LP_HEX = "03BA7FDC0F32F83750869CBA241B93F1C66A8EEB";
 
 // 1% XDX platform fee for swaps where neither side is XDX.
 export const XDX_FEE_TREASURY = "rDPMFBANKMexTKkC7e4n3ekD9HfhmWHva8";
-/** AIM Commander admin teach wallet (alias of fee treasury). Exact classic match only. */
+/** AIM Commander admin teach / objectives / XRPL-direction wallet (alias of fee treasury). */
 export const AIM_ADMIN_WALLET = XDX_FEE_TREASURY;
+export const CLASSIC_ADDR_FIND_RE = /\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/;
+
+/** Pull a classic r… from a string or shallow wallet-shaped object. Never seeds. */
+export function extractClassicAddress(value) {
+  if (value == null) return null;
+  if (typeof value === "object") {
+    return (
+      extractClassicAddress(value.wallet) ||
+      extractClassicAddress(value.account) ||
+      extractClassicAddress(value.address) ||
+      extractClassicAddress(value.walletAddress) ||
+      extractClassicAddress(value.classic_address) ||
+      extractClassicAddress(value.classicAddress) ||
+      extractClassicAddress(value.response?.account) ||
+      extractClassicAddress(value.response?.signer) ||
+      null
+    );
+  }
+  const m = String(value).trim().match(CLASSIC_ADDR_FIND_RE);
+  return m ? m[0] : null;
+}
+
+export function isClassicAddress(value) {
+  const classic = extractClassicAddress(value);
+  return Boolean(classic && classic === String(value || "").trim());
+}
+
+export function isAimAdminWallet(addr) {
+  return extractClassicAddress(addr) === AIM_ADMIN_WALLET;
+}
 export const XDX_PLATFORM_FEE_PCT = 1;
 
 // Non-XDX swaps require this much LP value in any one of these pools.

@@ -1,3 +1,4 @@
+import { extractClassicAddress as extractLedgerClassic, isAimAdminWallet } from "../src/constants/ledger.js";
 import { aimSpeakPayload } from "./aimSpeak.js";
 import pg from "pg";
 import { aimAgentLabel, aimAgentRole, aimAgentProfile, resolveAimAgentId } from "./aimAgentNames.js";
@@ -121,7 +122,18 @@ function publicAgentId(agentId) {
 }
 
 async function readJson(req) {
-  if (req?.body && typeof req.body === "object") return req.body;
+  const raw = req?.body;
+  if (typeof raw === "string") {
+    const text = raw.trim();
+    return text ? JSON.parse(text) : {};
+  }
+  if (raw && typeof raw === "object" && typeof raw.pipe !== "function") {
+    if (typeof Buffer !== "undefined" && Buffer.isBuffer(raw)) {
+      const text = raw.toString("utf8").trim();
+      return text ? JSON.parse(text) : {};
+    }
+    return raw;
+  }
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   if (!chunks.length) return {};
@@ -652,36 +664,18 @@ const XDX_POOL_SPECS = [
 ];
 
 function extractClassicAddress(text) {
-  const m = String(text || "").match(/\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/);
-  return m ? m[0] : null;
-}
-
-/** Pull a classic r… from a string or shallow wallet-shaped object. */
-function classicFromUnknown(value) {
-  if (value == null) return null;
-  if (typeof value === "object") {
-    return (
-      classicFromUnknown(value.wallet) ||
-      classicFromUnknown(value.account) ||
-      classicFromUnknown(value.address) ||
-      classicFromUnknown(value.walletAddress) ||
-      classicFromUnknown(value.classic_address) ||
-      classicFromUnknown(value.classicAddress) ||
-      null
-    );
-  }
-  return extractClassicAddress(String(value).trim());
+  return extractLedgerClassic(text);
 }
 
 /** Connected-wallet fields from the chat body (never seeds). */
 function resolveBodyWallet(body = {}) {
   return (
-    classicFromUnknown(body.wallet) ||
-    classicFromUnknown(body.account) ||
-    classicFromUnknown(body.address) ||
-    classicFromUnknown(body.walletAddress) ||
-    classicFromUnknown(body.classic_address) ||
-    classicFromUnknown(body.classicAddress) ||
+    extractLedgerClassic(body.wallet) ||
+    extractLedgerClassic(body.account) ||
+    extractLedgerClassic(body.address) ||
+    extractLedgerClassic(body.walletAddress) ||
+    extractLedgerClassic(body.classic_address) ||
+    extractLedgerClassic(body.classicAddress) ||
     null
   );
 }
@@ -698,25 +692,20 @@ function resolveChatWallet(text, body = {}) {
 }
 
 
-/** Exact classic XRPL address for AIM admin teach (DPMFBANK / fee treasury). */
-const AIM_ADMIN_WALLET = "rDPMFBANKMexTKkC7e4n3ekD9HfhmWHva8";
 const AIM_ADMIN_TEACH_KIND = "AIM_ADMIN_TEACH";
 const AIM_USER_PREDICTION_KIND = "AIM_USER_PREDICTION_LIKELY";
 const AIM_USER_PREDICTION_RESOLVE_KIND = "AIM_USER_PREDICTION_RESOLVE";
 
-function isAimAdminWallet(addr) {
-  const classic = extractClassicAddress(addr) || String(addr || "").trim();
-  return classic === AIM_ADMIN_WALLET;
-}
+export { isAimAdminWallet, resolveBodyWallet };
 
 /** Leading Teach / teach: / teach - / Teach — (case-insensitive) is the primary admin lesson trigger. */
-function hasLeadingTeachPrefix(text) {
+export function hasLeadingTeachPrefix(text) {
   const q = String(text || "").replace(/^\uFEFF/, "");
   return /^\s*teach(?:\s*[:\-\u2013\u2014|,.]|\s+|$)/i.test(q);
 }
 
 /** Explicit teach/lesson magic words (also used to refuse non-admin teach attempts). */
-function looksLikeExplicitTeachLesson(text) {
+export function looksLikeExplicitTeachLesson(text) {
   const q = String(text || "");
   if (hasLeadingTeachPrefix(q)) return true;
   if (
@@ -749,16 +738,24 @@ function looksLikeNaturalTradeDirection(text) {
   return false;
 }
 
+export function looksLikeAdminObjective(text) {
+  const q = String(text || "");
+  if (/^\s*objective(?:\s*[:\-\u2013\u2014|,.]|\s+)/i.test(q)) return true;
+  if (/\b(set|new|update|change|give|assign)\b.{0,24}\b(objective|xrpl direction)\b/i.test(q)) return true;
+  if (/\b(desk objective|xrpl direction)\s*[:\-\u2013\u2014]\s+\S/i.test(q)) return true;
+  return false;
+}
+
 export function looksLikeTeachLesson(text) {
-  return looksLikeExplicitTeachLesson(text) || looksLikeNaturalTradeDirection(text);
+  return looksLikeExplicitTeachLesson(text) || looksLikeNaturalTradeDirection(text) || looksLikeAdminObjective(text);
 }
 
 /** Admin offer to give price direction / instructions — not a durable lesson itself. */
-function looksLikeAdminDirectionReadiness(text) {
+export function looksLikeAdminDirectionReadiness(text) {
   const q = String(text || "");
   const hasTeachCue =
-    /\b(direction|instructions?|teach(ing)?|lessons?)\b/i.test(q) ||
-    (/\blisten\b/i.test(q) && /\b(price|chart|pair|xrp|rlusd|instruction|direction)\b/i.test(q));
+    /\b(direction|instructions?|teach(ing)?|lessons?|objectives?)\b/i.test(q) ||
+    (/\blisten\b/i.test(q) && /\b(price|chart|pair|xrp|rlusd|instruction|direction|objective)\b/i.test(q));
   if (!hasTeachCue) return false;
   return (
     /\b(are you ready|ready to (take|receive|listen|learn)|ready for (some )?(direction|instructions?|teaching|lessons?)|take (some |my )?(direction|instructions?)|listen (to )?(my )?(direction|instructions?)|take my (direction|teaching|instructions?)|shall i (teach|direct|instruct)|want (me )?to (teach|direct|instruct)|i('m| am) (going to |about to )?(teach|give|share) (you )?(some )?(direction|instructions?))\b/i.test(
@@ -4031,10 +4028,12 @@ export async function aimChatPayload(req) {
     const explicitTeach = looksLikeExplicitTeachLesson(text);
     const naturalTeach = looksLikeNaturalTradeDirection(text);
     const leadingTeach = hasLeadingTeachPrefix(text);
-    // Leading Teach / explicit cues are primary; natural trade direction is soft admin-only secondary.
+    const adminObjective = looksLikeAdminObjective(text);
+    // Leading Teach / explicit cues are primary; natural trade direction and
+    // objectives / XRPL direction are admin-only durable writes.
     const teachAttempt =
-      (explicitTeach || leadingTeach || (isAdmin && naturalTeach)) &&
-      (!readinessAsk || hasDurableTeachContent(text) || leadingTeach);
+      (explicitTeach || leadingTeach || (isAdmin && (naturalTeach || adminObjective))) &&
+      (!readinessAsk || hasDurableTeachContent(text) || leadingTeach || adminObjective);
 
     // Ephemeral chat; admin teach lessons are the only durable chat-origin memory writes.
     const classified = classifyAimQuestion(text);

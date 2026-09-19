@@ -1,58 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { AIM_ADMIN_WALLET, extractClassicAddress, isAimAdminWallet } from "../src/constants/ledger.js";
+import { classicAimWallet } from "../src/api/aim.js";
+import {
+  hasLeadingTeachPrefix,
+  looksLikeAdminDirectionReadiness,
+  looksLikeAdminObjective,
+  looksLikeTeachLesson,
+  resolveBodyWallet,
+} from "../server/aimMatrix.js";
 
-function extractClassicAddress(text) {
-  const m = String(text || "").match(/\br[1-9A-HJ-NP-Za-km-z]{24,34}\b/);
-  return m ? m[0] : null;
-}
-function classicFromUnknown(value) {
-  if (value == null) return null;
-  if (typeof value === "object") {
-    return (
-      classicFromUnknown(value.wallet) ||
-      classicFromUnknown(value.account) ||
-      classicFromUnknown(value.address) ||
-      classicFromUnknown(value.walletAddress) ||
-      classicFromUnknown(value.classic_address) ||
-      classicFromUnknown(value.classicAddress) ||
-      null
-    );
-  }
-  return extractClassicAddress(String(value).trim());
-}
-function resolveBodyWallet(body = {}) {
-  return (
-    classicFromUnknown(body.wallet) ||
-    classicFromUnknown(body.account) ||
-    classicFromUnknown(body.address) ||
-    classicFromUnknown(body.walletAddress) ||
-    classicFromUnknown(body.classic_address) ||
-    classicFromUnknown(body.classicAddress) ||
-    null
-  );
-}
+const ADMIN = AIM_ADMIN_WALLET;
+const OTHER = "rN7n7otQDd6FczFgLdphjsiEaUsfoe5bX";
+
 function resolveChatWallet(text, body = {}) {
   const fromMsg = extractClassicAddress(text);
   if (fromMsg) return fromMsg;
   return resolveBodyWallet(body);
 }
-const AIM_ADMIN_WALLET = "rDPMFBANKMexTKkC7e4n3ekD9HfhmWHva8";
-function isAimAdminWallet(addr) {
-  const classic = extractClassicAddress(addr) || String(addr || "").trim();
-  return classic === AIM_ADMIN_WALLET;
-}
-function hasLeadingTeachPrefix(text) {
-  const q = String(text || "").replace(/^\uFEFF/, "");
-  return /^\s*teach(?:\s*[:\-\u2013\u2014|,.]|\s+|$)/i.test(q);
-}
+
 function isAdminForTeach(text, body) {
   const bodyWallet = resolveBodyWallet(body);
   const chatWallet = resolveChatWallet(text, body);
   return isAimAdminWallet(bodyWallet) || isAimAdminWallet(chatWallet);
 }
-
-const ADMIN = AIM_ADMIN_WALLET;
-const OTHER = "rN7n7otQDd6FczFgLdphjsiEaUsfoe5bX";
 
 test("leading Teach prefixes", () => {
   for (const msg of ["teach - testing", "Teach:", "Teach — note", "  teach bias long", "teach"]) {
@@ -69,7 +40,20 @@ test("missing wallet is not admin", () => {
   assert.equal(isAdminForTeach("teach - testing teach function", {}), false);
 });
 
-test("exact admin classic match", () => {
+test("exact admin classic match from signed-in body fields", () => {
+  assert.equal(isAimAdminWallet(ADMIN), true);
+  assert.equal(isAimAdminWallet(`signed in as ${ADMIN}`), true);
+  assert.equal(isAimAdminWallet({ walletAddress: ADMIN }), true);
   assert.equal(isAdminForTeach("teach - testing", { wallet: ADMIN, account: ADMIN }), true);
   assert.equal(isAdminForTeach("teach - testing", { walletAddress: ADMIN }), true);
+  assert.equal(classicAimWallet(null, { account: ADMIN }), ADMIN);
+});
+
+test("admin objectives and XRPL direction are durable teach for the signed-in admin", () => {
+  assert.equal(looksLikeAdminObjective("Objective: grow XRP/RLUSD inventory this session"), true);
+  assert.equal(looksLikeAdminObjective("Set the desk objective to stay long XDX/XRP"), true);
+  assert.equal(looksLikeAdminObjective("XRPL direction: favour XRP strength vs RLUSD"), true);
+  assert.equal(looksLikeTeachLesson("Set the desk objective to stay long XDX/XRP"), true);
+  assert.equal(looksLikeAdminDirectionReadiness("ready for objectives and xrpl direction"), true);
+  assert.equal(looksLikeAdminObjective("what is the desk objective today"), false);
 });

@@ -1,3 +1,4 @@
+import { extractClassicAddress } from "../constants/ledger.js";
 import { isXappHost, openXappSignRequest } from "./xappHost.js";
 
 function pick(object, keys) {
@@ -244,18 +245,18 @@ export async function getPayloadResult(uuid) {
 }
 
 export function isClassicAddress(value) {
-  return /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(String(value || "").trim());
+  return extractClassicAddress(value) === String(value || "").trim();
 }
 
 export function extractSignedAccount(result) {
-  const account = String(
-    result?.response?.account ||
-      result?.response?.signer ||
-      result?.payload?.response?.account ||
-      result?.payload?.response?.signer ||
-      ""
-  ).trim();
-  return isClassicAddress(account) ? account : null;
+  return (
+    extractClassicAddress(result?.response?.account) ||
+    extractClassicAddress(result?.response?.signer) ||
+    extractClassicAddress(result?.payload?.response?.account) ||
+    extractClassicAddress(result?.payload?.response?.signer) ||
+    extractClassicAddress(result?.account) ||
+    null
+  );
 }
 
 export function payloadResolvedAtMs(result) {

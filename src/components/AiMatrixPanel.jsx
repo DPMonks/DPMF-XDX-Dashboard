@@ -9,7 +9,8 @@ import { useWallet } from "../context/useWallet";
 import { useChartSnapshot } from "../context/chartSnapshot";
 import { getChartAction, publishChartAction, subscribeChartNarrate } from "../context/chartAction";
 import { clearAimChatAsk, useAimChatAsk } from "../context/aimChatAsk";
-import { AIM_ADMIN_WALLET } from "../constants/ledger";
+import { isAimAdminWallet } from "../constants/ledger";
+import { liveWalletAddress } from "../wallet/walletStorage";
 import AimDeskSmartChart from "./AimDeskSmartChart";
 
 function ago(iso) {
@@ -75,8 +76,8 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   const chartSnapshot = useChartSnapshot();
   const aimChatAsk = useAimChatAsk();
   // Only show Admin teach on when the same classic wallet will be sent on chat.
-  const chatWallet = classicAimWallet(walletAddress);
-  const isAimAdmin = Boolean(chatWallet) && chatWallet === AIM_ADMIN_WALLET;
+  const chatWallet = classicAimWallet(walletAddress, liveWalletAddress());
+  const isAimAdmin = isAimAdminWallet(chatWallet);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -229,11 +230,12 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
               pending_question: pendingAction.pending_question || null,
             }
           : null;
+      const signedWallet = classicAimWallet(walletAddress, liveWalletAddress(), chatWallet);
       const out = await postAimChat(message, {
         lang: langPref === "auto" ? "auto" : effectiveLang,
-        wallet: chatWallet || classicAimWallet(walletAddress) || null,
-        account: chatWallet || classicAimWallet(walletAddress) || null,
-        address: chatWallet || classicAimWallet(walletAddress) || null,
+        wallet: signedWallet,
+        account: signedWallet,
+        address: signedWallet,
         chart_context: chartSnapshot || null,
         pending_chart_action,
       });
@@ -858,7 +860,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
           </div>
           {isAimAdmin ? (
             <p className="aim-admin-teach-hint" style={{ margin: "0 0 6px", fontSize: 12, opacity: 0.85 }}>
-              Admin teach on. Start a lesson with Teach ... and Commander will log it with ack.
+              Admin teach on. Commander takes lessons, objectives, and XRPL direction from rDPMFBANK…va8. Start with Teach … or set an objective.
             </p>
           ) : null}
           <form className="aim-chat-form" ref={chatFormRef} onSubmit={onSend}>
