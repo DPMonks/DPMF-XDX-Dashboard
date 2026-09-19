@@ -138,9 +138,20 @@ export function writeXamanSearchParam(uuid) {
 }
 
 export function markXamanReturn(uuid, extra = {}) {
-  const record = rememberPendingPayload(uuid, extra);
-  if (record) writeXamanSearchParam(record.uuid);
-  return record;
+  // Keep the payload in storage only. Writing ?xaman= here made every
+  // refresh look like a Xaman return and stuck the page on Preparing.
+  return rememberPendingPayload(uuid, extra);
+}
+
+export function shouldResumePendingSignIn(
+  search = typeof window !== "undefined" ? window.location.search : ""
+) {
+  const urlUuid = readXamanReturnUuid(search);
+  if (!urlUuid || isConsumedUuid(urlUuid)) return false;
+  const record = peekPendingPayload();
+  if (record?.watchTrade) return false;
+  if (record?.uuid && record.uuid !== urlUuid) return false;
+  return true;
 }
 
 export function peekXamanUuid(

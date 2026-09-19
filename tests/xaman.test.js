@@ -30,6 +30,7 @@ import {
   isReusableUnsignedPayload,
   launchXamanSign,
   shouldCancelConnectNavigation,
+  shouldShowXamanConnect,
   normalizePayload,
   payloadLooksSigned,
   payloadQrUrl,
@@ -51,10 +52,12 @@ import {
   rememberConsumedUuid,
   rememberPendingPayload,
   shouldAutoClaimPendingTrade,
+  shouldResumePendingSignIn,
   takeXamanReturnUuid,
   xamanWebsocketUrl,
 } from "../src/xaman/payloadResume.js";
 import { nextPayloadSession, payloadSessionOpen } from "../src/xaman/payloadSession.js";
+import { xamanAppQrDataUrl, xamanSignQrHref } from "../src/xaman/inHouseQr.js";
 import { normalizeTradeRequest } from "../src/xaman/tradeTx.js";
 
 test("cleanCredential strips quotes and whitespace", () => {
@@ -595,6 +598,42 @@ test("opening a new trade discards a leftover watchTrade payload", () => {
     if (previous.localStorage === undefined) delete globalThis.localStorage;
     else globalThis.localStorage = previous.localStorage;
   }
+});
+
+test("a stored payload does not resume sign-in unless Xaman returned the uuid", () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const previous = {
+    sessionStorage: globalThis.sessionStorage,
+    localStorage: globalThis.localStorage,
+  };
+  globalThis.sessionStorage = memoryStore();
+  globalThis.localStorage = memoryStore();
+  try {
+    rememberPendingPayload(uuid);
+    assert.equal(shouldResumePendingSignIn(""), false);
+    assert.equal(shouldResumePendingSignIn(`?xaman=${uuid}`), true);
+    rememberPendingPayload(uuid, { watchTrade: true, txjson: { TransactionType: "Payment" } });
+    assert.equal(shouldResumePendingSignIn(`?xaman=${uuid}`), false);
+  } finally {
+    clearPendingPayload();
+    if (previous.sessionStorage === undefined) delete globalThis.sessionStorage;
+    else globalThis.sessionStorage = previous.sessionStorage;
+    if (previous.localStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous.localStorage;
+  }
+});
+
+test("in-house QR encodes the Xaman app deep link, not the hosted console", () => {
+  const uuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  assert.equal(xamanSignQrHref(uuid), `xumm://xumm.app/sign/${uuid}`);
+  assert.doesNotMatch(xamanSignQrHref(uuid), /^https:\/\/xumm\.app\/sign\//);
+  const src = xamanAppQrDataUrl(uuid);
+  assert.match(src, /^data:image\/svg\+xml/);
+  assert.ok(src.length > 200);
+  assert.equal(shouldShowXamanConnect({ phone: false, telegram: false, hasLink: true }), false);
+  assert.equal(shouldShowXamanConnect({ phone: true, hasLink: true }), true);
+  assert.equal(shouldShowXamanConnect({ telegram: true, hasLink: true }), true);
+  assert.equal(shouldShowXamanConnect({ xapp: true, phone: true, hasLink: true }), false);
 });
 
 test("opening Xaman for a sign stays on the in-house modal", () => {

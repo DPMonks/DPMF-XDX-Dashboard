@@ -6,9 +6,11 @@ import {
   isTelegramWebView,
   launchXamanSign,
   shouldCancelConnectNavigation,
+  shouldShowXamanConnect,
   xamanAppUrl,
   xamanSignUrl,
 } from "../xaman/xamanClient";
+import { xamanAppQrDataUrl } from "../xaman/inHouseQr";
 import { isXappHost } from "../xaman/xappHost";
 import { useI18n } from "../i18n/useI18n";
 
@@ -28,11 +30,22 @@ export default function WalletModal({
   const phone = isPhoneDevice() || isInAppBrowser();
   const appHref = xamanAppUrl(uuid) || mobileUrl;
   const webHref = xamanSignUrl(uuid);
-  const connectHref = webHref || appHref;
+  // Desktop stays on the in-house QR. Phone opens the Xaman app via xumm://.
+  // Telegram still needs the https universal link because xumm:// is swallowed.
+  const connectHref = telegram ? webHref || appHref : appHref || webHref;
   const connectLabel = xapp ? t.xappApprove || t.connectXaman || t.openApp : t.connectXaman || t.openApp;
   const confirming = status === "confirming";
-  const showQr = Boolean(!xapp && qrUrl && status !== "loading" && !confirming);
-  const showConnect = Boolean(!xapp && status !== "loading" && !confirming && (connectHref || uuid));
+  const inHouseQr = xamanAppQrDataUrl(uuid);
+  const showQr = Boolean(!xapp && (inHouseQr || qrUrl) && status !== "loading" && !confirming);
+  const qrSrc = inHouseQr || qrUrl;
+  const showConnect = shouldShowXamanConnect({
+    xapp,
+    phone,
+    telegram,
+    confirming,
+    loading: status === "loading",
+    hasLink: Boolean(connectHref || uuid),
+  });
   const heading =
     status === "loading"
       ? preparingLabel || t.preparing
@@ -65,8 +78,8 @@ export default function WalletModal({
       return;
     }
     const result = launchXamanSign(uuid);
-    // Telegram already left via openLink. A phone tap must still
-    // follow https://xumm.app/sign so Connect is not a no-op.
+    // Telegram already left via openLink. A phone tap follows xumm://
+    // (or the Telegram universal link) and must not land on the hosted console.
     if (shouldCancelConnectNavigation(result)) event.preventDefault();
   }
 
@@ -85,7 +98,7 @@ export default function WalletModal({
           {heading}
         </h2>
 
-        {showQr ? <img src={qrUrl} alt={t.xamanQr || t.scan} className="qr-image" /> : null}
+        {showQr ? <img src={qrSrc} alt={t.xamanQr || t.scan} className="qr-image" /> : null}
 
         {xapp && status !== "loading" && !confirming ? (
           <p className="wallet-modal-hint">{t.xappApproveHint || t.waitingXaman}</p>
