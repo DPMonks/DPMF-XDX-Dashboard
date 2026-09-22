@@ -35,7 +35,7 @@ import {
   wickClipPairDefaults,
 } from "../src/chart/candles.js";
 import { bucketTime, CHART_PAIRS, DEFAULT_INTERVAL, mergeChartPairs, visibleBarsForInterval } from "../src/chart/intervals.js";
-import { backdateRlusdCandle, orientQuotePrice, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
+import { backdateRlusdCandle, crossXrpCandle, orientQuotePrice, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
 import { ammImpact, ammSupportResistanceRibbon, arbitrageWindow, clampPriceZoom, heatmapDots, liquidityPressure, liquidityWalls, percentile, scalePriceView, shiftAfterPriceZoom, smartView, zoomPriceScale } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
@@ -351,6 +351,19 @@ test("hollow candle boxes keep the slot width so packed 15m bars do not merge", 
   assert.equal(solid.width, 3.2);
   assert.equal(hollow.width, 3.2);
   assert.ok(hollow.height >= 2.2);
+});
+
+test("expandDailyToInterval carries the daily candle into an afternoon 1m window", () => {
+  const day = Date.parse("2026-09-22T00:00:00.000Z");
+  const from = day + 15 * 3_600_000;
+  const expanded = expandDailyToInterval(
+    [{ t: day, o: 0.0001, h: 0.0002, l: 0.00009, c: 0.00015, v: 4 }],
+    "1m",
+    from,
+    from + 30 * 60_000
+  );
+  assert.ok(expanded.length >= 30, `afternoon 1m window collapsed to ${expanded.length}`);
+  assert.ok(expanded.every((row) => row.c > 0));
 });
 
 test("expandDailyToInterval builds 1H buckets and windowLastBars keeps the tail", () => {
@@ -1164,4 +1177,50 @@ test("composePairCandles keeps XDX/RLUSD candles on the locked scale when AMM pr
   );
   assert.equal(dots.length, 2);
   assert.ok(dots.every((dot) => dot.price < 0.001 && dot.price > 1e-5));
+});
+
+test("XDX/XSQUAD price is quote per XDX, not the dollar print", () => {
+  const book = quotePerXdx({ pair: "XDX/XSQUAD", xdxQuote: 0.00015 });
+  assert.ok(Math.abs(book - 0.00015) < 1e-12);
+  const fromUsd = quotePerXdx({ pair: "XDX/XSQUAD", xdxUsd: 0.000068, quoteUsd: 0.453 });
+  assert.ok(Math.abs(fromUsd - 0.000068 / 0.453) < 1e-12);
+  assert.equal(quotePerXdx({ pair: "XDX/XSQUAD", xdxUsd: 0.000068 }), null);
+  const fromXrp = quotePerXdx({ pair: "XDX/XIO", xdxUsd: 0.000068, xrpUsd: 1.57, quoteXrp: 26.32 });
+  assert.ok(Math.abs(fromXrp - 0.000068 / 1.57 / 26.32) < 1e-12);
+});
+
+test("crossXrpCandle turns XDX/XRP and XSQUAD/XRP into XDX per XSQUAD", () => {
+  const t = Date.parse("2026-09-22T00:00:00.000Z");
+  const candle = crossXrpCandle(
+    { t, o: 0.00004, h: 0.00005, l: 0.00003, c: 0.000043, v: 10 },
+    { t, o: 0.3, h: 0.32, l: 0.28, c: 0.29, v: 4 },
+    "crossed"
+  );
+  assert.equal(candle.source, "crossed");
+  assert.ok(Math.abs(candle.c - 0.000043 / 0.29) < 1e-12);
+  assert.ok(candle.h >= candle.c && candle.l <= candle.c);
+});
+
+test("composePairCandles keeps years of XDX/XSQUAD daily history", () => {
+  const now = Date.parse("2026-09-22T15:00:00.000Z");
+  const candles = composePairCandles({
+    pair: "XDX/XSQUAD",
+    interval: "1D",
+    range: "Max",
+    sparkline: [{ timestamp: "2026-09-22T15:00:00.000Z", price_usd: 0.000068 }],
+    prices: { xrpUsd: 1.57, XSQUAD: 0.453, xsquadXrp: 0.2887 },
+    livePrice: 0.000068 / 0.453,
+    now,
+    windowed: false,
+  });
+  assert.ok(candles.length > 1000, `expected legacy daily tape, got ${candles.length}`);
+  const first = candles[0];
+  const last = candles[candles.length - 1];
+  assert.ok(first.t < Date.parse("2023-01-01T00:00:00.000Z"));
+  assert.ok(last.t >= Date.parse("2026-09-01T00:00:00.000Z"));
+  const recent = candles.filter((row) => row.t >= Date.parse("2026-01-01T00:00:00.000Z") && row.source !== "carry");
+  const closes = recent.map((row) => row.c);
+  const max = Math.max(...closes);
+  const min = Math.min(...closes);
+  assert.ok(min > 0.00002 && max < 0.001, `2026 closes ${min}..${max} left the XSQUAD scale`);
 });

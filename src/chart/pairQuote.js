@@ -29,6 +29,9 @@ export function quotePerXdx({
   xdxXrp,
   xdxRlusd,
   xrpRlusd,
+  xdxQuote,
+  quoteUsd,
+  quoteXrp,
 } = {}) {
   const name = String(pair || "").toUpperCase();
   const usd = Number(xdxUsd);
@@ -36,6 +39,9 @@ export function quotePerXdx({
   const nativeXrp = Number(xdxXrp);
   const nativeRlusd = Number(xdxRlusd);
   const nativeXrpRlusd = Number(xrpRlusd);
+  const nativeQuote = Number(xdxQuote);
+  const unitUsd = Number(quoteUsd);
+  const unitXrp = Number(quoteXrp);
 
   // RLUSD tracks USD ~1:1; prefer native XRP/RLUSD mid, else XRP/USD.
   if (name === "XRP/RLUSD") {
@@ -50,10 +56,64 @@ export function quotePerXdx({
     return null;
   }
 
+  // XIO and XSQUAD are not dollar pegs. Quote-per-XDX is the book, else XDX USD / quote USD.
+  if (name === "XDX/XIO" || name === "XDX/XSQUAD") {
+    if (nativeQuote > 0) return exactQuote(nativeQuote);
+    if (usd > 0 && unitUsd > 0) return exactQuote(usd / unitUsd);
+    if (nativeXrp > 0 && unitXrp > 0) return exactQuote(nativeXrp / unitXrp);
+    if (usd > 0 && xrp > 0 && unitXrp > 0) return exactQuote(usd / xrp / unitXrp);
+    return null;
+  }
+
   if (nativeRlusd > 0) return exactQuote(nativeRlusd);
   if (usd > 0) return exactQuote(usd / RLUSD_USD_PEG);
   if (nativeXrp > 0 && xrp > 0) return exactQuote(nativeXrp * xrp);
   return null;
+}
+
+function positiveDiv(numerator, denominator) {
+  const top = Number(numerator);
+  const bottom = Number(denominator);
+  if (!(top > 0) || !(bottom > 0)) return null;
+  return exactQuote(top / bottom);
+}
+
+/**
+ * XDX per quote from that day's XDX/XRP and quote/XRP candles.
+ * High uses the day's richest XDX against the cheapest quote.
+ */
+export function crossXrpCandle(baseXrp, quoteXrp, source = "crossed") {
+  if (!baseXrp || !quoteXrp || !(Number(baseXrp.c) > 0) || !(Number(quoteXrp.c) > 0)) return null;
+  const open = positiveDiv(baseXrp.o || baseXrp.c, quoteXrp.o || quoteXrp.c);
+  const close = positiveDiv(baseXrp.c, quoteXrp.c);
+  if (!(close > 0)) return null;
+  const high = positiveDiv(baseXrp.h || baseXrp.c, quoteXrp.l || quoteXrp.c);
+  const low = positiveDiv(baseXrp.l || baseXrp.c, quoteXrp.h || quoteXrp.c);
+  const o = open || close;
+  return {
+    t: baseXrp.t,
+    o,
+    h: Math.max(o, close, high || 0),
+    l: Math.min(o, close, low || o),
+    c: close,
+    v: Number(baseXrp.v) || 0,
+    source,
+  };
+}
+
+export function crossXrpQuotedCandles(baseXrpCandles = [], quoteXrpCandles = [], source = "crossed") {
+  const quoteByDay = new Map(
+    (Array.isArray(quoteXrpCandles) ? quoteXrpCandles : [])
+      .filter((row) => Number(row?.t) > 0 && Number(row?.c) > 0)
+      .map((row) => [Number(row.t), row])
+  );
+  const out = [];
+  for (const base of Array.isArray(baseXrpCandles) ? baseXrpCandles : []) {
+    const quote = quoteByDay.get(Number(base?.t));
+    const candle = quote ? crossXrpCandle(base, quote, source) : null;
+    if (candle) out.push(candle);
+  }
+  return out;
 }
 
 export function backdateRlusdCandle(xrpCandle, xrpUsd) {

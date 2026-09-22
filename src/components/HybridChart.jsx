@@ -550,13 +550,17 @@ export default function HybridChart({
   const reserveBase = Number(pool?.reserve_xdx ?? pool?.reserve_asset ?? 0);
   const reserveQuote = Number(pool?.reserve_currency ?? 0);
   const ammPrice = reserveBase > 0 && reserveQuote > 0 ? reserveQuote / reserveBase : Number(book.amm?.price);
+  const directQuote = Number(book.mid) > 0 ? Number(book.mid) : ammPrice;
   const livePrice = quotePerXdx({
     pair,
     xdxUsd: prices.xdxUsd,
     xrpUsd: prices.xrpUsd,
-    xdxXrp: pair === "XDX/XRP" ? book.mid || ammPrice : null,
-    xdxRlusd: pair === "XDX/RLUSD" ? book.mid || ammPrice : null,
-    xrpRlusd: pair === "XRP/RLUSD" ? book.mid || ammPrice : null,
+    xdxXrp: pair === "XDX/XRP" ? directQuote : null,
+    xdxRlusd: pair === "XDX/RLUSD" ? directQuote : null,
+    xdxQuote: pair === "XDX/XIO" || pair === "XDX/XSQUAD" ? directQuote : null,
+    quoteUsd: prices[quote] || prices.quotes?.[quote],
+    quoteXrp: prices[`${quote}Xrp`] || prices[`${quote.toLowerCase()}Xrp`],
+    xrpRlusd: pair === "XRP/RLUSD" ? directQuote : null,
   });
 
   const series = useMemo(

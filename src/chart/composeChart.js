@@ -1,4 +1,5 @@
 import lockedCandles from "../data/lockedCandles.json" with { type: "json" };
+import quoteXrpDaily from "../data/quoteXrpDaily.json" with { type: "json" };
 import {
   appendLiveClose,
   candlesFromMarketData,
@@ -13,6 +14,7 @@ import {
 } from "./candles.js";
 import { CHART_MA_PAD, intervalMs, isDailyOrLonger, visibleBarsForInterval } from "./intervals.js";
 import {
+  crossXrpQuotedCandles,
   inferQuoteReference,
   orientQuotePrice,
   quotePerXdx,
@@ -33,6 +35,11 @@ export function lockedPairCandles(pair = "XDX/RLUSD") {
 }
 
 export function ticksFromSparkline(rows = [], pair, prices = {}) {
+  const quote = String(pair || "").split("/")[1] || "";
+  const quoteUsd = Number(prices.quoteUsd || prices[quote] || prices.quotes?.[quote]);
+  const quoteXrp = Number(
+    prices.quoteXrp || prices[`${quote}Xrp`] || prices[`${quote.toLowerCase()}Xrp`]
+  );
   return (Array.isArray(rows) ? rows : [])
     .map((row) => {
       const t = Date.parse(row.timestamp || row.t);
@@ -43,6 +50,8 @@ export function ticksFromSparkline(rows = [], pair, prices = {}) {
         xrpUsd: prices.xrpUsd,
         xdxXrp: pair === "XDX/XRP" ? usd / Number(prices.xrpUsd || 0) : null,
         xdxRlusd: pair === "XDX/RLUSD" ? usd : null,
+        quoteUsd,
+        quoteXrp,
       });
       if (!Number.isFinite(t) || !(price > 0)) return null;
       return { t, p: price, source: "sparkline" };
@@ -122,6 +131,16 @@ export function composePairCandles({
   }
 
   let base = locked.pairs?.[name]?.candles || [];
+
+  // XDX/XSQUAD and XDX/XIO have no locked XDX tape. Cross XDX/XRP with the quote's own XRP history.
+  if ((name === "XDX/XSQUAD" || name === "XDX/XIO") && !base.length) {
+    const quote = name.split("/")[1];
+    base = crossXrpQuotedCandles(
+      locked.pairs?.["XDX/XRP"]?.candles || [],
+      quoteXrpDaily?.pairs?.[`${quote}/XRP`]?.candles || [],
+      `crossed(xdx_xrp/${quote.toLowerCase()}_xrp)`
+    );
+  }
 
   if (name === "XDX/RLUSD" && !base.length) {
     base = stitchRlusdCandles({
