@@ -18,6 +18,7 @@ import {
 import {
   applyStandingOrders,
   chartActionForCommand,
+  commandAckText,
   dispatchAdminDirective,
   intentForCommand,
   isExecutableAdminCommand,

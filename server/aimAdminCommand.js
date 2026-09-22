@@ -384,6 +384,40 @@ export function parseAdminCommand(text, { chartPair = "", topic = "chat" } = {})
   return null;
 }
 
+const COMMAND_INTENTS = {
+  draw_prediction: "chart_predict",
+  show_chart: "chart",
+  show_orderbook: "orderbook",
+  show_ledger_orders: "orderbook",
+  hide_ledger_orders: "orderbook",
+  trade_buy: "trade_opp",
+  trade_sell: "trade_opp",
+  analyse_markets: "xrpl_market",
+  watch_market: "xrpl_market",
+  show_pools: "pools",
+  amm_deposit: "pools",
+  amm_withdraw: "pools",
+  list_orders: "desk",
+  clear_order: "desk",
+  cancel_order: "desk",
+  cancel_all_orders: "desk",
+  set_objective: "desk",
+  list_objectives: "desk",
+  remove_objective: "desk",
+  activate_phases: "desk_mode",
+  observe: "desk_mode",
+  increase_trades: "desk_mode",
+  explore_ledger: "xrpl",
+  counter_bots: "desk",
+  route_xdx: "pools",
+  vortex_weekly: "chart",
+};
+
+export function intentForCommand(cmd) {
+  if (!cmd || typeof cmd !== "object") return "";
+  return COMMAND_INTENTS[cmd.verb] || "";
+}
+
 export function isExecutableAdminCommand(text, { chartPair = "", topic = "chat" } = {}) {
   const topicId = normalizeCommandTopic(topic);
   const cmd = parseAdminCommand(text, { chartPair, topic: topicId });
