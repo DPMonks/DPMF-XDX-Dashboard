@@ -35,8 +35,8 @@ import {
   wickClipPairDefaults,
 } from "../src/chart/candles.js";
 import { bucketTime, CHART_PAIRS, DEFAULT_INTERVAL, mergeChartPairs, visibleBarsForInterval } from "../src/chart/intervals.js";
-import { backdateRlusdCandle, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
-import { ammImpact, ammSupportResistanceRibbon, arbitrageWindow, clampPriceZoom, liquidityPressure, liquidityWalls, percentile, scalePriceView, shiftAfterPriceZoom, smartView, zoomPriceScale } from "../src/chart/overlays.js";
+import { backdateRlusdCandle, orientQuotePrice, quotePerXdx, stitchRlusdCandles } from "../src/chart/pairQuote.js";
+import { ammImpact, ammSupportResistanceRibbon, arbitrageWindow, clampPriceZoom, heatmapDots, liquidityPressure, liquidityWalls, percentile, scalePriceView, shiftAfterPriceZoom, smartView, zoomPriceScale } from "../src/chart/overlays.js";
 import { walletChartMarks } from "../src/chart/walletMarks.js";
 import { composePairCandles, lockedSnapshot } from "../src/chart/composeChart.js";
 import { boxPriceHeight, fullViewPriceHeight } from "../src/chart/fullView.js";
@@ -1110,4 +1110,58 @@ test("ammSupportResistanceRibbon builds support/resistance from AMM vs mid", () 
   assert.ok(padded.support < 2.0);
   assert.ok(padded.resistance > 2.02);
   assert.equal(ammSupportResistanceRibbon(0, 2), null);
+});
+
+test("orientQuotePrice flips reciprocal AMM prints and drops junk", () => {
+  assert.ok(Math.abs(orientQuotePrice(6.7e-5, 4.6e-5) - 6.7e-5) < 1e-12);
+  assert.ok(Math.abs(orientQuotePrice(14800, 4.6e-5) - 1 / 14800) < 1e-12);
+  assert.equal(orientQuotePrice(0, 4.6e-5), null);
+  assert.equal(orientQuotePrice(26.7, 4.4e-5), null);
+});
+
+test("composePairCandles keeps XDX/RLUSD candles on the locked scale when AMM prints are inverted", () => {
+  const t = Date.parse("2026-09-20T00:00:00.000Z");
+  const day = 86_400_000;
+  const candles = composePairCandles({
+    pair: "XDX/RLUSD",
+    interval: "15m",
+    range: "5D",
+    locked: {
+      pairs: {
+        "XDX/RLUSD": {
+          candles: [
+            { t, o: 4.5e-5, h: 4.6e-5, l: 4.4e-5, c: 4.5e-5, v: 1 },
+            { t: t + day, o: 4.5e-5, h: 4.7e-5, l: 4.4e-5, c: 4.6e-5, v: 1 },
+          ],
+        },
+      },
+      xrpUsd: [],
+    },
+    trades: [
+      { timestamp: new Date(t + day + 3_600_000).toISOString(), pool: "XDX/RLUSD", price: 14800, xdx: 12, side: "buy" },
+      { timestamp: new Date(t + day + 7_200_000).toISOString(), pool: "XDX/RLUSD", price: 6.7e-5, xdx: 8, side: "sell" },
+      { timestamp: new Date(t + day + 3_600_000).toISOString(), pool: "XDX/XRP", price: 4e-5, xdx: 100, side: "buy" },
+    ],
+    livePrice: 14900,
+    now: t + 2 * day,
+    windowed: false,
+  });
+  const closes = candles.map((row) => row.c).filter((value) => value > 0);
+  const max = Math.max(...closes);
+  const min = Math.min(...closes);
+  assert.ok(max < 0.001, `max close ${max} left the quote scale`);
+  assert.ok(min > 1e-6, `min close ${min}`);
+  assert.ok(max / min < 8, `range ${max / min} still looks like mixed AMM units`);
+  const view = smartView(candles, { rangeId: "Max", now: t + 2 * day, robust: true });
+  assert.ok(view.max < 0.001, `y-scale max ${view.max}`);
+  const dots = heatmapDots(
+    [
+      { timestamp: new Date(t + day + 3_600_000).toISOString(), price: 14800, xdx: 12, side: "buy" },
+      { timestamp: new Date(t + day + 7_200_000).toISOString(), price: 6.7e-5, xdx: 8, side: "sell" },
+      { timestamp: new Date(t + day).toISOString(), price: 26, xdx: 1, side: "buy" },
+    ],
+    { now: t + 2 * day, reference: 4.6e-5 }
+  );
+  assert.equal(dots.length, 2);
+  assert.ok(dots.every((dot) => dot.price < 0.001 && dot.price > 1e-5));
 });
