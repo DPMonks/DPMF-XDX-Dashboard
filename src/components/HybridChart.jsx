@@ -21,7 +21,7 @@ import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../char
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { defaultCexLimit, fetchCexCandles, usesCexTape } from "../chart/cexCandles";
 import { boxPriceHeight, fullViewPriceHeight } from "../chart/fullView";
-import { quotePerXdx } from "../chart/pairQuote";
+import { quotePerXdx, referenceClose } from "../chart/pairQuote";
 import {
   ammRebalanceTrail,
   ammSupportResistanceRibbon,
@@ -550,13 +550,17 @@ export default function HybridChart({
   const reserveBase = Number(pool?.reserve_xdx ?? pool?.reserve_asset ?? 0);
   const reserveQuote = Number(pool?.reserve_currency ?? 0);
   const ammPrice = reserveBase > 0 && reserveQuote > 0 ? reserveQuote / reserveBase : Number(book.amm?.price);
+  const directQuote = Number(book.mid) > 0 ? Number(book.mid) : ammPrice;
   const livePrice = quotePerXdx({
     pair,
     xdxUsd: prices.xdxUsd,
     xrpUsd: prices.xrpUsd,
-    xdxXrp: pair === "XDX/XRP" ? book.mid || ammPrice : null,
-    xdxRlusd: pair === "XDX/RLUSD" ? book.mid || ammPrice : null,
-    xrpRlusd: pair === "XRP/RLUSD" ? book.mid || ammPrice : null,
+    xdxXrp: pair === "XDX/XRP" ? directQuote : null,
+    xdxRlusd: pair === "XDX/RLUSD" ? directQuote : null,
+    xdxQuote: pair === "XDX/XIO" || pair === "XDX/XSQUAD" ? directQuote : null,
+    quoteUsd: prices[quote] || prices.quotes?.[quote],
+    quoteXrp: prices[`${quote}Xrp`] || prices[`${quote.toLowerCase()}Xrp`],
+    xrpRlusd: pair === "XRP/RLUSD" ? directQuote : null,
   });
 
   const series = useMemo(
@@ -638,7 +642,11 @@ export default function HybridChart({
   const ammRibbon = ammSupportResistanceRibbon(ammPrice, header.mid || livePrice, { padBps: ammRibbonBps });
   const autoView = smartView(candles, { rangeId: "Max", spread: bands.spread, now });
   const view = scalePriceView(autoView, { zoom: priceZoom, shift: priceShift });
-  const heat = heatmapDots(trades.filter((row) => !row.pool || String(row.pool).toUpperCase() === pair));
+  const priceRef = referenceClose(series) || Number(series[series.length - 1]?.c) || Number(bands.mid) || livePrice || null;
+  const heat = heatmapDots(
+    trades.filter((row) => !row.pool || String(row.pool).toUpperCase() === pair),
+    { reference: priceRef }
+  );
   const trail = ammRebalanceTrail(
     candles.slice(-24).map((row) => ({ t: row.t, price: row.c, timestamp: row.t }))
   );
@@ -652,8 +660,9 @@ export default function HybridChart({
     ),
     fills: mergeWalletActivity(ledgerFills, trades, walletPending.activity),
     pair,
+    reference: priceRef,
   });
-  const tapeRef = Number(candles[candles.length - 1]?.c) || Number(bands.mid) || livePrice || null;
+  const tapeRef = priceRef;
   const aimDeskMarks = deskOrders ? buildDeskMarks(deskOrders, pair, tapeRef) : [];
   const estimatePair = String(estimate?.pair || "XRP/RLUSD").replace(/\s+/g, "").toUpperCase();
   const estimateMatchesPair = Boolean(estimate) && sameChartPair(estimatePair, pair);

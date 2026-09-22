@@ -29,6 +29,9 @@ export function quotePerXdx({
   xdxXrp,
   xdxRlusd,
   xrpRlusd,
+  xdxQuote,
+  quoteUsd,
+  quoteXrp,
 } = {}) {
   const name = String(pair || "").toUpperCase();
   const usd = Number(xdxUsd);
@@ -36,6 +39,9 @@ export function quotePerXdx({
   const nativeXrp = Number(xdxXrp);
   const nativeRlusd = Number(xdxRlusd);
   const nativeXrpRlusd = Number(xrpRlusd);
+  const nativeQuote = Number(xdxQuote);
+  const unitUsd = Number(quoteUsd);
+  const unitXrp = Number(quoteXrp);
 
   // RLUSD tracks USD ~1:1; prefer native XRP/RLUSD mid, else XRP/USD.
   if (name === "XRP/RLUSD") {
@@ -50,10 +56,64 @@ export function quotePerXdx({
     return null;
   }
 
+  // XIO and XSQUAD are not dollar pegs. Quote-per-XDX is the book, else XDX USD / quote USD.
+  if (name === "XDX/XIO" || name === "XDX/XSQUAD") {
+    if (nativeQuote > 0) return exactQuote(nativeQuote);
+    if (usd > 0 && unitUsd > 0) return exactQuote(usd / unitUsd);
+    if (nativeXrp > 0 && unitXrp > 0) return exactQuote(nativeXrp / unitXrp);
+    if (usd > 0 && xrp > 0 && unitXrp > 0) return exactQuote(usd / xrp / unitXrp);
+    return null;
+  }
+
   if (nativeRlusd > 0) return exactQuote(nativeRlusd);
   if (usd > 0) return exactQuote(usd / RLUSD_USD_PEG);
   if (nativeXrp > 0 && xrp > 0) return exactQuote(nativeXrp * xrp);
   return null;
+}
+
+function positiveDiv(numerator, denominator) {
+  const top = Number(numerator);
+  const bottom = Number(denominator);
+  if (!(top > 0) || !(bottom > 0)) return null;
+  return exactQuote(top / bottom);
+}
+
+/**
+ * XDX per quote from that day's XDX/XRP and quote/XRP candles.
+ * High uses the day's richest XDX against the cheapest quote.
+ */
+export function crossXrpCandle(baseXrp, quoteXrp, source = "crossed") {
+  if (!baseXrp || !quoteXrp || !(Number(baseXrp.c) > 0) || !(Number(quoteXrp.c) > 0)) return null;
+  const open = positiveDiv(baseXrp.o || baseXrp.c, quoteXrp.o || quoteXrp.c);
+  const close = positiveDiv(baseXrp.c, quoteXrp.c);
+  if (!(close > 0)) return null;
+  const high = positiveDiv(baseXrp.h || baseXrp.c, quoteXrp.l || quoteXrp.c);
+  const low = positiveDiv(baseXrp.l || baseXrp.c, quoteXrp.h || quoteXrp.c);
+  const o = open || close;
+  return {
+    t: baseXrp.t,
+    o,
+    h: Math.max(o, close, high || 0),
+    l: Math.min(o, close, low || o),
+    c: close,
+    v: Number(baseXrp.v) || 0,
+    source,
+  };
+}
+
+export function crossXrpQuotedCandles(baseXrpCandles = [], quoteXrpCandles = [], source = "crossed") {
+  const quoteByDay = new Map(
+    (Array.isArray(quoteXrpCandles) ? quoteXrpCandles : [])
+      .filter((row) => Number(row?.t) > 0 && Number(row?.c) > 0)
+      .map((row) => [Number(row.t), row])
+  );
+  const out = [];
+  for (const base of Array.isArray(baseXrpCandles) ? baseXrpCandles : []) {
+    const quote = quoteByDay.get(Number(base?.t));
+    const candle = quote ? crossXrpCandle(base, quote, source) : null;
+    if (candle) out.push(candle);
+  }
+  return out;
 }
 
 export function backdateRlusdCandle(xrpCandle, xrpUsd) {
@@ -107,4 +167,72 @@ export function stitchRlusdCandles({
 
 export function issuedAtMs() {
   return Date.parse(XDX_ISSUED_AT);
+}
+
+const STABLE_QUOTES = new Set(["USD", "USDC", "USDT"]);
+
+/**
+ * Median close of recent real candles. Carry/session fills are not a price reference.
+ */
+export function referenceClose(candles = [], { take = 60 } = {}) {
+  const closes = [];
+  const list = Array.isArray(candles) ? candles : [];
+  const limit = Math.max(1, Math.trunc(Number(take) || 60));
+  for (let i = list.length - 1; i >= 0 && closes.length < limit; i -= 1) {
+    const row = list[i];
+    const src = String(row?.source || "");
+    if (src === "carry" || src === "session") continue;
+    const close = Number(row?.c ?? row?.price ?? row?.p);
+    if (close > 0) closes.push(close);
+  }
+  if (!closes.length) return null;
+  closes.sort((a, b) => a - b);
+  return closes[Math.floor(closes.length / 2)];
+}
+
+/**
+ * Quote-per-base price for the chart scale.
+ * Keeps prints near `reference`, flips reciprocals (XDX-per-quote tapes), drops the rest.
+ * With no reference, a positive price is returned unchanged.
+ */
+export function orientQuotePrice(price, reference, { factor = 6 } = {}) {
+  const value = Number(price);
+  if (!(value > 0)) return null;
+  const ref = Number(reference);
+  if (!(ref > 0)) return exactQuote(value);
+  const band = Number(factor) > 1 ? Number(factor) : 6;
+  const lo = ref / band;
+  const hi = ref * band;
+  if (value >= lo && value <= hi) return exactQuote(value);
+  const inverse = 1 / value;
+  if (inverse >= lo && inverse <= hi) return exactQuote(inverse);
+  return null;
+}
+
+/** Geometric-median scale when a pair has no locked candle to anchor to. */
+export function inferQuoteReference(prices = [], { factor = 6 } = {}) {
+  const nums = (Array.isArray(prices) ? prices : []).map(Number).filter((value) => value > 0);
+  if (!nums.length) return null;
+  const band = Number(factor) > 1 ? Number(factor) : 6;
+  const logs = nums.map((value) => Math.log(value)).sort((a, b) => a - b);
+  const geo = Math.exp(logs[Math.floor(logs.length / 2)]);
+  const near = nums.filter((value) => value >= geo / band && value <= geo * band).length;
+  if (near >= nums.length * 0.5) return geo;
+  const flipped = nums
+    .filter((value) => value < geo / band || value > geo * band)
+    .map((value) => 1 / value)
+    .filter((value) => value > 0);
+  if (!flipped.length) return geo;
+  const altLogs = flipped.map((value) => Math.log(value)).sort((a, b) => a - b);
+  const alt = Math.exp(altLogs[Math.floor(altLogs.length / 2)]);
+  const score = (ref) => nums.filter((value) => orientQuotePrice(value, ref, { factor: band }) != null).length;
+  return score(alt) > score(geo) ? alt : geo;
+}
+
+/** USD/USDC/USDT charts follow the same token's RLUSD candle when they have no tape of their own. */
+export function stablePegReference(pair, pairs = {}) {
+  const [base, quote] = String(pair || "").toUpperCase().split("/");
+  if (!base || !STABLE_QUOTES.has(quote)) return null;
+  const rows = pairs?.[`${base}/RLUSD`]?.candles;
+  return referenceClose(Array.isArray(rows) ? rows : []);
 }
