@@ -22,6 +22,7 @@ import {
   stablePegReference,
   stitchRlusdCandles,
 } from "./pairQuote.js";
+import { isXioBasePair } from "./xioHistory.js";
 
 export function lockedSnapshot() {
   return lockedCandles && typeof lockedCandles === "object" ? lockedCandles : { pairs: {}, xrpUsd: [] };
@@ -110,6 +111,7 @@ export function composePairCandles({
   cexCandles = [],
 } = {}) {
   const name = String(pair || "XDX/RLUSD").toUpperCase();
+  const xioBase = isXioBasePair(name);
   const cexTape = normalizeCexTape(
     cexCandles,
     isDailyOrLonger(interval) ? (interval === "1W" || interval === "3D" || interval === "1M" ? "1D" : interval) : interval
@@ -172,11 +174,12 @@ export function composePairCandles({
     base = [...map.values()].sort((left, right) => left.t - right.t);
   }
 
-  // XDX sparkline / XDX flow trades do not apply to XRP/RLUSD.
+  // XDX sparkline / XDX flow trades do not apply to XRP/RLUSD or XIO-base pairs.
+  // XIO history is the XIO exchange lock passed in `locked`. Do not paint XDX prints on it.
   // Trade prints arrive in both quote-per-base and base-per-quote. Anchor them
   // to the locked candle so inverted AMM fills cannot erase the real candles.
   const sparkTicks =
-    name === "XRP/RLUSD"
+    name === "XRP/RLUSD" || xioBase
       ? []
       : ticksFromSparkline(sparkline, name, { xrpUsd: prices.xrpUsd || latestLockedUsd() });
   const ref =
@@ -184,7 +187,7 @@ export function composePairCandles({
     referenceClose(sparkTicks.map((row) => ({ c: row.p, source: "sparkline" }))) ||
     stablePegReference(name, locked.pairs) ||
     (Number(livePrice) > 0 ? Number(livePrice) : null);
-  const liveTicks = name === "XRP/RLUSD" ? [] : [...sparkTicks, ...ticksFromTrades(trades, name, ref)];
+  const liveTicks = name === "XRP/RLUSD" || xioBase ? [] : [...sparkTicks, ...ticksFromTrades(trades, name, ref)];
   const orientedLive = orientQuotePrice(livePrice, ref);
 
   const liveInterval = isDailyOrLonger(interval) ? (interval === "1W" || interval === "3D" || interval === "1M" ? "1D" : interval) : interval;

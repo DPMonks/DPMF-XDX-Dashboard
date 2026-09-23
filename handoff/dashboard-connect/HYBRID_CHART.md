@@ -19,6 +19,16 @@ That script pulls history **once** into `src/data/lockedCandles.json`.
 
 Live candles still merge `/api/sparkline/XDX`, `/api/xdx-flows`, AMM spot, and order-book mid. Browser stays SELECT-only.
 
+## XIO pairs (XIO/XRP, XIO/RLUSD)
+
+The XDX lock does not include XIO-base pairs. The hybrid chart and Commander read them from the XIO exchange locked series, same-origin:
+
+```
+GET /api/chart/candles?pair=XIO/XRP
+```
+
+That handler proxies `https://xio-exchange.dpmf.technology/api/chart/candles` and merges `snapshot.pairs` for every XIO/* series in the lock (`t,o,h,l,c,v,source`). Optional env `XIO_EXCHANGE_ORIGIN` overrides the host. The default works with no env. Do not call XIO `/api/candles` (that path needs a database and is often 503). The function keeps the XIO snapshot in memory for about 5 minutes. A request for XDX/XRP does not call the XIO host and leaves the XDX series unchanged. No new database.
+
 ## Wallet marks
 
 Order lines and fill dots render **only** when a wallet is signed in. They use that wallet’s book rows and `xdx-flows` prints. Ready for later order-placement lines at the entry date.

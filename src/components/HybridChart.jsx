@@ -19,6 +19,7 @@ import {
 } from "../chart/candles";
 import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../chart/indicators";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
+import { fetchXioChartOverlay, isXioBasePair, mergeXioPairs } from "../chart/xioHistory";
 import { defaultCexLimit, fetchCexCandles, usesCexTape } from "../chart/cexCandles";
 import { boxPriceHeight, fullViewPriceHeight } from "../chart/fullView";
 import { quotePerXdx, referenceClose } from "../chart/pairQuote";
@@ -172,6 +173,8 @@ export default function HybridChart({
   const [sparkline, setSparkline] = useState([]);
   const [cexCandles, setCexCandles] = useState([]);
   const [cexMeta, setCexMeta] = useState({ source: "", label: "" });
+  const [xioOverlay, setXioOverlay] = useState(null);
+  const xioOverlayRef = useRef(null);
   const [drawings, setDrawings] = useState([]);
   const [selected, setSelected] = useState(null);
   const [pending, setPending] = useState(null);
@@ -544,6 +547,32 @@ export default function HybridChart({
     };
   }, [walletAddress]);
 
+  useEffect(() => {
+    if (!isXioBasePair(pair)) return undefined;
+    let cancelled = false;
+    async function load(force) {
+      const current = xioOverlayRef.current;
+      const have = current?.snapshot?.pairs?.[pair]?.candles?.length > 1;
+      const age = Date.now() - Number(current?.at || 0);
+      if (!force && have && age < 5 * 60_000) return;
+      try {
+        const next = await fetchXioChartOverlay(pair);
+        if (cancelled || !next?.snapshot) return;
+        xioOverlayRef.current = next;
+        setXioOverlay(next);
+      } catch {
+        /* keep the last XIO lock; do not invent candles */
+      }
+    }
+    const start = setTimeout(() => load(false), 0);
+    const id = setInterval(() => load(true), 5 * 60_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(start);
+      clearInterval(id);
+    };
+  }, [pair]);
+
   const quote = pair.split("/")[1] || "RLUSD";
   const book = books?.books?.[pair] || {};
   const pool = poolForPair(pools, pair);
@@ -551,7 +580,8 @@ export default function HybridChart({
   const reserveQuote = Number(pool?.reserve_currency ?? 0);
   const ammPrice = reserveBase > 0 && reserveQuote > 0 ? reserveQuote / reserveBase : Number(book.amm?.price);
   const directQuote = Number(book.mid) > 0 ? Number(book.mid) : ammPrice;
-  const livePrice = quotePerXdx({
+  const xioLive = isXioBasePair(pair) ? Number(xioOverlay?.live?.[pair]) : null;
+  const derivedLive = quotePerXdx({
     pair,
     xdxUsd: prices.xdxUsd,
     xrpUsd: prices.xrpUsd,
@@ -562,6 +592,11 @@ export default function HybridChart({
     quoteXrp: prices[`${quote}Xrp`] || prices[`${quote.toLowerCase()}Xrp`],
     xrpRlusd: pair === "XRP/RLUSD" ? directQuote : null,
   });
+  const livePrice = isXioBasePair(pair) ? (xioLive > 0 ? xioLive : null) : derivedLive;
+  const locked = useMemo(
+    () => mergeXioPairs(lockedSnapshot(), xioOverlay?.snapshot),
+    [xioOverlay]
+  );
 
   const series = useMemo(
     () =>
@@ -569,7 +604,7 @@ export default function HybridChart({
         pair,
         interval: timeframe,
         range: "Max",
-        locked: lockedSnapshot(),
+        locked,
         sparkline,
         trades,
         prices,
@@ -579,7 +614,7 @@ export default function HybridChart({
         lookbackBars: loadedBars,
         cexCandles: usesCexTape(pair) ? cexCandles : [],
       }),
-    [pair, timeframe, sparkline, trades, prices, livePrice, now, loadedBars, cexCandles]
+    [pair, timeframe, locked, sparkline, trades, prices, livePrice, now, loadedBars, cexCandles]
   );
   const baseVisible = visibleBarsForInterval(timeframe);
   const visibleCount = clampVisibleBars(barZoom ?? baseVisible, baseVisible);
@@ -1142,6 +1177,13 @@ export default function HybridChart({
             {usesCexTape(pair) && cexMeta.label ? (
               <p className="hybrid-tape-source" title={cexMeta.label}>
                 {cexMeta.label}
+              </p>
+            ) : null}
+            {isXioBasePair(pair) ? (
+              <p className="hybrid-tape-source" title="XIO exchange locked daily candles">
+                {xioOverlay?.snapshot?.pairs?.[pair]?.candles?.length > 1
+                  ? `Candles: XIO exchange daily lock (${pair})`
+                  : `Candles: loading XIO exchange daily lock (${pair})`}
               </p>
             ) : null}
             <p className="hybrid-events">

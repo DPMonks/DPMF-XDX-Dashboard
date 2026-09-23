@@ -5,6 +5,7 @@ import { indexerOrigin } from "./server/proxyIndexer.js";
 import lockedCandles from "./src/data/lockedCandles.json" with { type: "json" };
 import { loadCexXrpUsdCandles } from "./server/cexOhlc.js";
 import { hasIndexerDatabase, readIndexerDb } from "./server/readIndexerDb.js";
+import { buildChartCandlesPayload, pairFromRequest } from "./server/xioChartCandles.js";
 import {
   buildXamanPayload,
   isFreshXamanCreate,
@@ -97,9 +98,17 @@ function xamanDevPlugin() {
             }
           }
         }
+        const body = await buildChartCandlesPayload({
+          pair: pairFromRequest(req),
+          locked: lockedCandles,
+          db,
+        });
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ locked: true, snapshot: lockedCandles, db }));
+        if (body.xio) {
+          res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+        }
+        res.end(JSON.stringify(body));
         return;
       }
 
