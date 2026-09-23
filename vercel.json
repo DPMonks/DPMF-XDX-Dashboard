@@ -59,6 +59,19 @@
           "value": "public, max-age=0, must-revalidate"
         }
       ]
+    },
+    {
+      "source": "/.well-known/xrp-ledger.toml",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/toml; charset=utf-8"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
     }
   ],
   "functions": {
@@ -138,7 +151,7 @@
       "destination": "/api/index?path=$1"
     },
     {
-      "source": "/((?!api/|assets/|favicon\\.png|apple-touch-icon\\.png|og-image\\.png|og-image\\.jpg|icons\\.svg|robots\\.txt).*)",
+      "source": "/((?!api/|assets/|\\.well-known/|favicon\\.png|apple-touch-icon\\.png|og-image\\.png|og-image\\.jpg|icons\\.svg|robots\\.txt).*)",
       "destination": "/index.html"
     }
   ]
