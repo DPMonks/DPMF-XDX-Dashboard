@@ -83,7 +83,15 @@ import {
 } from "../src/chart/drawings.js";
 
 test("CHART_PAIRS includes XRP/RLUSD hybrid pair", () => {
-  assert.deepEqual(CHART_PAIRS, ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO", "XDX/XSQUAD"]);
+  assert.deepEqual(CHART_PAIRS, [
+    "XDX/RLUSD",
+    "XDX/XRP",
+    "XRP/RLUSD",
+    "XDX/XIO",
+    "XDX/XSQUAD",
+    "XIO/XRP",
+    "XIO/RLUSD",
+  ]);
 });
 
 test("mergeChartPairs keeps core tabs and adds extra markets", () => {
@@ -93,6 +101,8 @@ test("mergeChartPairs keeps core tabs and adds extra markets", () => {
     "XRP/RLUSD",
     "XDX/XIO",
     "XDX/XSQUAD",
+    "XIO/XRP",
+    "XIO/RLUSD",
     "XDX/SOLO",
   ]);
 });

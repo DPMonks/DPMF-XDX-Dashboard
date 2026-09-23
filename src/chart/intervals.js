@@ -1,4 +1,12 @@
-export const CHART_PAIRS = ["XDX/RLUSD", "XDX/XRP", "XRP/RLUSD", "XDX/XIO", "XDX/XSQUAD"];
+export const CHART_PAIRS = [
+  "XDX/RLUSD",
+  "XDX/XRP",
+  "XRP/RLUSD",
+  "XDX/XIO",
+  "XDX/XSQUAD",
+  "XIO/XRP",
+  "XIO/RLUSD",
+];
 
 export function mergeChartPairs(extra = []) {
   const extraNames = (Array.isArray(extra) ? extra : [])
