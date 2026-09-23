@@ -1,4 +1,5 @@
 import { extractClassicAddress as extractLedgerClassic, isAimAdminWallet } from "../src/constants/ledger.js";
+import { formatMovementSummary, readMovementPair } from "../src/movementDisplay.js";
 import { aimSpeakPayload } from "./aimSpeak.js";
 import pg from "pg";
 import { aimAgentLabel, aimAgentRole, aimAgentProfile, resolveAimAgentId } from "./aimAgentNames.js";
@@ -152,20 +153,29 @@ async function readJson(req) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-function summarizeIntent(kind, content) {
-  if (!content || typeof content !== "object") return scrubText(kind);
-  if (kind === "pools" || content.pools) {
-    const pools = content.pools || content;
-    if (pools.ok) return `Pool scan ok · ${pools.pool_count ?? "?"} pools · top ${pools.top_pool || "n/a"}`;
-    return `Pool scan issue · ${scrubText(pools.error || "unknown")}`;
+function scrubMovementParts(line) {
+  return String(line || "")
+    .split(" | ")
+    .map((part) => {
+      const trimmed = part.trim();
+      if (/^[A-Z0-9.]{2,20}\/[A-Z0-9.]{2,20}$/.test(trimmed)) return trimmed;
+      return scrubText(trimmed);
+    })
+    .filter(Boolean)
+    .join(" | ");
+}
+
+export function summarizeIntent(kind, content) {
+  const line = formatMovementSummary(kind, content);
+  if (line.startsWith("Pool scan issue")) {
+    const bits = line.split(" · ");
+    const head = bits.shift();
+    return [head, scrubText(bits.join(" · "))].filter(Boolean).join(" · ");
   }
-  if (content.indexer?.skipped) return "Observing via private data path";
-  if (content.indexer?.status_code) return `Indexer probe · HTTP ${content.indexer.status_code}`;
-  if (content.last_indexer?.status_code) return `Indexer probe · HTTP ${content.last_indexer.status_code}`;
-  if (content.public?.results) return "Public market ping";
-  if (content.type === "scan_directive") return "Observe-only directive";
-  if (content.type === "ping") return "Peer ping";
-  return scrubText(kind || "update");
+  if (/^(Pool scan |Observing via private data path|Indexer probe|Public market ping|Observe-only directive|Peer ping)/.test(line)) {
+    return line;
+  }
+  return scrubMovementParts(line);
 }
 
 
@@ -2108,16 +2118,21 @@ export async function aimStatusPayload() {
         }
       : null;
 
-    const movements = intents.rows.map((r) => ({
-      id: r.id,
-      agent: publicAgentId(r.agent_id),
-      agent_id: publicAgentId(r.agent_id),
-      label: agentLabel(r.agent_id),
-      role: agentRole(r.agent_id),
-      kind: scrubText(r.kind),
-      summary: summarizeIntent(r.kind, scrubValue(r.content)),
-      created_at: r.created_at,
-    }));
+    const movements = intents.rows.map((r) => {
+      const content = scrubValue(r.content);
+      const pair = readMovementPair(content);
+      return {
+        id: r.id,
+        agent: publicAgentId(r.agent_id),
+        agent_id: publicAgentId(r.agent_id),
+        label: agentLabel(r.agent_id),
+        role: agentRole(r.agent_id),
+        kind: scrubText(r.kind),
+        summary: summarizeIntent(r.kind, content),
+        pair: pair || null,
+        created_at: r.created_at,
+      };
+    });
 
     const messages = chat.rows
       .map((r) => ({

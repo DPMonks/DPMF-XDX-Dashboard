@@ -555,8 +555,8 @@
 }
 
 .aim-desk-usd { color: #b8ffd6; }
-.aim-desk-fill.is-live { color: #9ef0ff; }
-.aim-desk-fill.is-blocked { color: #ffc9a8; opacity: 0.9; }
+.aim-desk-fill.is-live { color: #7dffa8; }
+.aim-desk-fill.is-blocked { color: #ff7a7a; opacity: 1; }
 
 
 /* ---- AI-Matrix right slide-over (over the exchange) ---- */
@@ -1596,6 +1596,8 @@ body.aim-drawer-open:not(.aim-mobile) {
   overflow: hidden;
   line-clamp: 2;
 }
+.aim-move.is-success { color: #7dffa8; }
+.aim-move.is-block { color: #ff7a7a; }
 .aim-agent-moves li small { opacity: 0.65; font-size: 0.68rem; }
 .aim-agent-status { font-weight: 600; }
 

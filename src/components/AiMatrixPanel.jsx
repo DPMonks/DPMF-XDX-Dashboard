@@ -13,6 +13,7 @@ import { isAimAdminWallet } from "../constants/ledger";
 import { liveWalletAddress } from "../wallet/walletStorage";
 import AimDeskSmartChart from "./AimDeskSmartChart";
 import { AIM_COMMAND_TOPICS, commandTopicMeta, normalizeCommandTopic } from "../aimCommandTopics";
+import { formatMovementSummary, presentMovement } from "../movementDisplay";
 
 function ago(iso) {
   if (!iso) return "-";
@@ -552,23 +553,36 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
     const out = [];
     const prop = agent.proposal || agent.meta?.trade_proposal || {};
     const fill = agent.last_fill || agent.meta?.last_fill || prop?.exec || null;
+    const pair = prop?.pair || fill?.pair || "";
     if (fill?.submitted) {
       out.push({
         id: `synth-fill-${agent.id}`,
         agent: agent.id,
         agent_id: agent.id,
         kind: "trade_execution",
-        summary: `Fill ${fill.engine_result || "ok"}${prop?.pair ? ` | ${prop.pair}` : ""}`,
+        pair: pair || null,
+        summary: formatMovementSummary("trade_execution", {
+          pair,
+          engine_result: fill.engine_result,
+          urgency: prop?.urgency,
+          exec: fill,
+          proposal: prop,
+        }),
         created_at: fill.filled_at || fill.timestamp || agent.last_seen_at || null,
       });
     } else if (fill?.blocked_by) {
-      const reason = fill.blocked_by_display || fill.blocked_by || "gated";
       out.push({
         id: `synth-block-${agent.id}`,
         agent: agent.id,
         agent_id: agent.id,
         kind: "trade_blocked",
-        summary: `Held | ${String(reason).slice(0, 48)}`,
+        pair: pair || null,
+        summary: formatMovementSummary("trade_blocked", {
+          pair,
+          blocked_by: fill.blocked_by,
+          blocked_by_display: fill.blocked_by_display,
+          proposal: prop,
+        }),
         created_at: fill.timestamp || agent.last_seen_at || null,
       });
     }
@@ -578,7 +592,8 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
         agent: agent.id,
         agent_id: agent.id,
         kind: "trade_proposal",
-        summary: [prop.action, prop.pair, prop.urgency].filter(Boolean).join(" | ") || "Desk proposal",
+        pair: prop.pair || null,
+        summary: formatMovementSummary("trade_proposal", prop),
         created_at: prop.timestamp || prop.t || agent.last_seen_at || null,
       });
     }
@@ -606,19 +621,38 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   const pulsePool = agents.map((a) => {
     const prop = a.proposal || a.meta?.trade_proposal || {};
     const fill = a.last_fill || a.meta?.last_fill || prop?.exec || null;
-    let line = prop?.pair
-      ? `${prop.pair}${prop.urgency ? ` | ${prop.urgency}` : ""}`
-      : (a.meta?.skill?.summary ? String(a.meta.skill.summary).slice(0, 48) : a.status || "watching");
+    const pair = prop?.pair || fill?.pair || "";
+    let kind = "";
+    let summary;
     if (fill?.submitted) {
-      line = `Fill ${fill.engine_result || "ok"}${fill.hash ? ` ${String(fill.hash).slice(0, 8)}` : ""}${prop?.pair ? ` | ${prop.pair}` : ""}`;
+      kind = "trade_execution";
+      summary = formatMovementSummary(kind, {
+        pair,
+        engine_result: fill.engine_result,
+        urgency: prop?.urgency,
+        exec: fill,
+        proposal: prop,
+      });
     } else if (fill?.blocked_by && !fill?.submitted) {
-      const reason = fill.blocked_by_display || fill.blocked_by || "gated";
-      line = `Held | ${String(reason).slice(0, 42)}`;
+      kind = "trade_blocked";
+      summary = formatMovementSummary(kind, {
+        pair,
+        blocked_by: fill.blocked_by,
+        blocked_by_display: fill.blocked_by_display,
+        proposal: prop,
+      });
+    } else if (prop?.pair || prop?.action || prop?.urgency) {
+      kind = "trade_proposal";
+      summary = formatMovementSummary(kind, prop);
+    } else {
+      summary = String(a.meta?.skill?.summary || a.status || "watching").slice(0, 64);
     }
+    const view = presentMovement({ kind, summary, pair });
     return {
       id: a.id,
       label: a.label || aimAgentLabel(a.id),
-      line,
+      line: view.text,
+      tone: view.tone,
       status: a.status || "-",
     };
   });
@@ -1025,12 +1059,15 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
               <div className="aim-agent-moves" aria-label={`Recent movement for ${agent.label || aimAgentLabel(agent.id)}`}>
                 <h4>Recent movement</h4>
                 <ul>
-                  {agentMoves.map((m, idx) => (
+                  {agentMoves.map((m, idx) => {
+                    const view = presentMovement(m);
+                    return (
                     <li key={`${m.id || agent.id}-${idx}`}>
-                      <span>{m.summary || m.kind || "Move"}</span>
+                      <span className={view.tone ? `aim-move is-${view.tone}` : undefined}>{view.text}</span>
                       <small>{ago(m.created_at)}</small>
                     </li>
-                  ))}
+                    );
+                  })}
                   {!agentMoves.length ? <li className="aim-empty">No recent moves</li> : null}
                 </ul>
               </div>
@@ -1058,7 +1095,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
                 <AimAgentAvatar agentId={row.id} label={row.label} size="sm" />
                 <b><AimAgentName agentId={row.id} label={row.label} /></b>
               </div>
-              <span>{row.line}</span>
+              <span className={row.tone ? `aim-move is-${row.tone}` : undefined}>{row.line}</span>
               <small>{row.status}</small>
             </li>
           ))}
