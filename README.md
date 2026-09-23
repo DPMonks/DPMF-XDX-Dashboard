@@ -49,6 +49,8 @@ Do not commit `.env` files. Production and preview read encrypted store values, 
 | `INDEXER_ORIGIN` | Vercel env (optional) | override the server-side proxy target |
 | `DATABASE_URL` | Vercel env (Production + Preview), server-only | `postgres://postgres@acela.proxy.rlwy.net:48994/railway` (password optional in the URL) |
 | `POSTGRES_PASSWORD` | Vercel env (Production + Preview), server-only | Railway Postgres password, plain text. Overrides the URL password so `@` `#` `%` cannot break auth. |
+| `AIM_DESK_BASE_URL` | Vercel env (Production + Preview), server-only | aim-commander **origin** for admin realized PnL, e.g. `https://<aim-commander>.up.railway.app`. `AIM_BASE_URL` is used when this is unset. The proxy calls `GET /aim/realized-pnl/recent` and `GET /aim/realized-pnl/totals`. |
+| `AIM_ADMIN_TOKEN` | Vercel env (Production + Preview), server-only | Sent only by this server as `X-AIM-Admin-Token`. Never prefix with `VITE_`. |
 
 GitHub: repository **Settings → Secrets and variables → Actions**.
 

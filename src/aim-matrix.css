@@ -135,7 +135,7 @@
 .aim-moves small { opacity: 0.65; }
 .aim-empty { opacity: 0.65; }
 
-/* Vertical order on all devices: Commander -> agents -> Recent -> desk */
+/* Vertical order on all devices: Commander -> agents -> Recent -> desk -> admin profit */
 .aim-matrix-head { order: 0; }
 .aim-matrix-error { order: 1; }
 .aim-chat { order: 2; }
@@ -144,6 +144,7 @@
 .aim-moves { order: 5; display: none; }
 .aim-desk-pulse { order: 6; }
 .aim-desk-board { order: 7; }
+.aim-pnl { order: 8; }
 
 /* Mobile compact desk pulse (below agents). Full book stays desktop. */
 .aim-desk-pulse { display: none; }
@@ -848,6 +849,7 @@
 .aim-drawer-panel .aim-chat,
 .aim-drawer-panel .aim-moves,
 .aim-drawer-panel .aim-desk-board,
+.aim-drawer-panel .aim-pnl,
 .aim-drawer-panel .aim-bubble,
 .aim-drawer-panel .aim-bubble p {
   max-width: 100%;
@@ -1679,6 +1681,8 @@ body.aim-page-frozen .dashboard-container {
     min-height: 96px !important;
     max-height: min(28vh, 200px) !important;
   }
+  .aim-pnl { padding: 0.7rem 0.7rem 0.75rem; }
+  .aim-pnl-list { max-height: min(42vh, 280px); }
 }
 
 /* Desktop AIM: keep side panel above chart pane and always on-screen when open */
@@ -1694,4 +1698,134 @@ body.aim-page-frozen .dashboard-container {
     transform: translate3d(0, 0, 0);
   }
 }
+
+/* Admin-only realized PnL. Stays in the side panel; no horizontal slide. */
+.aim-pnl {
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  border-radius: 14px;
+  padding: 0.9rem 1rem 1rem;
+  background: rgba(8, 16, 28, 0.55);
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  overflow: hidden;
+}
+.aim-pnl-head h3 { margin: 0.15rem 0 0; font-size: 1rem; }
+.aim-pnl-tabs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.45rem;
+  min-width: 0;
+}
+.aim-pnl-tab {
+  box-sizing: border-box;
+  min-height: 44px;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 220, 255, 0.4);
+  background: linear-gradient(180deg, rgba(14, 116, 144, 0.35), rgba(8, 24, 40, 0.85));
+  color: #e0f7ff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.aim-pnl-tab.is-on {
+  border-color: rgba(125, 255, 168, 0.7);
+  color: #bbf7d0;
+  background: linear-gradient(180deg, rgba(16, 120, 80, 0.45), rgba(8, 24, 40, 0.9));
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.16);
+}
+.aim-pnl-list,
+.aim-pnl-agents {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.aim-pnl-list {
+  max-height: 280px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.aim-pnl-list li,
+.aim-pnl-agents li {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.aim-pnl-row-top,
+.aim-pnl-agents li {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.aim-pnl-row-top {
+  display: grid;
+  gap: 0.35rem 0.75rem;
+}
+.aim-pnl-agents li {
+  display: grid;
+  gap: 0.12rem 0.75rem;
+}
+.aim-pnl-agents li small { grid-column: 1 / -1; }
+.aim-pnl-who {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.aim-pnl-who b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.aim-pnl-amount {
+  color: #7dffa8;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.aim-pnl-amount.is-flat,
+.aim-pnl-total.is-flat {
+  color: #d7e7ea;
+  opacity: 0.85;
+}
+.aim-pnl-pair,
+.aim-pnl-meta,
+.aim-pnl-window,
+.aim-pnl-updated,
+.aim-pnl-stale {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.aim-pnl-pair { font-size: 0.86rem; }
+.aim-pnl-list small,
+.aim-pnl-agents small,
+.aim-pnl-window,
+.aim-pnl-updated,
+.aim-pnl-stale {
+  opacity: 0.7;
+  font-size: 0.75rem;
+}
+.aim-pnl-total {
+  margin: 0.15rem 0 0;
+  color: #7dffa8;
+  font-size: clamp(1.55rem, 6vw, 2.15rem);
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.aim-pnl-meta { font-size: 0.92rem; }
+.aim-pnl-stale { color: #fde68a; opacity: 0.9; }
 
