@@ -68,3 +68,30 @@ export async function postAimChat(
   if (!res.ok) throw new Error(data.error || `AIM chat failed (${res.status})`);
   return data;
 }
+
+async function getAimAdminPnl(path, wallet) {
+  const res = await fetch(path, {
+    headers: {
+      Accept: "application/json",
+      "X-Aim-Wallet": wallet || "",
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || `AIM profit failed (${res.status})`);
+    err.code = data.code || (res.status === 403 ? "AIM_PNL_FORBIDDEN" : "AIM_PNL_UPSTREAM");
+    throw err;
+  }
+  return data;
+}
+
+/** Admin-only. Same-origin proxy; the desk bearer never leaves the server. */
+export function getAimAdminPnlRecent(wallet, { limit = 50 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return getAimAdminPnl(`/api/aim/admin/pnl/recent?${params}`, wallet);
+}
+
+/** Admin-only team total for the rolling 24h window. */
+export function getAimAdminPnlSummary(wallet) {
+  return getAimAdminPnl("/api/aim/admin/pnl/summary-24h", wallet);
+}

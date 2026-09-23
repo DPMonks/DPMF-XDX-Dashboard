@@ -49,6 +49,8 @@ Do not commit `.env` files. Production and preview read encrypted store values, 
 | `INDEXER_ORIGIN` | Vercel env (optional) | override the server-side proxy target |
 | `DATABASE_URL` | Vercel env (Production + Preview), server-only | `postgres://postgres@acela.proxy.rlwy.net:48994/railway` (password optional in the URL) |
 | `POSTGRES_PASSWORD` | Vercel env (Production + Preview), server-only | Railway Postgres password, plain text. Overrides the URL password so `@` `#` `%` cannot break auth. |
+| `AIM_DESK_BASE_URL` | Vercel env (Production + Preview), server-only | AI-Matrix desk **origin** for admin realized PnL, e.g. `https://<aim-service>.up.railway.app`. Leave unset until that desk exposes `/api/aim/admin/pnl/*`. |
+| `AIM_ADMIN_TOKEN` | Vercel env (Production + Preview), server-only | Bearer sent only by this server to the desk. Never prefix with `VITE_`. |
 
 GitHub: repository **Settings → Secrets and variables → Actions**.
 

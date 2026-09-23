@@ -352,6 +352,7 @@ export default function AiMatrixDrawer() {
                 <AiMatrixPanel
                   onChartPropsChange={handleChartPropsChange}
                   showInlineChart={showInlineChart}
+                  open={open}
                 />
               </Suspense>
             ) : null}

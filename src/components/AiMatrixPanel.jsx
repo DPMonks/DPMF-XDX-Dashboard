@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAimStatus, postAimChat, getAimLocale, classicAimWallet } from "../api/aim";
+import { AIM_PNL_POLL_MS } from "../aimPnlFormat";
+import AimAdminPnlStrip from "./AimAdminPnlStrip";
 import { AIM_LANGUAGES, normalizeLang, readLangPref, writeLangPref } from "../aimLocale";
 import { aimVoiceEngineLabel, playPendingCommanderAudio, readVoicePref, speakCommander, stopCommanderSpeech, unlockCommanderAudio, writeVoicePref } from "../aimCommanderVoice";
 import { AIM_AGENT_IDS, AIM_COMMANDER_AVATAR, aimAgentLabel, aimAgentRole, aimAgentProfile, resolveAimAgentId } from "../aimAgentNames";
@@ -73,7 +75,7 @@ function createRevealProgress(applyChars, { minMs = 90, minStep = 8 } = {}) {
   };
 }
 
-export default function AiMatrixPanel({ onChartPropsChange = null, showInlineChart = true } = {}) {
+export default function AiMatrixPanel({ onChartPropsChange = null, showInlineChart = true, open = true } = {}) {
   const { walletAddress } = useWallet();
   const chartSnapshot = useChartSnapshot();
   const aimChatAsk = useAimChatAsk();
@@ -101,6 +103,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
   const [pulseSwap, setPulseSwap] = useState(false);
   const [commandTopic, setCommandTopic] = useState("chat");
   const [topicMenuOpen, setTopicMenuOpen] = useState(false);
+  const [pnlTick, setPnlTick] = useState(0);
   const topicMeta = commandTopicMeta(commandTopic);
 
   const effectiveLang = langPref === "auto" ? suggestedLang : normalizeLang(langPref);
@@ -119,7 +122,7 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
 
   useEffect(() => {
     refresh();
-    const id = window.setInterval(refresh, 30000);
+    const id = window.setInterval(refresh, AIM_PNL_POLL_MS);
     return () => {
       window.clearInterval(id);
       stopCommanderSpeech();
@@ -842,7 +845,10 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
             <button
               type="button"
               className="aim-toolbar-btn aim-matrix-refresh"
-              onClick={refresh}
+              onClick={() => {
+                refresh();
+                setPnlTick((n) => n + 1);
+              }}
               disabled={loading}
             >
               Refresh
@@ -1189,6 +1195,10 @@ export default function AiMatrixPanel({ onChartPropsChange = null, showInlineCha
           </div>
         </div>
       </section>
+
+      {isAimAdmin ? (
+        <AimAdminPnlStrip wallet={chatWallet} active={open} refreshKey={pnlTick} />
+      ) : null}
 
     </div>
   );

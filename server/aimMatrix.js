@@ -28,6 +28,7 @@ import {
   persistAdminCommand,
   standingOrdersPublic,
 } from "./aimAdminCommand.js";
+import { aimPnlRecentPayload, aimPnlRoute, aimPnlSummaryPayload } from "./aimPnl.js";
 
 /** No em/en dashes in Commander-facing text (chat + TTS). */
 function stripLongHyphens(text) {
@@ -4787,6 +4788,23 @@ export async function handleAimRequest(req, res) {
     const out = await aimChatPayload(req);
     res.statusCode = out.status;
     res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(out.body));
+    return true;
+  }
+  const pnlRoute = aimPnlRoute(pathOnly);
+  if (pnlRoute) {
+    if (method !== "GET") {
+      res.statusCode = 405;
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "private, no-store");
+      res.end(JSON.stringify({ ok: false, error: "GET only", code: "AIM_PNL_METHOD" }));
+      return true;
+    }
+    const out = pnlRoute === "recent" ? await aimPnlRecentPayload(req) : await aimPnlSummaryPayload(req);
+    res.statusCode = out.status;
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("Vary", "X-Aim-Wallet");
     res.end(JSON.stringify(out.body));
     return true;
   }
