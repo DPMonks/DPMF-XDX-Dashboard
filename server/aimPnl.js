@@ -1,20 +1,27 @@
 import { isAimAdminWallet } from "../src/constants/ledger.js";
 import {
+  AIM_PNL_RECENT_HOURS,
+  AIM_PNL_TOTAL_HOURS,
   clampPnlLimit,
   normalizePnlSummary,
   normalizeRecentTrades,
 } from "../src/aimPnlFormat.js";
 
 /**
- * Admin-only proxy to the AI-Matrix desk realized-PnL routes.
- * The browser calls this dashboard. The desk bearer stays in server env:
- *   AIM_DESK_BASE_URL  origin only, e.g. https://<aim>.up.railway.app
- *   AIM_ADMIN_TOKEN    Authorization: Bearer, never sent to the client
+ * Admin-only proxy to aim-commander realized PnL (DPMonks/AI-Matrix).
+ * The browser calls this dashboard. The desk token stays in server env:
+ *   AIM_DESK_BASE_URL or AIM_BASE_URL  aim-commander origin only
+ *   AIM_ADMIN_TOKEN                    sent as X-AIM-Admin-Token, never to the client
+ * Upstream:
+ *   GET /aim/realized-pnl/recent?limit=50&since=<ISO-8601>
+ *   GET /aim/realized-pnl/totals?hours=24
  * No Vercel database. Empty/unconfigured responses stay JSON and cache-private.
  */
 
 export const AIM_PNL_RECENT_PATH = "/api/aim/admin/pnl/recent";
 export const AIM_PNL_SUMMARY_PATH = "/api/aim/admin/pnl/summary-24h";
+export const DESK_PNL_RECENT_PATH = "/aim/realized-pnl/recent";
+export const DESK_PNL_TOTALS_PATH = "/aim/realized-pnl/totals";
 
 const DESK_TIMEOUT_MS = 12_000;
 
@@ -26,7 +33,9 @@ export function aimPnlRoute(pathname) {
 }
 
 export function aimDeskBaseUrl(env = process.env) {
-  const raw = String(env.AIM_DESK_BASE_URL || env.AIM_BASE_URL || "").trim();
+  const raw = String(
+    env.AIM_DESK_BASE_URL || env.AIM_COMMANDER_URL || env.AIM_BASE_URL || ""
+  ).trim();
   if (!raw) return "";
   try {
     const url = new URL(raw);
@@ -76,10 +85,16 @@ export function readPnlLimit(req) {
   }
 }
 
+export function pnlSinceIso(now, hours = AIM_PNL_RECENT_HOURS) {
+  const end = now instanceof Date ? now : new Date(now || Date.now());
+  const start = new Date(end.getTime() - hours * 60 * 60 * 1000);
+  return start.toISOString();
+}
+
 function deskHeaders(env) {
   const headers = { Accept: "application/json" };
   const token = aimAdminToken(env);
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) headers["X-AIM-Admin-Token"] = token;
   return headers;
 }
 
@@ -122,10 +137,16 @@ async function readResponseJson(res) {
 async function fetchDesk(kind, req, deps) {
   const env = deps.env || process.env;
   const base = aimDeskBaseUrl(env);
-  if (!base) return { status: 200, body: unconfiguredBody(kind) };
+  const token = aimAdminToken(env);
+  if (!base || !token) return { status: 200, body: unconfiguredBody(kind) };
   const fetchImpl = deps.fetchImpl || globalThis.fetch;
+  const now = deps.now ? deps.now() : new Date();
   const limit = kind === "recent" ? readPnlLimit(req) : null;
-  const path = kind === "recent" ? `${AIM_PNL_RECENT_PATH}?limit=${limit}` : AIM_PNL_SUMMARY_PATH;
+  const since = pnlSinceIso(now, AIM_PNL_RECENT_HOURS);
+  const path =
+    kind === "recent"
+      ? `${DESK_PNL_RECENT_PATH}?${new URLSearchParams({ limit: String(limit), since })}`
+      : `${DESK_PNL_TOTALS_PATH}?${new URLSearchParams({ hours: String(AIM_PNL_TOTAL_HOURS) })}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), DESK_TIMEOUT_MS);
   try {
@@ -151,7 +172,7 @@ async function fetchDesk(kind, req, deps) {
     if (!res.ok || !payload || typeof payload !== "object") {
       return { status: 502, body: { ok: false, code: "AIM_PNL_UPSTREAM", error: "Could not load team profit" } };
     }
-    const generated_at = (deps.now ? deps.now() : new Date()).toISOString();
+    const generated_at = now.toISOString();
     if (kind === "recent") {
       return {
         status: 200,
@@ -160,11 +181,14 @@ async function fetchDesk(kind, req, deps) {
           configured: true,
           available: true,
           trades: normalizeRecentTrades(payload, limit),
+          since,
           generated_at,
         },
       };
     }
     const summary = normalizePnlSummary(payload);
+    if (!summary.window_start) summary.window_start = pnlSinceIso(now, AIM_PNL_TOTAL_HOURS);
+    if (!summary.window_end) summary.window_end = generated_at;
     return {
       status: 200,
       body: {

@@ -4,6 +4,33 @@ export const AIM_PNL_POLL_MS = 30_000;
 export const AIM_PNL_EMPTY = "No profitable fills recorded yet";
 export const AIM_PNL_DEFAULT_LIMIT = 50;
 export const AIM_PNL_MAX_LIMIT = 50;
+export const AIM_PNL_TOTAL_HOURS = 24;
+export const AIM_PNL_RECENT_HOURS = 24;
+
+/** Desk by_agent roster, in the order AI-Matrix always returns. */
+export const AIM_PNL_AGENT_ORDER = ["Prime", "Echo", "Vector", "Vortex", "Flux", "Ghost", "Commander"];
+
+const AGENT_CANON = new Map([
+  ["prime", "Prime"],
+  ["agent prime", "Prime"],
+  ["agent1", "Prime"],
+  ["echo", "Echo"],
+  ["agent echo", "Echo"],
+  ["agent5", "Echo"],
+  ["vector", "Vector"],
+  ["agent vector", "Vector"],
+  ["agent3", "Vector"],
+  ["vortex", "Vortex"],
+  ["agent vortex", "Vortex"],
+  ["agent4", "Vortex"],
+  ["flux", "Flux"],
+  ["agent flux", "Flux"],
+  ["agent2", "Flux"],
+  ["ghost", "Ghost"],
+  ["agent ghost", "Ghost"],
+  ["agent6", "Ghost"],
+  ["commander", "Commander"],
+]);
 
 const LONDON = {
   timeZone: "Europe/London",
@@ -21,11 +48,13 @@ export function clampPnlLimit(value, fallback = AIM_PNL_DEFAULT_LIMIT) {
   return Math.min(AIM_PNL_MAX_LIMIT, Math.max(1, Math.floor(n)));
 }
 
+/** Decimal strings from the desk ("12.50", "-0.25") stay numbers. Null if not numeric. */
 export function asMoney(value) {
   if (typeof value === "string") value = value.replace(/[$,\s]/g, "").trim();
+  if (value == null || value === "") return null;
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
-  return Math.round(n * 100) / 100;
+  return n;
 }
 
 export function asCount(value) {
@@ -106,70 +135,95 @@ function tradeTime(row) {
   return Number.isFinite(t) ? t : 0;
 }
 
+function canonAgent(name) {
+  const key = String(name || "").trim().toLowerCase();
+  if (!key) return "";
+  return AGENT_CANON.get(key) || String(name || "").trim().slice(0, 40);
+}
+
+function recentRows(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+  for (const key of ["trades", "fills", "rows", "items"]) {
+    if (Array.isArray(payload[key])) return payload[key];
+  }
+  return [];
+}
+
 export function normalizeRecentTrades(payload, limit = AIM_PNL_DEFAULT_LIMIT) {
   const cap = clampPnlLimit(limit);
-  const rows = Array.isArray(payload?.trades) ? payload.trades : [];
   const cleaned = [];
-  for (const row of rows) {
+  for (const row of recentRows(payload)) {
     if (!row || typeof row !== "object") continue;
-    const realized = asMoney(row.realized_pnl_usd);
+    const realized = asMoney(row.realized_pnl_usd ?? row.realized_pnl ?? row.pnl);
     if (realized == null || realized <= 0) continue;
-    const created_at = asIso(row.created_at);
+    const created_at = asIso(row.created_at ?? row.filled_at ?? row.executed_at);
     cleaned.push({
       id: asText(row.id, 80) || `${created_at || "fill"}-${cleaned.length}`,
       created_at,
-      agent: asText(row.agent, 40),
-      pair: asText(row.pair, 40),
+      agent: canonAgent(row.agent ?? row.agent_name) || asText(row.agent, 40),
+      pair: asText(row.pair ?? row.market, 40),
       realized_pnl_usd: realized,
-      tx_hash: asTxHash(row.tx_hash),
+      tx_hash: asTxHash(row.tx_hash ?? row.hash),
     });
   }
   cleaned.sort((a, b) => tradeTime(b) - tradeTime(a));
   return cleaned.slice(0, cap);
 }
 
+function putAgent(found, extras, name, realized, count) {
+  if (realized == null) return;
+  const agent = canonAgent(name);
+  if (!agent) return;
+  const row = { agent, realized_pnl_usd: realized, trade_count: count };
+  if (AIM_PNL_AGENT_ORDER.includes(agent)) found.set(agent, row);
+  else extras.push(row);
+}
+
 export function normalizeByAgent(raw) {
-  const rows = [];
+  const found = new Map();
+  const extras = [];
   if (Array.isArray(raw)) {
     for (const row of raw) {
       if (!row || typeof row !== "object") continue;
-      const realized = asMoney(row.realized_pnl_usd ?? row.total_earned_usd ?? row.usd);
-      if (realized == null) continue;
-      rows.push({
-        agent: asText(row.agent || row.id, 40),
-        realized_pnl_usd: realized,
-        trade_count: asCount(row.trade_count),
-      });
+      putAgent(
+        found,
+        extras,
+        row.agent || row.id || row.name,
+        asMoney(row.realized_pnl_usd ?? row.total_earned_usd ?? row.usd ?? row.pnl),
+        asCount(row.count ?? row.trade_count)
+      );
     }
   } else if (raw && typeof raw === "object") {
     for (const [agent, value] of Object.entries(raw)) {
       if (value && typeof value === "object") {
-        const realized = asMoney(value.realized_pnl_usd ?? value.total_earned_usd ?? value.usd);
-        if (realized == null) continue;
-        rows.push({
-          agent: asText(agent, 40),
-          realized_pnl_usd: realized,
-          trade_count: asCount(value.trade_count),
-        });
+        putAgent(
+          found,
+          extras,
+          agent,
+          asMoney(value.realized_pnl_usd ?? value.total_earned_usd ?? value.usd ?? value.pnl),
+          asCount(value.count ?? value.trade_count)
+        );
       } else {
-        const realized = asMoney(value);
-        if (realized == null) continue;
-        rows.push({ agent: asText(agent, 40), realized_pnl_usd: realized, trade_count: null });
+        putAgent(found, extras, agent, asMoney(value), null);
       }
     }
   }
-  rows.sort((a, b) => b.realized_pnl_usd - a.realized_pnl_usd);
-  return rows;
+  const roster = AIM_PNL_AGENT_ORDER.map(
+    (agent) => found.get(agent) || { agent, realized_pnl_usd: 0, trade_count: 0 }
+  );
+  return roster.concat(extras);
 }
 
 export function normalizePnlSummary(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
+  const totals = body.totals && typeof body.totals === "object" ? body.totals : body;
   return {
-    total_earned_usd: asMoney(body.total_earned_usd),
-    trade_count: asCount(body.trade_count),
-    by_agent: normalizeByAgent(body.by_agent),
-    window_start: asIso(body.window_start),
-    window_end: asIso(body.window_end),
+    total_earned_usd: asMoney(totals.realized_pnl_usd ?? body.total_earned_usd),
+    trade_count: asCount(totals.count ?? totals.trade_count ?? body.count ?? body.trade_count),
+    by_agent: normalizeByAgent(body.by_agent ?? totals.by_agent),
+    window_start: asIso(totals.since ?? totals.window_start ?? body.since ?? body.window_start),
+    window_end: asIso(totals.until ?? totals.window_end ?? body.until ?? body.window_end),
   };
 }
 

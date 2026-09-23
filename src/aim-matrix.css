@@ -1794,6 +1794,11 @@ body.aim-page-frozen .dashboard-container {
   overflow-wrap: anywhere;
   text-align: right;
 }
+.aim-pnl-amount.is-flat,
+.aim-pnl-total.is-flat {
+  color: #d7e7ea;
+  opacity: 0.85;
+}
 .aim-pnl-pair,
 .aim-pnl-meta,
 .aim-pnl-window,

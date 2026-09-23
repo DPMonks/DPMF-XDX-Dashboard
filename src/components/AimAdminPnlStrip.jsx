@@ -114,7 +114,9 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
                 <li key={row.id}>
                   <div className="aim-pnl-row-top">
                     <Who agent={row.agent} />
-                    <span className="aim-pnl-amount">{formatUsd(row.realized_pnl_usd)}</span>
+                    <span className="aim-pnl-amount">
+                      {formatUsd(row.realized_pnl_usd)}
+                    </span>
                   </div>
                   <p className="aim-pnl-pair">{row.pair || "Pair n/a"}</p>
                   <small>
@@ -135,7 +137,10 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
           {summary.phase === "loading" ? <p className="aim-empty">Loading team profit...</p> : null}
           {dayReady ? (
             <>
-              <p className="aim-pnl-total" aria-live="polite">
+              <p
+                className={`aim-pnl-total${Number(day.total_earned_usd) > 0 ? "" : " is-flat"}`}
+                aria-live="polite"
+              >
                 {formatUsd(day.total_earned_usd)}
               </p>
               <p className="aim-pnl-meta">{fillCountLabel(day.trade_count) || "Team total, last 24 hours"}</p>
@@ -145,8 +150,10 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
                   {day.by_agent.map((row) => (
                     <li key={row.agent || row.realized_pnl_usd}>
                       <Who agent={row.agent} />
-                      <span className="aim-pnl-amount">{formatUsd(row.realized_pnl_usd)}</span>
-                      {row.trade_count != null ? <small>{fillCountLabel(row.trade_count)}</small> : null}
+                      <span className={`aim-pnl-amount${Number(row.realized_pnl_usd) > 0 ? "" : " is-flat"}`}>
+                        {formatUsd(row.realized_pnl_usd)}
+                      </span>
+                      {row.trade_count > 0 ? <small>{fillCountLabel(row.trade_count)}</small> : null}
                     </li>
                   ))}
                 </ul>
