@@ -1712,7 +1712,7 @@ body.aim-page-frozen .dashboard-container {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.48rem;
+  gap: 0.72rem;
   min-width: 0;
 }
 .aim-pnl-head .aim-desk-kicker {
@@ -1773,13 +1773,13 @@ body.aim-page-frozen .dashboard-container {
 .aim-pnl > [role="tabpanel"] {
   display: flex;
   flex-direction: column;
-  gap: 0.32rem;
+  gap: 0.55rem;
   min-width: 0;
 }
 .aim-pnl-list,
 .aim-pnl-agents {
   list-style: none;
-  margin: 0.28rem 0 0;
+  margin: 0.4rem 0 0;
   padding: 0;
   display: grid;
   gap: 0;
@@ -1795,7 +1795,7 @@ body.aim-page-frozen .dashboard-container {
   display: grid;
   gap: 0.16rem;
   min-width: 0;
-  padding: 0.52rem 0;
+  padding: 0.6rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.055);
 }
 .aim-pnl-row-top,
@@ -1871,7 +1871,7 @@ body.aim-page-frozen .dashboard-container {
   line-height: 1.4;
 }
 .aim-pnl .aim-empty {
-  margin: 0.35rem 0 0;
+  margin: 0.25rem 0 0;
   line-height: 1.4;
 }
 .aim-pnl-updated {
@@ -1880,7 +1880,7 @@ body.aim-page-frozen .dashboard-container {
 }
 .aim-pnl-stale { color: #fde68a; opacity: 0.9; }
 
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 1279px) {
   .aim-pnl-tab {
     min-height: 44px;
     padding: 0.28rem 1rem;
@@ -1892,9 +1892,9 @@ body.aim-page-frozen .dashboard-container {
     padding: 0.75rem 0.8rem 0.7rem;
     gap: 0.72rem;
   }
-  .aim-pnl-head { gap: 0.42rem; }
+  .aim-pnl-head { gap: 0.62rem; }
   .aim-pnl-list { max-height: min(42vh, 280px); }
   .aim-pnl-list li,
-  .aim-pnl-agents li { padding: 0.48rem 0; }
+  .aim-pnl-agents li { padding: 0.55rem 0; }
 }
 
