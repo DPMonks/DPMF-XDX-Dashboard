@@ -1,0 +1,15 @@
+# XRP Ledger well-known (XLS-0006 / XLS-0026)
+# Hosted at https://xdx-exchange.dpmf.technology/.well-known/xrp-ledger.toml
+
+[[ACCOUNTS]]
+address = "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo"
+name = "DPMF"
+desc = "DPMF issuer on the XRP Ledger."
+icon = "https://xdx-exchange.dpmf.technology/favicon.png"
+
+[[TOKENS]]
+issuer = "rMJAXYsbNzhwp7FfYnAsYP5ty3R9XnurPo"
+currency = "XDX"
+name = "XDX"
+desc = "XDX token by DPMF on the XRP Ledger."
+icon = "https://xdx-exchange.dpmf.technology/favicon.png"
