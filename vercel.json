@@ -123,6 +123,9 @@
     "api/aim/admin/pnl/summary-24h.js": {
       "maxDuration": 15
     },
+    "api/aim/admin/pnl/summary-all.js": {
+      "maxDuration": 15
+    },
     "api/chart/cex-candles.js": {
       "maxDuration": 20
     }
