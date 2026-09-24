@@ -3,6 +3,8 @@ import {
   AIM_PNL_RECENT_HOURS,
   AIM_PNL_TOTAL_HOURS,
   clampPnlLimit,
+  isAllTimeContract,
+  normalizePnlAll,
   normalizePnlSummary,
   normalizeRecentTrades,
 } from "../src/aimPnlFormat.js";
@@ -15,13 +17,17 @@ import {
  * Upstream:
  *   GET /aim/realized-pnl/recent?limit=50&since=<ISO-8601>
  *   GET /aim/realized-pnl/totals?hours=24
+ *   GET /api/aim/admin/pnl/summary-all
  * No Vercel database. Empty/unconfigured responses stay JSON and cache-private.
+ * A 404 (or the commander health stub) on summary-all is an empty ledger, not an error.
  */
 
 export const AIM_PNL_RECENT_PATH = "/api/aim/admin/pnl/recent";
 export const AIM_PNL_SUMMARY_PATH = "/api/aim/admin/pnl/summary-24h";
+export const AIM_PNL_ALL_PATH = "/api/aim/admin/pnl/summary-all";
 export const DESK_PNL_RECENT_PATH = "/aim/realized-pnl/recent";
 export const DESK_PNL_TOTALS_PATH = "/aim/realized-pnl/totals";
+export const DESK_PNL_ALL_PATH = "/api/aim/admin/pnl/summary-all";
 
 const DESK_TIMEOUT_MS = 12_000;
 
@@ -29,6 +35,7 @@ export function aimPnlRoute(pathname) {
   const path = String(pathname || "").split("?")[0];
   if (path === AIM_PNL_RECENT_PATH) return "recent";
   if (path === AIM_PNL_SUMMARY_PATH) return "summary";
+  if (path === AIM_PNL_ALL_PATH) return "all";
   return null;
 }
 
@@ -98,6 +105,22 @@ function deskHeaders(env) {
   return headers;
 }
 
+function emptyAllFields() {
+  return {
+    realized_pnl_usd: 0,
+    gross_wins_usd: 0,
+    gross_losses_usd: 0,
+    wins_count: 0,
+    losses_count: 0,
+    closed_trades_count: 0,
+    first_trade_at: null,
+    last_trade_at: null,
+    by_agent: [],
+    by_strategy: [],
+    source_note: "",
+  };
+}
+
 function unconfiguredBody(kind) {
   const base = {
     ok: false,
@@ -105,6 +128,7 @@ function unconfiguredBody(kind) {
     available: false,
     code: "AIM_PNL_UNCONFIGURED",
   };
+  if (kind === "all") return { ...base, ...emptyAllFields() };
   if (kind === "summary") {
     return { ...base, total_earned_usd: null, trade_count: 0, by_agent: [], window_start: null, window_end: null };
   }
@@ -118,10 +142,21 @@ function unavailableBody(kind) {
     available: false,
     code: "AIM_PNL_UNAVAILABLE",
   };
+  if (kind === "all") return { ...base, ...emptyAllFields() };
   if (kind === "summary") {
     return { ...base, total_earned_usd: null, trade_count: 0, by_agent: [], window_start: null, window_end: null };
   }
   return { ...base, trades: [] };
+}
+
+function emptyAllBody(generated_at) {
+  return {
+    ok: true,
+    configured: true,
+    available: true,
+    ...emptyAllFields(),
+    generated_at,
+  };
 }
 
 async function readResponseJson(res) {
@@ -146,7 +181,9 @@ async function fetchDesk(kind, req, deps) {
   const path =
     kind === "recent"
       ? `${DESK_PNL_RECENT_PATH}?${new URLSearchParams({ limit: String(limit), since })}`
-      : `${DESK_PNL_TOTALS_PATH}?${new URLSearchParams({ hours: String(AIM_PNL_TOTAL_HOURS) })}`;
+      : kind === "all"
+        ? DESK_PNL_ALL_PATH
+        : `${DESK_PNL_TOTALS_PATH}?${new URLSearchParams({ hours: String(AIM_PNL_TOTAL_HOURS) })}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), DESK_TIMEOUT_MS);
   try {
@@ -156,7 +193,10 @@ async function fetchDesk(kind, req, deps) {
       redirect: "error",
       signal: ctrl.signal,
     });
-    if (res.status === 404) return { status: 200, body: unavailableBody(kind) };
+    if (res.status === 404) {
+      if (kind === "all") return { status: 200, body: emptyAllBody(now.toISOString()) };
+      return { status: 200, body: unavailableBody(kind) };
+    }
     if (res.status === 401 || res.status === 403) {
       return {
         status: 502,
@@ -173,6 +213,24 @@ async function fetchDesk(kind, req, deps) {
       return { status: 502, body: { ok: false, code: "AIM_PNL_UPSTREAM", error: "Could not load team profit" } };
     }
     const generated_at = now.toISOString();
+    if (kind === "all") {
+      if (!isAllTimeContract(payload)) {
+        if (payload.ok === false) {
+          return { status: 502, body: { ok: false, code: "AIM_PNL_UPSTREAM", error: "Could not load team profit" } };
+        }
+        return { status: 200, body: emptyAllBody(generated_at) };
+      }
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          configured: true,
+          available: true,
+          ...normalizePnlAll(payload),
+          generated_at,
+        },
+      };
+    }
     if (kind === "recent") {
       return {
         status: 200,
@@ -226,4 +284,10 @@ export async function aimPnlSummaryPayload(req, deps = {}) {
   const denied = adminGate(req);
   if (denied) return denied;
   return fetchDesk("summary", req, deps);
+}
+
+export async function aimPnlAllPayload(req, deps = {}) {
+  const denied = adminGate(req);
+  if (denied) return denied;
+  return fetchDesk("all", req, deps);
 }

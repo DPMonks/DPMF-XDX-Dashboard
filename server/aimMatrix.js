@@ -28,7 +28,7 @@ import {
   persistAdminCommand,
   standingOrdersPublic,
 } from "./aimAdminCommand.js";
-import { aimPnlRecentPayload, aimPnlRoute, aimPnlSummaryPayload } from "./aimPnl.js";
+import { aimPnlAllPayload, aimPnlRecentPayload, aimPnlRoute, aimPnlSummaryPayload } from "./aimPnl.js";
 import { attachXioChartHistory } from "./xioChartCandles.js";
 
 /** No em/en dashes in Commander-facing text (chat + TTS). */
@@ -4805,7 +4805,12 @@ export async function handleAimRequest(req, res) {
       res.end(JSON.stringify({ ok: false, error: "GET only", code: "AIM_PNL_METHOD" }));
       return true;
     }
-    const out = pnlRoute === "recent" ? await aimPnlRecentPayload(req) : await aimPnlSummaryPayload(req);
+    const out =
+      pnlRoute === "recent"
+        ? await aimPnlRecentPayload(req)
+        : pnlRoute === "all"
+          ? await aimPnlAllPayload(req)
+          : await aimPnlSummaryPayload(req);
     res.statusCode = out.status;
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "private, no-store");

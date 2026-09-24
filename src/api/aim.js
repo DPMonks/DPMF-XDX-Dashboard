@@ -95,3 +95,8 @@ export function getAimAdminPnlRecent(wallet, { limit = 50 } = {}) {
 export function getAimAdminPnlSummary(wallet) {
   return getAimAdminPnl("/api/aim/admin/pnl/summary-24h", wallet);
 }
+
+/** Admin-only all-time net team profit. A missing desk route comes back empty. */
+export function getAimAdminPnlAll(wallet) {
+  return getAimAdminPnl("/api/aim/admin/pnl/summary-all", wallet);
+}

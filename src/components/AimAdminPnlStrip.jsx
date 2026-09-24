@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
-import { getAimAdminPnlRecent, getAimAdminPnlSummary } from "../api/aim";
-import { aimAgentLabel, resolveAimAgentId } from "../aimAgentNames";
+import { getAimAdminPnlAll, getAimAdminPnlRecent, getAimAdminPnlSummary } from "../api/aim";
+import { aimAgentLabel, aimAgentShortName, resolveAimAgentId } from "../aimAgentNames";
 import {
+  AIM_PNL_ALL_EMPTY,
   AIM_PNL_EMPTY,
   AIM_PNL_POLL_MS,
   fillCountLabel,
+  formatAllProfitLine,
   formatLondonStamp,
   formatLondonWindow,
   formatUsd,
+  interpretPnlAll,
   interpretPnlRecent,
   interpretPnlSummary,
   keepPnlOnError,
@@ -31,8 +34,30 @@ function Who({ agent }) {
   );
 }
 
+function moneyClass(base, value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n === 0) return `${base} is-flat`;
+  if (n < 0) return `${base} is-down`;
+  return base;
+}
+
+function AgentNet({ agentId, amount }) {
+  const id = resolveAimAgentId(agentId) || agentId;
+  const label = aimAgentShortName(id);
+  return (
+    <li>
+      <span className="aim-pnl-who">
+        <AimAgentAvatar agentId={id} label={label} size="sm" />
+        <b>{label}</b>
+      </span>
+      <span className={moneyClass("aim-pnl-amount", amount)}>{formatUsd(amount)}</span>
+    </li>
+  );
+}
+
 export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0 }) {
-  const [tab, setTab] = useState("wins");
+  const [tab, setTab] = useState("all");
+  const [all, setAll] = useState({ phase: "loading", summary: null, note: "" });
   const [recent, setRecent] = useState({ phase: "loading", trades: [], note: "" });
   const [summary, setSummary] = useState({ phase: "loading", summary: null, note: "" });
 
@@ -41,11 +66,14 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
     let cancelled = false;
 
     async function load() {
-      const [recentRes, summaryRes] = await Promise.allSettled([
+      const [allRes, recentRes, summaryRes] = await Promise.allSettled([
+        getAimAdminPnlAll(wallet),
         getAimAdminPnlRecent(wallet),
         getAimAdminPnlSummary(wallet),
       ]);
       if (cancelled) return;
+      if (allRes.status === "fulfilled") setAll(interpretPnlAll(allRes.value));
+      else setAll((prev) => keepPnlOnError(prev, allRes.reason));
       if (recentRes.status === "fulfilled") setRecent(interpretPnlRecent(recentRes.value));
       else setRecent((prev) => keepPnlOnError(prev, recentRes.reason));
       if (summaryRes.status === "fulfilled") setSummary(interpretPnlSummary(summaryRes.value));
@@ -70,9 +98,13 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
 
   const winsReady = recent.phase === "ready";
   const dayReady = summary.phase === "ready" && summary.summary;
+  const allReady = all.phase === "ready" && all.summary;
   const day = summary.summary;
+  const ledger = all.summary;
+  const closedCount = ledger?.closed_trades_count ?? 0;
   const windowLabel = day ? formatLondonWindow(day.window_start, day.window_end) : "";
-  const updated = formatLondonStamp((tab === "wins" ? recent.updatedAt : summary.updatedAt) || "");
+  const updatedAt = tab === "all" ? all.updatedAt : tab === "wins" ? recent.updatedAt : summary.updatedAt;
+  const updated = formatLondonStamp(updatedAt || "");
 
   return (
     <section className="aim-pnl neon-inset" aria-label="Admin team profit">
@@ -81,6 +113,17 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
         <h3>Team profit</h3>
       </div>
       <div className="aim-pnl-tabs" role="tablist" aria-label="Team profit views">
+        <button
+          type="button"
+          role="tab"
+          id="aim-pnl-tab-all"
+          className={`aim-pnl-tab${tab === "all" ? " is-on" : ""}`}
+          aria-selected={tab === "all"}
+          aria-controls="aim-pnl-panel-all"
+          onClick={() => setTab("all")}
+        >
+          All Profit
+        </button>
         <button
           type="button"
           role="tab"
@@ -104,6 +147,29 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
           24h
         </button>
       </div>
+
+      {tab === "all" ? (
+        <div role="tabpanel" id="aim-pnl-panel-all" aria-labelledby="aim-pnl-tab-all">
+          {all.phase === "loading" ? <p className="aim-empty">Loading team profit...</p> : null}
+          {allReady && closedCount > 0 ? (
+            <>
+              <p className={moneyClass("aim-pnl-total", ledger.realized_pnl_usd)} aria-live="polite">
+                {formatUsd(ledger.realized_pnl_usd)}
+              </p>
+              <p className="aim-pnl-meta">{formatAllProfitLine(ledger)}</p>
+              <ul className="aim-pnl-agents" aria-label="Net profit by agent">
+                {ledger.by_agent.map((row) => (
+                  <AgentNet key={row.agent_id} agentId={row.agent_id} amount={row.realized_pnl_usd} />
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {all.phase !== "loading" && !(allReady && closedCount > 0) ? (
+            <p className="aim-empty">{all.note || AIM_PNL_ALL_EMPTY}</p>
+          ) : null}
+          {all.staleNote ? <p className="aim-pnl-stale">{all.staleNote}</p> : null}
+        </div>
+      ) : null}
 
       {tab === "wins" ? (
         <div role="tabpanel" id="aim-pnl-panel-wins" aria-labelledby="aim-pnl-tab-wins">
@@ -132,7 +198,9 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
           ) : null}
           {recent.staleNote ? <p className="aim-pnl-stale">{recent.staleNote}</p> : null}
         </div>
-      ) : (
+      ) : null}
+
+      {tab === "day" ? (
         <div role="tabpanel" id="aim-pnl-panel-day" aria-labelledby="aim-pnl-tab-day">
           {summary.phase === "loading" ? <p className="aim-empty">Loading team profit...</p> : null}
           {dayReady ? (
@@ -168,7 +236,7 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
           ) : null}
           {summary.staleNote ? <p className="aim-pnl-stale">{summary.staleNote}</p> : null}
         </div>
-      )}
+      ) : null}
       {updated ? <p className="aim-pnl-updated">Updated {updated}</p> : null}
     </section>
   );

@@ -2,6 +2,7 @@
 
 export const AIM_PNL_POLL_MS = 30_000;
 export const AIM_PNL_EMPTY = "No profitable fills recorded yet";
+export const AIM_PNL_ALL_EMPTY = "No closed trades yet";
 export const AIM_PNL_DEFAULT_LIMIT = 50;
 export const AIM_PNL_MAX_LIMIT = 50;
 export const AIM_PNL_TOTAL_HOURS = 24;
@@ -9,6 +10,9 @@ export const AIM_PNL_RECENT_HOURS = 24;
 
 /** Desk by_agent roster, in the order AI-Matrix always returns. */
 export const AIM_PNL_AGENT_ORDER = ["Prime", "Echo", "Vector", "Vortex", "Flux", "Ghost", "Commander"];
+
+/** All-time card roster. Commander is omitted; this is the trading desk. */
+export const AIM_PNL_ALL_AGENTS = ["Prime", "Flux", "Vector", "Vortex", "Echo", "Ghost"];
 
 const AGENT_CANON = new Map([
   ["prime", "Prime"],
@@ -40,6 +44,11 @@ const LONDON = {
   minute: "2-digit",
   hourCycle: "h23",
   timeZoneName: "short",
+};
+
+const LONDON_WHEN = {
+  ...LONDON,
+  year: "numeric",
 };
 
 export function clampPnlLimit(value, fallback = AIM_PNL_DEFAULT_LIMIT) {
@@ -85,6 +94,32 @@ export function formatLondonStamp(iso) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
   return new Intl.DateTimeFormat("en-GB", LONDON).format(d);
+}
+
+/** All-time "since" stamp: London date and clock, with the year. */
+export function formatLondonWhen(iso) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-GB", LONDON_WHEN).format(d);
+}
+
+function countPhrase(count, singular, plural) {
+  const n = asCount(count) ?? 0;
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
+/** Compact all-time line. No em or en dashes. */
+export function formatAllProfitLine(summary) {
+  const body = summary && typeof summary === "object" ? summary : {};
+  const closed = asCount(body.closed_trades_count) ?? 0;
+  const parts = [
+    countPhrase(body.wins_count, "win", "wins"),
+    countPhrase(body.losses_count, "loss", "losses"),
+    `${closed} closed ${closed === 1 ? "trade" : "trades"}`,
+  ];
+  const since = formatLondonWhen(body.first_trade_at);
+  if (since) parts.push(`since ${since}`);
+  return parts.join(" | ");
 }
 
 export function formatLondonWindow(start, end) {
@@ -215,6 +250,81 @@ export function normalizeByAgent(raw) {
   return roster.concat(extras);
 }
 
+function strategyRows(raw) {
+  if (!Array.isArray(raw)) return [];
+  const rows = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const id = asText(row.strategy_id || row.id || row.strategy || row.name, 80);
+    rows.push({
+      strategy_id: id,
+      realized_pnl_usd: asMoney(row.realized_pnl_usd),
+      wins_count: asCount(row.wins_count),
+      losses_count: asCount(row.losses_count),
+    });
+    if (rows.length >= 40) break;
+  }
+  return rows;
+}
+
+/** True when the body is the all-time contract, not the commander health stub. */
+export function isAllTimeContract(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  return (
+    Object.prototype.hasOwnProperty.call(payload, "realized_pnl_usd") ||
+    Object.prototype.hasOwnProperty.call(payload, "closed_trades_count") ||
+    Array.isArray(payload.by_agent)
+  );
+}
+
+export function normalizeAllAgents(raw) {
+  const found = new Map();
+  const rows = Array.isArray(raw) ? raw : [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const agent = canonAgent(row.agent_id || row.agent || row.id || row.name);
+    if (!AIM_PNL_ALL_AGENTS.includes(agent)) continue;
+    found.set(agent, {
+      agent_id: agent,
+      role: asText(row.role, 80),
+      realized_pnl_usd: asMoney(row.realized_pnl_usd) ?? 0,
+      wins_count: asCount(row.wins_count) ?? 0,
+      losses_count: asCount(row.losses_count) ?? 0,
+    });
+  }
+  return AIM_PNL_ALL_AGENTS.map(
+    (agent) =>
+      found.get(agent) || {
+        agent_id: agent,
+        role: "",
+        realized_pnl_usd: 0,
+        wins_count: 0,
+        losses_count: 0,
+      }
+  );
+}
+
+export function normalizePnlAll(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const wins = asCount(body.wins_count) ?? 0;
+  const losses = asCount(body.losses_count) ?? 0;
+  let closed = asCount(body.closed_trades_count);
+  if (closed == null) closed = wins + losses;
+  return {
+    realized_pnl_usd: asMoney(body.realized_pnl_usd) ?? 0,
+    gross_wins_usd: asMoney(body.gross_wins_usd),
+    gross_losses_usd: asMoney(body.gross_losses_usd),
+    wins_count: wins,
+    losses_count: losses,
+    closed_trades_count: closed,
+    first_trade_at: asIso(body.first_trade_at),
+    last_trade_at: asIso(body.last_trade_at),
+    by_agent: normalizeAllAgents(body.by_agent),
+    by_strategy: strategyRows(body.by_strategy),
+    source_note: asText(body.source_note, 240),
+  };
+}
+
 export function normalizePnlSummary(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
   const totals = body.totals && typeof body.totals === "object" ? body.totals : body;
@@ -243,6 +353,23 @@ export function interpretPnlRecent(data) {
     phase: "ready",
     trades,
     note: trades.length ? "" : AIM_PNL_EMPTY,
+    updatedAt: data.generated_at || null,
+  };
+}
+
+export function interpretPnlAll(data) {
+  if (!data || data.configured === false || data.code === "AIM_PNL_UNCONFIGURED") {
+    return { phase: "unconfigured", summary: null, note: aimPnlStatusMessage({ configured: false }) };
+  }
+  if (data.available === false || data.code === "AIM_PNL_UNAVAILABLE") {
+    return { phase: "unavailable", summary: null, note: aimPnlStatusMessage({ available: false }) };
+  }
+  const summary = normalizePnlAll(data);
+  const count = summary.closed_trades_count ?? 0;
+  return {
+    phase: "ready",
+    summary,
+    note: count > 0 ? "" : AIM_PNL_ALL_EMPTY,
     updatedAt: data.generated_at || null,
   };
 }
