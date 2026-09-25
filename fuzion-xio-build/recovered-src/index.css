@@ -1,0 +1,22 @@
+html, body {
+  margin: 0;
+  font-family: givonic !important;
+}
+
+/* code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+} */
+
+@font-face {
+  font-family: 'givonic';
+  src: local('givonic'), url(./fonts/Givonic-Regular.otf) format('truetype');
+}
+
+/* .navbar-brand {
+  margin-right: 0 !important;
+} */
+.navbar-brand {
+  margin-right: 20px !important;
+  margin-left: 20px !important;
+}
