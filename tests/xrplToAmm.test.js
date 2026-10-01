@@ -187,3 +187,21 @@ test("the AMM list asks xrpl.to for every XDX pool, including thin ones", async 
   assert.match(seen[0], /status=all/);
   resetXrplToXdxAmmCache();
 });
+
+test("a 429 on the AMM list is retried and still returns CREATE", async () => {
+  resetXrplToXdxAmmCache();
+  let hits = 0;
+  const rows = await loadXrplToXdxAmmPools({
+    fresh: true,
+    now: 3,
+    fetchImpl: async () => {
+      hits += 1;
+      if (hits === 1) return { ok: false, status: 429, json: async () => ({}) };
+      return { ok: true, json: async () => ({ total: 1, pools: [createPool()] }) };
+    },
+  });
+  assert.equal(hits, 2);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].pool, "XDX/CREATE");
+  resetXrplToXdxAmmCache();
+});

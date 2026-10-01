@@ -89,6 +89,17 @@ function pairName(quote, issuer, collided) {
   return { quote: label, pair: `XDX/${label}` };
 }
 
+export function xrplToXdxAmmListUrl({ offset = 0, limit = 100 } = {}) {
+  const params = new URLSearchParams({
+    issuer: XDX_ISSUER,
+    currency: "XDX",
+    status: "all",
+    limit: String(Math.min(Math.max(Number(limit) || 100, 1), 100)),
+    offset: String(Math.max(Number(offset) || 0, 0)),
+  });
+  return `https://api.xrpl.to/v1/amm?${params}`;
+}
+
 export function poolsFromXrplToAmm(payload = {}, options = {}) {
   const rows = Array.isArray(payload?.pools) ? payload.pools : [];
   const xrpPerXdx = positive(options.xrpPerXdx);

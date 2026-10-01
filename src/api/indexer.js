@@ -29,6 +29,12 @@ import {
 } from "../utils/xrplToToken";
 import { detectQuoteUsd, preferUsdPoolSplit } from "../utils/poolSplit";
 import { sanePoolQuoteReserve } from "../ammPools";
+import {
+  mergeDiscoveredXdxPools,
+  poolsFromXrplToAmm,
+  sortPoolsByXdxReserve,
+  xrplToXdxAmmListUrl,
+} from "../utils/xrplToAmm";
 import { overlayPoolFlowVolumes } from "../utils/lpVolume";
 import { LIST_PAGE_SIZE, shouldFetchMoreRows } from "../utils/pagination";
 import {
@@ -339,6 +345,34 @@ export async function getOverview() {
   return api.overview();
 }
 
+let clientAmmListCache = { at: 0, rows: null };
+const CLIENT_AMM_LIST_MS = 60_000;
+
+export function resetClientAmmListCache() {
+  clientAmmListCache = { at: 0, rows: null };
+}
+
+async function clientDiscoveredXdxPools(prices = {}) {
+  const now = Date.now();
+  if (clientAmmListCache.rows && now - clientAmmListCache.at < CLIENT_AMM_LIST_MS) {
+    return clientAmmListCache.rows;
+  }
+  try {
+    const response = await fetch(xrplToXdxAmmListUrl(), { headers: { accept: "application/json" } });
+    if (!response.ok) return clientAmmListCache.rows || [];
+    const payload = await response.json();
+    const rows = poolsFromXrplToAmm(payload, {
+      xrpPerXdx: prices.xdxPerXrp || prices.xdx_per_xrp,
+      xdxUsd: prices.xdxUsd,
+      xrpUsd: prices.xrpUsd,
+    });
+    if (rows.length) clientAmmListCache = { at: now, rows };
+    return rows.length ? rows : clientAmmListCache.rows || [];
+  } catch {
+    return clientAmmListCache.rows || [];
+  }
+}
+
 export async function getAmm() {
   const [body, prices, flows] = await Promise.all([
     api.lpPools().catch(() => ({ pools: [], catching_up: true })),
@@ -347,9 +381,11 @@ export async function getAmm() {
   ]);
   const xdxUsd = numberOrNull(prices?.xdxUsd ?? prices?.recorded_price);
   const xrpUsd = numberOrNull(prices?.xrpUsd);
+  const discovered = await clientDiscoveredXdxPools(prices);
+  const merged = sortPoolsByXdxReserve(mergeDiscoveredXdxPools(asArray(body), discovered));
   return overlayPoolFlowVolumes(
     uniquePools(
-      asArray(body)
+      merged
         .map(mapPool)
         .filter(Boolean)
         .map((row) => withPoolSplit(row, row.xdxUsd || xdxUsd, xrpUsd, prices))

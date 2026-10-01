@@ -33,6 +33,8 @@ import {
   loadXrplToLpOwners,
   loadXrplToRank,
   loadXrplToXdxAmmPools,
+  loadXrplToXdxAmmRaw,
+  xrplToAmmDiscoveryStatus,
   loadXrpSparkline,
 } from "./xrplToCatalog.js";
 import { mergeDiscoveredXdxPools, sortPoolsByXdxReserve } from "../src/utils/xrplToAmm.js";
@@ -235,6 +237,8 @@ export async function loadLiveMarket(options = {}) {
   if (!options.fresh && marketCache.overview && now - marketCache.at < MARKET_MS) {
     return marketCache;
   }
+  // The AMM list has to leave before the token card and reserve fan-out, or xrpl.to answers 429 and the catalog stays on the indexer rows.
+  const discoveredRaw = loadXrplToXdxAmmRaw(options);
   const [quote, token, issuerLocked, blackhole, lpCounts] = await Promise.all([
     loadLiveXrpQuote(options),
     loadXrplToToken(options),
@@ -308,6 +312,7 @@ export async function loadLiveMarket(options = {}) {
   const pricedRows = applyPoolVolumes(liveRows, mergeVolumeMaps(volumes, ledgerVolumes));
   // Indexer xdx_amm_pools and the static POOLS list miss on-ledger AMMs.
   // xrpl.to /v1/amm?status=all is the discovery list. Low liquidity stays, tagged.
+  await discoveredRaw.catch(() => null);
   const discovered = await loadXrplToXdxAmmPools({
     ...options,
     xrpPerXdx: prices.xdxPerXrp || prices.xdx_per_xrp,
@@ -558,9 +563,12 @@ export async function liveCatalogPayload(suffix, options = {}) {
   }
   if (path === "lp-pools" || path === "amm" || path === "pools") {
     const market = await loadLiveMarket(options);
+    const discovery = xrplToAmmDiscoveryStatus();
     return {
       ...market.overview,
       pools: market.pools,
+      pool_discovery_count: discovery.count,
+      pool_discovery_error: discovery.error,
       source: "xrpl",
       catching_up: !market.pools?.length,
     };
