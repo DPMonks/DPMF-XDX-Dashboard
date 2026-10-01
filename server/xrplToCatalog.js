@@ -47,6 +47,10 @@ function jsonFetch(url, options = {}) {
   });
 }
 
+function transientXrplToError(err) {
+  return /429|502|503|504|timeout|TIMEOUT|ECONNRESET|aborted|fetch failed/i.test(String(err?.message || err));
+}
+
 export function holdersFromXrplTo(payload = {}, offset = 0) {
   const rows = Array.isArray(payload.richList) ? payload.richList : [];
   const holders = rows.map((row, index) => ({
@@ -295,10 +299,67 @@ export function xrplToAmmListUrl({
 }
 
 let xdxAmmCache = { at: 0, rows: null };
+let xdxAmmRawCache = { at: 0, payload: null };
+let xdxAmmInflight = null;
+let xdxAmmDiscoveryError = "";
 const XDX_AMM_MS = 60_000;
 
 export function resetXrplToXdxAmmCache() {
   xdxAmmCache = { at: 0, rows: null };
+  xdxAmmRawCache = { at: 0, payload: null };
+  xdxAmmInflight = null;
+  xdxAmmDiscoveryError = "";
+}
+
+export function xrplToAmmDiscoveryStatus() {
+  const count = Array.isArray(xdxAmmRawCache.payload?.pools) ? xdxAmmRawCache.payload.pools.length : 0;
+  return { count, error: xdxAmmDiscoveryError || null };
+}
+
+async function fetchXrplToAmmPage(offset, options) {
+  const url = xrplToAmmListUrl({ offset, limit: 100 });
+  const timeoutMs = Number(options.timeoutMs) || 8000;
+  try {
+    return await jsonFetch(url, { ...options, timeoutMs });
+  } catch (err) {
+    if (!transientXrplToError(err)) throw err;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return jsonFetch(url, { ...options, timeoutMs });
+  }
+}
+
+// Start this before the other catalog calls. A late call is the one xrpl.to drops.
+export function loadXrplToXdxAmmRaw(options = {}) {
+  const now = Number(options.now) || Date.now();
+  if (!options.fresh && xdxAmmRawCache.payload && now - xdxAmmRawCache.at < XDX_AMM_MS) {
+    return Promise.resolve(xdxAmmRawCache.payload);
+  }
+  if (xdxAmmInflight && !options.fresh) return xdxAmmInflight;
+  xdxAmmInflight = (async () => {
+    const pools = [];
+    let total = 0;
+    try {
+      for (let offset = 0; offset < 500; offset += 100) {
+        const payload = await fetchXrplToAmmPage(offset, options);
+        const page = Array.isArray(payload?.pools) ? payload.pools : [];
+        total = Number(payload?.total) || total;
+        pools.push(...page);
+        if (!page.length || page.length < 100 || (total && pools.length >= total)) break;
+      }
+    } catch (err) {
+      xdxAmmDiscoveryError = String(err?.message || err || "xrpl.to amm list failed");
+      if (xdxAmmRawCache.payload) return xdxAmmRawCache.payload;
+      return { pools: [], total: 0, error: xdxAmmDiscoveryError };
+    }
+    if (pools.length) {
+      xdxAmmDiscoveryError = "";
+      xdxAmmRawCache = { at: now, payload: { pools, total: total || pools.length } };
+    }
+    return xdxAmmRawCache.payload || { pools, total, error: xdxAmmDiscoveryError || null };
+  })().finally(() => {
+    xdxAmmInflight = null;
+  });
+  return xdxAmmInflight;
 }
 
 export async function loadXrplToXdxAmmPools(options = {}) {
@@ -309,25 +370,14 @@ export async function loadXrplToXdxAmmPools(options = {}) {
   const rate = Number(options.xrpPerXdx) || 0;
   const xdxUsd = Number(options.xdxUsd) || 0;
   const xrpUsd = Number(options.xrpUsd) || 0;
+  const payload = await loadXrplToXdxAmmRaw(options);
   const rows = [];
   const seen = new Set();
-  try {
-    for (let offset = 0; offset < 500; offset += 100) {
-      const payload = await jsonFetch(xrplToAmmListUrl({ offset, limit: 100 }), options);
-      const page = poolsFromXrplToAmm(payload, { xrpPerXdx: rate, xdxUsd, xrpUsd });
-      const rawCount = Array.isArray(payload?.pools) ? payload.pools.length : 0;
-      for (const row of page) {
-        const key = String(row.amm_account || "").toLowerCase();
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        rows.push(row);
-      }
-      const total = Number(payload?.total) || 0;
-      if (!rawCount || rawCount < 100 || (total && rows.length >= total)) break;
-    }
-  } catch (err) {
-    if (xdxAmmCache.rows) return xdxAmmCache.rows;
-    throw err;
+  for (const row of poolsFromXrplToAmm(payload, { xrpPerXdx: rate, xdxUsd, xrpUsd })) {
+    const key = String(row.amm_account || "").toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    rows.push(row);
   }
   if (rows.length) xdxAmmCache = { at: now, rows };
   return rows.length ? rows : xdxAmmCache.rows || [];
