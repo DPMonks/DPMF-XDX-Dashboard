@@ -1,6 +1,7 @@
 import {
   POOLS,
   XDX_HEX,
+  XDX_ISSUER,
   XDX_RLUSD_LP_XRPL_TO_MD5,
   XDX_XRPL_TO_MD5,
   XDX_XRP_LP_XRPL_TO_MD5,
@@ -10,6 +11,7 @@ import {
 import { rowsFromXrplToGraph } from "../src/activityHistory.js";
 import { pairFromTradeLegs } from "../src/utils/lpVolume.js";
 import { parseXrplToToken, XRPL_TO_TOKEN_URL } from "../src/utils/xrplToToken.js";
+import { poolsFromXrplToAmm } from "../src/utils/xrplToAmm.js";
 import { normalizeLpPool } from "../src/todayLpOwners.js";
 
 const HISTORY_URL = `https://api.xrpl.to/v1/history`;
@@ -273,6 +275,62 @@ export async function loadXrplToLpCounts(options = {}) {
     source: "xrpl.to",
     catching_up: !holders,
   };
+}
+
+export function xrplToAmmListUrl({
+  issuer = XDX_ISSUER,
+  currency = "XDX",
+  status = "all",
+  limit = 100,
+  offset = 0,
+} = {}) {
+  const params = new URLSearchParams({
+    issuer: String(issuer || XDX_ISSUER),
+    currency: String(currency || "XDX"),
+    status: status || "all",
+    limit: String(Math.min(Math.max(Number(limit) || 100, 1), 100)),
+    offset: String(Math.max(Number(offset) || 0, 0)),
+  });
+  return `https://api.xrpl.to/v1/amm?${params}`;
+}
+
+let xdxAmmCache = { at: 0, rows: null };
+const XDX_AMM_MS = 60_000;
+
+export function resetXrplToXdxAmmCache() {
+  xdxAmmCache = { at: 0, rows: null };
+}
+
+export async function loadXrplToXdxAmmPools(options = {}) {
+  const now = Number(options.now) || Date.now();
+  if (!options.fresh && xdxAmmCache.rows && now - xdxAmmCache.at < XDX_AMM_MS) {
+    return xdxAmmCache.rows;
+  }
+  const rate = Number(options.xrpPerXdx) || 0;
+  const xdxUsd = Number(options.xdxUsd) || 0;
+  const xrpUsd = Number(options.xrpUsd) || 0;
+  const rows = [];
+  const seen = new Set();
+  try {
+    for (let offset = 0; offset < 500; offset += 100) {
+      const payload = await jsonFetch(xrplToAmmListUrl({ offset, limit: 100 }), options);
+      const page = poolsFromXrplToAmm(payload, { xrpPerXdx: rate, xdxUsd, xrpUsd });
+      const rawCount = Array.isArray(payload?.pools) ? payload.pools.length : 0;
+      for (const row of page) {
+        const key = String(row.amm_account || "").toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        rows.push(row);
+      }
+      const total = Number(payload?.total) || 0;
+      if (!rawCount || rawCount < 100 || (total && rows.length >= total)) break;
+    }
+  } catch (err) {
+    if (xdxAmmCache.rows) return xdxAmmCache.rows;
+    throw err;
+  }
+  if (rows.length) xdxAmmCache = { at: now, rows };
+  return rows.length ? rows : xdxAmmCache.rows || [];
 }
 
 export async function loadXrplToRank(address, options = {}) {

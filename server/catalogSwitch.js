@@ -2,6 +2,7 @@ import { preferRailwayXdxVolume } from "../src/utils/lpVolume.js";
 import { mergeTradePrints } from "../src/xdxTrades.js";
 import { bookHasTape, mergeOrderbookPayloads } from "../src/orderbook.js";
 import { payloadUsable, preferUsable, recallCatalog, rememberCatalog } from "./sourceControl.js";
+import { sortPoolsByXdxReserve } from "../src/utils/xrplToAmm.js";
 
 function asObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
@@ -225,7 +226,7 @@ export function mergeLivePools(db = {}, live = {}) {
   const livePools = Array.isArray(live.pools) ? live.pools : [];
   const dbPools = Array.isArray(db.pools) ? db.pools : Array.isArray(db) ? db : [];
   if (!livePools.length) return db;
-  const pools = mergePoolRows(dbPools, livePools);
+  const pools = sortPoolsByXdxReserve(mergePoolRows(dbPools, livePools));
   return {
     ...(asObject(db) || {}),
     ...(asObject(live) || {}),

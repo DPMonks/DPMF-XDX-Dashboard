@@ -75,7 +75,12 @@ import {
 import { knownLivePoolSpecs, liveCatalogPayload, loadLiveMarket } from "./liveCatalog.js";
 import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
 import { catalogHealth } from "./sourceControl.js";
-import { FREE_API_HEADERS } from "./xrplToCatalog.js";
+import { FREE_API_HEADERS, loadXrplToXdxAmmPools } from "./xrplToCatalog.js";
+import {
+  findDiscoveredPool,
+  liveQueryFromPool,
+  needsDiscoveredAmmLookup,
+} from "../src/utils/xrplToAmm.js";
 import { loadPoolGovernance, loadWalletVotes } from "./ammGovernance.js";
 import { loadLiveAmmReserves, loadLiveAmmReservesMany, withXrplRetry } from "./liveAmmReserves.js";
 import { RLUSD_HEX, RLUSD_ISSUER } from "../src/constants/ledger.js";
@@ -2406,14 +2411,23 @@ function walletLedgerResult(suffix, search = "") {
   }
   if (suffix === "lp-pools/live") {
     const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
-    return loadLiveAmmReserves({
-      pair: params.get("pair") || params.get("pool") || "XDX/XRP",
-      ammAccount: params.get("amm") || params.get("amm_account"),
-      quote: params.get("quote"),
-      issuer: params.get("issuer") || params.get("quote_issuer"),
-      hex: params.get("hex") || params.get("quote_hex"),
+    const pair = params.get("pair") || params.get("pool") || "XDX/XRP";
+    const ammAccount = params.get("amm") || params.get("amm_account") || "";
+    const issuer = params.get("issuer") || params.get("quote_issuer") || "";
+    let query = {
+      pair,
+      ammAccount,
+      quote: params.get("quote") || "",
+      issuer,
+      hex: params.get("hex") || params.get("quote_hex") || "",
       fresh: params.get("fresh") === "1",
-    }).then((body) => ok(body));
+    };
+    const reserves = needsDiscoveredAmmLookup(pair, { ammAccount, issuer })
+      ? loadXrplToXdxAmmPools()
+          .then((rows) => liveQueryFromPool(query, findDiscoveredPool(rows, pair)))
+          .catch(() => query)
+      : Promise.resolve(query);
+    return reserves.then((next) => loadLiveAmmReserves(next)).then((body) => ok(body));
   }
   const account = String(suffix || "").match(/^wallet\/account\/([^/]+)$/);
   if (account) {

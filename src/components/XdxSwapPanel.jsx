@@ -249,14 +249,30 @@ export default function XdxSwapPanel() {
           ? getSwapMarket({ from: "XRP", to: toTicker, toIssuer, toHex, fresh: true }).catch(() => null)
           : Promise.resolve(null),
       ]);
+      const poolRows = Array.isArray(nextPools) ? nextPools : nextPools?.pools || [];
       const pairRows = await Promise.all(
         pairs.map(async (nextPair) => {
           const have = bookFromMarketPayload(catalog, nextPair);
           const needOne = !((have.bids || []).length || (have.asks || []).length || have.present);
-          const [one, live] = await Promise.all([
+          const want = String(nextPair || "").replace(/\s+/g, "").toUpperCase();
+          const row = poolRows.find(
+            (item) => String(item.pool || item.pool_name || "").replace(/\s+/g, "").toUpperCase() === want
+          );
+          const [one, liveRaw] = await Promise.all([
             needOne ? getOrderbook(nextPair).catch(() => null) : Promise.resolve(null),
-            getLiveLpReserves({ pair: nextPair, fresh: true }).catch(() => null),
+            getLiveLpReserves({
+              pair: nextPair,
+              quote: row?.quote,
+              issuer: row?.quote_issuer,
+              hex: row?.quote_hex,
+              ammAccount: row?.amm_account,
+              fresh: true,
+            }).catch(() => null),
           ]);
+          const live =
+            liveRaw && liveRaw.reserve_source !== "empty" && !liveRaw.empty
+              ? liveRaw
+              : row || liveRaw;
           return [nextPair, { book: bookFromMarketPayload(one || catalog, nextPair), live }];
         })
       );

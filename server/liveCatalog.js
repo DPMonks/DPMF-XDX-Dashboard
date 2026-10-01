@@ -32,8 +32,10 @@ import {
   loadXrplToLpCounts,
   loadXrplToLpOwners,
   loadXrplToRank,
+  loadXrplToXdxAmmPools,
   loadXrpSparkline,
 } from "./xrplToCatalog.js";
+import { mergeDiscoveredXdxPools, sortPoolsByXdxReserve } from "../src/utils/xrplToAmm.js";
 import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
 import { loadLedgerPoolVolumes, mergeVolumeMaps } from "./ammPoolVolume.js";
 import { QUOTE_ASSETS } from "../src/xaman/tradeTx.js";
@@ -303,8 +305,18 @@ export async function loadLiveMarket(options = {}) {
     .map((spec, index) => poolRowFromLive(spec, lives[index], prices))
     .filter((row) => row.amm_account || row.reserve_asset || row.lp_supply);
   const ledgerVolumes = await loadLedgerPoolVolumes(liveRows, options).catch(() => ({}));
-  const pools = applyPoolVolumes(liveRows, mergeVolumeMaps(volumes, ledgerVolumes));
-  const volume24h = num(volumes["XDX/XRP"]?.volume24hXdx) || num(pools[0]?.volume24h);
+  const pricedRows = applyPoolVolumes(liveRows, mergeVolumeMaps(volumes, ledgerVolumes));
+  // Indexer xdx_amm_pools and the static POOLS list miss on-ledger AMMs.
+  // xrpl.to /v1/amm?status=all is the discovery list. Low liquidity stays, tagged.
+  const discovered = await loadXrplToXdxAmmPools({
+    ...options,
+    xrpPerXdx: prices.xdxPerXrp || prices.xdx_per_xrp,
+    xdxUsd: prices.xdxUsd,
+    xrpUsd: prices.xrpUsd,
+  }).catch(() => []);
+  const pools = sortPoolsByXdxReserve(mergeDiscoveredXdxPools(pricedRows, discovered));
+  const xrpRow = pools.find((row) => row.pool === "XDX/XRP") || pricedRows[0] || {};
+  const volume24h = num(volumes["XDX/XRP"]?.volume24hXdx) || num(xrpRow.volume24h);
   const volume24hUsd = num(volumes["XDX/XRP"]?.volume24hUsd);
   const volume24hXrp = num(volumes["XDX/XRP"]?.volume24hXrp) || num(token.vol24hXrp);
   const overview = {

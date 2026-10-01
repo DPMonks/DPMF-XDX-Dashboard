@@ -243,6 +243,8 @@ function mapPool(row) {
     xdx_pct: numberOrNull(pick(row, ["xdx_pct"])),
     quote_pct: numberOrNull(pick(row, ["quote_pct"])),
     lead: pick(row, ["lead"]) || null,
+    low_liquidity: Boolean(row.low_liquidity),
+    liquidity_xrp: numberOrNull(pick(row, ["liquidity_xrp", "liquidityXrp"])),
     updated: pick(row, ["updated", "timestamp", "updated_at"]),
   };
 }
