@@ -9,6 +9,7 @@ import {
   applyTradePoolReserves,
   applyTradePoolVolume,
   compactPoolAmount,
+  formatPoolPrice,
   looksLikeLpAsQuote,
   filterAmmPools,
   isLpPoolTrade,
@@ -16,6 +17,7 @@ import {
   poolAssetTrustlineId,
   poolKey,
   poolQuoteTicker,
+  poolSpotPrice,
   poolSplitMeta,
   rememberPoolVolume,
   searchAmmAccount,
@@ -453,6 +455,7 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
           {visible.map((pool, index) => {
         const { asset, quote } = pairParts(pool.pool);
         const quoteName = pool.quote || quote;
+        const spot = poolSpotPrice(pool);
         return (
           <article
             key={pool.amm_account || `${pool.pool}-${index}`}
@@ -462,6 +465,9 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
           >
             <header className="pool-card-head">
               <span className="pair-badge">{pool.pool}</span>
+              {pool.low_liquidity ? (
+                <span className="pool-liquidity-tag">{t.lowLiquidity || "Low liquidity"}</span>
+              ) : null}
               <span className="pool-updated">
                 {pool.updated ? `${t.updated} ${formatWhen(pool.updated, locale)}` : "\u00a0"}
               </span>
@@ -509,6 +515,12 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
               <div>
                 <dt>{t.fee}</dt>
                 <dd>{formatAmmFee(pool.trading_fee, locale)}</dd>
+              </div>
+              <div>
+                <dt>{t.price}</dt>
+                <dd title={spot ? `${formatPoolPrice(spot)} ${quoteName} per 1 XDX` : ""}>
+                  {spot ? `${formatPoolPrice(spot)} ${quoteName}` : "-"}
+                </dd>
               </div>
               <div className="is-volume-stat">
                 <dt>{t.volume24h}</dt>

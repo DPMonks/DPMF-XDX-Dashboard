@@ -319,6 +319,7 @@ const en = {
   topHolders: "XDX Rich list",
   lpHolders: "XDX Lp Owners",
   ammPools: "AMM Pools",
+  lowLiquidity: "Low liquidity",
   createPoolTitle: "Create New XDX Pool",
   createPoolSubtitle: "Pair XDX with another asset to launch a new AMM pool.",
   createPoolTrustlinesOnly: "XDX is the primary asset. The second asset comes from this wallet’s trustlines.",

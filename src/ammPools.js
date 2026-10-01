@@ -75,6 +75,24 @@ export function poolKey(pool) {
   return String(pool?.amm_account || ammPoolName(pool));
 }
 
+export function poolSpotPrice(pool = {}) {
+  const direct = Number(pool?.price);
+  if (direct > 0) return direct;
+  const xdx = Number(pool?.reserve_asset ?? pool?.reserve_xdx);
+  const quote = Number(pool?.reserve_currency ?? pool?.reserve_quote);
+  if (xdx > 0 && quote > 0) return quote / xdx;
+  return null;
+}
+
+export function formatPoolPrice(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "-";
+  if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  const digits = Math.min(8, Math.max(4, Math.ceil(-Math.log10(n)) + 2));
+  return n.toLocaleString("en-US", { maximumFractionDigits: digits });
+}
+
 export function compactPoolAmount(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
