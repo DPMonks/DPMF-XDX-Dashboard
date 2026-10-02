@@ -7,6 +7,9 @@ export const EXCHANGE_MEMO_VERSION = "1.0.3";
 const MAX_MEMO_CHARS = 220;
 
 function currencyLabel(value) {
+  if (typeof value === "string" || typeof value === "number") {
+    if (/^\d+$/.test(String(value).trim())) return "XRP";
+  }
   const raw = String(value?.currency || value || "").trim();
   if (!raw || raw.toUpperCase() === "XRP") return "XRP";
   const upper = raw.toUpperCase();

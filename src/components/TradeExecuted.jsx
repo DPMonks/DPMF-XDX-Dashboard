@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n/useI18n";
 import { formatToken } from "../utils/format";
-import { executionReceipt, formatReceiptHash } from "../wallet/executionReceipt";
+import { executionReceipt, formatReceiptHash, ledgerHasSwapMeta } from "../wallet/executionReceipt";
 import { explainTradeFailure } from "../wallet/tradeFailure";
 import { ackTradeNotice, peekTradeNotice, rememberTradeNotice } from "../wallet/tradeNotice";
 import { getLedgerTx } from "../xaman/xamanClient";
@@ -75,26 +75,35 @@ export default function TradeExecuted() {
     };
   }, []);
 
+  const ledgerReady = ledgerHasSwapMeta(detail?.ledger);
   useEffect(() => {
     const hash = String(detail?.txid || "").trim();
     if (!detail || detail.kind !== "executed" || !/^[A-Fa-f0-9]{64}$/.test(hash)) return undefined;
-    if (detail.ledgerIndex || detail.lpReceived) return undefined;
+    if (ledgerReady || detail.ledgerChecked) return undefined;
     let cancelled = false;
     getLedgerTx(hash)
       .then((ledger) => {
-        if (cancelled || !ledger) return;
+        if (cancelled) return;
         setDetail((current) => {
-          if (!current || current.txid !== hash) return current;
-          const next = { ...current, ledger, ledgerIndex: ledger.ledger_index ?? current.ledgerIndex };
+          if (!current || String(current.txid || "").toUpperCase() !== hash.toUpperCase()) return current;
+          const next = {
+            ...current,
+            ledger: ledgerHasSwapMeta(ledger) ? ledger : current.ledger,
+            ledgerIndex: ledger?.ledger_index ?? current.ledgerIndex,
+            ledgerChecked: true,
+          };
           rememberTradeNotice(next);
           return next;
         });
       })
-      .catch(() => {});
+      .catch(() => {
+        if (cancelled) return;
+        setDetail((current) => (current ? { ...current, ledgerChecked: true } : current));
+      });
     return () => {
       cancelled = true;
     };
-  }, [detail?.txid, detail?.kind, detail?.ledgerIndex, detail?.lpReceived]);
+  }, [detail, ledgerReady]);
 
   function close() {
     ackTradeNotice();
@@ -106,6 +115,7 @@ export default function TradeExecuted() {
   const receipt = executionReceipt(detail);
   const paid = formatSide(receipt.paid, locale);
   const received = formatSide(receipt.received, locale);
+  const fee = formatSide(receipt.fee ? [receipt.fee] : [], locale);
   const hash = receipt.txid ? formatReceiptHash(receipt.txid) : "";
   const tone = detail.kind === "failed" ? "is-failed" : detail.kind === "unconfirmed" ? "is-unconfirmed" : "is-ok";
   const failure = detail.kind === "failed" ? explainTradeFailure(detail, t) : null;
@@ -143,6 +153,12 @@ export default function TradeExecuted() {
             <div>
               <dt>{t.receiptReceived || "Received"}</dt>
               <dd>{received}</dd>
+            </div>
+          ) : null}
+          {fee ? (
+            <div>
+              <dt>{t.receiptFee || "Network fee"}</dt>
+              <dd>{fee}</dd>
             </div>
           ) : null}
           {receipt.engineResult ? (

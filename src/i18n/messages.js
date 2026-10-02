@@ -503,6 +503,7 @@ const en = {
   close: "Close",
   receiptPaid: "Paid",
   receiptReceived: "Received",
+  receiptFee: "Network fee",
   receiptPair: "Pair",
   receiptLedger: "Ledger",
   receiptResult: "Result",
