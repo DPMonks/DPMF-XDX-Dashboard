@@ -129,43 +129,26 @@ export function formatLondonWindow(start, end) {
   return a || b || "";
 }
 
-function fractionSpan(abs, { smallDigits, largeDigits }) {
-  const large = Math.max(2, largeDigits);
-  if (!(abs > 0) || abs >= 0.01) return { min: 2, max: large };
-  const cap = Math.max(2, smallDigits);
-  return { min: cap, max: cap };
-}
-
-function formatSigned(value, { smallDigits, largeDigits, wrap }) {
+function formatSigned(value, wrap) {
   const n = asMoney(value);
   if (n == null) return "";
-  const abs = Math.abs(n);
-  const span = fractionSpan(abs, { smallDigits, largeDigits });
   const body = new Intl.NumberFormat("en-GB", {
-    minimumFractionDigits: span.min,
-    maximumFractionDigits: span.max,
-  }).format(abs);
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  }).format(Math.abs(n));
   const sign = n > 0 ? "+" : n < 0 ? "-" : "";
   return wrap(sign, body);
 }
 
-/** USD with cents. Amounts under $0.01 keep up to 4 decimals so $0.0019 stays visible. */
+/** Admin ledger USD. Always 4 decimal places, including whole dollars and sub-cent amounts. */
 export function formatUsd(value) {
-  const text = formatSigned(value, {
-    smallDigits: 4,
-    largeDigits: 2,
-    wrap: (sign, body) => (sign ? `${sign}$${body}` : `$${body}`),
-  });
+  const text = formatSigned(value, (sign, body) => (sign ? `${sign}$${body}` : `$${body}`));
   return text || "n/a";
 }
 
-/** Realized XRP beside USD. Up to 6 decimals so a fraction of an XRP is not rounded away. */
+/** Admin ledger XRP beside USD. Always 4 decimal places. */
 export function formatXrp(value) {
-  return formatSigned(value, {
-    smallDigits: 6,
-    largeDigits: 6,
-    wrap: (sign, body) => `${sign}${body} XRP`,
-  });
+  return formatSigned(value, (sign, body) => `${sign}${body} XRP`);
 }
 
 function hasOwn(obj, key) {
