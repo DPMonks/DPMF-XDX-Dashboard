@@ -90,20 +90,23 @@ test("all-time line uses London time and stays free of long dashes", () => {
 });
 
 test("USD labels stay grouped and signed, including decimal strings", () => {
-  assert.equal(formatUsd(12.5), "+$12.50");
-  assert.equal(formatUsd("12.50"), "+$12.50");
-  assert.equal(formatUsd(0), "$0.00");
-  assert.equal(formatUsd("0.00"), "$0.00");
-  assert.equal(formatUsd(1234.5), "+$1,234.50");
-  assert.equal(formatUsd("-3.00"), "-$3.00");
+  assert.equal(formatUsd(12.5), "+$12.5000");
+  assert.equal(formatUsd("12.50"), "+$12.5000");
+  assert.equal(formatUsd(0), "$0.0000");
+  assert.equal(formatUsd("0.00"), "$0.0000");
+  assert.equal(formatUsd(1234.5), "+$1,234.5000");
+  assert.equal(formatUsd("-3.00"), "-$3.0000");
   assert.equal(formatUsd("nope"), "n/a");
   assert.equal(formatUsd(0.0019), "+$0.0019");
   assert.equal(formatUsd("0.0019"), "+$0.0019");
+  assert.equal(formatUsd(0.25410261), "+$0.2541");
   assert.equal(formatUsd(-0.00194), "-$0.0019");
-  assert.equal(formatUsd(6.84511344), "+$6.85");
-  assert.equal(formatXrp(0.0019), "+0.001900 XRP");
-  assert.equal(formatXrp(1.5), "+1.50 XRP");
-  assert.equal(formatXrp(0), "0.00 XRP");
+  assert.equal(formatUsd(6.84511344), "+$6.8451");
+  assert.equal(formatXrp(0.0019), "+0.0019 XRP");
+  assert.equal(formatXrp(0.00130081), "+0.0013 XRP");
+  assert.equal(formatXrp(4.58583829), "+4.5858 XRP");
+  assert.equal(formatXrp(1.5), "+1.5000 XRP");
+  assert.equal(formatXrp(0), "0.0000 XRP");
   assert.equal(formatXrp(null), "");
   assert.equal(formatUsd(0.0019).includes("\u2013") || formatXrp(1).includes("\u2014"), false);
 });
