@@ -9,6 +9,7 @@ import {
   formatLondonWhen,
   formatLondonWindow,
   formatUsd,
+  formatXrp,
   interpretPnlAll,
   interpretPnlRecent,
   interpretPnlSummary,
@@ -96,6 +97,59 @@ test("USD labels stay grouped and signed, including decimal strings", () => {
   assert.equal(formatUsd(1234.5), "+$1,234.50");
   assert.equal(formatUsd("-3.00"), "-$3.00");
   assert.equal(formatUsd("nope"), "n/a");
+  assert.equal(formatUsd(0.0019), "+$0.0019");
+  assert.equal(formatUsd("0.0019"), "+$0.0019");
+  assert.equal(formatUsd(-0.00194), "-$0.0019");
+  assert.equal(formatUsd(6.84511344), "+$6.85");
+  assert.equal(formatXrp(0.0019), "+0.001900 XRP");
+  assert.equal(formatXrp(1.5), "+1.50 XRP");
+  assert.equal(formatXrp(0), "0.00 XRP");
+  assert.equal(formatXrp(null), "");
+  assert.equal(formatUsd(0.0019).includes("\u2013") || formatXrp(1).includes("\u2014"), false);
+});
+
+test("realized XRP is kept beside USD, and missing agent XRP is summed from rows", () => {
+  const direct = normalizePnlAll({
+    realized_pnl_usd: "6.84511344",
+    realized_pnl_xrp: "3.210000",
+    closed_trades_count: 2,
+    wins_count: 2,
+    by_agent: [
+      { agent_id: "Flux", realized_pnl_usd: "0.0019", realized_pnl_xrp: "0.0009", notional_xrp: "50" },
+    ],
+  });
+  assert.equal(direct.realized_pnl_xrp, 3.21);
+  assert.equal(direct.by_agent[1].agent_id, "Flux");
+  assert.equal(direct.by_agent[1].realized_pnl_usd, 0.0019);
+  assert.equal(direct.by_agent[1].realized_pnl_xrp, 0.0009);
+  assert.equal(JSON.stringify(direct).includes("notional_xrp"), false);
+
+  const summed = normalizePnlAll({
+    realized_pnl_usd: "0.0019",
+    closed_trades_count: 2,
+    wins_count: 2,
+    by_agent: [
+      {
+        agent_id: "agent2",
+        realized_pnl_usd: "0.0019",
+        trades: [{ realized_pnl_xrp: "0.001" }, { realized_pnl_xrp: "0.0009" }],
+      },
+    ],
+  });
+  assert.equal(summed.by_agent[1].realized_pnl_xrp, 0.0019);
+  assert.equal(summed.realized_pnl_xrp, 0.0019);
+
+  const day = interpretPnlSummary({
+    realized_pnl_usd: "0.25",
+    count: 2,
+    by_agent: {
+      Prime: { realized_pnl_usd: "0.25", count: 2, rows: [{ realized_pnl_xrp: "0.1" }, { realized_pnl_xrp: "0.05" }] },
+    },
+    configured: true,
+    available: true,
+  });
+  assert.equal(day.summary.realized_pnl_xrp, 0.15);
+  assert.equal(day.summary.by_agent[0].realized_pnl_xrp, 0.15);
 });
 
 test("recent trades keep profitable fills, newest first", () => {
@@ -286,6 +340,7 @@ test("all-time proxy calls summary-all and treats a missing route as an empty le
           JSON.stringify({
             ok: true,
             realized_pnl_usd: "18.00",
+            realized_pnl_xrp: "9.000000",
             gross_wins_usd: "20.00",
             gross_losses_usd: "-2.00",
             wins_count: 2,
@@ -294,7 +349,7 @@ test("all-time proxy calls summary-all and treats a missing route as an empty le
             first_trade_at: "2026-03-01T00:30:00.000Z",
             last_trade_at: "2026-09-23T18:00:00.000Z",
             by_agent: [
-              { agent_id: "agent5", role: "Mean reversion", realized_pnl_usd: "18.00", wins_count: 2, losses_count: 1 },
+              { agent_id: "agent5", role: "Mean reversion", realized_pnl_usd: "18.00", realized_pnl_xrp: "9.000000", wins_count: 2, losses_count: 1 },
             ],
             by_strategy: [{ name: "echo", realized_pnl_usd: "18.00", secret: TOKEN }],
             source_note: "closed fills",
@@ -331,6 +386,8 @@ test("all-time proxy calls summary-all and treats a missing route as an empty le
   assert.equal(calls[0].init.headers.Authorization, undefined);
   assert.equal(live.status, 200);
   assert.equal(live.body.realized_pnl_usd, 18);
+  assert.equal(live.body.realized_pnl_xrp, 9);
+  assert.equal(live.body.by_agent[4].realized_pnl_xrp, 9);
   assert.equal(live.body.closed_trades_count, 3);
   assert.equal(live.body.by_agent[4].agent_id, "Echo");
   assert.equal(live.body.by_agent[4].realized_pnl_usd, 18);

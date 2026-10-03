@@ -108,6 +108,7 @@ function deskHeaders(env) {
 function emptyAllFields() {
   return {
     realized_pnl_usd: 0,
+    realized_pnl_xrp: null,
     gross_wins_usd: 0,
     gross_losses_usd: 0,
     wins_count: 0,
