@@ -10,6 +10,7 @@ import {
   formatLondonStamp,
   formatLondonWindow,
   formatUsd,
+  formatXrp,
   interpretPnlAll,
   interpretPnlRecent,
   interpretPnlSummary,
@@ -41,7 +42,17 @@ function moneyClass(base, value) {
   return base;
 }
 
-function AgentNet({ agentId, amount }) {
+function MoneyLines({ usd, xrp, className, as: Tag = "span", ...rest }) {
+  const xrpText = formatXrp(xrp);
+  return (
+    <Tag className={className} {...rest}>
+      <span className="aim-pnl-usd">{formatUsd(usd)}</span>
+      {xrpText ? <span className="aim-pnl-xrp">{xrpText}</span> : null}
+    </Tag>
+  );
+}
+
+function AgentNet({ agentId, usd, xrp }) {
   const id = resolveAimAgentId(agentId) || agentId;
   const label = aimAgentShortName(id);
   return (
@@ -50,7 +61,7 @@ function AgentNet({ agentId, amount }) {
         <AimAgentAvatar agentId={id} label={label} size="sm" />
         <b>{label}</b>
       </span>
-      <span className={moneyClass("aim-pnl-amount", amount)}>{formatUsd(amount)}</span>
+      <MoneyLines usd={usd} xrp={xrp} className={moneyClass("aim-pnl-amount", usd)} />
     </li>
   );
 }
@@ -153,13 +164,22 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
           {all.phase === "loading" ? <p className="aim-empty">Loading team profit...</p> : null}
           {allReady && closedCount > 0 ? (
             <>
-              <p className={moneyClass("aim-pnl-total", ledger.realized_pnl_usd)} aria-live="polite">
-                {formatUsd(ledger.realized_pnl_usd)}
-              </p>
+              <MoneyLines
+                as="p"
+                usd={ledger.realized_pnl_usd}
+                xrp={ledger.realized_pnl_xrp}
+                className={moneyClass("aim-pnl-total", ledger.realized_pnl_usd)}
+                aria-live="polite"
+              />
               <p className="aim-pnl-meta">{formatAllProfitLine(ledger)}</p>
               <ul className="aim-pnl-agents" aria-label="Net profit by agent">
                 {ledger.by_agent.map((row) => (
-                  <AgentNet key={row.agent_id} agentId={row.agent_id} amount={row.realized_pnl_usd} />
+                  <AgentNet
+                    key={row.agent_id}
+                    agentId={row.agent_id}
+                    usd={row.realized_pnl_usd}
+                    xrp={row.realized_pnl_xrp}
+                  />
                 ))}
               </ul>
             </>
@@ -180,9 +200,11 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
                 <li key={row.id}>
                   <div className="aim-pnl-row-top">
                     <Who agent={row.agent} />
-                    <span className="aim-pnl-amount">
-                      {formatUsd(row.realized_pnl_usd)}
-                    </span>
+                    <MoneyLines
+                      usd={row.realized_pnl_usd}
+                      xrp={row.realized_pnl_xrp}
+                      className={moneyClass("aim-pnl-amount", row.realized_pnl_usd)}
+                    />
                   </div>
                   <p className="aim-pnl-pair">{row.pair || "Pair n/a"}</p>
                   <small>
@@ -205,12 +227,13 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
           {summary.phase === "loading" ? <p className="aim-empty">Loading team profit...</p> : null}
           {dayReady ? (
             <>
-              <p
-                className={`aim-pnl-total${Number(day.total_earned_usd) > 0 ? "" : " is-flat"}`}
+              <MoneyLines
+                as="p"
+                usd={day.total_earned_usd}
+                xrp={day.realized_pnl_xrp}
+                className={moneyClass("aim-pnl-total", day.total_earned_usd)}
                 aria-live="polite"
-              >
-                {formatUsd(day.total_earned_usd)}
-              </p>
+              />
               <p className="aim-pnl-meta">{fillCountLabel(day.trade_count) || "Team total, last 24 hours"}</p>
               {windowLabel ? <p className="aim-pnl-window">{windowLabel}</p> : null}
               {day.by_agent?.length ? (
@@ -218,9 +241,11 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
                   {day.by_agent.map((row) => (
                     <li key={row.agent || row.realized_pnl_usd}>
                       <Who agent={row.agent} />
-                      <span className={`aim-pnl-amount${Number(row.realized_pnl_usd) > 0 ? "" : " is-flat"}`}>
-                        {formatUsd(row.realized_pnl_usd)}
-                      </span>
+                      <MoneyLines
+                        usd={row.realized_pnl_usd}
+                        xrp={row.realized_pnl_xrp}
+                        className={moneyClass("aim-pnl-amount", row.realized_pnl_usd)}
+                      />
                       {row.trade_count > 0 ? <small>{fillCountLabel(row.trade_count)}</small> : null}
                     </li>
                   ))}

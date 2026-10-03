@@ -129,16 +129,74 @@ export function formatLondonWindow(start, end) {
   return a || b || "";
 }
 
-export function formatUsd(value) {
+function fractionSpan(abs, { smallDigits, largeDigits }) {
+  const large = Math.max(2, largeDigits);
+  if (!(abs > 0) || abs >= 0.01) return { min: 2, max: large };
+  const cap = Math.max(2, smallDigits);
+  return { min: cap, max: cap };
+}
+
+function formatSigned(value, { smallDigits, largeDigits, wrap }) {
   const n = asMoney(value);
-  if (n == null) return "n/a";
+  if (n == null) return "";
+  const abs = Math.abs(n);
+  const span = fractionSpan(abs, { smallDigits, largeDigits });
   const body = new Intl.NumberFormat("en-GB", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Math.abs(n));
-  if (n > 0) return `+$${body}`;
-  if (n < 0) return `-$${body}`;
-  return `$${body}`;
+    minimumFractionDigits: span.min,
+    maximumFractionDigits: span.max,
+  }).format(abs);
+  const sign = n > 0 ? "+" : n < 0 ? "-" : "";
+  return wrap(sign, body);
+}
+
+/** USD with cents. Amounts under $0.01 keep up to 4 decimals so $0.0019 stays visible. */
+export function formatUsd(value) {
+  const text = formatSigned(value, {
+    smallDigits: 4,
+    largeDigits: 2,
+    wrap: (sign, body) => (sign ? `${sign}$${body}` : `$${body}`),
+  });
+  return text || "n/a";
+}
+
+/** Realized XRP beside USD. Up to 6 decimals so a fraction of an XRP is not rounded away. */
+export function formatXrp(value) {
+  return formatSigned(value, {
+    smallDigits: 6,
+    largeDigits: 6,
+    wrap: (sign, body) => `${sign}${body} XRP`,
+  });
+}
+
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function sumKnown(values) {
+  let sum = 0;
+  let found = false;
+  for (const value of values) {
+    if (value == null) continue;
+    found = true;
+    sum += value;
+  }
+  if (!found) return null;
+  return Math.round(sum * 1e8) / 1e8;
+}
+
+/**
+ * Desk field is realized_pnl_xrp (PRs 141-143).
+ * When that key is missing, sum nested trade rows. Do not read notional_xrp.
+ */
+export function readRealizedXrp(row) {
+  if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+  if (hasOwn(row, "realized_pnl_xrp")) {
+    const direct = asMoney(row.realized_pnl_xrp);
+    if (direct != null) return direct;
+  }
+  const nested = [row.rows, row.trades, row.fills].find((value) => Array.isArray(value));
+  if (!nested) return null;
+  return sumKnown(nested.map((item) => readRealizedXrp(item)));
 }
 
 export function fillCountLabel(count) {
@@ -199,6 +257,7 @@ export function normalizeRecentTrades(payload, limit = AIM_PNL_DEFAULT_LIMIT) {
       agent: canonAgent(row.agent ?? row.agent_name) || asText(row.agent, 40),
       pair: asText(row.pair ?? row.market, 40),
       realized_pnl_usd: realized,
+      realized_pnl_xrp: readRealizedXrp(row),
       tx_hash: asTxHash(row.tx_hash ?? row.hash),
     });
   }
@@ -206,11 +265,16 @@ export function normalizeRecentTrades(payload, limit = AIM_PNL_DEFAULT_LIMIT) {
   return cleaned.slice(0, cap);
 }
 
-function putAgent(found, extras, name, realized, count) {
-  if (realized == null) return;
+function putAgent(found, extras, name, realized, count, xrp) {
+  if (realized == null && xrp == null) return;
   const agent = canonAgent(name);
   if (!agent) return;
-  const row = { agent, realized_pnl_usd: realized, trade_count: count };
+  const row = {
+    agent,
+    realized_pnl_usd: realized ?? 0,
+    realized_pnl_xrp: xrp,
+    trade_count: count,
+  };
   if (AIM_PNL_AGENT_ORDER.includes(agent)) found.set(agent, row);
   else extras.push(row);
 }
@@ -226,7 +290,8 @@ export function normalizeByAgent(raw) {
         extras,
         row.agent || row.id || row.name,
         asMoney(row.realized_pnl_usd ?? row.total_earned_usd ?? row.usd ?? row.pnl),
-        asCount(row.count ?? row.trade_count)
+        asCount(row.count ?? row.trade_count),
+        readRealizedXrp(row)
       );
     }
   } else if (raw && typeof raw === "object") {
@@ -237,15 +302,16 @@ export function normalizeByAgent(raw) {
           extras,
           agent,
           asMoney(value.realized_pnl_usd ?? value.total_earned_usd ?? value.usd ?? value.pnl),
-          asCount(value.count ?? value.trade_count)
+          asCount(value.count ?? value.trade_count),
+          readRealizedXrp(value)
         );
       } else {
-        putAgent(found, extras, agent, asMoney(value), null);
+        putAgent(found, extras, agent, asMoney(value), null, null);
       }
     }
   }
   const roster = AIM_PNL_AGENT_ORDER.map(
-    (agent) => found.get(agent) || { agent, realized_pnl_usd: 0, trade_count: 0 }
+    (agent) => found.get(agent) || { agent, realized_pnl_usd: 0, realized_pnl_xrp: null, trade_count: 0 }
   );
   return roster.concat(extras);
 }
@@ -288,6 +354,7 @@ export function normalizeAllAgents(raw) {
       agent_id: agent,
       role: asText(row.role, 80),
       realized_pnl_usd: asMoney(row.realized_pnl_usd) ?? 0,
+      realized_pnl_xrp: readRealizedXrp(row),
       wins_count: asCount(row.wins_count) ?? 0,
       losses_count: asCount(row.losses_count) ?? 0,
     });
@@ -298,6 +365,7 @@ export function normalizeAllAgents(raw) {
         agent_id: agent,
         role: "",
         realized_pnl_usd: 0,
+        realized_pnl_xrp: null,
         wins_count: 0,
         losses_count: 0,
       }
@@ -310,8 +378,12 @@ export function normalizePnlAll(payload) {
   const losses = asCount(body.losses_count) ?? 0;
   let closed = asCount(body.closed_trades_count);
   if (closed == null) closed = wins + losses;
+  const by_agent = normalizeAllAgents(body.by_agent);
+  let realized_pnl_xrp = readRealizedXrp(body);
+  if (realized_pnl_xrp == null) realized_pnl_xrp = sumKnown(by_agent.map((row) => row.realized_pnl_xrp));
   return {
     realized_pnl_usd: asMoney(body.realized_pnl_usd) ?? 0,
+    realized_pnl_xrp,
     gross_wins_usd: asMoney(body.gross_wins_usd),
     gross_losses_usd: asMoney(body.gross_losses_usd),
     wins_count: wins,
@@ -319,7 +391,7 @@ export function normalizePnlAll(payload) {
     closed_trades_count: closed,
     first_trade_at: asIso(body.first_trade_at),
     last_trade_at: asIso(body.last_trade_at),
-    by_agent: normalizeAllAgents(body.by_agent),
+    by_agent,
     by_strategy: strategyRows(body.by_strategy),
     source_note: asText(body.source_note, 240),
   };
@@ -328,10 +400,15 @@ export function normalizePnlAll(payload) {
 export function normalizePnlSummary(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
   const totals = body.totals && typeof body.totals === "object" ? body.totals : body;
+  const by_agent = normalizeByAgent(body.by_agent ?? totals.by_agent);
+  let realized_pnl_xrp = readRealizedXrp(totals);
+  if (realized_pnl_xrp == null && totals !== body) realized_pnl_xrp = readRealizedXrp(body);
+  if (realized_pnl_xrp == null) realized_pnl_xrp = sumKnown(by_agent.map((row) => row.realized_pnl_xrp));
   return {
     total_earned_usd: asMoney(totals.realized_pnl_usd ?? body.total_earned_usd),
+    realized_pnl_xrp,
     trade_count: asCount(totals.count ?? totals.trade_count ?? body.count ?? body.trade_count),
-    by_agent: normalizeByAgent(body.by_agent ?? totals.by_agent),
+    by_agent,
     window_start: asIso(totals.since ?? totals.window_start ?? body.since ?? body.window_start),
     window_end: asIso(totals.until ?? totals.window_end ?? body.until ?? body.window_end),
   };
