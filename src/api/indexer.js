@@ -711,6 +711,9 @@ async function withXrplToBackup(overview, prices, change) {
 function preferLedgerCount(endpointBody, overviewCount) {
   const fromEndpoint = numberOrNull(endpointBody?.count);
   const fromOverview = numberOrNull(overviewCount);
+  if (endpointBody?.source === "xrpl-lines" && fromEndpoint != null && fromEndpoint > 0) {
+    return { count: fromEndpoint, source: "xrpl-lines", stale: Boolean(endpointBody.stale) };
+  }
   const catching = Boolean(endpointBody?.catching_up) || endpointBody?.present === false;
   if (catching && fromOverview != null && fromOverview > 0) {
     return { count: Math.max(fromEndpoint || 0, fromOverview) };

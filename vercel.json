@@ -79,7 +79,7 @@
       "maxDuration": 60
     },
     "api/overview.js": {
-      "maxDuration": 20
+      "maxDuration": 60
     },
     "api/health.js": {
       "maxDuration": 10
