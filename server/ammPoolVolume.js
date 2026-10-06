@@ -147,10 +147,10 @@ export async function verifyAmmPools(pools = [], options = {}) {
     retries: Number.isFinite(Number(options.retries)) ? Number(options.retries) : 0,
     waitMs: Number(options.waitMs) || 200,
   };
-  const existenceBudget = Math.min(6000, deadlineMs || 6000);
+  const existenceBudget = Math.min(8_000, deadlineMs || 8_000);
   await mapLimit(
     list.filter((pool) => pool?.amm_account && !poolAlreadyLive(pool)),
-    Number(options.existenceConcurrency) || 4,
+    Number(options.existenceConcurrency) || 8,
     async (pool) => {
       if (Date.now() - started >= existenceBudget) {
         complete = false;

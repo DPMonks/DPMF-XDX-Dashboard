@@ -36,18 +36,20 @@ export function quoteSpecForPair(pair, pool = {}) {
   return null;
 }
 
-export async function xrplRpc(method, params, { fetchImpl = fetch, rpcUrl = DEFAULT_RPC } = {}) {
+export async function xrplRpc(method, params, { fetchImpl = fetch, rpcUrl = DEFAULT_RPC, timeoutMs = 8_000 } = {}) {
   const response = await fetchImpl(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ method, params: [params] }),
-    signal: AbortSignal.timeout(8_000),
+    signal: AbortSignal.timeout(Number(timeoutMs) || 8_000),
   });
   if (!response.ok) {
     throw new Error(`XRPL RPC ${response.status}`);
   }
   const body = await response.json();
-  return body?.result || {};
+  if (body?.result) return body.result;
+  if (body?.error) return body;
+  return {};
 }
 
 export async function fillNativeBookFromXrpl(pair, pool = {}, options = {}) {

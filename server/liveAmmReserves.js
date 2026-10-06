@@ -181,6 +181,19 @@ export async function loadLiveAmmReservesMany(queries = [], options = {}) {
   });
 }
 
+const PUBLIC_RPCS = ["https://xrplcluster.com", "https://s1.ripple.com:51234", "https://xrpl.ws"];
+
+function rpcCandidates(rpcUrl) {
+  const first = String(rpcUrl || "").trim();
+  return [...new Set([first, ...PUBLIC_RPCS].filter(Boolean))];
+}
+
+function accountIsMissing(result) {
+  const error = String(result?.error || "");
+  const message = String(result?.error_message || "");
+  return error === "actNotFound" || /account not found/i.test(message);
+}
+
 export async function accountStillExists(account, options = {}) {
   const name = String(account || "").trim();
   if (!name) return null;
@@ -188,26 +201,31 @@ export async function accountStillExists(account, options = {}) {
   const hit = accountCache.get(name);
   const ttl = hit?.exists === false ? DELETED_MS : CACHE_MS;
   if (hit && !options.fresh && now - hit.at < ttl) return hit.exists;
-  try {
-    const result = await withXrplRetry(
-      () => xrplRpc("account_info", { account: name, ledger_index: "validated" }, options),
-      {
-        retries: Number.isFinite(Number(options.retries)) ? Number(options.retries) : 0,
-        waitMs: Number(options.waitMs) || 200,
+  const checks = await Promise.all(
+    rpcCandidates(options.rpcUrl).map(async (rpcUrl) => {
+      try {
+        const result = await xrplRpc(
+          "account_info",
+          { account: name, ledger_index: "validated" },
+          { fetchImpl: options.fetchImpl, rpcUrl, timeoutMs: 3_000 }
+        );
+        if (accountIsMissing(result)) return false;
+        if (result?.account_data) return true;
+        return null;
+      } catch {
+        return null;
       }
-    );
-    if (result?.error === "actNotFound") {
-      accountCache.set(name, { at: now, exists: false });
-      return false;
-    }
-    if (result?.account_data) {
-      accountCache.set(name, { at: now, exists: true });
-      return true;
-    }
-    return null;
-  } catch {
-    return hit ? hit.exists : null;
+    })
+  );
+  if (checks.includes(false)) {
+    accountCache.set(name, { at: now, exists: false });
+    return false;
   }
+  if (checks.includes(true)) {
+    accountCache.set(name, { at: now, exists: true });
+    return true;
+  }
+  return hit ? hit.exists : null;
 }
 
 function alreadyLive(pool) {
