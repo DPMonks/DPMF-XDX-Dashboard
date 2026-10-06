@@ -31,6 +31,7 @@ test("AMM pool search matches XDX / quote, pair, or AMM account", () => {
     { pool: "XDX/XRP", quote: "XRP", amm_account: "rhEwhutV5EyYzTbBYDdK7dHxwdi5omqffB" },
     { pool: "XDX/RLUSD", quote: "RLUSD", amm_account: "rLbBzF9oxntVf4XxcyakNKJTci4yqSmQUu" },
     { pool: "XDX/PLX", quote: "PLX", amm_account: "rPlxPool" },
+    { pool: "XDX/BTC", quote: "BTC", quote_name: "Bitcoin", amm_account: "rBtcPool" },
   ];
   assert.deepEqual(
     filterAmmPools(pools, "rlusd").map((row) => row.pool),
@@ -44,7 +45,11 @@ test("AMM pool search matches XDX / quote, pair, or AMM account", () => {
     filterAmmPools(pools, "rhEwhut").map((row) => row.pool),
     ["XDX/XRP"]
   );
-  assert.equal(filterAmmPools(pools, "").length, 3);
+  assert.deepEqual(
+    filterAmmPools(pools, "bitcoin").map((row) => row.pool),
+    ["XDX/BTC"]
+  );
+  assert.equal(filterAmmPools(pools, "").length, 4);
 });
 
 test("searchPairHint turns a quote ticker into an XDX pair", () => {

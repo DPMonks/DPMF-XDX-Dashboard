@@ -2042,15 +2042,30 @@ body {
 
 .pool-card .pair-badge {
   margin: 0;
-  padding: 5px 12px;
+  padding: 4px 10px 4px 4px;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   flex: 0 1 auto;
-  max-width: 56%;
-  white-space: nowrap;
+  max-width: min(100%, 16rem);
+  gap: 6px;
+  min-width: 0;
+}
+
+.pool-token-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+  background: #12121a;
+}
+
+.pair-badge-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pool-updated {

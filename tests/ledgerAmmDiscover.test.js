@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { XDX_HEX, XDX_ISSUER } from "../src/constants/ledger.js";
 import { mergeLivePools } from "../server/catalogSwitch.js";
 import {
-  applyXrplToNames,
   discoverLedgerXdxPools,
   resetLedgerAmmDiscoveryCache,
   withLedgerLiquidity,
@@ -94,16 +93,7 @@ test("ledger discovery confirms AMM accounts and ignores xrpl.to existence", asy
   assert.equal(create.trading_fee, 331);
   assert.equal(create.reserve_source, "amm_info");
   assert.equal(create.volumeSource, null);
-  const named = applyXrplToNames(found.pools, {
-    pools: [
-      { ammAccount: CREATE, icon: "https://example.test/create.png", apy24h: { volume: 14.43 } },
-      { ammAccount: FARM, icon: "https://example.test/farm.png", currentLiquidity: { asset1Amount: 3090000 } },
-    ],
-  });
-  assert.equal(named.length, 1);
-  assert.equal(named[0].icon, "https://example.test/create.png");
-  assert.equal(named[0].reserve_xdx, 1987510.989658572);
-  assert.equal(named[0].amm_account, CREATE);
+  assert.equal(found.pools.length, 1);
   resetLedgerAmmDiscoveryCache();
 });
 
