@@ -110,7 +110,7 @@ export function ledgerVolumeOnPool(pool = {}, vol = null) {
       trades24h: vol.trades24h || 0,
     };
   }
-  if (pool?.volumeSource === "xrpl.to") {
+  if (String(pool?.volumeSource || "").startsWith("xrpl.to")) {
     return {
       ...pool,
       volume24h: 0,

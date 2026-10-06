@@ -106,13 +106,13 @@ test("ledger discovery confirms AMM accounts and ignores xrpl.to existence", asy
   resetLedgerAmmDiscoveryCache();
 });
 
-test("a tooBusy line read tries the next public node", async () => {
+test("a slowDown line read tries the next public node", async () => {
   resetLedgerAmmDiscoveryCache();
   let lines = 0;
   const fetchImpl = rpcFetch((method, params) => {
     if (method === "account_lines") {
       lines += 1;
-      if (lines === 1) return { error: "tooBusy", status: "error" };
+      if (lines === 1) return { error: "slowDown", status: "error" };
       return { lines: [{ account: CREATE, currency: "XDX", balance: "-2", limit_peer: "0" }] };
     }
     if (method === "account_info" && params.account === CREATE) {
