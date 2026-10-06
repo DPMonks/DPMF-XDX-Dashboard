@@ -690,7 +690,7 @@ async function withXrplToBackup(overview, prices, change) {
     !marketNeedsXrplTo(overview) &&
     !marketNeedsXrplTo(prices) &&
     !countsNeedXrplTo(overview) &&
-    Number(change?.xdx)
+    (Number(change?.xdx) || change?.source === "xrpl-ledger")
   ) {
     return { overview, prices, change };
   }
@@ -791,7 +791,8 @@ export async function getTokenDetailsHistory() {
     needsFullIssuanceHistory(localIssued) ? await fetchXrplToIssued() : []
   );
   const candlePrices = xdxPriceHistoryRows(candlesBody);
-  const priceRows = historyLooksShort(candlePrices, sparkline)
+  const ledgerCandles = String(candlesBody?.source || "").startsWith("xrpl-ledger");
+  const priceRows = !ledgerCandles && historyLooksShort(candlePrices, sparkline)
     ? [...(await fetchXrplToOhlc()), ...candlePrices]
     : candlePrices;
   const live = composeTokenDetails({
@@ -926,6 +927,16 @@ export async function getChartHistory() {
 }
 
 export async function getDailyXdxVolumeRows() {
+  const body = await api.candles().catch(() => null);
+  if (String(body?.source || "").startsWith("xrpl-ledger")) {
+    const rows = Array.isArray(body?.rows) ? body.rows : Array.isArray(body?.price_history) ? body.price_history : [];
+    return rows.map((row) => ({
+      timestamp: row.timestamp,
+      price_usd: row.price_usd,
+      volume_xdx: row.volume_xdx,
+      source: "xrpl-ledger",
+    }));
+  }
   return fetchXrplToOhlc();
 }
 

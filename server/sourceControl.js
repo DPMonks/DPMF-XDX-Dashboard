@@ -14,7 +14,7 @@ export function payloadUsable(suffix, body) {
     const xrp = Number(body.xrp);
     if (Number.isFinite(xdx) && xdx !== 0) return true;
     if (Number.isFinite(xrp) && xrp !== 0) return true;
-    return body.source === "xrpl.to" || body.source === "xrpl" || body.source === "hybrid";
+    return body.source === "xrpl.to" || body.source === "xrpl" || body.source === "hybrid" || body.source === "xrpl-ledger";
   }
   if (Array.isArray(body.holders) && body.holders.length) return true;
   if (Array.isArray(body.rows) && body.rows.length) return true;

@@ -32,6 +32,7 @@ test("last-good catalog memory keeps a usable free-API payload", () => {
   assert.equal(catalogMode({ dbUsed: true }), "railway");
   assert.equal(payloadUsable("prices/change24h", { xdx: -3.6, source: "xrpl.to" }), true);
   assert.equal(payloadUsable("prices/change24h", { xdx: 0, xrp: 0, source: "db" }), false);
+  assert.equal(payloadUsable("prices/change24h", { xdx: null, xrp: 0, source: "xrpl-ledger" }), true);
   resetCatalogMemory();
 });
 

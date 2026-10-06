@@ -95,28 +95,43 @@ export function applyXrplToOverview(overview = {}, token = {}, prices = {}) {
   const priced = applyXrplToPrices({ ...overview, ...prices }, token);
   const xdxUsd = num(priced.xdxUsd);
   const xrpUsd = num(priced.xrpUsd ?? overview.xrpUsd);
+  const ledgerCounts = overview.holders_source === "xrpl-lines";
+  const ledgerVolume = overview.volumeLedger === true || overview.volumeSource === "xrpl-amm";
+  const ledgerXdx = Number(overview.volume24hXdx ?? overview.volume24h);
+  const keptVolume = Number.isFinite(ledgerXdx) && ledgerXdx > 0 ? ledgerXdx : 0;
   const next = {
     ...overview,
     ...priced,
-    holder_count: num(overview.holder_count ?? overview.holders) || num(token.holders) || null,
-    holders: num(overview.holders ?? overview.holder_count) || num(token.holders) || null,
-    trustlines: num(overview.trustlines ?? overview.trustline_count) || num(token.trustlines) || null,
-    trustline_count: num(overview.trustline_count ?? overview.trustlines) || num(token.trustlines) || null,
+    holder_count: ledgerCounts
+      ? num(overview.holder_count ?? overview.holders) || null
+      : num(overview.holder_count ?? overview.holders) || num(token.holders) || null,
+    holders: ledgerCounts
+      ? num(overview.holders ?? overview.holder_count) || null
+      : num(overview.holders ?? overview.holder_count) || num(token.holders) || null,
+    trustlines: ledgerCounts
+      ? num(overview.trustlines ?? overview.trustline_count) || null
+      : num(overview.trustlines ?? overview.trustline_count) || num(token.trustlines) || null,
+    trustline_count: ledgerCounts
+      ? num(overview.trustline_count ?? overview.trustlines) || null
+      : num(overview.trustline_count ?? overview.trustlines) || num(token.trustlines) || null,
     lp_holder_count: num(overview.lp_holder_count) || num(token.lpHolders) || null,
-    volume24hXrp: num(overview.volume24hXrp) || num(token.vol24hXrp) || null,
-    volume24hXdx:
-      num(overview.volume24hXdx) ||
-      xdxFromXrpVolume(token.vol24hXrp, token.exchXrp || overview.xdxPerXrp || overview.xdx_per_xrp) ||
-      (looksLikeXdxVolume(overview.volume24h) ? num(overview.volume24h) : 0) ||
-      null,
-    volume24hUsd:
-      num(overview.volume24hUsd) ||
-      (num(token.vol24hXrp) && xrpUsd ? token.vol24hXrp * xrpUsd : null),
-    volume24h:
-      num(overview.volume24hXdx) ||
-      xdxFromXrpVolume(token.vol24hXrp, token.exchXrp || overview.xdxPerXrp || overview.xdx_per_xrp) ||
-      (looksLikeXdxVolume(overview.volume24h) ? num(overview.volume24h) : 0) ||
-      null,
+    volume24hXrp: ledgerVolume ? num(overview.volume24hXrp) || null : num(overview.volume24hXrp) || num(token.vol24hXrp) || null,
+    volume24hXdx: ledgerVolume
+      ? keptVolume
+      : num(overview.volume24hXdx) ||
+        xdxFromXrpVolume(token.vol24hXrp, token.exchXrp || overview.xdxPerXrp || overview.xdx_per_xrp) ||
+        (looksLikeXdxVolume(overview.volume24h) ? num(overview.volume24h) : 0) ||
+        null,
+    volume24hUsd: ledgerVolume
+      ? num(overview.volume24hUsd) || null
+      : num(overview.volume24hUsd) ||
+        (num(token.vol24hXrp) && xrpUsd ? token.vol24hXrp * xrpUsd : null),
+    volume24h: ledgerVolume
+      ? keptVolume
+      : num(overview.volume24hXdx) ||
+        xdxFromXrpVolume(token.vol24hXrp, token.exchXrp || overview.xdxPerXrp || overview.xdx_per_xrp) ||
+        (looksLikeXdxVolume(overview.volume24h) ? num(overview.volume24h) : 0) ||
+        null,
     tvl: num(overview.tvl_usd ?? overview.tvl) || tvlUsdFromXrplTo(token, xrpUsd) || null,
     tvl_usd: num(overview.tvl_usd ?? overview.tvl) || tvlUsdFromXrplTo(token, xrpUsd) || null,
     ammMarketCap: num(overview.ammMarketCap ?? overview.tvl_usd) || tvlUsdFromXrplTo(token, xrpUsd) || null,
@@ -138,6 +153,7 @@ export function applyXrplToOverview(overview = {}, token = {}, prices = {}) {
 
 export function applyXrplToChange(change = {}, token = {}) {
   const next = { ...change };
+  if (next.source === "xrpl-ledger") return next;
   if (!(Number(next.xdx) || Number(next.XDX)) && Number.isFinite(Number(token.change24h))) {
     next.xdx = Number(token.change24h);
     next.source = next.source && next.source !== "xrpl.to" ? "hybrid" : "xrpl.to";

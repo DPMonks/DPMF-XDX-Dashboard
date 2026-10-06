@@ -344,6 +344,26 @@ function markPostgresDown() {
   dbDownUntil = Date.now() + 8_000;
 }
 
+export async function queryIndexerDb(sql, params = []) {
+  const db = getPool();
+  if (!db) return { ok: false, reason: "no-database", rows: [] };
+  try {
+    const result = await db.query(sql, params);
+    return { ok: true, reason: "ok", rows: result.rows || [] };
+  } catch (error) {
+    const code = String(error?.code || "");
+    if (code === "42501" || /permission denied/i.test(String(error?.message || ""))) {
+      return { ok: false, reason: "read-only", rows: [] };
+    }
+    if (code === "42P01") return { ok: false, reason: "missing-table", rows: [] };
+    if (isConnectError(error)) {
+      logDbError(error);
+      markPostgresDown();
+    }
+    return { ok: false, reason: "error", rows: [] };
+  }
+}
+
 function getPool() {
   const raw = databaseUrl();
   if (!raw) return null;

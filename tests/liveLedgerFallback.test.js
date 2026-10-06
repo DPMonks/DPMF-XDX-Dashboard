@@ -19,6 +19,7 @@ import {
 } from "../server/walletLedger.js";
 import { lpHeldForPair } from "../src/xaman/tradeTx.js";
 import { liveCatalogPayload } from "../server/liveCatalog.js";
+import { resetLedgerCandleCache } from "../server/ledgerCandles.js";
 import { RLUSD_HEX, RLUSD_ISSUER } from "../src/constants/ledger.js";
 
 test("xrpDropsFromAccountInfo ignores missing or zero Balance", () => {
@@ -191,6 +192,7 @@ test("live wallet balances prefer the XRPL account and XDX line", async () => {
 });
 
 test("a down database still has a live token and price payload", async () => {
+  resetLedgerCandleCache();
   const now = Date.now();
   const fetchImpl = async (url, options = {}) => {
     const target = String(url || "");
@@ -258,9 +260,9 @@ test("a down database still has a live token and price payload", async () => {
     }
     return { ok: true, json: async () => ({ result: { offers: [] } }) };
   };
-  const empty = await liveCatalogPayload("prices/change24h", { fetchImpl, fresh: true, now });
-  assert.equal(empty.source, "xrpl.to");
-  assert.equal(empty.xdx, -3.6);
+  const empty = await liveCatalogPayload("prices/change24h", { fetchImpl, fresh: true, now, skipStore: true });
+  assert.equal(empty.source, "xrpl-ledger");
+  assert.equal(empty.xdx, null);
   const prices = await liveCatalogPayload("prices", { fetchImpl, fresh: true, now });
   assert.ok(Number(prices.xdxUsd) > 0);
   const counts = await liveCatalogPayload("holders/count", { fetchImpl, fresh: true, now });
@@ -273,9 +275,9 @@ test("a down database still has a live token and price payload", async () => {
   assert.equal(charts[0].holders, 58);
   const flows = await liveCatalogPayload("xdx-flows", { fetchImpl, fresh: true, now });
   assert.deepEqual(flows, []);
-  const spark = await liveCatalogPayload("sparkline/XDX", { fetchImpl, fresh: true, now });
+  const spark = await liveCatalogPayload("sparkline/XDX", { fetchImpl, fresh: true, now, skipStore: true });
   assert.equal(Array.isArray(spark), true);
-  assert.equal(spark[0].price_usd, 0.000046);
+  assert.equal(spark.length, 0);
   const lp = await liveCatalogPayload("top-lp", { fetchImpl, fresh: true, now, search: "?pool=all" });
   assert.equal(lp.catching_up, false);
   assert.ok(lp.holders.length > 0);
@@ -284,7 +286,9 @@ test("a down database still has a live token and price payload", async () => {
   assert.ok(Array.isArray(tvl));
   assert.ok(Number(tvl[0].tvl) > 0);
   const amm = await liveCatalogPayload("amm", { fetchImpl, fresh: true, now });
-  assert.ok(Number(amm.volume24h) > 1_000_000);
+  assert.equal(Number(amm.volume24h), 0);
+  assert.equal(amm.volumeSource, "xrpl-amm");
+  assert.equal(amm.volumeLedger, true);
   assert.equal(amm.volumeUnit, "xdx");
   const xrpPool = (amm.pools || []).find((row) => row.pool === "XDX/XRP") || amm.pools?.[0];
   assert.equal(xrpPool.volumeLedger, true);
@@ -292,6 +296,7 @@ test("a down database still has a live token and price payload", async () => {
   const lpChart = await liveCatalogPayload("charts/lp-holders", { fetchImpl, fresh: true, now });
   assert.ok(Array.isArray(lpChart));
   assert.equal(lpChart[0].lp_holder_count, 58);
+  resetLedgerCandleCache();
 });
 
 test("wallet LP from ledger keeps XDX/XSQUAD tokens off the XDX/XRP pair", async () => {
