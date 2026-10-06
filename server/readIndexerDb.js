@@ -75,7 +75,8 @@ import {
 import { knownLivePoolSpecs, liveCatalogPayload, loadLiveMarket } from "./liveCatalog.js";
 import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
 import { catalogHealth } from "./sourceControl.js";
-import { FREE_API_HEADERS, loadXrplToXdxAmmPools } from "./xrplToCatalog.js";
+import { FREE_API_HEADERS } from "./xrplToCatalog.js";
+import { discoverLedgerXdxPools } from "./ledgerAmmDiscover.js";
 import {
   findDiscoveredPool,
   liveQueryFromPool,
@@ -2423,8 +2424,8 @@ function walletLedgerResult(suffix, search = "") {
       fresh: params.get("fresh") === "1",
     };
     const reserves = needsDiscoveredAmmLookup(pair, { ammAccount, issuer })
-      ? loadXrplToXdxAmmPools()
-          .then((rows) => liveQueryFromPool(query, findDiscoveredPool(rows, pair)))
+      ? discoverLedgerXdxPools()
+          .then((found) => liveQueryFromPool(query, findDiscoveredPool(found.pools || [], pair)))
           .catch(() => query)
       : Promise.resolve(query);
     return reserves.then((next) => loadLiveAmmReserves(next)).then((body) => ok(body));

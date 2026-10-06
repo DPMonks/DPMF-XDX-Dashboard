@@ -29,12 +29,6 @@ import {
 } from "../utils/xrplToToken";
 import { detectQuoteUsd, preferUsdPoolSplit } from "../utils/poolSplit";
 import { sanePoolQuoteReserve } from "../ammPools";
-import {
-  mergeDiscoveredXdxPools,
-  poolsFromXrplToAmm,
-  sortPoolsByXdxReserve,
-  xrplToXdxAmmListUrl,
-} from "../utils/xrplToAmm";
 import { overlayPoolFlowVolumes } from "../utils/lpVolume";
 import { LIST_PAGE_SIZE, shouldFetchMoreRows } from "../utils/pagination";
 import {
@@ -346,32 +340,13 @@ export async function getOverview() {
   return api.overview();
 }
 
-let clientAmmListCache = { at: 0, rows: null };
-const CLIENT_AMM_LIST_MS = 60_000;
-
-export function resetClientAmmListCache() {
-  clientAmmListCache = { at: 0, rows: null };
+function deletedAmmAccounts(body) {
+  const list = Array.isArray(body?.deleted_amms) ? body.deleted_amms : [];
+  return new Set(list.map((id) => String(id || "").trim()).filter(Boolean));
 }
 
-async function clientDiscoveredXdxPools(prices = {}) {
-  const now = Date.now();
-  if (clientAmmListCache.rows && now - clientAmmListCache.at < CLIENT_AMM_LIST_MS) {
-    return clientAmmListCache.rows;
-  }
-  try {
-    const response = await fetch(xrplToXdxAmmListUrl(), { headers: { accept: "application/json" } });
-    if (!response.ok) return clientAmmListCache.rows || [];
-    const payload = await response.json();
-    const rows = poolsFromXrplToAmm(payload, {
-      xrpPerXdx: prices.xdxPerXrp || prices.xdx_per_xrp,
-      xdxUsd: prices.xdxUsd,
-      xrpUsd: prices.xrpUsd,
-    });
-    if (rows.length) clientAmmListCache = { at: now, rows };
-    return rows.length ? rows : clientAmmListCache.rows || [];
-  } catch {
-    return clientAmmListCache.rows || [];
-  }
+function ammAccountOf(row) {
+  return String(row?.amm_account || row?.amm || row?.account || "").trim();
 }
 
 export async function getAmm() {
@@ -382,11 +357,13 @@ export async function getAmm() {
   ]);
   const xdxUsd = numberOrNull(prices?.xdxUsd ?? prices?.recorded_price);
   const xrpUsd = numberOrNull(prices?.xrpUsd);
-  const discovered = await clientDiscoveredXdxPools(prices);
-  const merged = sortPoolsByXdxReserve(mergeDiscoveredXdxPools(asArray(body), discovered));
+  // Server /lp-pools is ledger-checked. Do not append xrpl.to status=all here.
+  // That list still includes deleted AMMs, and the browser cannot call the ledger.
+  const gone = deletedAmmAccounts(body);
+  const rows = asArray(body).filter((row) => !gone.has(ammAccountOf(row)));
   return overlayPoolFlowVolumes(
     uniquePools(
-      merged
+      rows
         .map(mapPool)
         .filter(Boolean)
         .map((row) => withPoolSplit(row, row.xdxUsd || xdxUsd, xrpUsd, prices))
