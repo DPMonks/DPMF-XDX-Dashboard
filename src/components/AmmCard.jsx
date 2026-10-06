@@ -106,6 +106,13 @@ function SplitBar({ asset, quote, xdxPct, quotePct, lead, reserveXdx, reserveQuo
   );
 }
 
+function poolBadgeLabel(pool) {
+  const name = String(pool?.quote_name || "").trim();
+  const quote = String(pool?.quote || "").trim();
+  if (name && name !== quote) return `XDX/${name}`;
+  return pool?.pool || "";
+}
+
 export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemoveLiquidity }) {
   const { t, locale } = useI18n();
   const { walletAddress, connectWallet } = useWallet();
@@ -466,7 +473,24 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
             }`}
           >
             <header className="pool-card-head">
-              <span className="pair-badge">{pool.pool}</span>
+              <span className="pair-badge">
+                {pool.icon ? (
+                  <img
+                    className="pool-token-logo"
+                    src={pool.icon}
+                    alt=""
+                    width="22"
+                    height="22"
+                    onError={(event) => {
+                      const img = event.currentTarget;
+                      if (img.dataset.fallback === "1") return;
+                      img.dataset.fallback = "1";
+                      img.src = "https://fuzion-xio.dpmf.technology/default-token-logo.png";
+                    }}
+                  />
+                ) : null}
+                <span className="pair-badge-label">{poolBadgeLabel(pool)}</span>
+              </span>
               {pool.low_liquidity ? (
                 <span className="pool-liquidity-tag">{t.lowLiquidity || "Low liquidity"}</span>
               ) : null}

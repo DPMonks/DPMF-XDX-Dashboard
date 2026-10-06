@@ -158,22 +158,6 @@ export function withLedgerLiquidity(pools = [], { xrpPerXdx = 0 } = {}) {
   });
 }
 
-export function applyXrplToNames(pools = [], payload = null) {
-  const rows = Array.isArray(payload?.pools) ? payload.pools : [];
-  const names = new Map();
-  for (const row of rows) {
-    const amm = String(row?.ammAccount || row?.amm_account || row?.account || "").trim().toLowerCase();
-    if (!amm) continue;
-    const icon = row.icon || row.logo || row.image || row.tokenIcon || null;
-    if (icon) names.set(amm, icon);
-  }
-  if (!names.size) return pools;
-  return pools.map((pool) => {
-    const icon = names.get(String(pool.amm_account || "").trim().toLowerCase());
-    return icon ? { ...pool, icon } : pool;
-  });
-}
-
 function rpcOptions(options) {
   return {
     fetchImpl: options.fetchImpl,

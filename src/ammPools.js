@@ -21,6 +21,7 @@ export function filterAmmPools(pools = [], query = "") {
       row?.pool_name,
       row?.pair,
       row?.quote,
+      row?.quote_name,
       row?.amm_account,
       row?.quote_issuer,
     ]

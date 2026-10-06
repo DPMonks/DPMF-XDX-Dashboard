@@ -32,14 +32,13 @@ import {
   loadXrplToLpCounts,
   loadXrplToLpOwners,
   loadXrplToRank,
-  loadXrplToXdxAmmRaw,
   loadXrpSparkline,
 } from "./xrplToCatalog.js";
 import { sortPoolsByXdxReserve } from "../src/utils/xrplToAmm.js";
 import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
 import { verifyAmmPools } from "./ammPoolVolume.js";
+import { applyFuzionAssets, loadFuzionAssetListings } from "./fuzionAssets.js";
 import {
-  applyXrplToNames,
   discoverLedgerXdxPools,
   ledgerAmmDiscoveryStatus,
   withLedgerLiquidity,
@@ -243,7 +242,7 @@ export async function loadLiveMarket(options = {}) {
     return marketCache;
   }
   const scanStarted = Date.now();
-  // Ledger trust lines decide which AMMs exist. xrpl.to is names only, and it can run beside the line walk.
+  // Ledger trust lines decide which AMMs exist. Fuzion supplies logos and names.
   const ledgerTask = discoverLedgerXdxPools({
     fetchImpl: options.fetchImpl,
     rpcUrl: options.rpcUrl,
@@ -252,7 +251,11 @@ export async function loadLiveMarket(options = {}) {
     lineBudgetMs: 40_000,
     confirmBudgetMs: 16_000,
   });
-  const namesTask = loadXrplToXdxAmmRaw({ ...options, timeoutMs: 5_000 }).catch(() => null);
+  const fuzionTask = loadFuzionAssetListings({
+    fetchImpl: options.fetchImpl,
+    timeoutMs: 5_000,
+    now,
+  }).catch(() => null);
   const [quote, token, issuerLocked, blackhole, lpCounts] = await Promise.all([
     loadLiveXrpQuote(options),
     loadXrplToToken(options),
@@ -336,7 +339,7 @@ export async function loadLiveMarket(options = {}) {
     candidates: 0,
     lines_done: false,
   }));
-  const names = await namesTask;
+  const listings = await fuzionTask;
   let poolSource;
   let ledgerComplete;
   let merged;
@@ -344,10 +347,7 @@ export async function loadLiveMarket(options = {}) {
     poolSource = "ledger";
     ledgerComplete = Boolean(ledger.complete);
     merged = sortPoolsByXdxReserve(
-      applyXrplToNames(
-        withLedgerLiquidity(ledger.pools, { xrpPerXdx: prices.xdxPerXrp || prices.xdx_per_xrp }),
-        names
-      )
+      withLedgerLiquidity(ledger.pools, { xrpPerXdx: prices.xdxPerXrp || prices.xdx_per_xrp })
     );
   } else {
     // A missed line scan must not fall back to stored rows. Those still include deleted AMMs.
@@ -355,6 +355,7 @@ export async function loadLiveMarket(options = {}) {
     ledgerComplete = false;
     merged = sortPoolsByXdxReserve(pricedRows.filter((row) => row.reserve_source === "amm_info"));
   }
+  merged = applyFuzionAssets(merged, listings);
   const verifyBudget = Math.max(1_500, Math.min(8_000, 54_000 - (Date.now() - scanStarted)));
   const checked = await verifyAmmPools(merged, {
     ...options,

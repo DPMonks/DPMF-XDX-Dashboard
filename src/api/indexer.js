@@ -246,6 +246,9 @@ function mapPool(row) {
     lead: pick(row, ["lead"]) || null,
     low_liquidity: Boolean(row.low_liquidity),
     liquidity_xrp: numberOrNull(pick(row, ["liquidity_xrp", "liquidityXrp"])),
+    icon: pick(row, ["icon", "logo"]) || null,
+    quote_name: pick(row, ["quote_name", "quoteName"]) || null,
+    icon_source: pick(row, ["icon_source", "iconSource"]) || null,
     updated: pick(row, ["updated", "timestamp", "updated_at"]),
   };
 }
