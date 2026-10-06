@@ -399,7 +399,7 @@ export const api = {
   health: () => getJson("/health"),
   healthXrpl: () => getJson("/health/xrpl"),
   overview: () => getJson(endpoint("overview"), { queue: false }),
-  amm: () => getJson(endpoint("amm")),
+  amm: () => getJson(endpoint("amm"), { timeoutMs: 45000, immediate: true, retries: 1 }),
   pools: async () => {
     const body = await getJson(endpoint("pools"));
     if (Array.isArray(body?.pools)) return body.pools;
@@ -448,7 +448,7 @@ export const api = {
     const join = path.includes("?") ? "&" : "?";
     return getJson(`${path}${join}pool=${encodeURIComponent(pool)}`);
   },
-  lpPools: () => getJson(endpoint("lpPools") || "/lp-pools"),
+  lpPools: () => getJson(endpoint("lpPools") || "/lp-pools", { timeoutMs: 45000, immediate: true, retries: 1 }),
   tvlHistory: () => getJson(endpoint("tvlHistory")),
   holdersHistory: (extra = {}) => getJson(endpoint("holdersHistory"), extra),
   lpHoldersHistory: () => getJson(endpoint("lpHoldersHistory")),

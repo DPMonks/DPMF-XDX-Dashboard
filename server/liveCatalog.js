@@ -359,11 +359,32 @@ export async function loadLiveMarket(options = {}) {
       .map((account) => String(account || "").trim())
       .filter(Boolean)
   );
-  const pools = sortPoolsByXdxReserve(
+  const verifiedPools = sortPoolsByXdxReserve(
     checked.pools.filter((row) => !gone.has(String(row.amm_account || "").trim()))
   );
+  const priorByAccount = new Map(
+    (marketCache.pools || []).filter((row) => row?.volumeLedger).map((row) => [String(row.amm_account || ""), row])
+  );
+  const pools = verifiedPools.map((row) => {
+    if (row.volumeLedger) return row;
+    const prior = priorByAccount.get(String(row.amm_account || ""));
+    if (!prior) return row;
+    return {
+      ...row,
+      volume24h: prior.volume24h,
+      volume24hXdx: prior.volume24hXdx,
+      volumeSource: prior.volumeSource || "xrpl-amm",
+      volumeLedger: true,
+      trades24h: prior.trades24h || 0,
+    };
+  });
   const xrpRow = pools.find((row) => row.pool === "XDX/XRP") || pricedRows[0] || {};
-  const ledgerVolume = xrpRow.volumeLedger ? Number(xrpRow.volume24hXdx) : null;
+  const priorOverview = marketCache.overview || {};
+  const ledgerVolume = xrpRow.volumeLedger
+    ? Number(xrpRow.volume24hXdx)
+    : priorOverview.volumeLedger
+      ? Number(priorOverview.volume24hXdx)
+      : null;
   const spot = xrpPerXdx(xdxUsd, xrpUsd) || (reserveXdx > 0 && reserveXrp > 0 ? reserveXrp / reserveXdx : 0);
   const volume24h = ledgerVolume != null && Number.isFinite(ledgerVolume)
     ? ledgerVolume
