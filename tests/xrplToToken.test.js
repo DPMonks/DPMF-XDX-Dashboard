@@ -53,6 +53,34 @@ test("xrpl.to fills empty Postgres prices and holder counts", () => {
   assert.equal(applyXrplToChange({ xdx: 0 }, sample).xdx, -4.89);
 });
 
+test("issuer line counts and a ledger volume of 0 stay on the token card", () => {
+  const overview = applyXrplToOverview(
+    {
+      xdxUsd: 0.00005,
+      holder_count: 15879,
+      holders: 15879,
+      trustlines: 20048,
+      trustline_count: 20048,
+      holders_source: "xrpl-lines",
+      volume24h: 0,
+      volume24hXdx: 0,
+      volumeLedger: true,
+      volumeSource: "xrpl-amm",
+      xrpUsd: 1.5,
+      source: "xrpl",
+    },
+    sample,
+    { xdxUsd: 0.00005, xrpUsd: 1.5 }
+  );
+  assert.equal(overview.holder_count, 15879);
+  assert.equal(overview.trustline_count, 20048);
+  assert.equal(overview.volume24h, 0);
+  assert.equal(overview.volume24hXdx, 0);
+  assert.equal(overview.volumeSource, "xrpl-amm");
+  assert.equal(applyXrplToChange({ xdx: null, source: "xrpl-ledger" }, sample).source, "xrpl-ledger");
+  assert.equal(applyXrplToChange({ xdx: null, source: "xrpl-ledger" }, sample).xdx, null);
+});
+
 test("xrpl.to still fills holder boxes when the live AMM already has a price", () => {
   const overview = applyXrplToOverview(
     { xdxUsd: 0.00005, holder_count: 0, trustlines: 0, xrpUsd: 1.5, source: "xrpl" },

@@ -89,6 +89,37 @@ test("issuer lock stays on DB when issued is present", () => {
 test("change24h uses live only when the DB row is blank", () => {
   assert.equal(mergeChange24h({ xdx: -2, xrp: 1 }, { xdx: -4, xrp: 0 }).xdx, -2);
   assert.equal(mergeChange24h({ xdx: 0, xrp: 0 }, { xdx: -3.6, xrp: 0.2 }).xdx, -3.6);
+  const ledger = mergeChange24h(
+    { xdx: -3.6, xrp: 1, source: "xrpl.to" },
+    { xdx: null, xrp: 0.4, source: "xrpl-ledger", stale: true, partial: true }
+  );
+  assert.equal(ledger.source, "xrpl-ledger");
+  assert.equal(ledger.xdx, null);
+  assert.equal(ledger.xrp, 0.4);
+});
+
+test("ledger candles replace stored price history when the walk has rows", () => {
+  const db = { price_history: [{ timestamp: "2026-01-01T00:00:00.000Z", price_usd: 0.00001 }], rows: [{ timestamp: "2026-01-01T00:00:00.000Z" }], source: "db" };
+  const live = {
+    source: "xrpl-ledger",
+    price_history: [{ timestamp: "2026-10-06T16:00:00.000Z", price_usd: 0.00008 }],
+    rows: [{ timestamp: "2026-10-06T16:00:00.000Z", price_usd: 0.00008 }],
+  };
+  const kept = mergeCatalogPayload("charts/candles", db, live);
+  assert.equal(kept.source, "xrpl-ledger");
+  assert.equal(kept.rows[0].price_usd, 0.00008);
+  const fallback = mergeCatalogPayload("charts/candles", db, { source: "xrpl-ledger", rows: [], price_history: [] });
+  assert.equal(fallback.source, "db");
+});
+
+test("a ledger overview volume of 0 replaces a stored xrpl.to volume", () => {
+  const merged = mergeLiveOverview(
+    { volume24h: 4_200_000, volume24hXdx: 4_200_000, volumeSource: "xrpl.to", xdxUsd: 0.00005 },
+    { volume24h: 0, volume24hXdx: 0, volumeLedger: true, volumeSource: "xrpl-amm", xdxUsd: 0.00005 }
+  );
+  assert.equal(merged.volume24hXdx, 0);
+  assert.equal(merged.volumeSource, "xrpl-amm");
+  assert.equal(merged.volumeLedger, true);
 });
 
 test("mergeCatalogPayload routes prices, overview, and lists", () => {

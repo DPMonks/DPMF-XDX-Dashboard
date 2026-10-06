@@ -193,6 +193,9 @@ export function mergeLiveOverview(db = {}, live = {}) {
   } else if (Array.isArray(live.pools) && live.pools.length) {
     next.pools = mergePoolRows(db.pools, live.pools);
   }
+  if (live.volumeLedger || live.volumeSource === "xrpl-amm") {
+    Object.assign(next, preferRailwayXdxVolume(db, live));
+  }
   const liveUsed = marketUsed || countUsed || metaUsed || Boolean(live.pools?.length);
   next.source = catalogSource(dbHasMarket(db) || dbHasCounts(db), liveUsed);
   next.catching_up = Boolean(live.catching_up && !dbHasCounts(db));
@@ -293,6 +296,17 @@ export function mergeLivePools(db = {}, live = {}) {
 }
 
 export function mergeChange24h(db = {}, live = {}) {
+  if (live?.source === "xrpl-ledger") {
+    return {
+      ...db,
+      ...live,
+      xdx: live.xdx == null || live.xdx === "" || !Number.isFinite(Number(live.xdx)) ? null : Number(live.xdx),
+      xrp: !isBlankAmount(live.xrp) ? live.xrp : db.xrp ?? null,
+      source: "xrpl-ledger",
+      stale: Boolean(live.stale),
+      partial: Boolean(live.partial),
+    };
+  }
   const next = { ...db };
   let liveUsed = false;
   for (const key of ["xdx", "xrp", "lp"]) {
@@ -402,7 +416,15 @@ export function mergeCatalogPayload(suffix, db, live) {
   if (path === "xdx-flows" || path === "trades" || path === "charts/trades") {
     return mergeTradeFlows(db, live);
   }
-  if (/^charts\//.test(path) || path === "chart/candles" || path === "charts/candles" || path.startsWith("sparkline/")) {
+  if (path === "chart/candles" || path === "charts/candles") {
+    if (live?.source === "xrpl-ledger" && hasRows(live)) return live;
+    return hasRows(db) ? db : live;
+  }
+  if (path.startsWith("sparkline/")) {
+    if (hasRows(live)) return live;
+    return hasRows(db) ? db : live;
+  }
+  if (/^charts\//.test(path)) {
     return hasRows(db) ? db : live;
   }
   if (path === "top-holders" || path === "top-holders-v2" || path === "top-lp") {

@@ -24,7 +24,6 @@ import {
 } from "../src/orderbook.js";
 import {
   FREE_API_HEADERS,
-  loadXrplToCandles,
   loadXrplToFlows,
   loadXrplToHolderGraph,
   loadXrplToHolders,
@@ -37,6 +36,7 @@ import {
 import { sortPoolsByXdxReserve } from "../src/utils/xrplToAmm.js";
 import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
 import { verifyAmmPools } from "./ammPoolVolume.js";
+import { loadLedgerCandles } from "./ledgerCandles.js";
 import { applyFuzionAssets, loadFuzionAssetListings } from "./fuzionAssets.js";
 import {
   discoverLedgerXdxPools,
@@ -277,10 +277,11 @@ export async function loadLiveMarket(options = {}) {
   const xrpPool = lives[liveSpecs.findIndex((spec) => spec.pair === "XDX/XRP")] || lives[0] || {};
   const rlusdPool = lives.find((row) => String(row?.pair || "").includes("RLUSD")) || lives[1] || {};
   const xrpUsd = num(quote.usd);
+  const reserveXdx = num(xrpPool.reserve_xdx ?? xrpPool.reserve_asset);
+  const reserveXrp = num(xrpPool.reserve_currency ?? xrpPool.reserve_quote);
   const xdxUsd = pickXdxUsd({
     ammXrp: xdxUsdFromXrpPool(xrpPool, xrpUsd),
     ammRlusd: xdxUsdFromRlusdPool(rlusdPool, 1),
-    xrplTo: xdxUsdFromXrplTo(token, xrpUsd),
   });
   const liveRates = await loadQuoteXrpRates(options).catch(() => ({}));
   const prices = attachXdxFiat(
@@ -295,8 +296,8 @@ export async function loadLiveMarket(options = {}) {
         usdJpy: num(quote.usdJpy),
         xdxUsd,
         recorded_price: xdxUsd,
-        xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
-        xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
+        xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd) || (reserveXdx > 0 && reserveXrp > 0 ? reserveXrp / reserveXdx : 0),
+        xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd) || (reserveXdx > 0 && reserveXrp > 0 ? reserveXrp / reserveXdx : 0),
         RLUSD: 1,
         quotes: { XRP: xrpUsd, RLUSD: 1 },
         source: "xrpl",
@@ -306,22 +307,10 @@ export async function loadLiveMarket(options = {}) {
     ),
     quote
   );
-  const reserveXdx = num(xrpPool.reserve_xdx ?? xrpPool.reserve_asset);
-  const reserveXrp = num(xrpPool.reserve_currency ?? xrpPool.reserve_quote);
   const tvlUsd = reserveXrp > 0 && xrpUsd > 0 ? reserveXrp * 2 * xrpUsd : 0;
   const burned = Number(issuerLocked.issuer_locked || 0);
   const circulating = Number(issuerLocked.circulating || XDX_TOTAL_SUPPLY);
-  const volumes = await loadPoolXdxVolumes({
-    token,
-    reserveXdx,
-    reserveXrp,
-    xdxUsd,
-    xrpUsd,
-    now,
-    fresh: options.fresh,
-    fetchImpl: options.fetchImpl,
-    pairs: liveSpecs.map((spec) => spec.pair),
-  }).catch(() => ({}));
+  const volumes = {};
   const featuredGone = lives
     .filter((row) => row?.reserve_source === "deleted" && row.amm_account)
     .map((row) => String(row.amm_account).trim());
@@ -374,9 +363,15 @@ export async function loadLiveMarket(options = {}) {
     checked.pools.filter((row) => !gone.has(String(row.amm_account || "").trim()))
   );
   const xrpRow = pools.find((row) => row.pool === "XDX/XRP") || pricedRows[0] || {};
-  const volume24h = num(volumes["XDX/XRP"]?.volume24hXdx) || num(xrpRow.volume24h);
-  const volume24hUsd = num(volumes["XDX/XRP"]?.volume24hUsd);
-  const volume24hXrp = num(volumes["XDX/XRP"]?.volume24hXrp) || num(token.vol24hXrp);
+  const ledgerVolume = xrpRow.volumeLedger ? Number(xrpRow.volume24hXdx) : null;
+  const spot = xrpPerXdx(xdxUsd, xrpUsd) || (reserveXdx > 0 && reserveXrp > 0 ? reserveXrp / reserveXdx : 0);
+  const volume24h = ledgerVolume != null && Number.isFinite(ledgerVolume)
+    ? ledgerVolume
+    : num(volumes["XDX/XRP"]?.volume24hXdx) || num(xrpRow.volume24h);
+  const volume24hUsd = xdxUsd && volume24h ? volume24h * xdxUsd : num(volumes["XDX/XRP"]?.volume24hUsd);
+  const volume24hXrp = ledgerVolume != null
+    ? (spot ? volume24h * spot : null)
+    : num(volumes["XDX/XRP"]?.volume24hXrp) || num(token.vol24hXrp);
   const overview = {
     pool: "XDX/XRP",
     tvl: tvlUsd || reserveXrp || 0,
@@ -391,8 +386,8 @@ export async function loadLiveMarket(options = {}) {
     xrpGbp: prices.xrpGbp,
     xrpEur: prices.xrpEur,
     xrpJpy: prices.xrpJpy,
-    xdx_per_xrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
-    xdxPerXrp: xrpPerXdx(xdxUsd, xrpUsd) || num(token.exchXrp),
+    xdx_per_xrp: spot,
+    xdxPerXrp: spot,
     reserve_asset: reserveXdx,
     reserve_currency: reserveXrp,
     lp_supply: num(xrpPool.lp_supply) || null,
@@ -404,7 +399,8 @@ export async function loadLiveMarket(options = {}) {
     volume7d: num(volumes["XDX/XRP"]?.volume7dXdx) || null,
     volume7dXdx: num(volumes["XDX/XRP"]?.volume7dXdx) || null,
     volumeUnit: "xdx",
-    volumeSource: volumes["XDX/XRP"]?.source || null,
+    volumeSource: ledgerVolume != null ? "xrpl-amm" : volumes["XDX/XRP"]?.source || null,
+    volumeLedger: ledgerVolume != null,
     holder_count: num(ledger.holders) || null,
     holders: num(ledger.holders) || null,
     holders_stale: Boolean(ledger.holders_stale) || !num(ledger.holders),
@@ -452,7 +448,7 @@ export async function loadLiveMarket(options = {}) {
     pool_discovery_lines_done: Boolean(ledger.lines_done),
     overview,
     token,
-    change: { xdx: Number(token.change24h) || 0, xrp: Number(quote.change24h) || 0 },
+    change: { xdx: null, xrp: Number(quote.change24h) || 0, source: "xrpl-ledger" },
   };
   return marketCache;
 }
@@ -644,11 +640,20 @@ export async function liveCatalogPayload(suffix, options = {}) {
     };
   }
   if (path === "prices/change24h" || path === "change24h") {
-    const [market, quote] = await Promise.all([loadXrplToMarket(options), loadLiveXrpQuote(options)]);
+    const quote = await loadLiveXrpQuote(options);
+    const candles = await loadLedgerCandles({
+      ...options,
+      xrpUsd: num(quote.usd),
+      skipStore: options.skipStore,
+    }).catch(() => null);
+    const rawChange = candles?.change24h;
+    const xdxChange = Number(rawChange);
     return {
-      xdx: Number(market.change?.xdx) || 0,
+      xdx: rawChange == null || !Number.isFinite(xdxChange) ? null : xdxChange,
       xrp: Number(quote.change24h) || 0,
-      source: "xrpl.to",
+      source: "xrpl-ledger",
+      stale: candles ? Boolean(candles.stale) : true,
+      partial: candles ? Boolean(candles.partial) : true,
     };
   }
   if (path === "issuer-locked") {
@@ -752,16 +757,25 @@ export async function liveCatalogPayload(suffix, options = {}) {
   if (path.startsWith("sparkline/")) {
     const asset = decodeURIComponent(path.split("/")[1] || "XDX").toUpperCase();
     if (asset === "XRP") return loadXrpSparkline(options).catch(() => []);
-    return loadXrplToCandles(options).catch(() => []);
+    const candles = await loadLedgerCandles({ ...options, xrpUsd: options.xrpUsd }).catch(() => null);
+    return Array.isArray(candles?.rows) ? candles.rows : [];
   }
   if (path === "chart/candles" || path === "charts/candles") {
-    const candles = await loadXrplToCandles(options).catch(() => []);
+    const quote = await loadLiveXrpQuote(options).catch(() => ({}));
+    const candles = await loadLedgerCandles({
+      ...options,
+      xrpUsd: num(quote.usd),
+    }).catch(() => null);
     return {
-      source: "xrpl.to",
+      source: "xrpl-ledger",
+      stored: candles?.stored || "memory",
       locked: false,
-      price_history: candles,
+      stale: candles ? Boolean(candles.stale) : true,
+      partial: candles ? Boolean(candles.partial) : true,
+      price_usd_basis: candles?.price_usd_basis || "live-xrp-usd",
+      price_history: candles?.rows || [],
       amm_pool_history: [],
-      rows: candles,
+      rows: candles?.rows || [],
     };
   }
   if (path === "top-lp") {

@@ -97,7 +97,9 @@ export function dailyPricesFromOhlc(rows = [], { xrpUsd, now = Date.now(), maxDa
   const byDay = {};
   for (const row of Array.isArray(rows) ? rows : []) {
     const time = Number(Array.isArray(row) ? row[0] : Date.parse(row?.timestamp || row?.time || row?.day || 0));
-    const close = Number(Array.isArray(row) ? row[4] : row?.close ?? row?.price ?? row?.xdxUsd);
+    const close = Number(
+      Array.isArray(row) ? row[4] : row?.price_usd ?? row?.xdxUsd ?? row?.price ?? row?.close
+    );
     const ts = time > 1e12 ? time : time * 1000;
     if (!Number.isFinite(ts) || ts < cutoff || !(close > 0)) continue;
     const day = new Date(ts).toISOString().slice(0, 10);
@@ -115,10 +117,11 @@ export function dailyXdxFlowsFromOhlc(
   const byDay = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
     const time = Number(Array.isArray(row) ? row[0] : Date.parse(row?.timestamp || row?.time || row?.day || 0));
+    const directXdx = Array.isArray(row) ? 0 : Number(row?.volume_xdx);
     const vol = Number(Array.isArray(row) ? row[5] : row?.volume ?? row?.vol);
     const ts = time > 1e12 ? time : time * 1000;
-    if (!Number.isFinite(ts) || ts < cutoff || !(vol > 0)) continue;
-    const xdx = xdxFromXrpVolume(vol, px);
+    if (!Number.isFinite(ts) || ts < cutoff) continue;
+    const xdx = directXdx > 0 ? directXdx : xdxFromXrpVolume(vol, px);
     if (!(xdx > 0)) continue;
     const timestamp = new Date(ts).toISOString();
     const day = timestamp.slice(0, 10);
