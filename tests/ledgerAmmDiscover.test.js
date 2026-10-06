@@ -106,6 +106,43 @@ test("ledger discovery confirms AMM accounts and ignores xrpl.to existence", asy
   resetLedgerAmmDiscoveryCache();
 });
 
+test("a tooBusy line read tries the next public node", async () => {
+  resetLedgerAmmDiscoveryCache();
+  let lines = 0;
+  const fetchImpl = rpcFetch((method, params) => {
+    if (method === "account_lines") {
+      lines += 1;
+      if (lines === 1) return { error: "tooBusy", status: "error" };
+      return { lines: [{ account: CREATE, currency: "XDX", balance: "-2", limit_peer: "0" }] };
+    }
+    if (method === "account_info" && params.account === CREATE) {
+      return { account_data: { Account: CREATE, Balance: "1000000", AMMID: "ABC" } };
+    }
+    if (method === "amm_info") {
+      return {
+        amm: {
+          account: CREATE,
+          amount: { currency: "XDX", issuer: XDX_ISSUER, value: "2" },
+          amount2: { currency: CREATE_HEX, issuer: CREATE_ISSUER, value: "4" },
+          lp_token: { currency: "03C0CFC705BD93B396F7F2062F13B0CE9F14B043", issuer: CREATE, value: "1" },
+          trading_fee: 331,
+        },
+      };
+    }
+    return { error: "actNotFound", error_message: "Account not found." };
+  });
+  const found = await discoverLedgerXdxPools({
+    fetchImpl,
+    fresh: true,
+    now: 5_000,
+    lineBudgetMs: 5_000,
+  });
+  assert.equal(found.complete, true);
+  assert.equal(found.pools[0].pool, "XDX/CREATE");
+  assert.ok(lines >= 2);
+  resetLedgerAmmDiscoveryCache();
+});
+
 test("low liquidity uses the XRP value of ledger reserves", () => {
   const [small, deep] = withLedgerLiquidity(
     [

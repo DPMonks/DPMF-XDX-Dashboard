@@ -329,8 +329,8 @@ export async function loadLiveMarket(options = {}) {
   // prices.xdxPerXrp stores XRP per 1 XDX, the same number as xrpPerXdx.
   const ledger = await ledgerTask.catch(() => ({ pools: [], complete: false, error: "ledger amm discovery failed" }));
   const names = await namesTask;
-  let poolSource = "featured";
-  let ledgerComplete = false;
+  let poolSource;
+  let ledgerComplete;
   let merged;
   if (ledger.complete || (Array.isArray(ledger.pools) && ledger.pools.length)) {
     poolSource = "ledger";
@@ -342,7 +342,10 @@ export async function loadLiveMarket(options = {}) {
       )
     );
   } else {
-    merged = sortPoolsByXdxReserve(pricedRows);
+    // A missed line scan must not fall back to stored rows. Those still include deleted AMMs.
+    poolSource = "ledger";
+    ledgerComplete = false;
+    merged = sortPoolsByXdxReserve(pricedRows.filter((row) => row.reserve_source === "amm_info"));
   }
   const checked = await verifyAmmPools(merged, {
     ...options,
