@@ -367,7 +367,7 @@ export async function loadXrplToXdxAmmPools(options = {}) {
   if (!options.fresh && xdxAmmCache.rows && now - xdxAmmCache.at < XDX_AMM_MS) {
     return xdxAmmCache.rows;
   }
-  const rate = Number(options.xrpPerXdx) || 0;
+  const rate = Number(options.xrpPerXdx) || Number(options.xdxPerXrp) || Number(options.xdx_per_xrp) || 0;
   const xdxUsd = Number(options.xdxUsd) || 0;
   const xrpUsd = Number(options.xrpUsd) || 0;
   const payload = await loadXrplToXdxAmmRaw(options);

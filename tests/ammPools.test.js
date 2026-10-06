@@ -257,6 +257,10 @@ test("rolling 24h volume keeps the last positive total when a refresh drops to 0
   assert.equal(rememberPoolVolume("XDX/XRP", 0, 0), 10_645_018);
   assert.equal(rememberPoolVolume("XDX/XRP", 11_000_000, 0), 11_000_000);
   resetHeldPoolVolumes();
+  assert.equal(rememberPoolVolume("XDX/FARM", 420_100, 0), 420_100);
+  assert.equal(rememberPoolVolume("XDX/FARM", 0, 0, { ledger: true }), 0);
+  assert.equal(rememberPoolVolume("XDX/FARM", 12, 4, { ledger: true }), 12);
+  resetHeldPoolVolumes();
 });
 
 test("a signed buy or sell adds XDX to that pool's 24h volume immediately", () => {

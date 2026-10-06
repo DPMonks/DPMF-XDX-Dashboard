@@ -1,8 +1,9 @@
-import { poolReservesFromAmmInfo } from "../src/utils/ammInfo.js";
+import { overlayLiveAmmReserves, poolReservesFromAmmInfo } from "../src/utils/ammInfo.js";
 import { quoteIdFromName, quoteIssue, xdxIssue } from "../src/wallet/ammVote.js";
 import { xrplRpc } from "./xrplBookOffers.js";
 
 const CACHE_MS = 15_000;
+const DELETED_MS = 10 * 60_000;
 const cache = new Map();
 const DEFAULT_CONCURRENCY = 3;
 
@@ -72,6 +73,21 @@ function emptyLive(pair) {
   };
 }
 
+function deletedLive(pair, ammAccount) {
+  return {
+    ...emptyLive(pair),
+    amm_account: ammAccount || null,
+    reserve_source: "deleted",
+    deleted: true,
+    empty: true,
+    source: "xrpl",
+  };
+}
+
+function cacheTtl(body) {
+  return body?.reserve_source === "deleted" ? DELETED_MS : CACHE_MS;
+}
+
 export async function loadLiveAmmReserves(query = {}, options = {}) {
   const pair = normalizePair(query.pair || query.pool, query.quote);
   const quoteId = String(query.quote || quoteIdFromName(pair) || "XRP").toUpperCase();
@@ -82,7 +98,8 @@ export async function loadLiveAmmReserves(query = {}, options = {}) {
     hex: query.hex || query.quote_hex || null,
   };
   const asset2 = quoteIssue(quote);
-  if (quoteId !== "XRP" && asset2.currency === "XRP") {
+  const ammAccount = String(query.ammAccount || query.amm_account || "").trim();
+  if (!ammAccount && quoteId !== "XRP" && asset2.currency === "XRP") {
     return emptyLive(pair);
   }
 
@@ -90,7 +107,7 @@ export async function loadLiveAmmReserves(query = {}, options = {}) {
   const key = cacheKey(query, pair);
   if (!query.fresh) {
     const hit = cache.get(key);
-    if (hit && now - hit.at < CACHE_MS) return hit.body;
+    if (hit && now - hit.at < cacheTtl(hit.body)) return hit.body;
   }
 
   const rpc = {
@@ -103,7 +120,6 @@ export async function loadLiveAmmReserves(query = {}, options = {}) {
   };
   let result = null;
   let transient = false;
-  const ammAccount = String(query.ammAccount || query.amm_account || "").trim();
   if (ammAccount) {
     try {
       result = await withXrplRetry(
@@ -113,6 +129,11 @@ export async function loadLiveAmmReserves(query = {}, options = {}) {
     } catch (err) {
       transient = isTransientXrplError(err);
       result = null;
+    }
+    if (result?.error === "actNotFound") {
+      const body = deletedLive(pair, ammAccount);
+      cache.set(key, { at: now, body });
+      return body;
     }
   }
   if (!result?.amm && !transient) {
@@ -154,4 +175,73 @@ export async function loadLiveAmmReservesMany(queries = [], options = {}) {
       return emptyLive(normalizePair(query?.pair || query?.pool, query?.quote));
     }
   });
+}
+
+function alreadyLive(pool) {
+  if (pool?.reserve_source !== "amm_info") return false;
+  return (
+    Number(pool.reserve_xdx ?? pool.reserve_asset) > 0 ||
+    Number(pool.reserve_currency ?? pool.reserve_quote) > 0 ||
+    Number(pool.lp_supply) > 0
+  );
+}
+
+export async function dropDeletedAmmPools(pools = [], options = {}) {
+  const list = Array.isArray(pools) ? pools : [];
+  const need = list.filter((pool) => {
+    const account = String(pool?.amm_account || "").trim();
+    if (!account) return false;
+    if (pool.reserve_source === "deleted" || pool.deleted) return false;
+    return !alreadyLive(pool);
+  });
+  const reads = await loadLiveAmmReservesMany(
+    need.map((pool) => ({
+      ammAccount: pool.amm_account,
+      pair: pool.pool || pool.pool_name,
+      quote: pool.quote,
+      issuer: pool.quote_issuer,
+      hex: pool.quote_hex,
+      fresh: options.fresh,
+    })),
+    {
+      ...options,
+      concurrency: Number(options.concurrency) || DEFAULT_CONCURRENCY,
+      retries: Number.isFinite(Number(options.retries)) ? Number(options.retries) : 1,
+      waitMs: Number(options.waitMs) || 200,
+    }
+  );
+  const readByAccount = new Map();
+  need.forEach((pool, index) => {
+    readByAccount.set(String(pool.amm_account).trim(), reads[index]);
+  });
+  const deleted = new Set();
+  for (const pool of list) {
+    if ((pool?.reserve_source === "deleted" || pool?.deleted) && pool.amm_account) {
+      deleted.add(String(pool.amm_account).trim());
+    }
+  }
+  for (const read of reads) {
+    if (read?.reserve_source === "deleted" && read.amm_account) {
+      deleted.add(String(read.amm_account).trim());
+    }
+  }
+  const kept = [];
+  for (const pool of list) {
+    const account = String(pool?.amm_account || "").trim();
+    if (account && deleted.has(account)) continue;
+    const read = account ? readByAccount.get(account) : null;
+    if (read?.reserve_source === "amm_info") {
+      const over = overlayLiveAmmReserves(pool, read);
+      const xdx = Number(over.reserve_xdx ?? over.reserve_asset);
+      const quote = Number(over.reserve_currency ?? over.reserve_quote);
+      kept.push({
+        ...over,
+        price: xdx > 0 && quote > 0 ? quote / xdx : over.price,
+        reserve_source: "amm_info",
+      });
+      continue;
+    }
+    kept.push(pool);
+  }
+  return { pools: kept, deleted_amms: [...deleted] };
 }

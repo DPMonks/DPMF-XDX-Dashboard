@@ -220,6 +220,7 @@ function mapPool(row) {
     volume7dXdx: numberOrNull(pick(row, ["volume7dXdx", "volume7d", "volume_7d"])),
     volumeUnit: pick(row, ["volumeUnit", "volume_unit"]) || null,
     volumeSource: pick(row, ["volumeSource", "volume_source"]) || null,
+    volumeLedger: Boolean(row.volumeLedger || row.volume_ledger),
     xdxPerXrp: numberOrNull(pick(row, ["xdxPerXrp", "xdx_per_xrp", "exchXrp"])),
     reserve_asset: numberOrNull(
       pick(row, [

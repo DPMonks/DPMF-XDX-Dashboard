@@ -359,6 +359,18 @@ export function volumesFromFlows(flows = [], { now = Date.now(), windowMs = DAY_
 export function overlayPoolFlowVolumes(pools = [], flows = [], now = Date.now()) {
   const byPair = volumesFromFlows(flows, { now });
   return (Array.isArray(pools) ? pools : []).map((pool) => {
+    if (pool?.volumeLedger || pool?.volume_ledger) {
+      const current = Number(pool.volume24h ?? pool.volume24hXdx);
+      const next = Number.isFinite(current) && current > 0 ? current : 0;
+      return {
+        ...pool,
+        volume24h: next,
+        volume24hXdx: next,
+        volumeUnit: "xdx",
+        volumeSource: pool.volumeSource || "xrpl-amm",
+        volumeLedger: true,
+      };
+    }
     const pair = xdxPairKey(pool.pool || pool.pool_name || pool.pair);
     const fromFlow = byPair[pair] || 0;
     const current = Number(pool.volume24h ?? pool.volume24hXdx);
@@ -395,6 +407,21 @@ export function attachPoolVolumes(pool = {}, volumes = {}) {
 }
 
 export function preferRailwayXdxVolume(dbRow = {}, liveRow = {}) {
+  if (liveRow?.volumeLedger || liveRow?.volume_ledger) {
+    const liveXdx = Number(liveRow.volume24hXdx ?? liveRow.volume24h);
+    const recorded = Number.isFinite(liveXdx) && liveXdx > 0 ? liveXdx : 0;
+    return {
+      volume24h: recorded,
+      volume24hXdx: recorded,
+      volume24hXrp: null,
+      volume24hUsd: numPos(liveRow.volume24hUsd) || null,
+      volume7d: numPos(liveRow.volume7dXdx) || numPos(liveRow.volume7d) || null,
+      volume7dXdx: numPos(liveRow.volume7dXdx) || numPos(liveRow.volume7d) || null,
+      volumeUnit: "xdx",
+      volumeSource: "xrpl-amm",
+      volumeLedger: true,
+    };
+  }
   const dbXdx = catalogXdxVolume24h(dbRow);
   const liveXdx = catalogXdxVolume24h(liveRow);
   const db7d = catalogXdxVolume7d(dbRow);

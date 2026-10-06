@@ -283,7 +283,9 @@ test("a down database still has a live token and price payload", async () => {
   const amm = await liveCatalogPayload("amm", { fetchImpl, fresh: true, now });
   assert.ok(Number(amm.volume24h) > 1_000_000);
   assert.equal(amm.volumeUnit, "xdx");
-  assert.ok(Number(amm.pools?.[0]?.volume24hXdx) > 1_000_000);
+  const xrpPool = (amm.pools || []).find((row) => row.pool === "XDX/XRP") || amm.pools?.[0];
+  assert.equal(xrpPool.volumeLedger, true);
+  assert.equal(Number(xrpPool.volume24hXdx), 0);
   const lpChart = await liveCatalogPayload("charts/lp-holders", { fetchImpl, fresh: true, now });
   assert.ok(Array.isArray(lpChart));
   assert.equal(lpChart[0].lp_holder_count, 58);
