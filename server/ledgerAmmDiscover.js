@@ -1,12 +1,27 @@
 import { XDX_HEX, XDX_ISSUER } from "../src/constants/ledger.js";
 import { poolReservesFromAmmInfo } from "../src/utils/ammInfo.js";
 import { currencyLabelFromCode, LOW_LIQUIDITY_XRP } from "../src/utils/xrplToAmm.js";
-import { mapLimit, withXrplRetry } from "./liveAmmReserves.js";
+import { mapLimit } from "./liveAmmReserves.js";
 import { xrplRpc } from "./xrplBookOffers.js";
 
 const POOLS_MS = 3 * 60_000;
 const PAGE_LIMIT = 400;
 const MAX_PAGES = 80;
+const PUBLIC_RPCS = [
+  "https://xrplcluster.com",
+  "https://s2.ripple.com:51234",
+  "https://s1.ripple.com:51234",
+  "https://xrpl.ws",
+];
+
+function rpcUrls(rpcUrl) {
+  const first = String(rpcUrl || "").trim();
+  return [...new Set([first, ...PUBLIC_RPCS].filter(Boolean))];
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 let state = emptyState();
 let inflight = null;
@@ -166,6 +181,26 @@ function accountIsAmm(result) {
   return null;
 }
 
+function retryableRpc(result) {
+  const error = String(result?.error || "");
+  return error === "tooBusy" || error === "noNetwork" || error === "noPermission" || error === "timeout";
+}
+
+async function rpcRotate(method, params, options) {
+  let last = null;
+  for (const rpcUrl of rpcUrls(options.rpcUrl)) {
+    try {
+      const result = await xrplRpc(method, params, { ...rpcOptions(options), rpcUrl });
+      if (result && !retryableRpc(result) && !result.error) return result;
+      last = result;
+      if (result && !retryableRpc(result)) return result;
+    } catch (err) {
+      last = { error: String(err?.message || err) };
+    }
+  }
+  return last;
+}
+
 async function readPage(options, marker) {
   const params = {
     account: XDX_ISSUER,
@@ -173,10 +208,7 @@ async function readPage(options, marker) {
     limit: PAGE_LIMIT,
   };
   if (marker) params.marker = marker;
-  return withXrplRetry(() => xrplRpc("account_lines", params, rpcOptions(options)), {
-    retries: 1,
-    waitMs: 200,
-  });
+  return rpcRotate("account_lines", params, options);
 }
 
 async function walkLines(options, budgetMs) {
@@ -186,12 +218,13 @@ async function walkLines(options, budgetMs) {
     try {
       page = await readPage(options, state.marker);
     } catch (err) {
-      state.error = String(err?.message || err || "account_lines failed");
-      return false;
+      page = { error: String(err?.message || err || "account_lines failed") };
     }
     if (!page || page.error || !Array.isArray(page.lines)) {
       state.error = page?.error || "account_lines incomplete";
-      return false;
+      if (!retryableRpc(page) || Date.now() - started > budgetMs - 800) return false;
+      await sleep(350);
+      continue;
     }
     const found = xdxAmmCandidateLines(page.lines);
     const seen = new Set(state.candidates.map((row) => row.account));
@@ -220,10 +253,10 @@ async function confirmCandidates(options, budgetMs) {
       return;
     }
     try {
-      const info = await xrplRpc(
+      const info = await rpcRotate(
         "account_info",
         { account: row.account, ledger_index: "validated" },
-        rpcOptions(options)
+        options
       );
       const verdict = accountIsAmm(info);
       if (verdict == null) {
@@ -234,10 +267,10 @@ async function confirmCandidates(options, budgetMs) {
         state.verdicts.set(row.account, { amm: false });
         return;
       }
-      const amm = await xrplRpc(
+      const amm = await rpcRotate(
         "amm_info",
         { amm_account: row.account, ledger_index: "validated" },
-        rpcOptions(options)
+        options
       );
       const built = rowFromAmmInfo(amm);
       if (!built) {
