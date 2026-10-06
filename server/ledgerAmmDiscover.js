@@ -66,6 +66,8 @@ export function xdxAmmCandidateLines(lines = [], issuer = XDX_ISSUER) {
     if (!account || account === owner) continue;
     if (!isXdxCurrency(line?.currency)) continue;
     if (Number(line?.limit_peer) !== 0) continue;
+    // AMM lines leave no_ripple_peer unset. Ordinary zero limit wallets set it.
+    if (line?.no_ripple_peer) continue;
     const balance = Number(line?.balance);
     if (!Number.isFinite(balance) || balance === 0) continue;
     out.push({ account, balance });
@@ -306,8 +308,8 @@ async function discoverUncached(options = {}) {
       source: "xrpl-lines",
     };
   }
-  const lineBudget = Number(options.lineBudgetMs) || 32_000;
-  const confirmBudget = Number(options.confirmBudgetMs) || 16_000;
+  const lineBudget = Number(options.lineBudgetMs) || 46_000;
+  const confirmBudget = Number(options.confirmBudgetMs) || 10_000;
   const linesDone = await walkLines(options, lineBudget);
   const confirmed = await confirmCandidates(options, confirmBudget);
   const complete = Boolean(linesDone && !confirmed.unknown);

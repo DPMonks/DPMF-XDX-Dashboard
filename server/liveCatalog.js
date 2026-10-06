@@ -248,8 +248,8 @@ export async function loadLiveMarket(options = {}) {
     rpcUrl: options.rpcUrl,
     fresh: options.fresh,
     now,
-    lineBudgetMs: 32_000,
-    confirmBudgetMs: 16_000,
+    lineBudgetMs: 46_000,
+    confirmBudgetMs: 10_000,
   });
   const namesTask = loadXrplToXdxAmmRaw({ ...options, timeoutMs: 5_000 }).catch(() => null);
   const [quote, token, issuerLocked, blackhole, lpCounts] = await Promise.all([
@@ -426,7 +426,7 @@ export async function loadLiveMarket(options = {}) {
     catching_up: !num(token.holders),
   };
   marketCache = {
-    at: checked.complete && num(token.holders) ? now : 0,
+    at: ledgerComplete && checked.complete && num(token.holders) ? now : 0,
     prices,
     pools,
     deleted_amms: [...gone],
