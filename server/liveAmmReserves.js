@@ -5,6 +5,7 @@ import { xrplRpc } from "./xrplBookOffers.js";
 const CACHE_MS = 15_000;
 const DELETED_MS = 10 * 60_000;
 const cache = new Map();
+const accountCache = new Map();
 const DEFAULT_CONCURRENCY = 3;
 
 export function isTransientXrplError(err) {
@@ -130,10 +131,13 @@ export async function loadLiveAmmReserves(query = {}, options = {}) {
       transient = isTransientXrplError(err);
       result = null;
     }
-    if (result?.error === "actNotFound") {
-      const body = deletedLive(pair, ammAccount);
-      cache.set(key, { at: now, body });
-      return body;
+    if (result?.error === "actNotFound" || result?.error === "actMalformed") {
+      const exists = await accountStillExists(ammAccount, { ...rpc, now, fresh: query.fresh, retries: 0, waitMs: retry.waitMs });
+      if (exists === false) {
+        const body = deletedLive(pair, ammAccount);
+        cache.set(key, { at: now, body });
+        return body;
+      }
     }
   }
   if (!result?.amm && !transient) {
@@ -175,6 +179,35 @@ export async function loadLiveAmmReservesMany(queries = [], options = {}) {
       return emptyLive(normalizePair(query?.pair || query?.pool, query?.quote));
     }
   });
+}
+
+export async function accountStillExists(account, options = {}) {
+  const name = String(account || "").trim();
+  if (!name) return null;
+  const now = Number(options.now) || Date.now();
+  const hit = accountCache.get(name);
+  const ttl = hit?.exists === false ? DELETED_MS : CACHE_MS;
+  if (hit && !options.fresh && now - hit.at < ttl) return hit.exists;
+  try {
+    const result = await withXrplRetry(
+      () => xrplRpc("account_info", { account: name, ledger_index: "validated" }, options),
+      {
+        retries: Number.isFinite(Number(options.retries)) ? Number(options.retries) : 0,
+        waitMs: Number(options.waitMs) || 200,
+      }
+    );
+    if (result?.error === "actNotFound") {
+      accountCache.set(name, { at: now, exists: false });
+      return false;
+    }
+    if (result?.account_data) {
+      accountCache.set(name, { at: now, exists: true });
+      return true;
+    }
+    return null;
+  } catch {
+    return hit ? hit.exists : null;
+  }
 }
 
 function alreadyLive(pool) {

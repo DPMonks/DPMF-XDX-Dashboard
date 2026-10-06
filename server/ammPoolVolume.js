@@ -1,7 +1,7 @@
 import { overlayLiveAmmReserves } from "../src/utils/ammInfo.js";
 import { swapVolumeFromAccountTx } from "../src/utils/ammSwapVolume.js";
 import { xdxPairKey } from "../src/utils/lpVolume.js";
-import { loadLiveAmmReserves, mapLimit, withXrplRetry } from "./liveAmmReserves.js";
+import { accountStillExists, loadLiveAmmReserves, mapLimit, withXrplRetry } from "./liveAmmReserves.js";
 import { xrplRpc } from "./xrplBookOffers.js";
 
 const CACHE_MS = 60_000;
@@ -147,7 +147,22 @@ export async function verifyAmmPools(pools = [], options = {}) {
     retries: Number.isFinite(Number(options.retries)) ? Number(options.retries) : 0,
     waitMs: Number(options.waitMs) || 200,
   };
-  const rows = await mapLimit(list, Number(options.concurrency) || 3, async (pool) => {
+  const existenceBudget = Math.min(6000, deadlineMs || 6000);
+  await mapLimit(
+    list.filter((pool) => pool?.amm_account && !poolAlreadyLive(pool)),
+    Number(options.existenceConcurrency) || 4,
+    async (pool) => {
+      if (Date.now() - started >= existenceBudget) {
+        complete = false;
+        return;
+      }
+      const account = String(pool.amm_account).trim();
+      const exists = await accountStillExists(account, { ...rpcOptions, fresh: options.fresh });
+      if (exists === false) deleted.push(account);
+    }
+  );
+  const survivors = list.filter((pool) => !deleted.includes(String(pool?.amm_account || "").trim()));
+  const rows = await mapLimit(survivors, Number(options.concurrency) || 3, async (pool) => {
     try {
       const account = String(pool?.amm_account || "").trim();
       if (deadlineMs > 0 && Date.now() - started >= deadlineMs) {
