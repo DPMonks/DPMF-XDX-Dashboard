@@ -4,9 +4,9 @@ import { currencyLabelFromCode, LOW_LIQUIDITY_XRP } from "../src/utils/xrplToAmm
 import { mapLimit } from "./liveAmmReserves.js";
 import { xrplRpc } from "./xrplBookOffers.js";
 
-const POOLS_MS = 3 * 60_000;
+const POOLS_MS = 10 * 60_000;
 const PAGE_LIMIT = 400;
-const MAX_PAGES = 80;
+const MAX_PAGES = 160;
 const PUBLIC_RPCS = [
   "https://xrplcluster.com",
   "https://s2.ripple.com:51234",
@@ -42,6 +42,7 @@ function emptyState() {
 export function resetLedgerAmmDiscoveryCache() {
   state = emptyState();
   inflight = null;
+  stickyRpc = "";
 }
 
 export function ledgerAmmDiscoveryStatus() {
@@ -190,16 +191,25 @@ function retryableRpc(result) {
   return /tooBusy|slowDown|noNetwork|noPermission|timeout|serverBusy/i.test(error);
 }
 
+let stickyRpc = "";
+
 async function rpcRotate(method, params, options) {
+  const urls = rpcUrls(stickyRpc || options.rpcUrl);
   let last = null;
-  for (const rpcUrl of rpcUrls(options.rpcUrl)) {
-    try {
-      const result = await xrplRpc(method, params, { ...rpcOptions(options), rpcUrl });
-      if (result && !retryableRpc(result) && !result.error) return result;
-      last = result;
-      if (result && !retryableRpc(result)) return result;
-    } catch (err) {
-      last = { error: String(err?.message || err) };
+  for (const rpcUrl of urls) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const result = await xrplRpc(method, params, { ...rpcOptions(options), rpcUrl });
+        if (result && !retryableRpc(result) && !result.error) {
+          if (method === "account_lines") stickyRpc = rpcUrl;
+          return result;
+        }
+        last = result;
+        if (result && !retryableRpc(result)) return result;
+      } catch (err) {
+        last = { error: String(err?.message || err) };
+      }
+      if (attempt === 0) await sleep(400);
     }
   }
   return last;
@@ -237,12 +247,21 @@ async function walkLines(options, budgetMs) {
       seen.add(row.account);
       state.candidates.push(row);
     }
+    if (!page.lines.length && state.pages === 0) {
+      state.error = "account_lines empty";
+      if (Date.now() - started > budgetMs - 800) return false;
+      await sleep(400);
+      continue;
+    }
     state.pages += 1;
     state.marker = page.marker || null;
     if (!page.marker) {
       state.linesDone = true;
       state.error = "";
     }
+  }
+  if (!state.linesDone) {
+    state.error = state.error || `account_lines stopped after ${state.pages} pages`;
   }
   return state.linesDone;
 }
@@ -299,6 +318,7 @@ async function discoverUncached(options = {}) {
   const now = Number(options.now) || Date.now();
   if (options.fresh) {
     state = emptyState();
+    stickyRpc = "";
   }
   if (!options.fresh && state.pools && now - state.poolsAt < POOLS_MS) {
     return {
