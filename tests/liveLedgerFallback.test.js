@@ -264,7 +264,10 @@ test("a down database still has a live token and price payload", async () => {
   const prices = await liveCatalogPayload("prices", { fetchImpl, fresh: true, now });
   assert.ok(Number(prices.xdxUsd) > 0);
   const counts = await liveCatalogPayload("holders/count", { fetchImpl, fresh: true, now });
-  assert.equal(counts.count, 15941);
+  assert.equal(counts.count, null);
+  assert.equal(counts.source, "xrpl-lines");
+  assert.equal(counts.stale, true);
+  assert.equal(counts.catching_up, true);
   const charts = await liveCatalogPayload("charts/activity", { fetchImpl, fresh: true, now });
   assert.ok(Array.isArray(charts));
   assert.equal(charts[0].holders, 58);

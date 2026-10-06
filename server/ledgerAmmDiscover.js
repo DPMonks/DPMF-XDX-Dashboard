@@ -36,6 +36,9 @@ function emptyState() {
     pools: null,
     poolsAt: 0,
     error: "",
+    holders: 0,
+    trustlines: 0,
+    holderSnapshot: null,
   };
 }
 
@@ -53,6 +56,7 @@ export function ledgerAmmDiscoveryStatus() {
     pages: state.pages,
     candidates: state.candidates.length,
     lines_done: Boolean(state.linesDone),
+    ...holderFields(Date.now()),
     source: "xrpl-lines",
   };
 }
@@ -60,6 +64,22 @@ export function ledgerAmmDiscoveryStatus() {
 function isXdxCurrency(code) {
   const currency = String(code || "").trim().toUpperCase();
   return currency === "XDX" || currency === XDX_HEX;
+}
+
+export function countXdxHolderLines(lines = [], issuer = XDX_ISSUER) {
+  const owner = String(issuer || XDX_ISSUER).trim();
+  let holders = 0;
+  let trustlines = 0;
+  for (const line of Array.isArray(lines) ? lines : []) {
+    const account = String(line?.account || "").trim();
+    if (!account || account === owner) continue;
+    if (!isXdxCurrency(line?.currency)) continue;
+    trustlines += 1;
+    const balance = Number(line?.balance);
+    // Issuer lines report a holder's balance as negative. Any non-zero balance counts.
+    if (Number.isFinite(balance) && balance !== 0) holders += 1;
+  }
+  return { holders, trustlines };
 }
 
 export function xdxAmmCandidateLines(lines = [], issuer = XDX_ISSUER) {
@@ -170,7 +190,13 @@ function retryableRpc(result) {
   const error = String(result?.error || "");
   if (!error) return false;
   if (error === "actNotFound" || error === "actMalformed") return false;
-  return /tooBusy|slowDown|noNetwork|noPermission|timeout|serverBusy|abort|ECONNRESET|fetch failed/i.test(error);
+  return /tooBusy|slowDown|noNetwork|noPermission|timeout|serverBusy|abort|ECONNRESET|fetch failed|402|429/i.test(
+    error
+  );
+}
+
+function rateLimitedRpc(result) {
+  return /402|429/.test(String(result?.error || ""));
 }
 
 let stickyRpc = "";
@@ -194,8 +220,9 @@ async function rpcRotate(method, params, options) {
       } catch (err) {
         last = { error: String(err?.message || err) };
       }
-      if (attempt === 0 && attempts > 1) await sleep(400);
+      if (attempt === 0 && attempts > 1) await sleep(rateLimitedRpc(last) ? 1200 : 400);
     }
+    if (rateLimitedRpc(last)) await sleep(800);
   }
   return last;
 }
@@ -241,10 +268,13 @@ async function walkLines(options, budgetMs) {
     if (!page || page.error || !Array.isArray(page.lines)) {
       state.error = page?.error || "account_lines incomplete";
       if (!retryableRpc(page) || Date.now() - started > budgetMs - 800) return false;
-      await sleep(350);
+      await sleep(rateLimitedRpc(page) ? 1200 : 350);
       continue;
     }
     const found = xdxAmmCandidateLines(page.lines);
+    const counted = countXdxHolderLines(page.lines);
+    state.holders += counted.holders;
+    state.trustlines += counted.trustlines;
     const seen = new Set(state.candidates.map((row) => row.account));
     for (const row of found) {
       if (seen.has(row.account)) continue;
@@ -262,12 +292,53 @@ async function walkLines(options, budgetMs) {
     if (!page.marker) {
       state.linesDone = true;
       state.error = "";
+      state.holderSnapshot = {
+        holders: state.holders,
+        trustlines: state.trustlines,
+        at: Date.now(),
+        lines_done: true,
+        source: "xrpl-lines",
+      };
     }
   }
   if (!state.linesDone) {
     state.error = state.error || `account_lines stopped after ${state.pages} pages`;
   }
   return state.linesDone;
+}
+
+function holderFields(now = Date.now()) {
+  const snap = state.holderSnapshot;
+  if (snap?.lines_done && Number(snap.holders) > 0) {
+    const refreshing = !state.linesDone;
+    const aged = now - Number(snap.at || 0) >= POOLS_MS;
+    return {
+      holders: snap.holders,
+      trustlines: snap.trustlines,
+      holders_at: snap.at,
+      holders_stale: refreshing || aged,
+      holders_source: "xrpl-lines",
+    };
+  }
+  const partial = state.holders > 0 || state.trustlines > 0;
+  return {
+    holders: partial ? state.holders : null,
+    trustlines: partial ? state.trustlines : null,
+    holders_at: null,
+    holders_stale: true,
+    holders_source: "xrpl-lines",
+  };
+}
+
+function beginScheduledRefresh() {
+  state.marker = undefined;
+  state.pages = 0;
+  state.candidates = [];
+  state.linesDone = false;
+  state.verdicts = new Map();
+  state.holders = 0;
+  state.trustlines = 0;
+  state.error = "";
 }
 
 function poolsFromVerdicts() {
@@ -318,12 +389,13 @@ async function confirmCandidates(options, budgetMs) {
   return poolsFromVerdicts();
 }
 
-function discoveryBody(extra = {}) {
+function discoveryBody(extra = {}, now = Date.now()) {
   return {
     source: "xrpl-lines",
     pages: state.pages,
     candidates: state.candidates.length,
     lines_done: Boolean(state.linesDone),
+    ...holderFields(now),
     ...extra,
   };
 }
@@ -334,13 +406,17 @@ async function discoverUncached(options = {}) {
     state = emptyState();
     stickyRpc = "";
   }
-  if (!options.fresh && state.pools && now - state.poolsAt < POOLS_MS) {
+  if (!options.fresh && state.pools && state.linesDone && now - state.poolsAt < POOLS_MS) {
     return discoveryBody({
       pools: state.pools,
       complete: true,
       error: null,
-    });
+    }, now);
   }
+  const keepPools = !options.fresh && state.linesDone && Array.isArray(state.pools) && state.pools.length
+    ? state.pools
+    : null;
+  if (keepPools) beginScheduledRefresh();
   const lineBudget = Number(options.lineBudgetMs) || 40_000;
   const confirmBudget = Number(options.confirmBudgetMs) || 16_000;
   const linesDone = await walkLines(options, lineBudget);
@@ -355,13 +431,20 @@ async function discoverUncached(options = {}) {
     state.pools = confirmed.pools;
     state.poolsAt = now;
     state.error = "";
+  } else if (keepPools?.length) {
+    return discoveryBody({
+      pools: keepPools,
+      complete: false,
+      stale: true,
+      error: state.error || "ledger amm scan incomplete",
+    }, now);
   } else if (!confirmed.pools.length && state.pools) {
     return discoveryBody({
       pools: state.pools,
       complete: true,
       stale: true,
       error: state.error || "ledger amm scan incomplete",
-    });
+    }, now);
   } else if (!complete) {
     const pending = state.candidates.filter((row) => !state.verdicts.has(row.account)).length;
     state.error = linesDone
@@ -372,17 +455,17 @@ async function discoverUncached(options = {}) {
     pools: confirmed.pools,
     complete,
     error: state.error || null,
-  });
+  }, now);
 }
 
 export function discoverLedgerXdxPools(options = {}) {
   const now = Number(options.now) || Date.now();
-  if (!options.fresh && state.pools && now - state.poolsAt < POOLS_MS) {
+  if (!options.fresh && state.pools && state.linesDone && now - state.poolsAt < POOLS_MS) {
     return Promise.resolve(discoveryBody({
       pools: state.pools,
       complete: true,
       error: null,
-    }));
+    }, now));
   }
   if (inflight && !options.fresh) return inflight;
   inflight = discoverUncached(options).finally(() => {
