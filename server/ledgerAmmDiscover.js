@@ -50,6 +50,9 @@ export function ledgerAmmDiscoveryStatus() {
     count: Array.isArray(state.pools) ? state.pools.length : 0,
     error: state.error || null,
     complete: Boolean(state.linesDone && state.pools),
+    pages: state.pages,
+    candidates: state.candidates.length,
+    lines_done: Boolean(state.linesDone),
     source: "xrpl-lines",
   };
 }
@@ -172,7 +175,11 @@ export function applyXrplToNames(pools = [], payload = null) {
 }
 
 function rpcOptions(options) {
-  return { fetchImpl: options.fetchImpl, rpcUrl: options.rpcUrl, timeoutMs: 8_000 };
+  return {
+    fetchImpl: options.fetchImpl,
+    rpcUrl: options.rpcUrl,
+    timeoutMs: Number(options.timeoutMs) || 8_000,
+  };
 }
 
 function accountIsAmm(result) {
@@ -194,10 +201,13 @@ function retryableRpc(result) {
 let stickyRpc = "";
 
 async function rpcRotate(method, params, options) {
-  const urls = rpcUrls(stickyRpc || options.rpcUrl);
+  const urls = options.rotate === false
+    ? [stickyRpc || options.rpcUrl || PUBLIC_RPCS[0]]
+    : rpcUrls(stickyRpc || options.rpcUrl);
   let last = null;
   for (const rpcUrl of urls) {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    const attempts = options.rotate === false ? 1 : 2;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         const result = await xrplRpc(method, params, { ...rpcOptions(options), rpcUrl });
         if (result && !retryableRpc(result) && !result.error) {
@@ -209,10 +219,20 @@ async function rpcRotate(method, params, options) {
       } catch (err) {
         last = { error: String(err?.message || err) };
       }
-      if (attempt === 0) await sleep(400);
+      if (attempt === 0 && attempts > 1) await sleep(400);
     }
   }
   return last;
+}
+
+function rpcBudget(method, params, options, deadline) {
+  const remaining = deadline - Date.now();
+  if (remaining < 200) return Promise.resolve({ error: "timeout" });
+  const timeoutMs = Math.min(3_500, remaining);
+  return Promise.race([
+    rpcRotate(method, params, { ...options, timeoutMs, rotate: false }),
+    sleep(remaining).then(() => ({ error: "timeout" })),
+  ]);
 }
 
 async function readPage(options, marker) {
@@ -266,52 +286,67 @@ async function walkLines(options, budgetMs) {
   return state.linesDone;
 }
 
-async function confirmCandidates(options, budgetMs) {
-  const started = Date.now();
-  const pending = state.candidates.filter((row) => !state.verdicts.has(row.account));
-  let unknown = false;
-  await mapLimit(pending, 8, async (row) => {
-    if (Date.now() - started >= budgetMs) {
-      unknown = true;
-      return;
-    }
-    try {
-      const info = await rpcRotate(
-        "account_info",
-        { account: row.account, ledger_index: "validated" },
-        options
-      );
-      const verdict = accountIsAmm(info);
-      if (verdict == null) {
-        unknown = true;
-        return;
-      }
-      if (!verdict) {
-        state.verdicts.set(row.account, { amm: false });
-        return;
-      }
-      const amm = await rpcRotate(
-        "amm_info",
-        { amm_account: row.account, ledger_index: "validated" },
-        options
-      );
-      const built = rowFromAmmInfo(amm);
-      if (!built) {
-        state.verdicts.set(row.account, { amm: false });
-        return;
-      }
-      state.verdicts.set(row.account, { amm: true, row: built });
-    } catch {
-      unknown = true;
-    }
-  });
+function poolsFromVerdicts() {
   const pools = [];
+  let unknown = false;
   for (const row of state.candidates) {
     const verdict = state.verdicts.get(row.account);
     if (verdict?.amm && verdict.row) pools.push(verdict.row);
     else if (!verdict) unknown = true;
   }
   return { pools: disambiguatePairs(pools), unknown };
+}
+
+async function confirmCandidates(options, budgetMs) {
+  const deadline = Date.now() + budgetMs;
+  // AMM trust lines sit at the end of the issuer list. Check those first.
+  // A full fan-out on the earlier wallets used up the budget and hid every pool.
+  const pending = state.candidates.filter((row) => !state.verdicts.has(row.account)).reverse();
+  await mapLimit(pending, 6, async (row) => {
+    if (Date.now() >= deadline) return;
+    try {
+      const info = await rpcBudget(
+        "account_info",
+        { account: row.account, ledger_index: "validated" },
+        options,
+        deadline
+      );
+      const verdict = accountIsAmm(info);
+      if (verdict == null) return;
+      if (!verdict) {
+        state.verdicts.set(row.account, { amm: false });
+        return;
+      }
+      if (Date.now() >= deadline) return;
+      const amm = await rpcBudget(
+        "amm_info",
+        { amm_account: row.account, ledger_index: "validated" },
+        options,
+        deadline
+      );
+      const built = rowFromAmmInfo(amm);
+      if (!built) {
+        if (amm && !retryableRpc(amm) && amm.error) {
+          state.verdicts.set(row.account, { amm: false });
+        }
+        return;
+      }
+      state.verdicts.set(row.account, { amm: true, row: built });
+    } catch {
+      // Leave the account unknown so the next scan can retry it.
+    }
+  });
+  return poolsFromVerdicts();
+}
+
+function discoveryBody(extra = {}) {
+  return {
+    source: "xrpl-lines",
+    pages: state.pages,
+    candidates: state.candidates.length,
+    lines_done: Boolean(state.linesDone),
+    ...extra,
+  };
 }
 
 async function discoverUncached(options = {}) {
@@ -321,48 +356,52 @@ async function discoverUncached(options = {}) {
     stickyRpc = "";
   }
   if (!options.fresh && state.pools && now - state.poolsAt < POOLS_MS) {
-    return {
+    return discoveryBody({
       pools: state.pools,
       complete: true,
-      error: state.error || null,
-      source: "xrpl-lines",
-    };
+      error: null,
+    });
   }
-  const lineBudget = Number(options.lineBudgetMs) || 46_000;
-  const confirmBudget = Number(options.confirmBudgetMs) || 10_000;
+  const lineBudget = Number(options.lineBudgetMs) || 40_000;
+  const confirmBudget = Number(options.confirmBudgetMs) || 16_000;
   const linesDone = await walkLines(options, lineBudget);
-  const confirmed = await confirmCandidates(options, confirmBudget);
+  // Confirming before the last page only classifies ordinary wallets.
+  const confirmed = linesDone
+    ? await confirmCandidates(options, confirmBudget)
+    : poolsFromVerdicts();
   const complete = Boolean(linesDone && !confirmed.unknown);
   if (complete) {
     state.pools = confirmed.pools;
     state.poolsAt = now;
     state.error = "";
   } else if (!confirmed.pools.length && state.pools) {
-    return {
+    return discoveryBody({
       pools: state.pools,
       complete: true,
       stale: true,
       error: state.error || "ledger amm scan incomplete",
-      source: "xrpl-lines",
-    };
+    });
+  } else if (!complete) {
+    const pending = state.candidates.filter((row) => !state.verdicts.has(row.account)).length;
+    state.error = linesDone
+      ? `confirm left ${pending} of ${state.candidates.length} after ${state.pages} pages`
+      : state.error || `account_lines stopped after ${state.pages} pages`;
   }
-  return {
+  return discoveryBody({
     pools: confirmed.pools,
     complete,
     error: state.error || null,
-    source: "xrpl-lines",
-  };
+  });
 }
 
 export function discoverLedgerXdxPools(options = {}) {
   const now = Number(options.now) || Date.now();
   if (!options.fresh && state.pools && now - state.poolsAt < POOLS_MS) {
-    return Promise.resolve({
+    return Promise.resolve(discoveryBody({
       pools: state.pools,
       complete: true,
-      error: state.error || null,
-      source: "xrpl-lines",
-    });
+      error: null,
+    }));
   }
   if (inflight && !options.fresh) return inflight;
   inflight = discoverUncached(options).finally(() => {

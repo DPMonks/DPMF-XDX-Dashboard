@@ -144,6 +144,65 @@ test("a slowDown line read tries the next public node", async () => {
   resetLedgerAmmDiscoveryCache();
 });
 
+test("confirmation checks the last issuer lines first so a slow wallet cannot hide an AMM", async () => {
+  resetLedgerAmmDiscoveryCache();
+  const slow = Array.from({ length: 9 }, (_n, index) => `rSlowWallet${index}1111111111111111111`);
+  const fetchImpl = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    const method = body.method;
+    const params = body.params?.[0] || {};
+    const abort = () =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 5_000);
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(new Error("aborted"));
+        };
+        if (options.signal?.aborted) onAbort();
+        else options.signal?.addEventListener("abort", onAbort, { once: true });
+      });
+    let result;
+    if (method === "account_lines" && !params.marker) {
+      result = {
+        lines: slow.map((account) => ({ account, currency: "XDX", balance: "-5", limit_peer: "0" })),
+        marker: { page: 2 },
+      };
+    } else if (method === "account_lines") {
+      result = { lines: [{ account: CREATE, currency: "XDX", balance: "-2", limit_peer: "0" }] };
+    } else if (method === "account_info" && params.account === CREATE) {
+      result = { account_data: { Account: CREATE, Balance: "1000000", AMMID: "ABC" } };
+    } else if (method === "account_info") {
+      await abort();
+      result = { account_data: { Account: params.account, Balance: "1000000" } };
+    } else if (method === "amm_info" && params.amm_account === CREATE) {
+      result = {
+        amm: {
+          account: CREATE,
+          amount: { currency: "XDX", issuer: XDX_ISSUER, value: "2" },
+          amount2: { currency: CREATE_HEX, issuer: CREATE_ISSUER, value: "4" },
+          lp_token: { currency: "03C0CFC705BD93B396F7F2062F13B0CE9F14B043", issuer: CREATE, value: "1" },
+          trading_fee: 331,
+        },
+      };
+    } else {
+      result = { error: "actNotFound", error_message: "Account not found." };
+    }
+    return { ok: true, json: async () => ({ result }) };
+  };
+  const found = await discoverLedgerXdxPools({
+    fetchImpl,
+    fresh: true,
+    now: 9_000,
+    confirmBudgetMs: 800,
+  });
+  assert.equal(found.lines_done, true);
+  assert.equal(found.complete, false);
+  assert.match(found.error, /confirm left \d+ of 10 after 2 pages/);
+  assert.ok(found.pools.some((row) => row.amm_account === CREATE));
+  assert.equal(found.pools.find((row) => row.amm_account === CREATE).pool, "XDX/CREATE");
+  resetLedgerAmmDiscoveryCache();
+});
+
 test("low liquidity uses the XRP value of ledger reserves", () => {
   const [small, deep] = withLedgerLiquidity(
     [
