@@ -28,6 +28,7 @@ function emptyMemory() {
     marker: null,
     hydrated: false,
     loaded: false,
+    pruned: null,
     seen: new Set(),
     prints: [],
     candles: { "1m": [], "1h": [], "1d": [] },
@@ -250,6 +251,7 @@ async function storeCandles(now) {
     return;
   }
   memory.stored = "postgres";
+  memory.pruned = "1m-7d";
 }
 
 async function readPage(options, marker) {
@@ -265,7 +267,7 @@ async function readPage(options, marker) {
   return xrplRpc("account_tx", params, {
     fetchImpl: options.fetchImpl,
     rpcUrl: options.rpcUrl,
-    timeoutMs: 8000,
+    timeoutMs: Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 8000,
   });
 }
 
@@ -278,10 +280,13 @@ async function ingest(options, now) {
   let marker = memory.marker;
   let pages = 0;
   let limited = false;
-  while (pages < PAGES_PER_CALL) {
+  const started = Date.now();
+  const deadline = Number(options.deadlineMs) > 0 ? Number(options.deadlineMs) : memory.hydrated ? 4_000 : 12_000;
+  const pageCap = memory.hydrated ? 1 : PAGES_PER_CALL;
+  while (pages < pageCap && Date.now() - started < deadline) {
     let page;
     try {
-      page = await readPage(options, marker);
+      page = await readPage({ ...options, timeoutMs: Math.min(8000, deadline) }, marker);
     } catch (err) {
       limited = rateLimited(err?.message || err);
       memory.stale = true;
@@ -310,6 +315,16 @@ async function ingest(options, now) {
   if (!options.skipStore) await storeCandles(now);
 }
 
+function intervalSummary(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return { count: 0, oldest: null, newest: null };
+  return {
+    count: list.length,
+    oldest: new Date(list[0].bucket).toISOString(),
+    newest: new Date(list[list.length - 1].bucket).toISOString(),
+  };
+}
+
 function candlePayload(now, xrpUsd) {
   const fx = Number(xrpUsd) > 0 ? Number(xrpUsd) : 0;
   const hourly = memory.candles["1h"];
@@ -331,6 +346,12 @@ function candlePayload(now, xrpUsd) {
     price_usd_basis: fx ? "live-xrp-usd" : "xrp-per-xdx",
     change24h: change24hFromCandles(hourly, now),
     volume24hXdx: volumeSince(memory.candles["1m"].length ? memory.candles["1m"] : hourly, now),
+    pruned: memory.pruned,
+    intervals: {
+      "1m": intervalSummary(memory.candles["1m"]),
+      "1h": intervalSummary(memory.candles["1h"]),
+      "1d": intervalSummary(memory.candles["1d"]),
+    },
     candles: memory.candles,
     price_history: rows,
     rows,

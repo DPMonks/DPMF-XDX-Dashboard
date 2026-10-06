@@ -765,10 +765,13 @@ export async function liveCatalogPayload(suffix, options = {}) {
     const candles = await loadLedgerCandles({
       ...options,
       xrpUsd: num(quote.usd),
+      deadlineMs: 5_000,
     }).catch(() => null);
     return {
       source: "xrpl-ledger",
       stored: candles?.stored || "memory",
+      pruned: candles?.pruned || null,
+      intervals: candles?.intervals || null,
       locked: false,
       stale: candles ? Boolean(candles.stale) : true,
       partial: candles ? Boolean(candles.partial) : true,
