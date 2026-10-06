@@ -78,6 +78,13 @@ function xdxVolumeFromXrp(volumeXrp, xrpPerXdx) {
   return vol / rate;
 }
 
+export function xrpPerXdxOption(options = {}) {
+  // The price book field xdxPerXrp stores XRP per 1 XDX. Same number, not an inverse.
+  const named = positive(options.xrpPerXdx);
+  if (named) return named;
+  return positive(options.xdxPerXrp ?? options.xdx_per_xrp);
+}
+
 function shortIssuer(address) {
   const text = String(address || "");
   if (text.length <= 11) return text;
@@ -102,7 +109,7 @@ export function xrplToXdxAmmListUrl({ offset = 0, limit = 100 } = {}) {
 
 export function poolsFromXrplToAmm(payload = {}, options = {}) {
   const rows = Array.isArray(payload?.pools) ? payload.pools : [];
-  const xrpPerXdx = positive(options.xrpPerXdx);
+  const xrpPerXdx = xrpPerXdxOption(options);
   const xdxUsd = positive(options.xdxUsd);
   const xrpUsd = positive(options.xrpUsd);
   const parsed = [];

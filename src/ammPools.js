@@ -368,8 +368,20 @@ export function rollingPoolVolume(catalog, held) {
 
 const heldVolumeByKey = new Map();
 
-export function rememberPoolVolume(key, catalog, held) {
+export function rememberPoolVolume(key, catalog, held, options = {}) {
   const id = String(key || "");
+  if (options.ledger) {
+    const catalogVol = Number(catalog);
+    const heldVol = Number(held);
+    const live = Number.isFinite(catalogVol) && catalogVol > 0 ? catalogVol : 0;
+    const kept = Number.isFinite(heldVol) && heldVol > 0 ? heldVol : 0;
+    const next = Math.max(live, kept);
+    if (id) {
+      if (next > 0) heldVolumeByKey.set(id, next);
+      else heldVolumeByKey.delete(id);
+    }
+    return next;
+  }
   const next = rollingPoolVolume(catalog, rollingPoolVolume(held, heldVolumeByKey.get(id)));
   if (id && next > 0) heldVolumeByKey.set(id, next);
   return next;

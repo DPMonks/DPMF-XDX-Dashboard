@@ -225,12 +225,19 @@ export function mergeTradeFlows(db, live) {
 export function mergeLivePools(db = {}, live = {}) {
   const livePools = Array.isArray(live.pools) ? live.pools : [];
   const dbPools = Array.isArray(db.pools) ? db.pools : Array.isArray(db) ? db : [];
-  if (!livePools.length) return db;
-  const pools = sortPoolsByXdxReserve(mergePoolRows(dbPools, livePools));
+  const gone = new Set(
+    [...(Array.isArray(db.deleted_amms) ? db.deleted_amms : []), ...(Array.isArray(live.deleted_amms) ? live.deleted_amms : [])]
+      .map((account) => String(account || "").trim())
+      .filter(Boolean)
+  );
+  const visible = (row) => !gone.has(String(row?.amm_account || row?.amm || "").trim());
+  if (!livePools.length && !gone.size) return db;
+  const pools = sortPoolsByXdxReserve(mergePoolRows(dbPools.filter(visible), livePools.filter(visible)));
   return {
     ...(asObject(db) || {}),
     ...(asObject(live) || {}),
     pools,
+    deleted_amms: [...gone],
     count: pools.length,
     catching_up: !dbPools.length,
     source: catalogSource(dbPools.length > 0, true),

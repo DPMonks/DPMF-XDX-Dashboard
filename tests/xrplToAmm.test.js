@@ -10,6 +10,7 @@ import {
   needsDiscoveredAmmLookup,
   poolsFromXrplToAmm,
   sortPoolsByXdxReserve,
+  xrpPerXdxOption,
 } from "../src/utils/xrplToAmm.js";
 import {
   loadXrplToXdxAmmPools,
@@ -162,6 +163,15 @@ test("pool price keeps a small XRP rate and the CREATE rate", () => {
   const spot = poolSpotPrice({ reserve_asset: XDX_RESERVE, reserve_currency: CREATE_RESERVE });
   assert.ok(Math.abs(spot - CREATE_RESERVE / XDX_RESERVE) < 1e-12);
   assert.match(formatPoolPrice(spot), /^9\.327/);
+});
+
+test("xdxPerXrp is the same XRP-per-XDX rate as xrpPerXdx", () => {
+  assert.equal(xrpPerXdxOption({ xdxPerXrp: 0.000039 }), 0.000039);
+  assert.equal(xrpPerXdxOption({ xrpPerXdx: 0.000039 }), xrpPerXdxOption({ xdxPerXrp: 0.000039 }));
+  const viaAlias = poolsFromXrplToAmm({ pools: [createPool()] }, { xdxPerXrp: 0.000039 });
+  const viaName = poolsFromXrplToAmm({ pools: [createPool()] }, { xrpPerXdx: 0.000039 });
+  assert.equal(viaAlias[0].volume24hXdx, viaName[0].volume24hXdx);
+  assert.ok(Math.abs(viaName[0].volume24hXdx - 1.5 / 0.000039) < 1);
 });
 
 test("the AMM list asks xrpl.to for every XDX pool, including thin ones", async () => {

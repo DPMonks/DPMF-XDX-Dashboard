@@ -395,6 +395,13 @@ test("every pool records 24h XDX volume, including new pairs with no tape", () =
   assert.equal(overlaid[1].volume24h, 0);
   assert.equal(overlaid[1].volumeUnit, "xdx");
   assert.equal(overlaid[2].volume24h, 8_000_000);
+  const ledgerZero = overlayPoolFlowVolumes(
+    [{ pool: "XDX/FARM", volume24h: 0, volumeLedger: true, volumeSource: "xrpl-amm" }],
+    [{ pool: "XDX/FARM", xdx: 420100, timestamp: "2026-08-25T12:00:00.000Z" }],
+    now
+  );
+  assert.equal(ledgerZero[0].volume24h, 0);
+  assert.equal(ledgerZero[0].volumeSource, "xrpl-amm");
   const applied = applyPoolVolumes(
     [{ pool: "XDX/XSQUAD" }, { pool: "XDX/XIO" }],
     { "XDX/XIO": { volume24hXdx: 2000, source: "xrpl.to-history" } }

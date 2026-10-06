@@ -39,7 +39,7 @@ import {
 } from "./xrplToCatalog.js";
 import { mergeDiscoveredXdxPools, sortPoolsByXdxReserve } from "../src/utils/xrplToAmm.js";
 import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
-import { loadLedgerPoolVolumes, mergeVolumeMaps } from "./ammPoolVolume.js";
+import { verifyAmmPools } from "./ammPoolVolume.js";
 import { QUOTE_ASSETS } from "../src/xaman/tradeTx.js";
 
 export function knownLivePoolSpecs(extra = []) {
@@ -125,6 +125,7 @@ function poolRowFromLive(spec, live, prices) {
     reserve_quote: reserveQuote || null,
     lp_supply: num(live?.lp_supply) || null,
     trading_fee: live?.trading_fee ?? null,
+    reserve_source: live?.reserve_source || null,
     xdxUsd: prices?.xdxUsd || null,
     xrpUsd: prices?.xrpUsd || null,
     xdxPerXrp: prices?.xdxPerXrp || prices?.xdx_per_xrp || null,
@@ -305,13 +306,17 @@ export async function loadLiveMarket(options = {}) {
     fetchImpl: options.fetchImpl,
     pairs: liveSpecs.map((spec) => spec.pair),
   }).catch(() => ({}));
+  const featuredGone = lives
+    .filter((row) => row?.reserve_source === "deleted" && row.amm_account)
+    .map((row) => String(row.amm_account).trim());
   const liveRows = liveSpecs
     .map((spec, index) => poolRowFromLive(spec, lives[index], prices))
+    .filter((row) => row.reserve_source !== "deleted")
     .filter((row) => row.amm_account || row.reserve_asset || row.lp_supply);
-  const ledgerVolumes = await loadLedgerPoolVolumes(liveRows, options).catch(() => ({}));
-  const pricedRows = applyPoolVolumes(liveRows, mergeVolumeMaps(volumes, ledgerVolumes));
+  const pricedRows = applyPoolVolumes(liveRows, volumes);
   // Indexer xdx_amm_pools and the static POOLS list miss on-ledger AMMs.
   // xrpl.to /v1/amm?status=all is the discovery list. Low liquidity stays, tagged.
+  // prices.xdxPerXrp stores XRP per 1 XDX, the same number as xrpPerXdx.
   await discoveredRaw.catch(() => null);
   const discovered = await loadXrplToXdxAmmPools({
     ...options,
@@ -319,7 +324,23 @@ export async function loadLiveMarket(options = {}) {
     xdxUsd: prices.xdxUsd,
     xrpUsd: prices.xrpUsd,
   }).catch(() => []);
-  const pools = sortPoolsByXdxReserve(mergeDiscoveredXdxPools(pricedRows, discovered));
+  const merged = sortPoolsByXdxReserve(mergeDiscoveredXdxPools(pricedRows, discovered));
+  const checked = await verifyAmmPools(merged, {
+    ...options,
+    concurrency: 3,
+    retries: 0,
+    waitMs: 200,
+    deadlineMs: 9000,
+    limit: 200,
+  }).catch(() => ({ pools: merged, deleted_amms: [] }));
+  const gone = new Set(
+    [...featuredGone, ...(checked.deleted_amms || [])]
+      .map((account) => String(account || "").trim())
+      .filter(Boolean)
+  );
+  const pools = sortPoolsByXdxReserve(
+    checked.pools.filter((row) => !gone.has(String(row.amm_account || "").trim()))
+  );
   const xrpRow = pools.find((row) => row.pool === "XDX/XRP") || pricedRows[0] || {};
   const volume24h = num(volumes["XDX/XRP"]?.volume24hXdx) || num(xrpRow.volume24h);
   const volume24hUsd = num(volumes["XDX/XRP"]?.volume24hUsd);
@@ -383,9 +404,10 @@ export async function loadLiveMarket(options = {}) {
     catching_up: !num(token.holders),
   };
   marketCache = {
-    at: num(token.holders) ? now : 0,
+    at: checked.complete && num(token.holders) ? now : 0,
     prices,
     pools,
+    deleted_amms: [...gone],
     overview,
     token,
     change: { xdx: Number(token.change24h) || 0, xrp: Number(quote.change24h) || 0 },
@@ -567,6 +589,7 @@ export async function liveCatalogPayload(suffix, options = {}) {
     return {
       ...market.overview,
       pools: market.pools,
+      deleted_amms: market.deleted_amms || [],
       pool_discovery_count: discovery.count,
       pool_discovery_error: discovery.error,
       source: "xrpl",

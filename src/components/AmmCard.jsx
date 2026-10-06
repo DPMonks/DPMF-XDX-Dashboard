@@ -127,7 +127,9 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
   const visible = filtered.map((row) => {
     const key = poolKey(row);
     const live = applyLivePoolReserves(row, liveByKey[key]);
-    const volume24h = rememberPoolVolume(key, live.volume24h ?? live.volume24hXdx, volumeByKey[key]);
+    const volume24h = rememberPoolVolume(key, live.volume24h ?? live.volume24hXdx, volumeByKey[key], {
+      ledger: Boolean(live.volumeLedger || live.volume_ledger),
+    });
     return { ...live, volume24h, volume24hXdx: volume24h, volumeUnit: "xdx" };
   });
 
