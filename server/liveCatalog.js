@@ -242,14 +242,15 @@ export async function loadLiveMarket(options = {}) {
   if (!options.fresh && marketCache.overview && now - marketCache.at < MARKET_MS) {
     return marketCache;
   }
+  const scanStarted = Date.now();
   // Ledger trust lines decide which AMMs exist. xrpl.to is names only, and it can run beside the line walk.
   const ledgerTask = discoverLedgerXdxPools({
     fetchImpl: options.fetchImpl,
     rpcUrl: options.rpcUrl,
     fresh: options.fresh,
     now,
-    lineBudgetMs: 46_000,
-    confirmBudgetMs: 10_000,
+    lineBudgetMs: 40_000,
+    confirmBudgetMs: 16_000,
   });
   const namesTask = loadXrplToXdxAmmRaw({ ...options, timeoutMs: 5_000 }).catch(() => null);
   const [quote, token, issuerLocked, blackhole, lpCounts] = await Promise.all([
@@ -327,7 +328,14 @@ export async function loadLiveMarket(options = {}) {
     .filter((row) => row.amm_account || row.reserve_asset || row.lp_supply);
   const pricedRows = applyPoolVolumes(liveRows, volumes);
   // prices.xdxPerXrp stores XRP per 1 XDX, the same number as xrpPerXdx.
-  const ledger = await ledgerTask.catch(() => ({ pools: [], complete: false, error: "ledger amm discovery failed" }));
+  const ledger = await ledgerTask.catch(() => ({
+    pools: [],
+    complete: false,
+    error: "ledger amm discovery failed",
+    pages: 0,
+    candidates: 0,
+    lines_done: false,
+  }));
   const names = await namesTask;
   let poolSource;
   let ledgerComplete;
@@ -347,12 +355,13 @@ export async function loadLiveMarket(options = {}) {
     ledgerComplete = false;
     merged = sortPoolsByXdxReserve(pricedRows.filter((row) => row.reserve_source === "amm_info"));
   }
+  const verifyBudget = Math.max(1_500, Math.min(8_000, 54_000 - (Date.now() - scanStarted)));
   const checked = await verifyAmmPools(merged, {
     ...options,
     concurrency: 3,
     retries: 0,
     waitMs: 200,
-    deadlineMs: 8_000,
+    deadlineMs: verifyBudget,
     limit: 200,
   }).catch(() => ({ pools: merged, deleted_amms: [] }));
   const gone = new Set(
@@ -433,6 +442,9 @@ export async function loadLiveMarket(options = {}) {
     pool_source: poolSource,
     ledger_complete: ledgerComplete && checked.complete !== false,
     pool_discovery_error: ledger.error || null,
+    pool_discovery_pages: Number(ledger.pages) || 0,
+    pool_discovery_candidates: Number(ledger.candidates) || 0,
+    pool_discovery_lines_done: Boolean(ledger.lines_done),
     overview,
     token,
     change: { xdx: Number(token.change24h) || 0, xrp: Number(quote.change24h) || 0 },
@@ -619,6 +631,9 @@ export async function liveCatalogPayload(suffix, options = {}) {
       ledger_complete: Boolean(market.ledger_complete),
       pool_discovery_count: discovery.count || market.pools?.length || 0,
       pool_discovery_error: market.pool_discovery_error || discovery.error,
+      pool_discovery_pages: Number(market.pool_discovery_pages ?? discovery.pages) || 0,
+      pool_discovery_candidates: Number(market.pool_discovery_candidates ?? discovery.candidates) || 0,
+      pool_discovery_lines_done: Boolean(market.pool_discovery_lines_done ?? discovery.lines_done),
       source: "xrpl",
       catching_up: !market.pools?.length,
     };
