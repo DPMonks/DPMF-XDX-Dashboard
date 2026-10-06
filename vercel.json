@@ -76,7 +76,7 @@
   ],
   "functions": {
     "api/index.js": {
-      "maxDuration": 20
+      "maxDuration": 60
     },
     "api/overview.js": {
       "maxDuration": 20
@@ -85,7 +85,7 @@
       "maxDuration": 10
     },
     "api/[...path].js": {
-      "maxDuration": 20
+      "maxDuration": 60
     },
     "api/top-holders.js": {
       "maxDuration": 20

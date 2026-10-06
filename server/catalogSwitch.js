@@ -165,7 +165,9 @@ export function mergeLiveOverview(db = {}, live = {}) {
     if (!isBlankAmount(live.circulatingMarketCap)) next.circulatingMarketCap = live.circulatingMarketCap;
     if (!isBlankAmount(live.ammMarketCap)) next.ammMarketCap = live.ammMarketCap;
   }
-  if (Array.isArray(live.pools) && live.pools.length) {
+  if (live.pool_source === "ledger") {
+    next.pools = Array.isArray(live.pools) ? live.pools : [];
+  } else if (Array.isArray(live.pools) && live.pools.length) {
     next.pools = mergePoolRows(db.pools, live.pools);
   }
   const liveUsed = marketUsed || countUsed || metaUsed || Boolean(live.pools?.length);
@@ -222,6 +224,10 @@ export function mergeTradeFlows(db, live) {
   return mergeTradePrints(dbRows, liveRows);
 }
 
+function ammAccountOf(row) {
+  return String(row?.amm_account || row?.amm || "").trim();
+}
+
 export function mergeLivePools(db = {}, live = {}) {
   const livePools = Array.isArray(live.pools) ? live.pools : [];
   const dbPools = Array.isArray(db.pools) ? db.pools : Array.isArray(db) ? db : [];
@@ -230,7 +236,26 @@ export function mergeLivePools(db = {}, live = {}) {
       .map((account) => String(account || "").trim())
       .filter(Boolean)
   );
-  const visible = (row) => !gone.has(String(row?.amm_account || row?.amm || "").trim());
+  const visible = (row) => !gone.has(ammAccountOf(row));
+  if (live.pool_source === "ledger") {
+    const liveAccounts = new Set(livePools.map(ammAccountOf).filter(Boolean));
+    if (live.ledger_complete) {
+      for (const row of dbPools) {
+        const account = ammAccountOf(row);
+        if (account && !liveAccounts.has(account)) gone.add(account);
+      }
+    }
+    const pools = sortPoolsByXdxReserve(livePools.filter(visible));
+    return {
+      ...(asObject(db) || {}),
+      ...(asObject(live) || {}),
+      pools,
+      deleted_amms: [...gone],
+      count: pools.length,
+      catching_up: false,
+      source: catalogSource(dbPools.length > 0, true),
+    };
+  }
   if (!livePools.length && !gone.size) return db;
   const pools = sortPoolsByXdxReserve(mergePoolRows(dbPools.filter(visible), livePools.filter(visible)));
   return {

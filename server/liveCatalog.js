@@ -32,14 +32,18 @@ import {
   loadXrplToLpCounts,
   loadXrplToLpOwners,
   loadXrplToRank,
-  loadXrplToXdxAmmPools,
   loadXrplToXdxAmmRaw,
-  xrplToAmmDiscoveryStatus,
   loadXrpSparkline,
 } from "./xrplToCatalog.js";
-import { mergeDiscoveredXdxPools, sortPoolsByXdxReserve } from "../src/utils/xrplToAmm.js";
+import { sortPoolsByXdxReserve } from "../src/utils/xrplToAmm.js";
 import { applyPoolVolumes, loadPoolXdxVolumes } from "./freeVolume.js";
 import { verifyAmmPools } from "./ammPoolVolume.js";
+import {
+  applyXrplToNames,
+  discoverLedgerXdxPools,
+  ledgerAmmDiscoveryStatus,
+  withLedgerLiquidity,
+} from "./ledgerAmmDiscover.js";
 import { QUOTE_ASSETS } from "../src/xaman/tradeTx.js";
 
 export function knownLivePoolSpecs(extra = []) {
@@ -238,8 +242,16 @@ export async function loadLiveMarket(options = {}) {
   if (!options.fresh && marketCache.overview && now - marketCache.at < MARKET_MS) {
     return marketCache;
   }
-  // The AMM list has to leave before the token card and reserve fan-out, or xrpl.to answers 429 and the catalog stays on the indexer rows.
-  const discoveredRaw = loadXrplToXdxAmmRaw(options);
+  // Ledger trust lines decide which AMMs exist. xrpl.to is names only, and it can run beside the line walk.
+  const ledgerTask = discoverLedgerXdxPools({
+    fetchImpl: options.fetchImpl,
+    rpcUrl: options.rpcUrl,
+    fresh: options.fresh,
+    now,
+    lineBudgetMs: 32_000,
+    confirmBudgetMs: 16_000,
+  });
+  const namesTask = loadXrplToXdxAmmRaw({ ...options, timeoutMs: 5_000 }).catch(() => null);
   const [quote, token, issuerLocked, blackhole, lpCounts] = await Promise.all([
     loadLiveXrpQuote(options),
     loadXrplToToken(options),
@@ -314,23 +326,30 @@ export async function loadLiveMarket(options = {}) {
     .filter((row) => row.reserve_source !== "deleted")
     .filter((row) => row.amm_account || row.reserve_asset || row.lp_supply);
   const pricedRows = applyPoolVolumes(liveRows, volumes);
-  // Indexer xdx_amm_pools and the static POOLS list miss on-ledger AMMs.
-  // xrpl.to /v1/amm?status=all is the discovery list. Low liquidity stays, tagged.
   // prices.xdxPerXrp stores XRP per 1 XDX, the same number as xrpPerXdx.
-  await discoveredRaw.catch(() => null);
-  const discovered = await loadXrplToXdxAmmPools({
-    ...options,
-    xrpPerXdx: prices.xdxPerXrp || prices.xdx_per_xrp,
-    xdxUsd: prices.xdxUsd,
-    xrpUsd: prices.xrpUsd,
-  }).catch(() => []);
-  const merged = sortPoolsByXdxReserve(mergeDiscoveredXdxPools(pricedRows, discovered));
+  const ledger = await ledgerTask.catch(() => ({ pools: [], complete: false, error: "ledger amm discovery failed" }));
+  const names = await namesTask;
+  let poolSource = "featured";
+  let ledgerComplete = false;
+  let merged;
+  if (ledger.complete || (Array.isArray(ledger.pools) && ledger.pools.length)) {
+    poolSource = "ledger";
+    ledgerComplete = Boolean(ledger.complete);
+    merged = sortPoolsByXdxReserve(
+      applyXrplToNames(
+        withLedgerLiquidity(ledger.pools, { xrpPerXdx: prices.xdxPerXrp || prices.xdx_per_xrp }),
+        names
+      )
+    );
+  } else {
+    merged = sortPoolsByXdxReserve(pricedRows);
+  }
   const checked = await verifyAmmPools(merged, {
     ...options,
     concurrency: 3,
     retries: 0,
     waitMs: 200,
-    deadlineMs: 9000,
+    deadlineMs: 8_000,
     limit: 200,
   }).catch(() => ({ pools: merged, deleted_amms: [] }));
   const gone = new Set(
@@ -408,6 +427,9 @@ export async function loadLiveMarket(options = {}) {
     prices,
     pools,
     deleted_amms: [...gone],
+    pool_source: poolSource,
+    ledger_complete: ledgerComplete && checked.complete !== false,
+    pool_discovery_error: ledger.error || null,
     overview,
     token,
     change: { xdx: Number(token.change24h) || 0, xrp: Number(quote.change24h) || 0 },
@@ -585,13 +607,15 @@ export async function liveCatalogPayload(suffix, options = {}) {
   }
   if (path === "lp-pools" || path === "amm" || path === "pools") {
     const market = await loadLiveMarket(options);
-    const discovery = xrplToAmmDiscoveryStatus();
+    const discovery = ledgerAmmDiscoveryStatus();
     return {
       ...market.overview,
       pools: market.pools,
       deleted_amms: market.deleted_amms || [],
-      pool_discovery_count: discovery.count,
-      pool_discovery_error: discovery.error,
+      pool_source: market.pool_source || "ledger",
+      ledger_complete: Boolean(market.ledger_complete),
+      pool_discovery_count: discovery.count || market.pools?.length || 0,
+      pool_discovery_error: market.pool_discovery_error || discovery.error,
       source: "xrpl",
       catching_up: !market.pools?.length,
     };
