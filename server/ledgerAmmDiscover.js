@@ -183,7 +183,9 @@ function accountIsAmm(result) {
 
 function retryableRpc(result) {
   const error = String(result?.error || "");
-  return error === "tooBusy" || error === "noNetwork" || error === "noPermission" || error === "timeout";
+  if (!error) return false;
+  if (error === "actNotFound" || error === "actMalformed") return false;
+  return /tooBusy|slowDown|noNetwork|noPermission|timeout|serverBusy/i.test(error);
 }
 
 async function rpcRotate(method, params, options) {
