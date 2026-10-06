@@ -28,8 +28,14 @@ function rpcFetch(handler) {
 test("a deleted AMM is dropped and a live AMM keeps ledger reserves and ledger volume", async () => {
   resetAmmPoolVolumeCache();
   const fetchImpl = rpcFetch((method, params) => {
+    if (method === "account_info" && params.account === FARM) {
+      return { error: "actNotFound", error_message: "Account not found.", status: "error" };
+    }
+    if (method === "account_info") {
+      return { account_data: { Account: params.account, Balance: "10000000" } };
+    }
     if (method === "amm_info" && params.amm_account === FARM) {
-      return { error: "actNotFound", status: "error" };
+      return { error: "actMalformed", error_message: "Account malformed.", status: "error" };
     }
     if (method === "amm_info" && params.amm_account === CREATE) {
       return {
