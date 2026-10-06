@@ -29,6 +29,7 @@ test("issuer lines keep zero peer limit balances and skip ordinary holders", () 
   const rows = xdxAmmCandidateLines([
     { account: HOLDER, currency: "XDX", balance: "-10", limit_peer: "100" },
     { account: WALLET, currency: "XDX", balance: "-5", limit_peer: "0" },
+    { account: "rNoRippleWallet111111111111111111", currency: "XDX", balance: "-8", limit_peer: "0", no_ripple_peer: true },
     { account: CREATE, currency: XDX_HEX, balance: "-0.000000002", limit_peer: "0" },
     { account: FARM, currency: "XDX", balance: "0", limit_peer: "0" },
     { account: XDX_ISSUER, currency: "XDX", balance: "-1", limit_peer: "0" },
