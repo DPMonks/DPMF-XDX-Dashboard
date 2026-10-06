@@ -85,6 +85,29 @@ const LIVE_COUNT_KEYS = [
   "count",
 ];
 
+function takeLedgerHolderCounts(next, live) {
+  if (live?.holders_source !== "xrpl-lines") return false;
+  const holders = !isBlankAmount(live.holder_count) ? Number(live.holder_count) : !isBlankAmount(live.holders) ? Number(live.holders) : 0;
+  const trustlines = !isBlankAmount(live.trustline_count)
+    ? Number(live.trustline_count)
+    : !isBlankAmount(live.trustlines)
+      ? Number(live.trustlines)
+      : 0;
+  if (!(holders > 0) && !(trustlines > 0)) return false;
+  if (holders > 0) {
+    next.holder_count = holders;
+    next.holders = holders;
+  }
+  if (trustlines > 0) {
+    next.trustlines = trustlines;
+    next.trustline_count = trustlines;
+  }
+  next.holders_source = "xrpl-lines";
+  next.holders_stale = Boolean(live.holders_stale);
+  next.trustlines_stale = Boolean(live.trustlines_stale);
+  return true;
+}
+
 function takeLive(next, live, keys) {
   let used = false;
   for (const key of keys) {
@@ -155,7 +178,7 @@ export function mergeLivePrices(db = {}, live = {}) {
 export function mergeLiveOverview(db = {}, live = {}) {
   const next = { ...db, ...mergeLivePrices(db, live) };
   const marketUsed = takeLive(next, live, LIVE_MARKET_KEYS);
-  const countUsed = takeLiveWhenDbBlank(next, db, live, LIVE_COUNT_KEYS);
+  const countUsed = takeLedgerHolderCounts(next, live) || takeLiveWhenDbBlank(next, db, live, LIVE_COUNT_KEYS);
   const metaUsed = takeLiveWhenDbBlankValue(next, db, live, LIVE_META_KEYS);
   if (!isBlankAmount(live.xdxUsd)) {
     next.xdxUsd = live.xdxUsd;
@@ -289,6 +312,23 @@ export function mergeIssuerLocked(db = {}, live = {}) {
 }
 
 export function mergeCountPayload(db = {}, live = {}) {
+  const ledgerCount = !isBlankAmount(live?.count)
+    ? Number(live.count)
+    : !isBlankAmount(live?.holder_count)
+      ? Number(live.holder_count)
+      : !isBlankAmount(live?.trustline_count)
+        ? Number(live.trustline_count)
+        : 0;
+  if ((live?.source === "xrpl-lines" || live?.holders_source === "xrpl-lines") && ledgerCount > 0) {
+    return {
+      ...db,
+      ...live,
+      count: ledgerCount,
+      source: "xrpl-lines",
+      stale: Boolean(live.stale || live.holders_stale),
+      catching_up: Boolean(live.catching_up) && ledgerCount <= 0,
+    };
+  }
   if (!isBlankAmount(db.count) || !isBlankAmount(db.holder_count)) {
     return { ...db, source: db.source || "db" };
   }

@@ -37,6 +37,33 @@ test("DB holders stay when present and live fills a zero price", () => {
   assert.equal(merged.source, "hybrid");
 });
 
+test("issuer line counts replace a stored holder snapshot", () => {
+  const merged = mergeLiveOverview(
+    { xdxUsd: 0.00005, holder_count: 1800, holders: 1800, trustlines: 2200, trustline_count: 2200, source: "db" },
+    {
+      xdxUsd: 0.00005,
+      holder_count: 15879,
+      holders: 15879,
+      trustlines: 20048,
+      trustline_count: 20048,
+      holders_source: "xrpl-lines",
+      holders_stale: false,
+      source: "xrpl",
+    }
+  );
+  assert.equal(merged.holder_count, 15879);
+  assert.equal(merged.trustlines, 20048);
+  assert.equal(merged.holders_source, "xrpl-lines");
+  assert.equal(merged.holders_stale, false);
+  const counts = mergeCountPayload(
+    { count: 1800, source: "token_holders_latest", as_of: "2026-10-06T00:00:00.000Z" },
+    { count: 15879, source: "xrpl-lines", stale: false, catching_up: false, lines_done: true }
+  );
+  assert.equal(counts.count, 15879);
+  assert.equal(counts.source, "xrpl-lines");
+  assert.equal(counts.as_of, "2026-10-06T00:00:00.000Z");
+});
+
 test("zero DB holder counts take the live token stats", () => {
   const merged = mergeCountPayload({ count: 0, source: "db" }, { count: 15941, source: "xrpl.to" });
   assert.equal(merged.count, 15941);
