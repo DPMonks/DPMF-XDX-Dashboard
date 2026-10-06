@@ -405,8 +405,10 @@ export async function loadLiveMarket(options = {}) {
     volume7dXdx: num(volumes["XDX/XRP"]?.volume7dXdx) || null,
     volumeUnit: "xdx",
     volumeSource: volumes["XDX/XRP"]?.source || null,
-    holder_count: num(token.holders) || null,
-    holders: num(token.holders) || null,
+    holder_count: num(ledger.holders) || null,
+    holders: num(ledger.holders) || null,
+    holders_stale: Boolean(ledger.holders_stale) || !num(ledger.holders),
+    holders_source: ledger.holders_source || "xrpl-lines",
     lp_holder_count: num(token.lpHolders) || num(lpCounts?.holders) || null,
     circulating,
     circulating_supply: circulating,
@@ -416,8 +418,9 @@ export async function loadLiveMarket(options = {}) {
     issued_xdx: Number(issuerLocked.issued || 0),
     issuer_source: issuerLocked.source,
     amm_xdx: reserveXdx,
-    trustlines: num(token.trustlines) || null,
-    trustline_count: num(token.trustlines) || null,
+    trustlines: num(ledger.trustlines) || null,
+    trustline_count: num(ledger.trustlines) || null,
+    trustlines_stale: Boolean(ledger.holders_stale) || !num(ledger.trustlines),
     lp_trustline_count: num(lpCounts?.trustlines) || null,
     ammMarketCap: tvlUsd,
     xrplMarketCap: XDX_TOTAL_SUPPLY * xdxUsd,
@@ -433,10 +436,11 @@ export async function loadLiveMarket(options = {}) {
     usdJpy: prices.usdJpy,
     amm_account: xrpPool.amm_account || XDX_XRP_AMM,
     source: "xrpl",
-    catching_up: !num(token.holders),
+    catching_up: !num(ledger.holders),
   };
+  const holdersFresh = num(ledger.holders) > 0 && !ledger.holders_stale;
   marketCache = {
-    at: ledgerComplete && checked.complete && num(token.holders) ? now : 0,
+    at: ledgerComplete && checked.complete && holdersFresh ? now : 0,
     prices,
     pools,
     deleted_amms: [...gone],
@@ -650,13 +654,26 @@ export async function liveCatalogPayload(suffix, options = {}) {
   if (path === "issuer-locked") {
     return loadIssuerLockedLive(options);
   }
-  if (path === "holders/count") {
-    const token = await loadXrplToToken(options);
-    return { count: token.holders || null, source: token.source, catching_up: !token.holders };
-  }
-  if (path === "trustlines/count") {
-    const token = await loadXrplToToken(options);
-    return { count: token.trustlines || null, source: token.source, catching_up: !token.trustlines };
+  if (path === "holders/count" || path === "trustlines/count") {
+    const ledger = await discoverLedgerXdxPools({
+      fetchImpl: options.fetchImpl,
+      rpcUrl: options.rpcUrl,
+      fresh: options.fresh,
+      now: Number(options.now) || Date.now(),
+      lineBudgetMs: 40_000,
+      confirmBudgetMs: 16_000,
+    });
+    const holders = num(ledger.holders) || null;
+    const trustlines = num(ledger.trustlines) || null;
+    const count = path === "holders/count" ? holders : trustlines;
+    const stale = Boolean(ledger.holders_stale) || !count;
+    return {
+      count,
+      source: "xrpl-lines",
+      stale,
+      catching_up: !count,
+      lines_done: Boolean(ledger.lines_done),
+    };
   }
   if (path === "lp-holders/count") {
     const params = new URLSearchParams(String(options.search || "").replace(/^\?/, ""));

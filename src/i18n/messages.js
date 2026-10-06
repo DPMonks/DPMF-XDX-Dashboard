@@ -391,6 +391,7 @@ const en = {
   amm: "AMM",
   xdxPerXrp: "XDX / XRP",
   holders: "Holders",
+  holdersStale: "Last complete ledger count",
   trustlines: "Trustlines",
   previous: "Previous",
   change: "Change",

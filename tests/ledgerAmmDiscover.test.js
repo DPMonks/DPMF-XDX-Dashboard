@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { XDX_HEX, XDX_ISSUER } from "../src/constants/ledger.js";
 import { mergeLivePools } from "../server/catalogSwitch.js";
 import {
+  countXdxHolderLines,
   discoverLedgerXdxPools,
   resetLedgerAmmDiscoveryCache,
   withLedgerLiquidity,
@@ -23,6 +24,18 @@ function rpcFetch(handler) {
     return { ok: true, json: async () => ({ result }) };
   };
 }
+
+test("holder counts keep every non-zero XDX balance, including ordinary wallets", () => {
+  const counted = countXdxHolderLines([
+    { account: HOLDER, currency: "XDX", balance: "-10", limit_peer: "100" },
+    { account: WALLET, currency: "XDX", balance: "0", limit_peer: "0" },
+    { account: CREATE, currency: XDX_HEX, balance: "-0.000000002", limit_peer: "0" },
+    { account: XDX_ISSUER, currency: "XDX", balance: "-1", limit_peer: "0" },
+    { account: "rOtherAsset111111111111111111111", currency: "USD", balance: "-3" },
+  ]);
+  assert.equal(counted.holders, 2);
+  assert.equal(counted.trustlines, 3);
+});
 
 test("issuer lines keep zero peer limit balances and skip ordinary holders", () => {
   const rows = xdxAmmCandidateLines([
@@ -94,6 +107,10 @@ test("ledger discovery confirms AMM accounts and ignores xrpl.to existence", asy
   assert.equal(create.reserve_source, "amm_info");
   assert.equal(create.volumeSource, null);
   assert.equal(found.pools.length, 1);
+  assert.equal(found.holders, 3);
+  assert.equal(found.trustlines, 3);
+  assert.equal(found.holders_source, "xrpl-lines");
+  assert.equal(found.holders_stale, false);
   resetLedgerAmmDiscoveryCache();
 });
 
@@ -223,6 +240,92 @@ test("amm_info tooBusy retries and still keeps the ledger pool", async () => {
   assert.equal(found.pools[0].pool, "XDX/CREATE");
   assert.equal(found.pools[0].trading_fee, 331);
   assert.ok(infos >= 2);
+  resetLedgerAmmDiscoveryCache();
+});
+
+test("a 402 line read backs off and then counts holders", async () => {
+  resetLedgerAmmDiscoveryCache();
+  let lines = 0;
+  const fetchImpl = async () => {
+    lines += 1;
+    if (lines === 1) return { ok: false, status: 402, json: async () => ({}) };
+    return {
+      ok: true,
+      json: async () => ({
+        result: {
+          lines: [
+            { account: HOLDER, currency: "XDX", balance: "-4", limit_peer: "1" },
+            { account: WALLET, currency: "XDX", balance: "0", limit_peer: "1" },
+          ],
+        },
+      }),
+    };
+  };
+  const found = await discoverLedgerXdxPools({
+    fetchImpl,
+    fresh: true,
+    now: Date.now(),
+    confirmBudgetMs: 1000,
+    lineBudgetMs: 5000,
+  });
+  assert.equal(found.lines_done, true);
+  assert.equal(found.holders, 1);
+  assert.equal(found.trustlines, 2);
+  assert.equal(found.holders_stale, false);
+  assert.ok(lines >= 2);
+  resetLedgerAmmDiscoveryCache();
+});
+
+test("an incomplete rescan keeps the last holder count and labels it stale", async () => {
+  resetLedgerAmmDiscoveryCache();
+  let open = true;
+  const fetchImpl = rpcFetch((method) => {
+    if (method === "account_lines") {
+      if (!open) return { error: "actNotFound", error_message: "Account not found." };
+      return {
+        lines: [
+          { account: CREATE, currency: "XDX", balance: "-2", limit_peer: "0" },
+          { account: HOLDER, currency: "XDX", balance: "0", limit_peer: "5" },
+        ],
+      };
+    }
+    if (method === "amm_info") {
+      return {
+        amm: {
+          account: CREATE,
+          amount: { currency: "XDX", issuer: XDX_ISSUER, value: "2" },
+          amount2: { currency: CREATE_HEX, issuer: CREATE_ISSUER, value: "4" },
+          lp_token: { currency: "03C0CFC705BD93B396F7F2062F13B0CE9F14B043", issuer: CREATE, value: "1" },
+          trading_fee: 331,
+        },
+      };
+    }
+    return { error: "actNotFound", error_message: "Account not found." };
+  });
+  const firstNow = Date.now();
+  const first = await discoverLedgerXdxPools({
+    fetchImpl,
+    fresh: true,
+    now: firstNow,
+    confirmBudgetMs: 1000,
+  });
+  assert.equal(first.complete, true);
+  assert.equal(first.holders, 1);
+  assert.equal(first.trustlines, 2);
+  assert.equal(first.holders_stale, false);
+  open = false;
+  const second = await discoverLedgerXdxPools({
+    fetchImpl,
+    now: firstNow + 10 * 60_000 + 5,
+    confirmBudgetMs: 1000,
+    lineBudgetMs: 1000,
+  });
+  assert.equal(second.holders, 1);
+  assert.equal(second.trustlines, 2);
+  assert.equal(second.holders_stale, true);
+  assert.equal(second.stale, true);
+  assert.equal(second.complete, false);
+  assert.equal(second.pools[0].amm_account, CREATE);
   resetLedgerAmmDiscoveryCache();
 });
 

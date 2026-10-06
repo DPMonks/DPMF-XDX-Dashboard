@@ -167,11 +167,13 @@ export default function TokenDetails() {
         label={t.holders}
         value={formatNumber(pick(data, ["holders", "holder_count"]), locale)}
         amount={amountOf(data, ["holders", "holder_count"])}
+        hint={data.holders_stale ? t.holdersStale : null}
       />
       <Detail
         label={t.trustlines}
         value={formatNumber(pick(data, ["trustlines", "trustline_count"]), locale)}
         amount={amountOf(data, ["trustlines", "trustline_count"])}
+        hint={data.holders_stale || data.trustlines_stale ? t.holdersStale : null}
       />
       <Detail
         label={t.lpHoldersCount}
