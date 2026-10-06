@@ -2,7 +2,6 @@ import { api, INDEXER_ORIGIN } from "../api";
 import {
   pairFromRow,
   XDX_RLUSD_LP_XRPL_TO_MD5,
-  XDX_XRPL_TO_MD5,
   XDX_XRP_LP_XRPL_TO_MD5,
 } from "../constants/ledger";
 import { keepLastGoodOwners } from "../todayOwners";
@@ -15,7 +14,7 @@ import {
   xrplToHolderGraphUrl,
 } from "../activityHistory";
 import { composeTokenDetails } from "../tokenDetails";
-import { composeTokenDetailHistory, rowsFromOhlc, xdxPriceHistoryRows } from "../tokenDetailsHistory";
+import { composeTokenDetailHistory, xdxPriceHistoryRows } from "../tokenDetailsHistory";
 import lockedCandles from "../data/lockedCandles.json" with { type: "json" };
 import { fillMissingXdxFiat, pricesNeedFiat } from "../utils/fiatFx";
 import {
@@ -790,11 +789,7 @@ export async function getTokenDetailsHistory() {
     localIssued,
     needsFullIssuanceHistory(localIssued) ? await fetchXrplToIssued() : []
   );
-  const candlePrices = xdxPriceHistoryRows(candlesBody);
-  const ledgerCandles = String(candlesBody?.source || "").startsWith("xrpl-ledger");
-  const priceRows = !ledgerCandles && historyLooksShort(candlePrices, sparkline)
-    ? [...(await fetchXrplToOhlc()), ...candlePrices]
-    : candlePrices;
+  const priceRows = xdxPriceHistoryRows(candlesBody);
   const live = composeTokenDetails({
     overview,
     prices: fillMissingXdxFiat(prices),
@@ -857,44 +852,6 @@ async function fetchXrplToIssued() {
   }
 }
 
-const XRPL_TO_OHLC_URL = `https://api.xrpl.to/v1/ohlc/${XDX_XRPL_TO_MD5}?range=ALL&interval=1d&vs_currency=USD`;
-let xrplToOhlcCache = { at: 0, rows: [], blockedUntil: 0 };
-
-function historyLooksShort(...lists) {
-  const rows = lists.flatMap((list) => (Array.isArray(list) ? list : []));
-  if (rows.length < 50) return true;
-  let first = Infinity;
-  for (const row of rows) {
-    const ms = Date.parse(row?.timestamp || row?.day || row?.ts || "");
-    if (Number.isFinite(ms) && ms < first) first = ms;
-  }
-  return !Number.isFinite(first) || Date.now() - first < 60 * 86400000;
-}
-
-async function fetchXrplToOhlc() {
-  const now = Date.now();
-  if (now < xrplToOhlcCache.blockedUntil) return xrplToOhlcCache.rows;
-  if (xrplToOhlcCache.rows.length && now - xrplToOhlcCache.at < XRPL_TO_TTL_MS) {
-    return xrplToOhlcCache.rows;
-  }
-  try {
-    const response = await fetch(XRPL_TO_OHLC_URL, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(6000),
-    });
-    if (response.status === 429) {
-      xrplToOhlcCache = { ...xrplToOhlcCache, blockedUntil: now + XRPL_TO_TTL_MS };
-      return xrplToOhlcCache.rows;
-    }
-    if (!response.ok) return xrplToOhlcCache.rows;
-    const rows = rowsFromOhlc(await response.json());
-    xrplToOhlcCache = { at: now, rows, blockedUntil: 0 };
-    return rows;
-  } catch {
-    return xrplToOhlcCache.rows;
-  }
-}
-
 export async function getChartHistory() {
   const take = (promise) => promise.then(chartArray).catch(() => []);
   const [apiIssued, apiActivity, apiTraders] = await Promise.all([
@@ -937,7 +894,7 @@ export async function getDailyXdxVolumeRows() {
       source: "xrpl-ledger",
     }));
   }
-  return fetchXrplToOhlc();
+  return [];
 }
 
 export async function getXdxFlows() {

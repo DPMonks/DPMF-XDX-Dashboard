@@ -72,6 +72,8 @@ test("ledger candles price in live XRP and do not double count a seen hash", asy
   assert.ok(Math.abs(first.rows[0].price_xrp - 1.000012 / 100) < 1e-12);
   assert.ok(Math.abs(first.rows[0].price_usd - (1.000012 / 100) * 2) < 1e-12);
   assert.equal(first.rows[0].volume_xdx, 100);
+  assert.equal(first.intervals["1h"].count, 1);
+  assert.ok(first.intervals["1m"].count >= 1);
   const second = await loadLedgerCandles({
     fetchImpl,
     skipStore: true,

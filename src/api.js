@@ -173,7 +173,7 @@ function cacheSet(url, data, ttl = CACHE_MS) {
   responseCache.set(url, { at: Date.now(), data, ttl });
 }
 
-async function fetchJson(url, { method = "GET", body } = {}) {
+async function fetchJson(url, { method = "GET", body, timeoutMs = 8000 } = {}) {
   let res;
   try {
     res = await fetch(url, {
@@ -184,7 +184,7 @@ async function fetchJson(url, { method = "GET", body } = {}) {
         ...(body ? { "content-type": "application/json" } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(Number(timeoutMs) || 8000),
     });
   } catch (error) {
     const timedOut = error.name === "TimeoutError" || error.name === "AbortError";
@@ -231,6 +231,7 @@ async function getJson(path, options = {}) {
     immediate = false,
     priority = 0,
     retries = 2,
+    timeoutMs = 8000,
   } = options;
   const url = requestUrl(path);
   const cacheKey = `${method} ${url}`;
@@ -251,7 +252,7 @@ async function getJson(path, options = {}) {
     let lastError;
     for (let attempt = 0; attempt < retries; attempt += 1) {
       try {
-        const data = await getJsonOnce(path, { method, body });
+        const data = await getJsonOnce(path, { method, body, timeoutMs });
         if (cache) cacheSet(cacheKey, data);
         return data;
       } catch (error) {
@@ -398,7 +399,7 @@ export const api = {
   health: () => getJson("/health"),
   healthXrpl: () => getJson("/health/xrpl"),
   overview: () => getJson(endpoint("overview"), { queue: false }),
-  amm: () => getJson(endpoint("amm")),
+  amm: () => getJson(endpoint("amm"), { timeoutMs: 45000, immediate: true, retries: 1 }),
   pools: async () => {
     const body = await getJson(endpoint("pools"));
     if (Array.isArray(body?.pools)) return body.pools;
@@ -447,7 +448,7 @@ export const api = {
     const join = path.includes("?") ? "&" : "?";
     return getJson(`${path}${join}pool=${encodeURIComponent(pool)}`);
   },
-  lpPools: () => getJson(endpoint("lpPools") || "/lp-pools"),
+  lpPools: () => getJson(endpoint("lpPools") || "/lp-pools", { timeoutMs: 45000, immediate: true, retries: 1 }),
   tvlHistory: () => getJson(endpoint("tvlHistory")),
   holdersHistory: (extra = {}) => getJson(endpoint("holdersHistory"), extra),
   lpHoldersHistory: () => getJson(endpoint("lpHoldersHistory")),
@@ -552,7 +553,8 @@ export const api = {
   prices: () => getJson(endpoint("prices"), { queue: false }),
   change24h: () => getJson(endpoint("change24h"), { queue: false }),
   sparkline: (asset) => getJson(endpoint("sparkline", { asset })),
-  candles: () => getJson(endpoint("candles") || "/charts/candles"),
+  candles: () =>
+    getJson(endpoint("candles") || "/charts/candles", { timeoutMs: 20000, immediate: true, retries: 1 }),
   issuerLocked: () => getJson(endpoint("issuerLocked")),
   orderbook: (pair = "XDX/XRP") => {
     const path = endpoint("orderbook") || "/orderbook";
