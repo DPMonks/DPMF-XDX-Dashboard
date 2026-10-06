@@ -182,20 +182,11 @@ function rpcOptions(options) {
   };
 }
 
-function accountIsAmm(result) {
-  if (result?.account_data?.AMMID) return true;
-  if (result?.account_data) return false;
-  const error = String(result?.error || "");
-  const message = String(result?.error_message || "");
-  if (error === "actNotFound" || /account not found/i.test(message)) return false;
-  return null;
-}
-
 function retryableRpc(result) {
   const error = String(result?.error || "");
   if (!error) return false;
   if (error === "actNotFound" || error === "actMalformed") return false;
-  return /tooBusy|slowDown|noNetwork|noPermission|timeout|serverBusy/i.test(error);
+  return /tooBusy|slowDown|noNetwork|noPermission|timeout|serverBusy|abort|ECONNRESET|fetch failed/i.test(error);
 }
 
 let stickyRpc = "";
@@ -225,14 +216,23 @@ async function rpcRotate(method, params, options) {
   return last;
 }
 
-function rpcBudget(method, params, options, deadline) {
+function confirmUrls() {
+  const hot = stickyRpc;
+  const cool = PUBLIC_RPCS.filter((url) => url !== hot);
+  return cool.length ? cool : PUBLIC_RPCS;
+}
+
+async function rpcConfirm(method, params, options, deadline, salt) {
   const remaining = deadline - Date.now();
-  if (remaining < 200) return Promise.resolve({ error: "timeout" });
-  const timeoutMs = Math.min(3_500, remaining);
-  return Promise.race([
-    rpcRotate(method, params, { ...options, timeoutMs, rotate: false }),
-    sleep(remaining).then(() => ({ error: "timeout" })),
-  ]);
+  if (remaining < 250) return { error: "timeout" };
+  const urls = confirmUrls();
+  const rpcUrl = urls[Math.abs(Number(salt) || 0) % urls.length];
+  const timeoutMs = Math.min(4_000, remaining);
+  try {
+    return await xrplRpc(method, params, { ...rpcOptions(options), rpcUrl, timeoutMs });
+  } catch (err) {
+    return { error: String(err?.message || err) };
+  }
 }
 
 async function readPage(options, marker) {
@@ -300,40 +300,35 @@ function poolsFromVerdicts() {
 async function confirmCandidates(options, budgetMs) {
   const deadline = Date.now() + budgetMs;
   // AMM trust lines sit at the end of the issuer list. Check those first.
-  // A full fan-out on the earlier wallets used up the budget and hid every pool.
+  // The line walk leaves its node busy, so confirmation uses the other public nodes.
+  // amm_info is one call: a pool comes back, and a normal wallet is actMalformed.
   const pending = state.candidates.filter((row) => !state.verdicts.has(row.account)).reverse();
-  await mapLimit(pending, 6, async (row) => {
+  await mapLimit(pending, 4, async (row, index) => {
     if (Date.now() >= deadline) return;
-    try {
-      const info = await rpcBudget(
-        "account_info",
-        { account: row.account, ledger_index: "validated" },
-        options,
-        deadline
-      );
-      const verdict = accountIsAmm(info);
-      if (verdict == null) return;
-      if (!verdict) {
-        state.verdicts.set(row.account, { amm: false });
-        return;
-      }
+    let amm = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       if (Date.now() >= deadline) return;
-      const amm = await rpcBudget(
-        "amm_info",
-        { amm_account: row.account, ledger_index: "validated" },
-        options,
-        deadline
-      );
-      const built = rowFromAmmInfo(amm);
-      if (!built) {
-        if (amm && !retryableRpc(amm) && amm.error) {
-          state.verdicts.set(row.account, { amm: false });
-        }
-        return;
+      try {
+        amm = await rpcConfirm(
+          "amm_info",
+          { amm_account: row.account, ledger_index: "validated" },
+          options,
+          deadline,
+          index + attempt
+        );
+      } catch (err) {
+        amm = { error: String(err?.message || err) };
       }
+      if (amm && !retryableRpc(amm)) break;
+      if (attempt < 2 && deadline - Date.now() > 300) await sleep(300);
+    }
+    const built = rowFromAmmInfo(amm);
+    if (built) {
       state.verdicts.set(row.account, { amm: true, row: built });
-    } catch {
-      // Leave the account unknown so the next scan can retry it.
+      return;
+    }
+    if (amm && !retryableRpc(amm) && amm.error) {
+      state.verdicts.set(row.account, { amm: false });
     }
   });
   return poolsFromVerdicts();
@@ -366,8 +361,10 @@ async function discoverUncached(options = {}) {
   const confirmBudget = Number(options.confirmBudgetMs) || 16_000;
   const linesDone = await walkLines(options, lineBudget);
   // Confirming before the last page only classifies ordinary wallets.
+  // A short pause lets the line-walk node cool down before amm_info.
+  if (linesDone && confirmBudget >= 2_000) await sleep(300);
   const confirmed = linesDone
-    ? await confirmCandidates(options, confirmBudget)
+    ? await confirmCandidates(options, Math.max(0, confirmBudget - (confirmBudget >= 2_000 ? 300 : 0)))
     : poolsFromVerdicts();
   const complete = Boolean(linesDone && !confirmed.unknown);
   if (complete) {

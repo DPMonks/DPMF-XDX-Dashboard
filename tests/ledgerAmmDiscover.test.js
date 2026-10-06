@@ -169,11 +169,9 @@ test("confirmation checks the last issuer lines first so a slow wallet cannot hi
       };
     } else if (method === "account_lines") {
       result = { lines: [{ account: CREATE, currency: "XDX", balance: "-2", limit_peer: "0" }] };
-    } else if (method === "account_info" && params.account === CREATE) {
-      result = { account_data: { Account: CREATE, Balance: "1000000", AMMID: "ABC" } };
-    } else if (method === "account_info") {
+    } else if (method === "amm_info" && params.amm_account !== CREATE) {
       await abort();
-      result = { account_data: { Account: params.account, Balance: "1000000" } };
+      result = { error: "actMalformed", error_message: "Account malformed." };
     } else if (method === "amm_info" && params.amm_account === CREATE) {
       result = {
         amm: {
@@ -200,6 +198,41 @@ test("confirmation checks the last issuer lines first so a slow wallet cannot hi
   assert.match(found.error, /confirm left \d+ of 10 after 2 pages/);
   assert.ok(found.pools.some((row) => row.amm_account === CREATE));
   assert.equal(found.pools.find((row) => row.amm_account === CREATE).pool, "XDX/CREATE");
+  resetLedgerAmmDiscoveryCache();
+});
+
+test("amm_info tooBusy retries and still keeps the ledger pool", async () => {
+  resetLedgerAmmDiscoveryCache();
+  let infos = 0;
+  const fetchImpl = rpcFetch((method) => {
+    if (method === "account_lines") {
+      return { lines: [{ account: CREATE, currency: "XDX", balance: "-2", limit_peer: "0" }] };
+    }
+    if (method === "amm_info") {
+      infos += 1;
+      if (infos === 1) return { error: "tooBusy", error_message: "You are placing too much load on the server." };
+      return {
+        amm: {
+          account: CREATE,
+          amount: { currency: "XDX", issuer: XDX_ISSUER, value: "2" },
+          amount2: { currency: CREATE_HEX, issuer: CREATE_ISSUER, value: "4" },
+          lp_token: { currency: "03C0CFC705BD93B396F7F2062F13B0CE9F14B043", issuer: CREATE, value: "1" },
+          trading_fee: 331,
+        },
+      };
+    }
+    return { error: "actNotFound", error_message: "Account not found." };
+  });
+  const found = await discoverLedgerXdxPools({
+    fetchImpl,
+    fresh: true,
+    now: 11_000,
+    confirmBudgetMs: 5_000,
+  });
+  assert.equal(found.complete, true);
+  assert.equal(found.pools[0].pool, "XDX/CREATE");
+  assert.equal(found.pools[0].trading_fee, 331);
+  assert.ok(infos >= 2);
   resetLedgerAmmDiscoveryCache();
 });
 
