@@ -971,28 +971,6 @@ async function loadLpTrustlineCount(db, pool = "all") {
   return { count, as_of: asIso(asOf), pool: pair };
 }
 
-async function loadAllLpSupply(db) {
-  const lines = await loadAllLpLineStats(db, false);
-  if (lines.supply > 0) return lines.supply;
-  const catalog = await tryQueryIf(
-    db,
-    "xdx_amm_pools",
-    ["lp_supply"],
-    "SELECT COALESCE(SUM(lp_supply::numeric), 0) AS n FROM xdx_amm_pools"
-  );
-  const catalogSum = Number(catalog.rows[0]?.n || 0);
-  if (catalogSum > 0) return catalogSum;
-  const latest = await tryQueryIf(
-    db,
-    "amm_pool_latest",
-    ["lp_supply"],
-    `SELECT COALESCE(SUM(lp_supply::numeric), 0) AS n
-     FROM amm_pool_latest
-     WHERE pool_name ILIKE 'XDX/%' OR pool_name ILIKE 'XDX-%'`
-  );
-  return Number(latest.rows[0]?.n || 0);
-}
-
 function rowsForPair(rows, pair) {
   const name = normalizeOrderbookPair(pair);
   return (Array.isArray(rows) ? rows : []).filter(
@@ -1020,7 +998,9 @@ async function loadNativeBookRow(db, pair = "XDX/XRP") {
      ORDER BY timestamp DESC
      LIMIT 200`
   );
-  return pickNativeBookRow(rowsForPair(latest.rows, name)[0], rowsForPair(history.rows, name), name);
+  // Stored book rows only stand in for a live book_offers read, and only while recent.
+  const fresh = (rows) => rowsForPair(rows, name).filter((row) => dbRowIsFresh(row.timestamp));
+  return pickNativeBookRow(fresh(latest.rows)[0], fresh(history.rows), name);
 }
 
 async function composeStoredBook(stored, pair, reserveIndex, xrpPool, pool, extras = {}) {
@@ -1099,10 +1079,15 @@ async function loadOrderbook(db, pair = "XDX/XRP") {
 
 function loadPairReserves(pair, reserveIndex, xrpPool, pool) {
   const name = normalizeOrderbookPair(pair);
+  const poolLive = pool?.reserve_source === "amm_info";
+  const xrpLive = name === "XDX/XRP" && xrpPool?.reserve_source === "amm_info";
+  // Live amm_info beats any stored row. Stored rows only fill a pool we could not read.
   const extra =
-    reserveIndex?.byName?.get(name.toUpperCase()) ||
-    reserveIndex?.byAmm?.get(pool?.amm_account) ||
-    {};
+    poolLive || xrpLive
+      ? {}
+      : reserveIndex?.byName?.get(name.toUpperCase()) ||
+        reserveIndex?.byAmm?.get(pool?.amm_account) ||
+        {};
   let reserveBase = Number(
     extra.reserve_asset || pool?.reserve_xdx || pool?.reserve_asset || 0
   );
@@ -1110,11 +1095,14 @@ function loadPairReserves(pair, reserveIndex, xrpPool, pool) {
     extra.reserve_currency || pool?.reserve_currency || pool?.reserve_quote || 0
   );
   const price = Number(extra.price || 0);
-  const tradingFee = Number(extra.trading_fee || pool?.trading_fee || 1000);
+  const tradingFee =
+    xrpLive && xrpPool?.trading_fee != null && Number.isFinite(Number(xrpPool.trading_fee))
+      ? Number(xrpPool.trading_fee)
+      : Number(extra.trading_fee || pool?.trading_fee || 1000);
 
-  if (name === "XDX/XRP") {
-    if (!(reserveBase > 0)) reserveBase = Number(xrpPool?.reserve_asset || 0);
-    if (!(reserveQuote > 0)) reserveQuote = Number(xrpPool?.reserve_currency || 0);
+  if (name === "XDX/XRP" && (xrpLive || !poolLive)) {
+    if (xrpLive || !(reserveBase > 0)) reserveBase = Number(xrpPool?.reserve_asset || 0) || reserveBase;
+    if (xrpLive || !(reserveQuote > 0)) reserveQuote = Number(xrpPool?.reserve_currency || 0) || reserveQuote;
   }
 
   if (reserveBase > 0 && !(reserveQuote > 0) && price > 0 && price < 10) {
@@ -1156,6 +1144,7 @@ async function loadOrderbooks(db) {
 
   const historyByPair = new Map();
   for (const row of historyRows.rows) {
+    if (!dbRowIsFresh(row.timestamp)) continue;
     const name = normalizeOrderbookPair(row.pair);
     const key = name.toUpperCase();
     const list = historyByPair.get(key) || [];
@@ -1166,6 +1155,7 @@ async function loadOrderbooks(db) {
   const storedByPair = new Map();
   const latestByPair = new Map();
   for (const row of storedRows.rows) {
+    if (!dbRowIsFresh(row.timestamp)) continue;
     const name = normalizeOrderbookPair(row.pair);
     latestByPair.set(name.toUpperCase(), row);
   }
@@ -1325,8 +1315,11 @@ async function loadLpTrustlineChart(db, pool = "all") {
 async function loadAmmReserveIndex(db) {
   const byName = new Map();
   const byAmm = new Map();
+  const now = Date.now();
   const take = (row, overwrite) => {
     if (!row) return;
+    // Old snapshot rows would override nothing useful and mislead every pool.
+    if (!dbRowIsFresh(row.timestamp, now)) return;
     const name = String(row.pool_name || "").toUpperCase();
     const extra = {
       reserve_asset: Number(row.reserve_asset || 0),
@@ -1643,14 +1636,19 @@ async function loadXdxLpPools(db) {
       {};
     const optional = optionalByAmm.get(row.amm_account) || {};
     const reserveXdx = Number(row.reserve_xdx || extra.reserve_asset || 0);
-    const measuredQuote =
-      Number(optional.quote || 0) || Number(extra.reserve_currency || 0) || 0;
+    const measuredQuote = dbRowIsFresh(extra.timestamp || row.updated_at)
+      ? Number(optional.quote || 0) || Number(extra.reserve_currency || 0) || 0
+      : 0;
     const quoteUsd = quoteUsdFromMap(row.quote, quotePrices);
-    const lpSupply =
-      extra.lp_supply ||
-      optional.lp_supply ||
-      holderSupply.get(normalizeWalletPairName(row.pool_name || row.quote)) ||
-      null;
+    // Stored LP supply is only a stand-in when amm_info misses, and only while
+    // the stored row is recent. The live overlay below replaces it when it lands.
+    const storedFresh = dbRowIsFresh(extra.timestamp || row.updated_at);
+    const lpSupply = storedFresh
+      ? extra.lp_supply ||
+        optional.lp_supply ||
+        holderSupply.get(normalizeWalletPairName(row.pool_name || row.quote)) ||
+        null
+      : null;
     const reserveQuote = measuredQuote || null;
     const built = {
       pool_name: row.pool_name,
@@ -2014,12 +2012,54 @@ async function loadRecordedXdxUsd(db, xrpUsd) {
   );
 }
 
+// Postgres AMM snapshots (amm_pool_latest / amm_pool_history) are only a
+// fallback. The writer for those tables stopped in Aug 2026, so an old row must
+// never be shown as the current pool. Live amm_info wins; an old row is dropped.
+export const AMM_DB_FRESH_MS = 60 * 60_000;
+
+export function dbRowIsFresh(timestamp, now = Date.now(), maxAgeMs = AMM_DB_FRESH_MS) {
+  if (timestamp == null || timestamp === "") return false;
+  const ms = timestamp instanceof Date ? timestamp.getTime() : Date.parse(timestamp);
+  return Number.isFinite(ms) && now - ms <= maxAgeMs;
+}
+
+const AMM_RESERVE_FIELDS = ["reserve_asset", "reserve_currency", "lp_supply", "trading_fee", "price"];
+
+export function dropStaleAmmRow(row = {}, now = Date.now()) {
+  if (row.reserve_source === "amm_info" || dbRowIsFresh(row.timestamp, now)) return row;
+  const next = { ...row };
+  for (const key of AMM_RESERVE_FIELDS) next[key] = null;
+  next.reserve_source = "stale";
+  next.stale_as_of = row.timestamp ? asIso(row.timestamp) || row.timestamp : null;
+  return next;
+}
+
 async function hydrateAmm(db) {
-  const latest = await tryQuery(
-    db,
-    `SELECT * FROM amm_pool_latest WHERE pool_name = 'XDX/XRP' LIMIT 1`
-  );
+  const [latest, live] = await Promise.all([
+    tryQuery(db, `SELECT * FROM amm_pool_latest WHERE pool_name = 'XDX/XRP' LIMIT 1`),
+    loadLiveAmmReserves(
+      { pair: "XDX/XRP", quote: "XRP", ammAccount: XDX_XRP_AMM },
+      { retries: 1, waitMs: 200 }
+    ).catch(() => null),
+  ]);
   const row = { ...(latest.rows[0] || {}) };
+  if (live && live.reserve_source === "amm_info") {
+    const reserveAsset = Number(live.reserve_xdx ?? live.reserve_asset) || 0;
+    const reserveCurrency = Number(live.reserve_currency ?? live.reserve_quote) || 0;
+    return {
+      ...row,
+      pool_name: "XDX/XRP",
+      amm_account: live.amm_account || row.amm_account || XDX_XRP_AMM,
+      reserve_asset: reserveAsset || null,
+      reserve_currency: reserveCurrency || null,
+      lp_supply: Number(live.lp_supply) || null,
+      trading_fee: live.trading_fee ?? null,
+      price: reserveAsset > 0 && reserveCurrency > 0 ? reserveCurrency / reserveAsset : null,
+      timestamp: live.as_of || new Date().toISOString(),
+      reserve_source: "amm_info",
+      reserve_stale: Boolean(live.stale),
+    };
+  }
   if (!(Number(row.reserve_currency) > 0)) {
     const hist = await tryQuery(
       db,
@@ -2033,10 +2073,12 @@ async function hydrateAmm(db) {
       row.reserve_currency = hist.rows[0].reserve_currency;
       if (!Number(row.reserve_asset)) row.reserve_asset = hist.rows[0].reserve_asset;
       if (!Number(row.price)) row.price = hist.rows[0].price;
+      if (!Number(row.lp_supply)) row.lp_supply = hist.rows[0].lp_supply;
+      row.timestamp = hist.rows[0].timestamp;
       row.reserve_source = "amm_pool_history";
     }
   }
-  return row;
+  return dropStaleAmmRow(row);
 }
 
 function poolKey(row, fallback) {
@@ -2233,8 +2275,11 @@ async function buildTokenOverview(db) {
   const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
   const tvlUsd = reserveCurrency > 0 && xrpUsd > 0 ? reserveCurrency * 2 * xrpUsd : 0;
   const totalSupply = XDX_TOTAL_SUPPLY;
-  const burned = Number(issuerLocked.locked || 0);
-  const circulating = Math.max(totalSupply - burned, 0);
+  // No issued figure means we do not know what is burned yet. Leave circulating
+  // empty instead of reporting the full 10,000,000,000 supply.
+  const issuerKnown = Number(issuerLocked.issued) > 0;
+  const burned = issuerKnown ? Number(issuerLocked.locked || 0) : null;
+  const circulating = issuerKnown ? Math.max(totalSupply - burned, 0) : null;
   const ammMarketCap = (await loadCatalogAmmMarketCap(db, xdxUsd)) || tvlUsd;
 
   return {
@@ -2267,14 +2312,14 @@ async function buildTokenOverview(db) {
     total_supply: totalSupply,
     burned_supply: burned,
     issuer_locked: burned,
-    issued_xdx: Number(issuerLocked.issued || 0),
+    issued_xdx: issuerKnown ? Number(issuerLocked.issued) : null,
     issuer_source: issuerLocked.source,
     amm_xdx: Number(ammXdx || reserveAsset || 0),
     trustlines,
     trustline_count: trustlines,
     ammMarketCap,
     xrplMarketCap: totalSupply * xdxUsd,
-    circulatingMarketCap: circulating * xdxUsd,
+    circulatingMarketCap: circulating != null && xdxUsd ? circulating * xdxUsd : null,
     issuer: XDX_ISSUER,
     blackholed: blackhole.blackholed,
     blackholed_fixed: blackhole.blackholed_fixed,
@@ -2287,7 +2332,7 @@ async function buildTokenOverview(db) {
 }
 
 async function buildSnapshot(db) {
-  const [amm, quote, holders, trustlines, lpOwners, lpTrustlines, lpSupply, issuerLocked, blackhole, ammXdx] =
+  const [amm, quote, holders, trustlines, lpOwners, lpTrustlines, issuerLocked, blackhole, ammXdx] =
     await Promise.all([
       hydrateAmm(db),
       loadXrpQuote(db),
@@ -2295,7 +2340,6 @@ async function buildSnapshot(db) {
       tokenTrustlineCount(db),
       loadAllLpLineStats(db, true),
       loadLpTrustlineCount(db, "all"),
-      loadAllLpSupply(db),
       loadIssuerLocked(db),
       loadIssuerBlackhole(),
       tokenBalanceFor(db, XDX_XRP_AMM),
@@ -2307,8 +2351,11 @@ async function buildSnapshot(db) {
   const xdxUsd = await loadRecordedXdxUsd(db, xrpUsd);
   const tvlUsd = reserveCurrency > 0 && xrpUsd > 0 ? reserveCurrency * 2 * xrpUsd : 0;
   const totalSupply = XDX_TOTAL_SUPPLY;
-  const burned = Number(issuerLocked.locked || 0);
-  const circulating = Math.max(totalSupply - burned, 0);
+  // No issued figure means we do not know what is burned yet. Leave circulating
+  // empty instead of reporting the full 10,000,000,000 supply.
+  const issuerKnown = Number(issuerLocked.issued) > 0;
+  const burned = issuerKnown ? Number(issuerLocked.locked || 0) : null;
+  const circulating = issuerKnown ? Math.max(totalSupply - burned, 0) : null;
   const pools = (await listXdxPools(db)).map((row) => presentPool(row, xdxUsd, xrpUsd));
   const ammMarketCap = pools.reduce((sum, pool) => sum + Number(pool.tvl || 0), 0) || tvlUsd;
 
@@ -2332,7 +2379,9 @@ async function buildSnapshot(db) {
     volume24h: Number(amm.volume24h || 0),
     reserve_asset: reserveAsset,
     reserve_currency: reserveCurrency,
-    lp_supply: Number(lpSupply || amm.lp_supply || 0),
+    // XDX/XRP lp_token from amm_info. Summing LP lines across every pool mixed
+    // different LP tokens into one meaningless number.
+    lp_supply: Number(amm.lp_supply || 0) || null,
     trading_fee: Number(amm.trading_fee || 0) || null,
     holder_count: holders,
     lp_holder_count: Number(lpOwners.count || 0),
@@ -2342,14 +2391,14 @@ async function buildSnapshot(db) {
     total_supply: totalSupply,
     burned_supply: burned,
     issuer_locked: burned,
-    issued_xdx: Number(issuerLocked.issued || 0),
+    issued_xdx: issuerKnown ? Number(issuerLocked.issued) : null,
     issuer_source: issuerLocked.source,
     amm_xdx: Number(ammXdx || reserveAsset || 0),
     trustlines,
     trustline_count: trustlines,
     ammMarketCap,
     xrplMarketCap: totalSupply * xdxUsd,
-    circulatingMarketCap: circulating * xdxUsd,
+    circulatingMarketCap: circulating != null && xdxUsd ? circulating * xdxUsd : null,
     pools,
     issuer: XDX_ISSUER,
     blackholed: blackhole.blackholed,
@@ -2635,12 +2684,13 @@ export async function readIndexerDb(suffix, search = "") {
 
     if (suffix === "issuer-locked") {
       const snap = await loadIssuerLocked(db);
+      const known = Number(snap.issued) > 0;
       return withLiveCatalog(suffix, {
         issuer: XDX_ISSUER,
-        issuer_locked: snap.locked,
-        burned_supply: snap.locked,
-        issued: snap.issued,
-        circulating: Math.max(XDX_TOTAL_SUPPLY - snap.locked, 0),
+        issuer_locked: known ? snap.locked : null,
+        burned_supply: known ? snap.locked : null,
+        issued: known ? snap.issued : null,
+        circulating: known ? Math.max(XDX_TOTAL_SUPPLY - snap.locked, 0) : null,
         as_of: snap.as_of,
         source: snap.source,
       });

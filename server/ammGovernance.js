@@ -13,11 +13,23 @@ import {
 const CACHE_MS = 10_000;
 const cache = new Map();
 
+// Last good governance read per key. A failed amm_info returns this instead of
+// an empty body, so the vote tiles never flip to 0% on a rate limited node.
+const LAST_GOOD_MS = 15 * 60_000;
+const lastGood = new Map();
+
 function cached(key, loader) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.body;
   return loader().then((body) => {
+    if (body?.source === "empty") {
+      const kept = lastGood.get(key);
+      if (kept && Date.now() - kept.at < LAST_GOOD_MS) return { ...kept.body, stale: true };
+      // Do not cache a miss; the next request tries the ledger again.
+      return body;
+    }
     cache.set(key, { at: Date.now(), body });
+    lastGood.set(key, { at: Date.now(), body });
     return body;
   });
 }
@@ -44,9 +56,12 @@ export async function loadPoolGovernance(pair, address = "", extra = {}) {
           : { asset: xdxIssue(), asset2, ledger_index: "validated" }
       );
       const gov = governanceFromAmmInfo(result, { address, pair: name, lpBalance });
+      if (!gov.loaded) {
+        return { ...gov, source: "empty" };
+      }
       return {
         ...gov,
-        voteSlots: await datedVoteSlots(gov.voteSlots, name),
+        voteSlots: await withinBudget(datedVoteSlots(gov.voteSlots, name), VOTE_DATES_BUDGET_MS, gov.voteSlots),
         source: "xrpl",
       };
     } catch {
@@ -56,6 +71,19 @@ export async function loadPoolGovernance(pair, address = "", extra = {}) {
       };
     }
   });
+}
+
+// Vote dates are a nice to have. Never let the per voter account_tx lookups
+// hold back the fee figures.
+const VOTE_DATES_BUDGET_MS = 4_000;
+
+function withinBudget(promise, ms, fallback) {
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+    if (typeof timer.unref === "function") timer.unref();
+  });
+  return Promise.race([promise.catch(() => fallback), timeout]).finally(() => clearTimeout(timer));
 }
 
 async function datedVoteSlots(slots = [], pair = "XDX/XRP") {

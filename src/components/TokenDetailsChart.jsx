@@ -10,6 +10,7 @@ import {
   tokenDetailIsIntraday,
   tokenDetailIsLevelMetric,
   tokenDetailLabel,
+  tokenDetailShowsGaps,
   tokenDetailYDomain,
   windowedTokenSeries,
 } from "../tokenDetailsHistory";
@@ -80,7 +81,7 @@ export default function TokenDetailsChart() {
     return [now - TOKEN_DETAIL_RANGE_MS[range], now];
   }, [chartRows, range, now]);
   const targetY = useMemo(
-    () => tokenDetailYDomain(chartRows.map((row) => Number(row.plot))),
+    () => tokenDetailYDomain(chartRows.map((row) => row.plot)),
     [chartRows]
   );
   const digits = tokenDetailDecimals(metric);
@@ -187,7 +188,7 @@ export default function TokenDetailsChart() {
                   strokeLinejoin="round"
                   dot={false}
                   activeDot={false}
-                  connectNulls
+                  connectNulls={!tokenDetailShowsGaps(metric)}
                   isAnimationActive={false}
                   className="activity-line"
                 />

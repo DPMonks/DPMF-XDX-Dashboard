@@ -191,13 +191,15 @@ export async function loadIssuerLockedLive(options = {}) {
     issuerLockedCache = { at: now, body };
     return body;
   } catch {
+    // Unknown is not the same as nothing burned. A null keeps the page from
+    // showing the 10,000,000,000 total as circulating supply.
     return (
       issuerLockedCache.body || {
         issuer: XDX_ISSUER,
-        issuer_locked: 0,
-        burned_supply: 0,
-        issued: 0,
-        circulating: XDX_TOTAL_SUPPLY,
+        issuer_locked: null,
+        burned_supply: null,
+        issued: null,
+        circulating: null,
         source: "empty",
       }
     );
@@ -308,8 +310,9 @@ export async function loadLiveMarket(options = {}) {
     quote
   );
   const tvlUsd = reserveXrp > 0 && xrpUsd > 0 ? reserveXrp * 2 * xrpUsd : 0;
-  const burned = Number(issuerLocked.issuer_locked || 0);
-  const circulating = Number(issuerLocked.circulating || XDX_TOTAL_SUPPLY);
+  const issuerKnown = issuerLocked.source === "xrpl" && num(issuerLocked.issued) > 0;
+  const burned = issuerKnown ? Number(issuerLocked.issuer_locked || 0) : null;
+  const circulating = issuerKnown ? num(issuerLocked.circulating) || null : null;
   const volumes = {};
   const featuredGone = lives
     .filter((row) => row?.reserve_source === "deleted" && row.amm_account)
@@ -432,7 +435,7 @@ export async function loadLiveMarket(options = {}) {
     total_supply: XDX_TOTAL_SUPPLY,
     burned_supply: burned,
     issuer_locked: burned,
-    issued_xdx: Number(issuerLocked.issued || 0),
+    issued_xdx: issuerKnown ? Number(issuerLocked.issued) : null,
     issuer_source: issuerLocked.source,
     amm_xdx: reserveXdx,
     trustlines: num(ledger.trustlines) || null,
@@ -441,7 +444,7 @@ export async function loadLiveMarket(options = {}) {
     lp_trustline_count: num(lpCounts?.trustlines) || null,
     ammMarketCap: tvlUsd,
     xrplMarketCap: XDX_TOTAL_SUPPLY * xdxUsd,
-    circulatingMarketCap: circulating * xdxUsd,
+    circulatingMarketCap: circulating && xdxUsd ? circulating * xdxUsd : null,
     issuer: XDX_ISSUER,
     tokenType: "XDX",
     created: XDX_ISSUED_AT,
@@ -539,8 +542,9 @@ export async function loadXrplToMarket(options = {}) {
     holder_count: num(token.holders) || null,
     holders: num(token.holders) || null,
     lp_holder_count: num(token.lpHolders) || null,
-    circulating: XDX_TOTAL_SUPPLY,
-    circulating_supply: XDX_TOTAL_SUPPLY,
+    // Circulating comes from the issuer's gateway_balances, not this backup.
+    circulating: null,
+    circulating_supply: null,
     total_supply: XDX_TOTAL_SUPPLY,
     issuer: XDX_ISSUER,
     tokenType: "XDX",
@@ -555,7 +559,7 @@ export async function loadXrplToMarket(options = {}) {
     trustline_count: num(token.trustlines) || null,
     ammMarketCap: tvlUsd || null,
     xrplMarketCap: num(token.marketcap) || XDX_TOTAL_SUPPLY * xdxUsd,
-    circulatingMarketCap: num(token.marketcap) || XDX_TOTAL_SUPPLY * xdxUsd,
+    circulatingMarketCap: null,
     amm_account: XDX_XRP_AMM,
     source: "xrpl.to",
     catching_up: !num(token.holders),
@@ -590,11 +594,13 @@ function liveBookReserves(pair, pool = {}, market = {}) {
   const reserveQuote =
     Number(pool.reserve_currency || pool.reserve_quote) ||
     (name === "XDX/XRP" ? Number(market.overview?.reserve_currency) || 0 : 0);
+  // Pool spot from the same reserves the implied levels use. The overview
+  // price can come from another pool (RLUSD) when the XRP read blips.
   const price =
-    name === "XDX/XRP"
-      ? Number(market.overview?.xdxPerXrp) || null
-      : reserveAsset > 0 && reserveQuote > 0
-        ? reserveQuote / reserveAsset
+    reserveAsset > 0 && reserveQuote > 0
+      ? reserveQuote / reserveAsset
+      : name === "XDX/XRP"
+        ? Number(market.overview?.xdxPerXrp) || null
         : null;
   return {
     reserve_asset: reserveAsset || null,
@@ -606,9 +612,11 @@ function liveBookReserves(pair, pool = {}, market = {}) {
 
 function poolForPair(market, pair) {
   const name = normalizeOrderbookPair(pair);
+  // market.pools lists the XDX/token pools only; XDX/XRP lives on the overview.
+  // Never fall back to pools[0]: that is XDX/RLUSD, and its quote and reserves
+  // turned the XDX/XRP book into an RLUSD book priced in dollars.
   return (
-    (market.pools || []).find((row) => normalizeOrderbookPair(row.pool_name || row.pool) === name) ||
-    (name === "XDX/XRP" ? market.pools?.[0] || {} : {})
+    (market.pools || []).find((row) => normalizeOrderbookPair(row.pool_name || row.pool) === name) || {}
   );
 }
 

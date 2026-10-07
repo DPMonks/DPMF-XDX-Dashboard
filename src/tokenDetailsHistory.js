@@ -48,6 +48,24 @@ export const TOKEN_DETAIL_LEVEL_METRICS = new Set([
 
 export const TOKEN_DETAIL_LP_METRICS = new Set(["lpHolders", "lpTrustlines", "lpSupply"]);
 
+/**
+ * Metrics read straight off the price tape. When the tape has a hole we show a
+ * break, not the last price stretched flat across days we have no trades for.
+ */
+export const TOKEN_DETAIL_PRICE_METRICS = new Set([
+  "price",
+  "xdxPerXrp",
+  "xrplMarketCap",
+  "circulatingMarketCap",
+]);
+
+/** Longer than this between real price samples counts as missing data. */
+export const TOKEN_DETAIL_PRICE_GAP_MS = 3 * 86400000;
+
+export function tokenDetailShowsGaps(metric) {
+  return TOKEN_DETAIL_PRICE_METRICS.has(metric);
+}
+
 export function tokenDetailIsLevelMetric(metric) {
   return TOKEN_DETAIL_LEVEL_METRICS.has(metric);
 }
@@ -170,8 +188,12 @@ export function carryTokenDetailMetrics(rows = []) {
       ) {
         value = null;
       }
-      if (value != null) last[metric] = value;
-      if (last[metric] != null) next[metric] = last[metric];
+      if (value != null) {
+        last[metric] = value;
+      } else if (last[metric] != null) {
+        next[metric] = last[metric];
+        next.__carried = { ...(next.__carried || {}), [metric]: true };
+      }
     }
     return next;
   });
@@ -208,7 +230,9 @@ function sparkMetricRows(sparkline, live) {
         fields.circulatingMarketCap = price * circulating;
       }
       if (burned != null) fields.burnedSupply = burned;
-      if (xrpUsd != null && xrpUsd > 0) fields.xdxPerXrp = price / xrpUsd;
+      const priceXrp = rawNumber(row.price_xrp);
+      if (priceXrp != null && priceXrp > 0) fields.xdxPerXrp = priceXrp;
+      else if (xrpUsd != null && xrpUsd > 0) fields.xdxPerXrp = price / xrpUsd;
       return mapHistoryRow(row, fields);
     })
     .filter(Boolean);
@@ -241,35 +265,91 @@ export function rowsFromOhlc(payload, asset = "XDX") {
     .filter(Boolean);
 }
 
+function priceTape(node) {
+  if (!node || typeof node !== "object") return [];
+  if (Array.isArray(node.price_history) && node.price_history.length) return node.price_history;
+  if (Array.isArray(node.rows) && node.rows.length) return node.rows;
+  if (Array.isArray(node.ohlc)) return rowsFromOhlc(node);
+  return [];
+}
+
+/**
+ * XDX price rows from the candles payload. `/api/chart/candles` nests the
+ * ledger candles under `db` (next to the locked snapshot), so read both levels.
+ * price_history and rows carry the same candles; take one of them, not both.
+ */
 export function xdxPriceHistoryRows(payload) {
   const rows = Array.isArray(payload)
     ? payload
-    : [
-        ...(Array.isArray(payload?.price_history) ? payload.price_history : []),
-        ...(Array.isArray(payload?.rows) ? payload.rows : []),
-        ...(Array.isArray(payload?.ohlc) ? rowsFromOhlc(payload) : []),
-      ];
+    : [...priceTape(payload), ...priceTape(payload?.db)];
   return rows.filter((row) => {
     const asset = String(row?.asset || row?.token || "XDX").toUpperCase();
     return !asset || asset === "XDX";
   });
 }
 
-/** Locked Trading-chart daily closes (USD) — same tape HybridChart seeds from. */
+function dayKey(ms) {
+  return Math.floor(ms / 86400000);
+}
+
+/** Daily XRP/USD closes from the locked snapshot, keyed by UTC day. */
+export function xrpUsdByDay(locked) {
+  const map = new Map();
+  for (const row of Array.isArray(locked?.xrpUsd) ? locked.xrpUsd : []) {
+    const t = Number(row?.t ?? row?.time ?? row?.timestamp);
+    const close = rawNumber(row?.c ?? row?.close ?? row?.price);
+    if (!Number.isFinite(t) || !(close > 0)) continue;
+    map.set(dayKey(t < 1e12 ? t * 1000 : t), close);
+  }
+  return map;
+}
+
+/**
+ * Ledger candles store USD at today's XRP rate. Where the snapshot has that
+ * day's XRP/USD close, reprice from price_xrp so older history is in the USD of
+ * its own day.
+ */
+export function repriceWithDailyXrpUsd(rows, byDay) {
+  if (!byDay?.size) return rows;
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const priceXrp = rawNumber(row?.price_xrp);
+    const ts = rowTs(row);
+    if (priceXrp == null || !(priceXrp > 0) || ts == null) return row;
+    const xrpUsd = byDay.get(dayKey(ts));
+    if (!(xrpUsd > 0)) return row;
+    return { ...row, price_usd: priceXrp * xrpUsd, price_usd_basis: "daily-xrp-usd" };
+  });
+}
+
+/**
+ * Locked Trading-chart daily closes as USD rows. The XDX/XRP candles are quoted
+ * in XRP, so each close is multiplied by that day's XRP/USD close. A day with
+ * no XRP/USD close is skipped rather than plotted in the wrong unit.
+ */
 export function rowsFromLockedCandles(locked, pair = "XDX/XRP") {
   const key = String(pair || "XDX/XRP").toUpperCase();
-  const candles =
-    locked?.pairs?.[key]?.candles ||
-    locked?.pairs?.[pair]?.candles ||
-    (Array.isArray(locked) ? locked : []);
+  const entry = locked?.pairs?.[key] || locked?.pairs?.[pair] || null;
+  const candles = entry?.candles || (Array.isArray(locked) ? locked : []);
+  const quote = String(entry?.quote || key.split("/")[1] || "").toUpperCase();
+  const byDay = quote === "XRP" ? xrpUsdByDay(locked) : null;
   return (Array.isArray(candles) ? candles : [])
     .map((row) => {
       const t = Number(row?.t ?? row?.time ?? row?.timestamp);
       const close = rawNumber(row?.c ?? row?.price_usd ?? row?.price);
       if (!Number.isFinite(t) || !(close > 0)) return null;
+      const ms = t < 1e12 ? t * 1000 : t;
+      let priceUsd = close;
+      let priceXrp = null;
+      if (quote === "XRP") {
+        const xrpUsd = byDay?.get(dayKey(ms));
+        if (!(xrpUsd > 0)) return null;
+        priceXrp = close;
+        priceUsd = close * xrpUsd;
+      }
       return {
-        timestamp: new Date(t < 1e12 ? t * 1000 : t).toISOString(),
-        price_usd: close,
+        timestamp: new Date(ms).toISOString(),
+        price_usd: priceUsd,
+        ...(priceXrp != null ? { price_xrp: priceXrp } : {}),
         asset: "XDX",
         source: row?.source || "locked",
       };
@@ -398,8 +478,13 @@ export function composeTokenDetailHistory({
   lockedCandles = null,
   live = null,
 } = {}) {
-  const lockedRows = rowsFromLockedCandles(lockedCandles);
-  const priceRows = xdxPriceHistoryRows(candles);
+  const priceRows = repriceWithDailyXrpUsd(xdxPriceHistoryRows(candles), xrpUsdByDay(lockedCandles));
+  const firstLedgerTs = priceRows.reduce((min, row) => {
+    const ts = rowTs(row);
+    return ts != null && ts < min ? ts : min;
+  }, Infinity);
+  // The locked daily tape only fills time before the ledger candles begin.
+  const lockedRows = rowsFromLockedCandles(lockedCandles).filter((row) => rowTs(row) < firstLedgerTs);
   const sparkSource = priceRows.length || lockedRows.length ? [...lockedRows, ...priceRows] : sparkline;
   return carryTokenDetailMetrics(
     mergeTokenDetailRows(
@@ -415,6 +500,70 @@ export function composeTokenDetailHistory({
   );
 }
 
+function isRealSample(row, metric) {
+  return !(row?.__carried && row.__carried[metric]);
+}
+
+function gapBreak(ts) {
+  return { timestamp: new Date(ts).toISOString(), ts, plot: null, gap: true };
+}
+
+/** Downsample each unbroken run on its own and join the runs with a null break. */
+function joinSegments(segments, maxPoints) {
+  const total = segments.reduce((sum, seg) => sum + seg.length, 0) || 1;
+  const out = [];
+  segments.forEach((seg, index) => {
+    if (!seg.length) return;
+    const share = maxPoints ? Math.max(2, Math.round((seg.length / total) * maxPoints)) : undefined;
+    const thinned = collapseUnchangedPlot(share ? downsampleSeries(seg, share) : downsampleSeries(seg));
+    if (index > 0 && out.length) {
+      out.push(gapBreak(Math.round((out[out.length - 1].ts + thinned[0].ts) / 2)));
+    }
+    out.push(...thinned);
+  });
+  return out;
+}
+
+function windowedPriceSeries(all, range, now, metric) {
+  // Only real price samples count. A value carried in from a holders row is not
+  // a trade, so it may bridge short quiet spells but never a multi day hole.
+  const real = all
+    .map((row) => ({ row, value: tokenDetailMetricNumber(row, metric) }))
+    .filter(({ row, value }) => value != null && isRealSample(row, metric))
+    .map(({ row, value }) => ({ ...row, plot: value }));
+  if (!real.length) return [];
+
+  const windowMs = TOKEN_DETAIL_RANGE_MS[range];
+  const start = range === "Max" || !windowMs ? -Infinity : now - windowMs;
+  const inside = real.filter((row) => row.ts >= start && row.ts <= now);
+  const lastBefore = [...real].reverse().find((row) => row.ts < start);
+  const series = [...inside];
+  if (lastBefore && Number.isFinite(start)) {
+    const firstTs = series[0]?.ts ?? now;
+    // Hold the last trade into the window only if the hold is a short one.
+    if (firstTs - lastBefore.ts <= TOKEN_DETAIL_PRICE_GAP_MS) {
+      series.unshift({ ...lastBefore, timestamp: new Date(start).toISOString(), ts: start });
+    }
+  } else if (
+    series.length &&
+    tokenDetailIsIntraday(range) &&
+    Number.isFinite(start) &&
+    series[0].ts > start
+  ) {
+    // Intraday windows only: start the line at the window edge from the first
+    // trade inside it. This spans hours at most, never days.
+    series.unshift({ ...series[0], timestamp: new Date(start).toISOString(), ts: start });
+  }
+  if (!series.length) return [];
+
+  const segments = [[series[0]]];
+  for (let i = 1; i < series.length; i += 1) {
+    if (series[i].ts - series[i - 1].ts > TOKEN_DETAIL_PRICE_GAP_MS) segments.push([]);
+    segments[segments.length - 1].push(series[i]);
+  }
+  return joinSegments(segments);
+}
+
 export function windowedTokenSeries(rows, range, now, metric) {
   const all = (Array.isArray(rows) ? rows : [])
     .map((row) => {
@@ -424,6 +573,7 @@ export function windowedTokenSeries(rows, range, now, metric) {
     .filter(Boolean)
     .sort((a, b) => a.ts - b.ts);
   if (!all.length) return [];
+  if (tokenDetailShowsGaps(metric)) return windowedPriceSeries(all, range, now, metric);
 
   let lastKnown = null;
   const filled = all.map((row) => {
@@ -451,12 +601,9 @@ export function windowedTokenSeries(rows, range, now, metric) {
   if (lastBefore) {
     out.unshift({ ...lastBefore, timestamp: new Date(start).toISOString(), ts: start });
   } else if (out.length && out[0].ts > start) {
-    // Fill empty left of the selected window:
-    // - level metrics on intraday TFs (even a single live tip → flat step)
-    // - price-like series when ≥2 points already exist mid-window
-    const levelIntraday = tokenDetailIsLevelMetric(metric) && tokenDetailIsIntraday(range);
-    const priceMidWindow = !tokenDetailIsLevelMetric(metric) && out.length >= 2;
-    if (levelIntraday || priceMidWindow) {
+    // Fill empty left of the selected window for level metrics on intraday TFs
+    // (even a single live tip becomes a flat step).
+    if (tokenDetailIsIntraday(range)) {
       out.unshift({ ...out[0], timestamp: new Date(start).toISOString(), ts: start });
     }
   }
@@ -464,7 +611,7 @@ export function windowedTokenSeries(rows, range, now, metric) {
 }
 
 export function tokenDetailYDomain(values) {
-  const nums = (values || []).filter((value) => Number.isFinite(value));
+  const nums = (values || []).filter((value) => value != null && value !== "" && Number.isFinite(Number(value))).map(Number);
   if (!nums.length) return [0, 1];
   const min = Math.min(...nums);
   const max = Math.max(...nums);
