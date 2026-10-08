@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, plotViewKey, priceLabelWidth, priceTicks, timeTagOrigin, timeTagWidth } from "../chart/axis";
-import { candleBodyBox, candleBodyWidth, noTradeGaps, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
+import { candleBodyBox, candleBodyWidth, labelGaps, noTradeGaps, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
 import { applyPlaceOffset, canMoveHandle, clickIsPan, drawingToolbarAnchor, hitPlacedDrawing, isIdleTool, shouldFollowCrosshair, snapPoint, toggleInspect } from "../chart/drawings";
@@ -858,23 +858,20 @@ export default function HybridPlot({
           ))}
 
           {(() => {
-            const gaps = noTradeGaps(candles, interval);
+            const gaps = labelGaps(noTradeGaps(candles, interval), scale.x, PAD.l + innerW);
             if (!gaps.length) return null;
-            const label = gaps.length <= 8;
             return (
               <g className="hybrid-gaps" pointerEvents="none">
                 {gaps.map((gap) => {
-                  const x = (scale.x(gap.from) + scale.x(gap.to)) / 2;
-                  if (!Number.isFinite(x)) return null;
                   const fromDay = new Date(gap.from).toISOString().slice(0, 10);
                   const toDay = new Date(gap.to).toISOString().slice(0, 10);
                   return (
                     <g key={`gap-${gap.from}`} className="hybrid-gap">
-                      <title>{`No trades between ${fromDay} and ${toDay}`}</title>
-                      <line x1={x} x2={x} y1={PAD.t} y2={plotBottom} />
-                      {label ? (
-                        <text x={x + 3} y={PAD.t + 10}>
-                          no trades
+                      <title>{`No ledger trades on record between ${fromDay} and ${toDay}`}</title>
+                      <line x1={gap.x} x2={gap.x} y1={PAD.t} y2={plotBottom} />
+                      {gap.label ? (
+                        <text x={gap.x + 3} y={PAD.t + 10}>
+                          no data
                         </text>
                       ) : null}
                     </g>

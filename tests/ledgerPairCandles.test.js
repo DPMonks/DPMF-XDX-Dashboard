@@ -254,3 +254,23 @@ test("noTradeGaps flags breaks over three bars and a full day only", async () =>
   const daily = [0, 1, 3, 8].map((d) => ({ t: start + d * DAY }));
   assert.deepEqual(noTradeGaps(daily, "1D"), [{ from: start + 3 * DAY, to: start + 8 * DAY }]);
 });
+
+test("labelGaps labels only markers with room so text never stacks", async () => {
+  const { labelGaps } = await import("../src/chart/candles.js");
+  const gaps = [
+    { from: 0, to: 20 },
+    { from: 30, to: 50 },
+    { from: 200, to: 220 },
+    { from: 960, to: 980 },
+  ];
+  const out = labelGaps(gaps, (t) => t, 1000);
+  assert.deepEqual(
+    out.map((g) => [g.x, g.label]),
+    [
+      [10, true],
+      [40, false],
+      [210, true],
+      [970, false],
+    ]
+  );
+});
