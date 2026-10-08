@@ -285,3 +285,18 @@ test("a single-swap candle opens at the previous close so the move shows", async
   ]);
   assert.deepEqual(out[1], { t: 1, o: 1, h: 1.05, l: 1, c: 1.05 });
 });
+
+test("ledger rows match mixed-case and spaced pool names from the feed", async () => {
+  resetPairLedgerCache();
+  const calls = [];
+  await buildLedgerChartPayload("XDX/AiCat", {
+    now: NOW,
+    queryImpl: async (sql, params) => {
+      calls.push({ sql, params });
+      return { ok: true, rows: [] };
+    },
+    loadXrpCandles: async () => ({ candles: { "1m": [], "1h": [], "1d": [] } }),
+  });
+  assert.equal(calls[0].params[0], "XDX/AICAT");
+  assert.match(calls[0].sql, /upper\(replace\(pair, ' ', ''\)\) = \$1/);
+});
