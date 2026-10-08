@@ -550,7 +550,7 @@ export default function HybridChart({
   }, [walletAddress]);
 
   useEffect(() => {
-    if (!String(pair || "").toUpperCase().startsWith("XDX/")) return undefined;
+    if (!String(pair || "").toUpperCase().startsWith("XDX/") && !isXioBasePair(pair)) return undefined;
     let cancelled = false;
     async function loadLedger() {
       if (!aimEmbed && isAimPageFrozen()) return;
@@ -1217,9 +1217,14 @@ export default function HybridChart({
               </p>
             ) : null}
             {isXioBasePair(pair) ? (
-              <p className="hybrid-tape-source" title="XIO exchange locked daily candles">
+              <p
+                className="hybrid-tape-source"
+                title="Daily candles up to 13 Sep 2026 come from the XIO exchange lock. After that, candles come from XRPL ledger swaps on this pair's XIO AMM. A gap means no trades on record for that period."
+              >
                 {xioOverlay?.snapshot?.pairs?.[pair]?.candles?.length > 1
-                  ? `Candles: XIO exchange daily lock (${pair})`
+                  ? hasLedgerData(ledgerByPair[pair])
+                    ? `Candles: XIO exchange daily lock, then XRPL ledger trades (${pair} pool). Gaps mean no trades on record.`
+                    : `Candles: XIO exchange daily lock (${pair}), loading XRPL ledger trades`
                   : `Candles: loading XIO exchange daily lock (${pair})`}
               </p>
             ) : null}
