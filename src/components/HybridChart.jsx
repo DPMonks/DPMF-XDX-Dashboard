@@ -1205,9 +1205,11 @@ export default function HybridChart({
               </p>
             ) : null}
             {String(pair).startsWith("XDX/") ? (
-              <p className="hybrid-tape-source" title="Candles come from XRPL ledger trades. A gap means no trades in that period.">
+              <p className="hybrid-tape-source" title="Candles come from XRPL ledger trades: the pool's own fills first, XDX/XRP fills converted where the pool has none. A gap means no XDX trades in that period.">
                 {hasLedgerData(ledgerByPair[pair])
-                  ? `Candles: XRPL ledger trades (${pair}). Gaps mean no trades.`
+                  ? pair === "XDX/XRP"
+                    ? "Candles: XRPL ledger trades. Gaps mean no trades."
+                    : `Candles: XRPL ledger (${pair} pool fills, else XDX/XRP converted). Gaps mean no trades.`
                   : `Candles: loading XRPL ledger trades (${pair})`}
               </p>
             ) : null}

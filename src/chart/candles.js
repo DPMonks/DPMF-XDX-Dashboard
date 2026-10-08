@@ -876,6 +876,20 @@ export function noTradeGaps(candles = [], intervalId = "1D") {
   return out;
 }
 
+/** Place gap markers and label only those with room, so labels never stack. */
+export function labelGaps(gaps = [], xOf = (t) => t, right = Infinity, minSpace = 72) {
+  const out = [];
+  let lastLabelX = -Infinity;
+  for (const gap of Array.isArray(gaps) ? gaps : []) {
+    const x = (Number(xOf(gap.from)) + Number(xOf(gap.to))) / 2;
+    if (!Number.isFinite(x)) continue;
+    const label = x - lastLabelX > minSpace && x + 60 < right;
+    if (label) lastLabelX = x;
+    out.push({ ...gap, x, label });
+  }
+  return out;
+}
+
 export function windowCandles(candles, rangeId, now = Date.now()) {
   if (!candles.length) return candles;
   if (rangeId === "Max") return candles;
