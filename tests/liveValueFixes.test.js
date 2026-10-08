@@ -161,3 +161,17 @@ test("price lines break across multi day holes instead of a flat fake line", () 
   const holders = windowedTokenSeries(rows, "1M", now, "holders");
   assert.ok(holders.every((row) => row.plot != null));
 });
+
+test("dust-trade candles far from their neighbours are dropped from price history", async () => {
+  const { dropPriceOutliers } = await import("../src/tokenDetailsHistory.js");
+  const start = Date.parse("2024-10-01T00:00:00Z");
+  const rows = Array.from({ length: 30 }, (_, i) => ({
+    timestamp: new Date(start + i * 3600000).toISOString(),
+    price_xrp: 0.0001 * (1 + (i % 5) * 0.02),
+  }));
+  rows[10] = { ...rows[10], price_xrp: 89.47 };
+  rows[20] = { ...rows[20], price_xrp: 0.0000001 };
+  const kept = dropPriceOutliers(rows);
+  assert.equal(kept.length, 28);
+  assert.ok(kept.every((row) => row.price_xrp < 0.001 && row.price_xrp > 0.00001));
+});
