@@ -1,4 +1,6 @@
 import {
+  RLUSD_HEX,
+  RLUSD_ISSUER,
   XIO_HEX,
   XIO_ISSUER,
   XSQUAD_HEX,
@@ -9,6 +11,9 @@ import { xrplRpc } from "./xrplBookOffers.js";
 const CACHE_MS = 30_000;
 const DROPS = 1_000_000;
 let rateCache = { at: 0, rates: null };
+
+/** RLUSD is a USD stablecoin on the ledger: XRP per RLUSD gives USD per XRP. */
+export const RLUSD_SPEC = { id: "RLUSD", currency: "RLUSD", hex: RLUSD_HEX, issuer: RLUSD_ISSUER };
 
 export const QUOTE_XRP_SPECS = [
   { id: "XIO", currency: "XIO", hex: XIO_HEX, issuer: XIO_ISSUER },
@@ -89,7 +94,7 @@ function sideRate(offers, spec, preferLow) {
   return best;
 }
 
-async function loadOneQuoteXrpRate(spec, options) {
+export async function loadOneQuoteXrpRate(spec, options) {
   const asset = spec.hex && spec.id !== "XIO" ? { currency: spec.hex, issuer: spec.issuer } : { currency: spec.currency, issuer: spec.issuer };
   const xrp = { currency: "XRP" };
   try {

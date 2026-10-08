@@ -1,6 +1,8 @@
 import { XRP_XRPL_TO_MD5 } from "../src/constants/ledger.js";
 import { applyUsdFx, fillMissingXdxFiat, positive, usdFxFromSources } from "../src/utils/fiatFx.js";
 import { FREE_API_HEADERS } from "./xrplToCatalog.js";
+import { RLUSD_SPEC, loadOneQuoteXrpRate, xrpPerQuoteFromAmm } from "./quoteXrpMarket.js";
+import { xrplRpc } from "./xrplBookOffers.js";
 
 const COINGECKO_XRP =
   "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd,gbp,eur,jpy&include_24hr_change=true";
@@ -150,15 +152,81 @@ export async function loadUsdFx(options = {}) {
   };
 }
 
+const LEDGERS_PER_DAY = 21_600; // about 4 s per ledger
+let lastFallbackLog = 0;
+
+function saneUsd(usd) {
+  return usd > 0.05 && usd < 100 ? usd : 0;
+}
+
+/**
+ * USD per XRP from the ledger's XRP/RLUSD AMM pool and order book (RLUSD = USD).
+ * The 24h change compares the pool spot with the pool a day of ledgers back.
+ */
+let ledgerCache = { at: 0, quote: null };
+
+export async function loadLedgerXrpUsd(options = {}) {
+  const injected = Boolean(options.rpc || options.ledgerRate || options.fetchImpl);
+  if (!injected && ledgerCache.quote && Date.now() - ledgerCache.at < 60_000) return ledgerCache.quote;
+  const quote = await readLedgerXrpUsd(options);
+  if (!injected && quote) ledgerCache = { at: Date.now(), quote };
+  return quote;
+}
+
+async function readLedgerXrpUsd(options = {}) {
+  const rpc = options.rpc || ((method, params) => xrplRpc(method, params, options));
+  const xrpPerRlusd = options.ledgerRate
+    ? await options.ledgerRate()
+    : await loadOneQuoteXrpRate(RLUSD_SPEC, options);
+  const usd = saneUsd(xrpPerRlusd > 0 ? 1 / xrpPerRlusd : 0);
+  if (!usd) return null;
+  const quote = { usd, source: "xrpl_rlusd" };
+  try {
+    const rlusd = { currency: RLUSD_SPEC.hex, issuer: RLUSD_SPEC.issuer };
+    const now = await rpc("amm_info", { asset: rlusd, asset2: { currency: "XRP" }, ledger_index: "validated" });
+    const index = Number(now?.ledger_index || now?.ledger_current_index || 0);
+    if (index > LEDGERS_PER_DAY) {
+      const then = await rpc("amm_info", { asset: rlusd, asset2: { currency: "XRP" }, ledger_index: index - LEDGERS_PER_DAY });
+      const thenXrp = xrpPerQuoteFromAmm(then?.amm || then, RLUSD_SPEC);
+      const thenUsd = saneUsd(thenXrp > 0 ? 1 / thenXrp : 0);
+      if (thenUsd) quote.change24h = (usd / thenUsd - 1) * 100;
+    }
+  } catch {
+    // spot stands without a 24h change
+  }
+  return quote;
+}
+
+function logExternalFallback(name, value) {
+  const now = Date.now();
+  if (now - lastFallbackLog < 600_000) return;
+  lastFallbackLog = now;
+  console.warn(`[fiat] xrp_usd source=external_fallback reason=ledger_read_failed external=${name} value=${value}`);
+}
+
 export async function loadXrpSpot(options = {}) {
   try {
+    const ledger = await loadLedgerXrpUsd(options);
+    if (ledger && positive(ledger.usd)) return ledger;
+  } catch {
+    // outside quotes below, logged
+  }
+  if (options.ledgerOnly) {
+    return { usd: lastGood.usd, change24h: lastGood.change24h, source: lastGood.usd ? "last-good" : "empty" };
+  }
+  try {
     const quote = xrpQuoteFromCoinGecko(await fetchJson(COINGECKO_XRP, options));
-    if (positive(quote.usd)) return quote;
+    if (positive(quote.usd)) {
+      logExternalFallback("coingecko", quote.usd);
+      return quote;
+    }
   } catch {
     // xrpl.to still has an XRP USD mark
   }
   try {
-    return xrpUsdFromXrplTo(await fetchJson(XRPL_TO_XRP, options));
+    const quote = xrpUsdFromXrplTo(await fetchJson(XRPL_TO_XRP, options));
+    if (positive(quote.usd)) logExternalFallback("xrpl.to", quote.usd);
+    return quote;
   } catch {
     return {
       usd: lastGood.usd,
