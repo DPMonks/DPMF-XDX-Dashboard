@@ -28,6 +28,7 @@ export function feeUnitsFromPercent(percent) {
 }
 
 export function formatFeePercent(percent, locale = "en") {
+  if (percent == null || percent === "") return "-";
   const n = Number(percent);
   if (!Number.isFinite(n)) return "-";
   return `${n.toLocaleString(locale, {
@@ -167,7 +168,10 @@ export function isVoteTxjson(txjson) {
 }
 
 export function governanceFromAmmInfo(result = {}, { address = "", pair = "XDX/XRP", lpBalance = 0 } = {}) {
-  const amm = result.amm || result;
+  const amm = (result && (result.amm || result)) || {};
+  // No trading_fee means amm_info did not answer (rate limit, timeout). Report
+  // the figures as unknown rather than a 0% fee that the pool does not have.
+  const loaded = amm.trading_fee != null && Number.isFinite(Number(amm.trading_fee));
   const slots = voteSlotsFromAmm(amm);
   const yours = slots.find((row) => address && sameWallet(row.account, address)) || null;
   const lpSupply = Number(amm.lp_token?.value ?? amm.lp_token);
@@ -175,12 +179,13 @@ export function governanceFromAmmInfo(result = {}, { address = "", pair = "XDX/X
   const eligible = held > 0;
   return {
     pair,
+    loaded,
     ammAccount: amm.account || null,
-    tradingFee: Number(amm.trading_fee),
-    tradingFeePct: feePercentFromUnits(amm.trading_fee),
-    weightedFeePct: weightedVotedFee(slots) ?? feePercentFromUnits(amm.trading_fee),
-    medianFeePct: medianVotedFee(slots),
-    voteCount: slots.length,
+    tradingFee: loaded ? Number(amm.trading_fee) : null,
+    tradingFeePct: loaded ? feePercentFromUnits(amm.trading_fee) : null,
+    weightedFeePct: loaded ? weightedVotedFee(slots) ?? feePercentFromUnits(amm.trading_fee) : null,
+    medianFeePct: loaded ? medianVotedFee(slots) : null,
+    voteCount: loaded ? slots.length : null,
     voteSlots: slots.map((row) => ({ ...row, pair })),
     yourVote: yours,
     lpSupply: Number.isFinite(lpSupply) ? lpSupply : null,

@@ -527,7 +527,9 @@ export const api = {
       search.set("amm", extra.ammAccount || extra.amm || extra.amm_account);
     }
     if (extra.lpBalance != null || extra.lp != null) search.set("lp", String(extra.lpBalance ?? extra.lp));
-    return getJson(`/amm/governance?${search}`, { retries: 1, queue: false, cache: false });
+    // Governance reads amm_info plus each voter's history; give it room so a
+    // slow ledger node does not time the tiles out to empty.
+    return getJson(`/amm/governance?${search}`, { retries: 1, queue: false, cache: false, timeoutMs: 20000 });
   },
   swapMarket: (query = {}) => {
     const search = new URLSearchParams();

@@ -4,7 +4,11 @@ import { xrplRpc } from "./xrplBookOffers.js";
 
 const CACHE_MS = 15_000;
 const DELETED_MS = 10 * 60_000;
+// Last good amm_info per pool. A blip on a public node should keep showing the
+// reserves we read a few minutes ago, not fall back to old Postgres rows.
+const LAST_GOOD_MS = 15 * 60_000;
 const cache = new Map();
+const lastGood = new Map();
 const accountCache = new Map();
 const DEFAULT_CONCURRENCY = 3;
 
@@ -157,8 +161,16 @@ export async function loadLiveAmmReserves(query = {}, options = {}) {
   // default to XDX/XRP and then stamp every other LP position as that pool.
   const resolvedPair = parsed?.pair || pair;
   const body = parsed
-    ? { ...parsed, pair: resolvedPair, reserve_source: "amm_info", source: "xrpl" }
+    ? { ...parsed, pair: resolvedPair, reserve_source: "amm_info", source: "xrpl", as_of: new Date(now).toISOString() }
     : emptyLive(pair);
+  if (parsed) {
+    lastGood.set(key, { at: now, body });
+  } else {
+    const kept = lastGood.get(key);
+    if (kept && now - kept.at < LAST_GOOD_MS) {
+      return { ...kept.body, stale: true };
+    }
+  }
   if (parsed || !transient) {
     cache.set(key, { at: now, body });
   }

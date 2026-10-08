@@ -22,6 +22,14 @@ import PoolSelector from "./PoolSelector";
 import VoteHistory from "./VoteHistory";
 import VotePanel from "./VotePanel";
 
+const GOV_RETRY_MS = [2_500, 6_000, 15_000];
+
+function governanceLoaded(gov) {
+  if (!gov || typeof gov !== "object") return false;
+  if (gov.loaded === false || gov.source === "empty") return false;
+  return gov.tradingFee != null && Number.isFinite(Number(gov.tradingFee));
+}
+
 export default function VotingContainer() {
   const { t, locale } = useI18n();
   const { walletAddress } = useWallet();
@@ -70,7 +78,10 @@ export default function VotingContainer() {
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer = null;
+    let attempt = 0;
     async function loadGov() {
+      clearTimeout(retryTimer);
       const [nextGov, votes] = await Promise.all([
         getPoolGovernance(pair, walletAddress, {
           issuer: selectedPool?.quote_issuer,
@@ -81,15 +92,27 @@ export default function VotingContainer() {
         walletAddress ? getWalletVotes(walletAddress).catch(() => []) : [],
       ]);
       if (cancelled) return;
+      if (!governanceLoaded(nextGov)) {
+        // amm_info missed (often a rate limited node while every section loads
+        // at once). Keep what is on screen for this pool and try again shortly.
+        setGov((current) => (current?.pair === nextGov?.pair && governanceLoaded(current) ? current : nextGov));
+        if (attempt < GOV_RETRY_MS.length) {
+          retryTimer = setTimeout(loadGov, GOV_RETRY_MS[attempt]);
+          attempt += 1;
+        }
+        return;
+      }
+      attempt = 0;
       setGov(nextGov);
       setHistory(voteHistoryFromActivity(votes, nextGov?.voteSlots || []));
       const current = nextGov?.yourVote?.tradingFee ?? nextGov?.tradingFee;
-      if (Number.isFinite(Number(current))) {
+      if (current != null && Number.isFinite(Number(current))) {
         setFee(feePercentFromUnits(current));
       }
     }
     const startLoad = setTimeout(loadGov, 0);
     function onRefresh() {
+      attempt = 0;
       loadGov();
     }
     window.addEventListener("dpmf-wallet-refresh", onRefresh);
@@ -97,6 +120,7 @@ export default function VotingContainer() {
     return () => {
       cancelled = true;
       clearTimeout(startLoad);
+      clearTimeout(retryTimer);
       window.removeEventListener("dpmf-wallet-refresh", onRefresh);
       window.removeEventListener("dpmf-trade-executed", onRefresh);
     };

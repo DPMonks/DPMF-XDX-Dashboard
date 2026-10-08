@@ -395,8 +395,16 @@ export function mergeOrderbookCatalogs(db, live) {
     };
   }
 
-  if (bookHasTape(stored)) return stored;
-  if (bookHasTape(fresh)) return { ...stored, ...fresh, source: fresh.source || stored.source };
+  // The live book is built from amm_info plus book_offers right now. Prefer it
+  // whenever it has levels; the stored book could carry an old reserve snapshot,
+  // which is how a single-pair request showed a different mid than the catalog.
+  const samePair =
+    !stored.pair ||
+    !fresh.pair ||
+    String(stored.pair).toUpperCase() === String(fresh.pair).toUpperCase();
+  if (samePair && bookHasTape(fresh)) {
+    return { ...stored, ...fresh, source: fresh.source || stored.source };
+  }
   return stored;
 }
 

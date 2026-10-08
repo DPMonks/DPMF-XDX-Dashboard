@@ -94,7 +94,9 @@ test("empty token details take ledger constants and a free-API price", () => {
   assert.equal(row.blackholed_at, XDX_BLACKHOLED_AT);
   assert.equal(row.price, 0.00004);
   assert.ok(row.xrplMarketCap > 0);
-  assert.ok(row.circulating > 0);
+  // No issuer-locked figure yet: circulating stays unknown instead of showing
+  // the full 10B supply as if nothing were locked.
+  assert.equal(row.circulating, null);
 });
 
 test("Frankfurter and CoinGecko payloads compose a last-good FX quote", () => {

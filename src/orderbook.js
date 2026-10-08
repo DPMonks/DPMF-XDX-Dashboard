@@ -305,6 +305,14 @@ function issuedAmount(value) {
   return null;
 }
 
+function fundedAmountIsZero(value) {
+  if (value == null || value === "") return false;
+  const raw = typeof value === "object" ? value.value ?? value.amount : value;
+  if (raw == null || raw === "") return false;
+  const num = Number(raw);
+  return Number.isFinite(num) && num <= 0;
+}
+
 function isXdxAmount(amount) {
   const currency = String(amount?.currency || "").toUpperCase();
   return currency === "XDX" || currency.startsWith("584458");
@@ -329,8 +337,15 @@ export function offerToDexRow(row) {
 
   const gets = issuedAmount(row.TakerGets ?? row.taker_gets);
   const pays = issuedAmount(row.TakerPays ?? row.taker_pays);
-  const fundedGets = issuedAmount(row.taker_gets_funded ?? row.TakerGetsFunded);
-  const fundedPays = issuedAmount(row.taker_pays_funded ?? row.TakerPaysFunded);
+  // book_offers lists offers whose owner no longer holds the funds. rippled
+  // flags them with taker_gets_funded / taker_pays_funded of "0" (or a smaller
+  // partial amount). Showing them at full size put phantom levels at the top of
+  // the book and dragged the mid away from the real market.
+  const rawFundedGets = row.taker_gets_funded ?? row.TakerGetsFunded;
+  const rawFundedPays = row.taker_pays_funded ?? row.TakerPaysFunded;
+  if (fundedAmountIsZero(rawFundedGets) || fundedAmountIsZero(rawFundedPays)) return null;
+  const fundedGets = issuedAmount(rawFundedGets);
+  const fundedPays = issuedAmount(rawFundedPays);
   if (gets && pays) {
     if (isXdxAmount(gets)) {
       return {

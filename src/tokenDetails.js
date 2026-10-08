@@ -32,12 +32,21 @@ export function composeTokenDetails({
 } = {}) {
   const totalSupply =
     numberOrNull(overview.total_supply || overview.totalSupply) || XDX_TOTAL_SUPPLY;
-  const issuerLocked =
-    numberOrNull(overview.issuer_locked || overview.burned_supply || overview.issuerLocked) || 0;
+  const issuerLockedKnown = numberOrNull(
+    overview.issuer_locked ?? overview.burned_supply ?? overview.issuerLocked
+  );
+  const issuerLocked = issuerLockedKnown ?? null;
   const rawCirc = numberOrNull(
     overview.circulating || overview.circulating_supply || overview.xdx_supply
   );
-  const circulating = rawCirc && rawCirc > 0 ? rawCirc : Math.max(totalSupply - issuerLocked, 0);
+  // Only derive circulating from a known burned figure. Before the issuer read
+  // lands, total minus "0 burned" would flash the 10,000,000,000 placeholder.
+  const circulating =
+    rawCirc && rawCirc > 0
+      ? rawCirc
+      : issuerLocked != null && issuerLocked > 0
+        ? Math.max(totalSupply - issuerLocked, 0)
+        : null;
   const filledPrices = fillMissingXdxFiat({ ...overview, ...prices });
   const price =
     recordedXdxUsdFromPrices(filledPrices, filledPrices.xrpUsd || overview.xrpUsd) ||
@@ -65,7 +74,8 @@ export function composeTokenDetails({
     xdx_per_xrp: xdxPerXrp,
     xrplMarketCap: fdv ?? overview.xrplMarketCap ?? overview.market_cap,
     ammMarketCap,
-    circulatingMarketCap: price != null ? circulating * price : overview.circulatingMarketCap,
+    circulatingMarketCap:
+      price != null && circulating != null ? circulating * price : numberOrNull(overview.circulatingMarketCap),
     circulating,
     totalSupply,
     burnedSupply: issuerLocked,
