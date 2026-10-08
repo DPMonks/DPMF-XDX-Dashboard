@@ -512,7 +512,7 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
             <dl className="pool-stats">
               <div>
                 <dt>{t.ammAccount}</dt>
-                <dd title={pool.amm_account || ""}>{pool.amm_account ? shortAddress(pool.amm_account) : "—"}</dd>
+                <dd title={pool.amm_account || ""}>{pool.amm_account ? shortAddress(pool.amm_account) : "-"}</dd>
               </div>
               <div>
                 <dt>
@@ -525,17 +525,17 @@ export default function AmmCard({ pools, loading, error, onAddLiquidity, onRemov
                   {t.reserve} {quoteName}
                 </dt>
                 <dd title={formatToken(pool.reserve_currency, locale)}>
-                  {pool.reserve_currency != null ? compactPoolAmount(pool.reserve_currency) : "—"}
+                  {pool.reserve_currency != null ? compactPoolAmount(pool.reserve_currency) : "-"}
                 </dd>
               </div>
               <div>
                 <dt>{t.lp}</dt>
-                <dd title={pool.lp_currency || ""}>{pool.lp_currency ? shortAddress(pool.lp_currency) : "—"}</dd>
+                <dd title={pool.lp_currency || ""}>{pool.lp_currency ? shortAddress(pool.lp_currency) : "-"}</dd>
               </div>
               <div>
                 <dt>{t.lpSupply}</dt>
                 <dd title={formatToken(pool.lp_supply, locale)}>
-                  {pool.lp_supply != null ? compactPoolAmount(pool.lp_supply) : "—"}
+                  {pool.lp_supply != null ? compactPoolAmount(pool.lp_supply) : "-"}
                 </dd>
               </div>
               <div>

@@ -23,8 +23,8 @@ test("formatSupplySharePercent keeps six decimal places and stays at or under 10
 });
 
 test("formatNumber keeps a missing metric blank instead of zero", () => {
-  assert.equal(formatNumber(null), "—");
-  assert.equal(formatNumber(undefined), "—");
-  assert.equal(formatNumber(""), "—");
+  assert.equal(formatNumber(null), "-");
+  assert.equal(formatNumber(undefined), "-");
+  assert.equal(formatNumber(""), "-");
   assert.equal(formatNumber(0, "en-US", { maximumFractionDigits: 0 }), "0");
 });

@@ -96,7 +96,7 @@ export function formatPoolPrice(value) {
 
 export function compactPoolAmount(value) {
   const n = Number(value);
-  if (!Number.isFinite(n)) return "—";
+  if (!Number.isFinite(n)) return "-";
   const abs = Math.abs(n);
   const signed = n < 0 ? "-" : "";
   const format = (qty, suffix) => {

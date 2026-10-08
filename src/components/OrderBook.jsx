@@ -34,9 +34,9 @@ function BookSide({ title, rows, side, locale, t }) {
   const isAsk = side === "ask";
 
   const amount = (row) =>
-    row.placeholder || row.base_size == null ? "—" : formatToken(row.base_size, locale, 2);
+    row.placeholder || row.base_size == null ? "-" : formatToken(row.base_size, locale, 2);
   const price = (row) =>
-    row.placeholder || row.price == null ? "—" : formatQuotePerBase(row.price, locale, "");
+    row.placeholder || row.price == null ? "-" : formatQuotePerBase(row.price, locale, "");
 
   return (
     <div className={`orderbook-side is-${side}`}>
@@ -247,11 +247,11 @@ export default function OrderBook() {
         </div>
         <div>
           <dt>{t.spreadBps}</dt>
-          <dd>{header.spread_bps == null ? "—" : Number(header.spread_bps).toFixed(1)}</dd>
+          <dd>{header.spread_bps == null ? "-" : Number(header.spread_bps).toFixed(1)}</dd>
         </div>
         <div>
           <dt>{t.midUsdHint}</dt>
-          <dd>{header.mid_usd ? formatUsdPrice(header.mid_usd, locale) : "—"}</dd>
+          <dd>{header.mid_usd ? formatUsdPrice(header.mid_usd, locale) : "-"}</dd>
         </div>
       </dl>
 

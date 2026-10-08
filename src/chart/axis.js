@@ -196,14 +196,14 @@ export function clientToSvg(svg, clientX, clientY, viewW, viewH) {
 
 export function formatPriceLabel(value) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   return num.toFixed(6);
 }
 
 /** Nice axis labels: 10s / 100s / 1000s steps, dollar-style 1 / 1.1 / 1.2. */
 export function formatAxisPrice(value) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   if (num === 0) return "0";
   const abs = Math.abs(num);
   if (abs >= 1000) return String(Math.round(num));
@@ -226,7 +226,7 @@ export function priceLabelWidth(label) {
 
 export function formatAxisTime(t, { spanMs = 30 * DAY_MS, intervalId = "1D", locale = "en" } = {}) {
   const date = new Date(t);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "-";
   const span = Number(spanMs) || 0;
   if (span >= 80 * DAY_MS) {
     return date.toLocaleDateString(locale, { month: "short", year: "numeric", timeZone: "UTC" });
@@ -263,7 +263,7 @@ export function timeTagOrigin(x, width, { left = 0, right = 0 } = {}) {
 
 export function formatCursorWhen(t, locale = "en") {
   const date = new Date(t);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleString(locale, {
     day: "2-digit",
     month: "short",

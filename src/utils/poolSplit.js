@@ -40,7 +40,7 @@ export function roundPoolPct(value) {
 
 export function formatPoolPct(value) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   return num.toFixed(1);
 }
 
