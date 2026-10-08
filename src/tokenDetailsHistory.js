@@ -288,6 +288,45 @@ export function xdxPriceHistoryRows(payload) {
   });
 }
 
+function candlePrice(row) {
+  const xrp = rawNumber(row?.price_xrp);
+  if (xrp != null && xrp > 0) return xrp;
+  const usd = rawNumber(row?.price_usd ?? row?.price);
+  return usd != null && usd > 0 ? usd : null;
+}
+
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Hourly ledger candles average every fill in the hour, so a dust trade at a
+ * silly price (89 XRP per XDX against a 0.0001 market) turns a candle into a
+ * spike thousands of times the real price. Drop a candle that sits more than
+ * `factor` times away from the median of its neighbours.
+ */
+export function dropPriceOutliers(rows, { window = 12, factor = 3 } = {}) {
+  const list = (Array.isArray(rows) ? rows : [])
+    .map((row) => ({ row, ts: rowTs(row), price: candlePrice(row) }))
+    .filter((item) => item.ts != null)
+    .sort((a, b) => a.ts - b.ts);
+  const prices = list.map((item) => item.price);
+  return list
+    .filter((item, index) => {
+      if (item.price == null) return false;
+      const around = [];
+      for (let j = Math.max(0, index - window); j <= Math.min(list.length - 1, index + window); j += 1) {
+        if (j !== index && prices[j] != null) around.push(prices[j]);
+      }
+      if (around.length < 4) return true;
+      const ref = median(around);
+      return item.price <= ref * factor && item.price >= ref / factor;
+    })
+    .map((item) => item.row);
+}
+
 function dayKey(ms) {
   return Math.floor(ms / 86400000);
 }
@@ -478,7 +517,10 @@ export function composeTokenDetailHistory({
   lockedCandles = null,
   live = null,
 } = {}) {
-  const priceRows = repriceWithDailyXrpUsd(xdxPriceHistoryRows(candles), xrpUsdByDay(lockedCandles));
+  const priceRows = repriceWithDailyXrpUsd(
+    dropPriceOutliers(xdxPriceHistoryRows(candles)),
+    xrpUsdByDay(lockedCandles)
+  );
   const firstLedgerTs = priceRows.reduce((min, row) => {
     const ts = rowTs(row);
     return ts != null && ts < min ? ts : min;
