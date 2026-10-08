@@ -193,9 +193,28 @@ export function ledgerPairCandles({ pair, intervalId = "1h", ledger, locked = {}
     rows = [...crossed, ...native];
   }
   if (!rows.length) return [];
+  let out;
   if (src === "1d") {
-    return intervalId === "1D" ? rows : resampleCandles(rows, intervalId);
+    out = intervalId === "1D" ? rows : resampleCandles(rows, intervalId);
+  } else if ((src === "1h" && intervalId === "1h") || (src === "1m" && intervalId === "1m")) {
+    out = rows;
+  } else {
+    out = ticksToCandles(rows, intervalId, { continuous: false }).map((row) => ({ ...row, source: row.source || "ledger" }));
   }
-  if ((src === "1h" && intervalId === "1h") || (src === "1m" && intervalId === "1m")) return rows;
-  return ticksToCandles(rows, intervalId, { continuous: false }).map((row) => ({ ...row, source: row.source || "ledger" }));
+  return continuousOpens(out);
+}
+
+/**
+ * An AMM price only moves when someone trades, so each candle opens where the
+ * last one closed. A bucket with one swap then shows the move that swap made
+ * instead of a flat dash at its fill price.
+ */
+export function continuousOpens(candles = []) {
+  const list = Array.isArray(candles) ? candles : [];
+  return list.map((row, index) => {
+    if (index === 0) return row;
+    const open = Number(list[index - 1].c);
+    if (!(open > 0)) return row;
+    return { ...row, o: open, h: Math.max(row.h, open, row.c), l: Math.min(row.l, open, row.c) };
+  });
 }
