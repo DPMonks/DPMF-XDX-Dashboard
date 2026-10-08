@@ -4,7 +4,6 @@ import {
   appendLiveClose,
   candlesFromMarketData,
   clipCandleWicks,
-  expandDailyToInterval,
   fillDailyGaps,
   normalizeCandle,
   resampleCandles,
@@ -23,6 +22,7 @@ import {
   stitchRlusdCandles,
 } from "./pairQuote.js";
 import { isXioBasePair } from "./xioHistory.js";
+import { hasLedgerData, ledgerPairCandles } from "./ledgerPairCandles.js";
 
 export function lockedSnapshot() {
   return lockedCandles && typeof lockedCandles === "object" ? lockedCandles : { pairs: {}, xrpUsd: [] };
@@ -109,6 +109,7 @@ export function composePairCandles({
   windowed = true,
   lookbackBars,
   cexCandles = [],
+  ledger = null,
 } = {}) {
   const name = String(pair || "XDX/RLUSD").toUpperCase();
   const xioBase = isXioBasePair(name);
@@ -178,8 +179,10 @@ export function composePairCandles({
   // XIO history is the XIO exchange lock passed in `locked`. Do not paint XDX prints on it.
   // Trade prints arrive in both quote-per-base and base-per-quote. Anchor them
   // to the locked candle so inverted AMM fills cannot erase the real candles.
+  const ledgerOn = name.startsWith("XDX/") && hasLedgerData(ledger);
+  // Ledger candles replace the sparkline (hourly ledger closes) for XDX pairs.
   const sparkTicks =
-    name === "XRP/RLUSD" || xioBase
+    name === "XRP/RLUSD" || xioBase || ledgerOn
       ? []
       : ticksFromSparkline(sparkline, name, { xrpUsd: prices.xrpUsd || latestLockedUsd() });
   const ref =
@@ -189,25 +192,25 @@ export function composePairCandles({
     (Number(livePrice) > 0 ? Number(livePrice) : null);
   const liveTicks = name === "XRP/RLUSD" || xioBase ? [] : [...sparkTicks, ...ticksFromTrades(trades, name, ref)];
   const orientedLive = orientQuotePrice(livePrice, ref);
+  const ledgerArgs = { pair: name, ledger, locked, prices, now };
 
   const liveInterval = isDailyOrLonger(interval) ? (interval === "1W" || interval === "3D" || interval === "1M" ? "1D" : interval) : interval;
-  const live = ticksToCandles(liveTicks, liveInterval, { continuous: false });
-  let daily = fillDailyGaps(base, base[0]?.t, now);
-  const merged = new Map(daily.map((row) => [row.t, row]));
-  for (const row of live) {
-    const prev = merged.get(row.t);
-    merged.set(row.t, prev ? { ...prev, ...row, o: prev.o, source: row.source || "live" } : row);
+  // Real daily candles only. A UTC day with no trade has no candle (no carried close).
+  let daily = normalizeDaily(base);
+  if (ledgerOn) {
+    const lastLocked = daily.length ? daily[daily.length - 1].t : -Infinity;
+    const ledgerDaily = ledgerPairCandles({ ...ledgerArgs, intervalId: "1D" }).filter((row) => row.t > lastLocked);
+    daily = [...daily, ...ledgerDaily];
   }
-  let candles = [...merged.values()].sort((left, right) => left.t - right.t);
-  candles = appendLiveClose(candles, orientedLive, now, liveInterval);
-  if (interval === "1D") candles = fillDailyGaps(candles, candles[0]?.t, now);
+  let candles = overlayTicks(daily, ticksToCandles(liveTicks, liveInterval, { continuous: false }), { keepExisting: ledgerOn });
+  candles = appendLiveClose(candles, orientedLive, now, liveInterval, { skipFlat: ledgerOn });
   if (interval === "1W" || interval === "3D" || interval === "1M") {
     candles = resampleCandles(candles, interval);
   }
   if (!isDailyOrLonger(interval)) {
-    // XRP/RLUSD without CEX: do not invent dense flat/wick session bars from daily.
-    // Keep coarse daily tape until /api/chart/cex-candles arrives.
-    if (name === "XRP/RLUSD") {
+    // No intraday source: keep the coarse daily tape instead of inventing
+    // flat or interpolated session bars from it.
+    if (name === "XRP/RLUSD" || xioBase) {
       candles = clipCandleWicks(candles, wickClipOptions({ pair: name }));
       return windowed ? windowCandles(candles, range, now) : candles;
     }
@@ -217,19 +220,42 @@ export function composePairCandles({
       Math.max(visibleBarsForInterval(interval) + CHART_MA_PAD, Math.trunc(Number(lookbackBars) || 0))
     );
     const from = now - need * step;
-    candles = expandDailyToInterval(candles, interval, from, now);
-    const intra = ticksToCandles(liveTicks, interval, { continuous: false });
-    const intraMap = new Map(candles.map((row) => [row.t, row]));
-    for (const row of intra) {
-      const prev = intraMap.get(row.t);
-      intraMap.set(row.t, prev ? { ...prev, ...row, o: prev.o, source: row.source || "live" } : row);
+    const intraday = ledgerOn
+      ? ledgerPairCandles({ ...ledgerArgs, intervalId: interval }).filter((row) => row.t >= from)
+      : [];
+    const intra = overlayTicks(intraday, ticksToCandles(liveTicks, interval, { continuous: false }), {
+      keepExisting: ledgerOn,
+    }).filter((row) => row.t >= from);
+    if (intra.length) {
+      candles = appendLiveClose(intra, orientedLive, now, interval, { skipFlat: ledgerOn });
     }
-    candles = [...intraMap.values()].sort((left, right) => left.t - right.t);
-    candles = appendLiveClose(candles, orientedLive, now, interval);
   }
   // Display path: clip absurd wick/close extremes from thin AMM/swap prints.
   candles = clipCandleWicks(candles, wickClipOptions({ pair: name }));
   return windowed ? windowCandles(candles, range, now) : candles;
+}
+
+function normalizeDaily(rows = []) {
+  const map = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const candle = normalizeCandle(row, "1D");
+    if (candle) map.set(candle.t, candle);
+  }
+  return [...map.values()].sort((left, right) => left.t - right.t);
+}
+
+/**
+ * Lay live trade ticks over candles. With `keepExisting`, a bucket the ledger
+ * already has keeps its ledger OHLC; ticks only fill buckets it has not seen yet.
+ */
+function overlayTicks(candles = [], ticks = [], { keepExisting = false } = {}) {
+  const merged = new Map(candles.map((row) => [row.t, row]));
+  for (const row of ticks) {
+    const prev = merged.get(row.t);
+    if (prev && keepExisting) continue;
+    merged.set(row.t, prev ? { ...prev, ...row, o: prev.o, source: row.source || "live" } : row);
+  }
+  return [...merged.values()].sort((left, right) => left.t - right.t);
 }
 
 export function latestLockedUsd() {

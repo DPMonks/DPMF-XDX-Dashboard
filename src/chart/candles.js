@@ -831,7 +831,7 @@ export function clipCandleWicks(candles = [], opts = {}) {
   });
 }
 
-export function appendLiveClose(candles, price, at = Date.now(), intervalId = "1D") {
+export function appendLiveClose(candles, price, at = Date.now(), intervalId = "1D", { skipFlat = false } = {}) {
   if (!(Number(price) > 0)) return candles;
   const t = bucketTime(at, intervalId);
   if (t == null) return candles;
@@ -844,6 +844,8 @@ export function appendLiveClose(candles, price, at = Date.now(), intervalId = "1
     return list;
   }
   const open = last?.c > 0 ? last.c : price;
+  // No trade since the last candle and no price move: do not add a flat bar.
+  if (skipFlat && last && Math.abs(price - open) <= Math.abs(open) * 1e-9) return list;
   list.push({
     t,
     o: open,
@@ -854,6 +856,24 @@ export function appendLiveClose(candles, price, at = Date.now(), intervalId = "1
     source: "live",
   });
   return list;
+}
+
+/**
+ * Breaks between consecutive candles long enough to call out as a no-trade
+ * period: more than three bars and at least a full day. Bars are slot-spaced,
+ * so without a marker a quiet week would just look like the next candle.
+ */
+export function noTradeGaps(candles = [], intervalId = "1D") {
+  const step = intervalMs(intervalId);
+  const limit = Math.max(3 * step, 86_400_000);
+  const list = Array.isArray(candles) ? candles : [];
+  const out = [];
+  for (let i = 1; i < list.length; i += 1) {
+    const from = Number(list[i - 1]?.t);
+    const to = Number(list[i]?.t);
+    if (Number.isFinite(from) && Number.isFinite(to) && to - from > limit) out.push({ from, to });
+  }
+  return out;
 }
 
 export function windowCandles(candles, rangeId, now = Date.now()) {

@@ -20,6 +20,7 @@ import {
 import { RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_PERIODS, rsiForWindow } from "../chart/indicators";
 import { composePairCandles, lockedSnapshot } from "../chart/composeChart";
 import { fetchXioChartOverlay, isXioBasePair, mergeXioPairs } from "../chart/xioHistory";
+import { fetchLedgerPairCandles, hasLedgerData } from "../chart/ledgerPairCandles";
 import { defaultCexLimit, fetchCexCandles, usesCexTape } from "../chart/cexCandles";
 import { boxPriceHeight, fullViewPriceHeight } from "../chart/fullView";
 import { quotePerXdx, referenceClose } from "../chart/pairQuote";
@@ -175,6 +176,7 @@ export default function HybridChart({
   const [cexMeta, setCexMeta] = useState({ source: "", label: "" });
   const [xioOverlay, setXioOverlay] = useState(null);
   const xioOverlayRef = useRef(null);
+  const [ledgerByPair, setLedgerByPair] = useState({});
   const [drawings, setDrawings] = useState([]);
   const [selected, setSelected] = useState(null);
   const [pending, setPending] = useState(null);
@@ -548,6 +550,28 @@ export default function HybridChart({
   }, [walletAddress]);
 
   useEffect(() => {
+    if (!String(pair || "").toUpperCase().startsWith("XDX/")) return undefined;
+    let cancelled = false;
+    async function loadLedger() {
+      if (!aimEmbed && isAimPageFrozen()) return;
+      try {
+        const next = await fetchLedgerPairCandles(pair);
+        if (cancelled || !next) return;
+        setLedgerByPair((rows) => ({ ...rows, [pair]: next }));
+      } catch {
+        /* keep the last ledger candles; never fill with a carried close */
+      }
+    }
+    const start = setTimeout(loadLedger, 0);
+    const id = setInterval(loadLedger, 60_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(start);
+      clearInterval(id);
+    };
+  }, [pair, aimEmbed]);
+
+  useEffect(() => {
     if (!isXioBasePair(pair)) return undefined;
     let cancelled = false;
     async function load(force) {
@@ -613,8 +637,9 @@ export default function HybridChart({
         windowed: false,
         lookbackBars: loadedBars,
         cexCandles: usesCexTape(pair) ? cexCandles : [],
+        ledger: ledgerByPair[pair] || null,
       }),
-    [pair, timeframe, locked, sparkline, trades, prices, livePrice, now, loadedBars, cexCandles]
+    [pair, timeframe, locked, sparkline, trades, prices, livePrice, now, loadedBars, cexCandles, ledgerByPair]
   );
   const baseVisible = visibleBarsForInterval(timeframe);
   const visibleCount = clampVisibleBars(barZoom ?? baseVisible, baseVisible);
@@ -1177,6 +1202,13 @@ export default function HybridChart({
             {usesCexTape(pair) && cexMeta.label ? (
               <p className="hybrid-tape-source" title={cexMeta.label}>
                 {cexMeta.label}
+              </p>
+            ) : null}
+            {String(pair).startsWith("XDX/") ? (
+              <p className="hybrid-tape-source" title="Candles come from XRPL ledger trades. A gap means no trades in that period.">
+                {hasLedgerData(ledgerByPair[pair])
+                  ? `Candles: XRPL ledger trades (${pair}). Gaps mean no trades.`
+                  : `Candles: loading XRPL ledger trades (${pair})`}
               </p>
             ) : null}
             {isXioBasePair(pair) ? (
