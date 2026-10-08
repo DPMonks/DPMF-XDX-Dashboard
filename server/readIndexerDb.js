@@ -76,6 +76,7 @@ import { knownLivePoolSpecs, liveCatalogPayload, loadLiveMarket } from "./liveCa
 import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
 import { catalogHealth } from "./sourceControl.js";
 import { FREE_API_HEADERS } from "./xrplToCatalog.js";
+import { loadLedgerXrpUsd, loadUsdFx } from "./fiatQuotes.js";
 import { discoverLedgerXdxPools } from "./ledgerAmmDiscover.js";
 import {
   findDiscoveredPool,
@@ -1928,6 +1929,23 @@ async function loadXrpQuote(db) {
   let eur = Number(xrpQuote.eur || 0);
   let jpy = Number(xrpQuote.jpy || 0);
   if (!looksLikeXrpUsd(usd)) usd = 0;
+  // XRP/USD from the ledger XRP/RLUSD pool and book first (RLUSD = USD).
+  try {
+    const ledger = await loadLedgerXrpUsd();
+    if (ledger && looksLikeXrpUsd(ledger.usd)) usd = ledger.usd;
+  } catch {
+    // indexer value or the outside quote below
+  }
+  if (usd && (!gbp || !eur || !jpy)) {
+    try {
+      const fx = await loadUsdFx();
+      gbp = gbp || (fx.usdGbp ? usd * fx.usdGbp : 0);
+      eur = eur || (fx.usdEur ? usd * fx.usdEur : 0);
+      jpy = jpy || (fx.usdJpy ? usd * fx.usdJpy : 0);
+    } catch {
+      // fiat legs stay as read
+    }
+  }
   if (!usd || !gbp || !eur || !jpy) {
     try {
       const res = await fetch(
@@ -1936,7 +1954,10 @@ async function loadXrpQuote(db) {
       );
       if (!res.ok) throw new Error(`coingecko ${res.status}`);
       const body = await res.json();
-      usd = Number(body?.ripple?.usd || usd || 0);
+      if (!usd && body?.ripple?.usd) {
+        console.warn(`[fiat] xrp_usd source=external_fallback reason=ledger_read_failed external=coingecko value=${body.ripple.usd}`);
+      }
+      usd = Number(usd || body?.ripple?.usd || 0);
       gbp = Number(body?.ripple?.gbp || gbp || 0);
       eur = Number(body?.ripple?.eur || eur || 0);
       jpy = Number(body?.ripple?.jpy || jpy || 0);
