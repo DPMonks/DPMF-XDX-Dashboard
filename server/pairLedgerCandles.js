@@ -66,11 +66,15 @@ function summary(rows) {
   };
 }
 
+/**
+ * aim-market-data keeps the token's own spelling (XDX/AiCat, XDX/POWDER KEG),
+ * while chart pair names are upper case with no spaces. Match on that form.
+ */
 async function readStoredPair(pair, queryImpl) {
   const result = await queryImpl(
     `SELECT interval, EXTRACT(EPOCH FROM bucket) * 1000 AS bucket, open, high, low, close, volume_xdx, trades
      FROM xdx_ledger_candles
-     WHERE pair = $1 AND interval IN ('1m', '1h', '1d')
+     WHERE upper(replace(pair, ' ', '')) = $1 AND interval IN ('1m', '1h', '1d')
      ORDER BY bucket ASC`,
     [pair]
   );
