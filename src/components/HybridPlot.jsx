@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatQuotePerBase, formatToken } from "../utils/format";
 import { axisLabelX, barSlots, clientToSvg, equalGrid, formatAxisPrice, formatAxisTime, formatCursorWhen, plotViewKey, priceLabelWidth, priceTicks, timeTagOrigin, timeTagWidth } from "../chart/axis";
-import { candleBodyBox, candleBodyWidth, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
+import { candleBodyBox, candleBodyWidth, noTradeGaps, wheelPanSteps, wheelZoomSteps } from "../chart/candles";
 import { extendMaPoints, maCurvePoints, maPath, maRevealState, volumeWaveValues, waveArea, wavePath } from "../chart/indicators";
 import { intervalMs } from "../chart/intervals";
 import { applyPlaceOffset, canMoveHandle, clickIsPan, drawingToolbarAnchor, hitPlacedDrawing, isIdleTool, shouldFollowCrosshair, snapPoint, toggleInspect } from "../chart/drawings";
@@ -856,6 +856,33 @@ export default function HybridPlot({
               opacity={Math.min(0.28, 0.1 + wall.dominance / 20)}
             />
           ))}
+
+          {(() => {
+            const gaps = noTradeGaps(candles, interval);
+            if (!gaps.length) return null;
+            const label = gaps.length <= 8;
+            return (
+              <g className="hybrid-gaps" pointerEvents="none">
+                {gaps.map((gap) => {
+                  const x = (scale.x(gap.from) + scale.x(gap.to)) / 2;
+                  if (!Number.isFinite(x)) return null;
+                  const fromDay = new Date(gap.from).toISOString().slice(0, 10);
+                  const toDay = new Date(gap.to).toISOString().slice(0, 10);
+                  return (
+                    <g key={`gap-${gap.from}`} className="hybrid-gap">
+                      <title>{`No trades between ${fromDay} and ${toDay}`}</title>
+                      <line x1={x} x2={x} y1={PAD.t} y2={plotBottom} />
+                      {label ? (
+                        <text x={x + 3} y={PAD.t + 10}>
+                          no trades
+                        </text>
+                      ) : null}
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })()}
 
           {trail.length > 1 ? (
             <polyline

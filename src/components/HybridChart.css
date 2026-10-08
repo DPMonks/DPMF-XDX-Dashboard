@@ -1693,3 +1693,16 @@
 .hybrid-aim-desk.is-cluster .hybrid-aim-desk-dot {
   /* purple set inline via DESK_CLUSTER_PURPLE */
 }
+
+/* No-trade breaks between slot-spaced candles. */
+.hybrid-gap line {
+  stroke: rgba(160, 174, 192, 0.45);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.hybrid-gap text {
+  fill: rgba(160, 174, 192, 0.75);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
