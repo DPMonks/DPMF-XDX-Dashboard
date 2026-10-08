@@ -52,6 +52,7 @@ test("XDX/XRP hourly chart uses ledger candles and leaves no-trade hours empty",
   assert.deepEqual(times, [0, 1, 2, 8, 9, 14, 15]);
   assert.ok(candles.every((c) => c.source !== "carry" && c.source !== "session"));
   assert.ok(candles.slice(0, -1).every((c) => !isFlat(c)));
+  assert.equal(candles[3].o, candles[2].c, "each candle opens at the previous close");
 });
 
 test("4H buckets merge real hourly candles and skip buckets with no trade", () => {
@@ -67,6 +68,7 @@ test("4H buckets merge real hourly candles and skip buckets with no trade", () =
   assert.equal(four.length, 2);
   assert.equal(four[0].t, start);
   assert.equal(four[0].o, 1);
+  assert.equal(four[1].o, 1.1, "the 08:00 bar opens at the 04:00 close");
   assert.equal(four[0].h, 1.3);
   assert.equal(four[0].l, 0.9);
   assert.equal(four[0].c, 1.1);
@@ -273,4 +275,13 @@ test("labelGaps labels only markers with room so text never stacks", async () =>
       [970, false],
     ]
   );
+});
+
+test("a single-swap candle opens at the previous close so the move shows", async () => {
+  const { continuousOpens } = await import("../src/chart/ledgerPairCandles.js");
+  const out = continuousOpens([
+    { t: 0, o: 1, h: 1, l: 1, c: 1 },
+    { t: 1, o: 1.05, h: 1.05, l: 1.05, c: 1.05 },
+  ]);
+  assert.deepEqual(out[1], { t: 1, o: 1, h: 1.05, l: 1, c: 1.05 });
 });
