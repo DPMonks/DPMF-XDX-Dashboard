@@ -354,7 +354,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
             />
             <span className="trade-field-usd">
               {(t.createPoolAvailable || "Available {amount} {asset}")
-                .replace("{amount}", signedIn ? formatToken(Number.isFinite(xdxBal) ? xdxBal : 0, locale, 6) : "—")
+                .replace("{amount}", signedIn ? formatToken(Number.isFinite(xdxBal) ? xdxBal : 0, locale, 6) : "-")
                 .replace("{asset}", "XDX")}
             </span>
           </label>
@@ -377,7 +377,7 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
               {(t.createPoolAvailable || "Available {amount} {asset}")
                 .replace(
                   "{amount}",
-                  signedIn ? formatToken(Number.isFinite(Number(quoteBal)) ? Number(quoteBal) : 0, locale, 6) : "—"
+                  signedIn ? formatToken(Number.isFinite(Number(quoteBal)) ? Number(quoteBal) : 0, locale, 6) : "-"
                 )
                 .replace("{asset}", quote.label)}
             </span>
@@ -389,12 +389,12 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
             <b>
               {ratio > 0
                 ? `${formatToken(ratio, locale, 8)} ${quote.label} / XDX`
-                : "—"}
+                : "-"}
             </b>
             {market > 0 ? (
               <small>
                 {(t.createPoolRatioHint || "{deposit} {quote} per XDX · market {market}")
-                  .replace("{deposit}", ratio > 0 ? formatToken(ratio, locale, 8) : "—")
+                  .replace("{deposit}", ratio > 0 ? formatToken(ratio, locale, 8) : "-")
                   .replace("{quote}", quote.label)
                   .replace("{market}", formatToken(market, locale, 8))}
               </small>
@@ -460,12 +460,12 @@ export default function CreatePoolCard({ pools = [], onJoinExisting, onCreated }
             </div>
             <div>
               <dt>{t.createPoolEstLp}</dt>
-              <dd>{lpOut > 0 ? formatToken(lpOut, locale, 6) : "—"}</dd>
+              <dd>{lpOut > 0 ? formatToken(lpOut, locale, 6) : "-"}</dd>
             </div>
             <div>
               <dt>{t.createPoolEstValue}</dt>
               <dd>
-                {poolXrp > 0 ? `${formatToken(poolXrp, locale, 4)} XRP` : "—"}
+                {poolXrp > 0 ? `${formatToken(poolXrp, locale, 4)} XRP` : "-"}
                 {poolUsd > 0 ? <span>{formatUsd(poolUsd, locale)}</span> : null}
               </dd>
             </div>

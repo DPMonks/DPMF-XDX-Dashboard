@@ -9,9 +9,9 @@ function localeOf(locale) {
 }
 
 export function formatNumber(value, locale, options = {}) {
-  if (value == null || value === "") return "—";
+  if (value == null || value === "") return "-";
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   return num.toLocaleString(localeOf(locale), {
     maximumFractionDigits: 2,
     ...options,
@@ -26,7 +26,7 @@ export function recordUsdPrice(value) {
 
 export function formatFiat(value, locale, currency = "USD") {
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   return num.toLocaleString(localeOf(locale), {
     style: "currency",
     currency,
@@ -41,7 +41,7 @@ export function formatUsd(value, locale) {
 
 export function formatUsdAmount(value, locale) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   const abs = Math.abs(num);
   let minimumFractionDigits = 2;
   let maximumFractionDigits = 2;
@@ -60,7 +60,7 @@ export function formatUsdAmount(value, locale) {
 
 export function formatUsdPrice(value, locale) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   return num.toLocaleString(localeOf(locale), {
     style: "currency",
     currency: "USD",
@@ -71,7 +71,7 @@ export function formatUsdPrice(value, locale) {
 
 export function formatQuotePerBase(value, locale, quote = "XRP") {
   const num = Number(value);
-  if (!Number.isFinite(num) || num <= 0) return "—";
+  if (!Number.isFinite(num) || num <= 0) return "-";
   const formatted = num.toLocaleString(localeOf(locale), {
     minimumFractionDigits: 8,
     maximumFractionDigits: 8,
@@ -81,7 +81,7 @@ export function formatQuotePerBase(value, locale, quote = "XRP") {
 
 export function formatXrpPrice(value, locale) {
   const num = Number(value);
-  if (!Number.isFinite(num) || num <= 0) return "—";
+  if (!Number.isFinite(num) || num <= 0) return "-";
   return `${num.toLocaleString(localeOf(locale), {
     minimumFractionDigits: 8,
     maximumFractionDigits: 8,
@@ -90,7 +90,7 @@ export function formatXrpPrice(value, locale) {
 
 export function formatToken(value, locale, digits = 4) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   return num.toLocaleString(localeOf(locale), {
     maximumFractionDigits: digits,
   });
@@ -98,7 +98,7 @@ export function formatToken(value, locale, digits = 4) {
 
 export function formatPercent(value, locale) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   return `${num.toLocaleString(localeOf(locale), {
     maximumFractionDigits: 2,
   })}%`;
@@ -114,7 +114,7 @@ export function formatEur(value, locale) {
 
 export function formatJpy(value, locale) {
   const amount = Number(value);
-  if (!Number.isFinite(amount)) return "—";
+  if (!Number.isFinite(amount)) return "-";
   return amount.toLocaleString(localeOf(locale), {
     style: "currency",
     currency: "JPY",
@@ -125,7 +125,7 @@ export function formatJpy(value, locale) {
 
 export function formatSharePercent(value, locale) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   const digits = Math.abs(num) < 1 ? 3 : 2;
   return `${num.toLocaleString(localeOf(locale), {
     minimumFractionDigits: digits,
@@ -135,7 +135,7 @@ export function formatSharePercent(value, locale) {
 
 export function formatSupplySharePercent(value, locale) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "-";
   return `${Math.min(100, num).toLocaleString(localeOf(locale), {
     minimumFractionDigits: 6,
     maximumFractionDigits: 6,
@@ -143,7 +143,7 @@ export function formatSupplySharePercent(value, locale) {
 }
 
 export function formatWhen(value, locale) {
-  if (!value) return "—";
+  if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString(localeOf(locale), {
@@ -156,7 +156,7 @@ export function formatWhen(value, locale) {
 }
 
 export function formatDay(value, locale) {
-  if (!value) return "—";
+  if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString(localeOf(locale), {

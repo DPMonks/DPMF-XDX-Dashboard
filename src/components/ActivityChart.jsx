@@ -415,7 +415,7 @@ export default function ActivityChart() {
                   </td>
                   <td className="col-num">
                     {row.previous == null
-                      ? "—"
+                      ? "-"
                       : formatNumber(row.previous, locale, { maximumFractionDigits: 0 })}
                   </td>
                   <td
@@ -424,7 +424,7 @@ export default function ActivityChart() {
                     }`}
                   >
                     {row.change == null
-                      ? "—"
+                      ? "-"
                       : formatNumber(row.change, locale, { maximumFractionDigits: 6 })}
                   </td>
                   <td className="col-num">{formatNumber(row.holders, locale)}</td>
@@ -465,7 +465,7 @@ export default function ActivityChart() {
                       {formatNumber(row.xdx, locale, { maximumFractionDigits: 6 })}
                     </td>
                     <td title={row.account || row.pool || ""}>
-                      {row.account ? shortAddress(row.account) : row.pool || "—"}
+                      {row.account ? shortAddress(row.account) : row.pool || "-"}
                     </td>
                   </tr>
                 )}

@@ -111,7 +111,7 @@ function tokenUsd(ticker, qty, prices) {
 function recommendationCopy(rec, t, impactText) {
   if (!rec) return "";
   if (rec.reason === "half") {
-    const impact = impactText && !String(impactText).includes("—") ? impactText : "this much";
+    const impact = impactText && !["-", "\u2014"].includes(String(impactText).trim()) ? impactText : "this much";
     return (t.swapRecHalf || "").replace("{impact}", impact);
   }
   if (rec.reason === "nobook") return t.swapRecNoBook;

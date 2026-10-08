@@ -913,7 +913,7 @@ export default function TradePanel({
             {t.xdxAmount}
             <input type="text" readOnly value={formatToken(withdraw.base, locale, 6)} />
             <span className="trade-field-usd">
-              {xdxUsd > 0 ? formatUsd(withdraw.base * xdxUsd, locale) : "—"}
+              {xdxUsd > 0 ? formatUsd(withdraw.base * xdxUsd, locale) : "-"}
             </span>
           </label>
         ) : null}
@@ -926,7 +926,7 @@ export default function TradePanel({
             <div className="pool-split-labels">
               <span className="pool-split-xdx">
                 <i className="pool-split-swatch is-xdx" aria-hidden="true" />
-                <span className="pool-split-pct">{splitReady ? `${formatPoolPct(deposit.xdxPct)}%` : "—"}</span>
+                <span className="pool-split-pct">{splitReady ? `${formatPoolPct(deposit.xdxPct)}%` : "-"}</span>
                 <span className="pool-split-asset">XDX</span>
               </span>
               <span className="pool-split-ratio">
@@ -934,10 +934,10 @@ export default function TradePanel({
                   ? `${formatPoolPct(deposit.xdxPct)} / ${formatPoolPct(deposit.quotePct)}`
                   : quoteUsd > 0
                     ? formatUsd(deposit.total, locale)
-                    : "—"}
+                    : "-"}
               </span>
               <span className="pool-split-quote">
-                <span className="pool-split-pct">{splitReady ? `${formatPoolPct(deposit.quotePct)}%` : "—"}</span>
+                <span className="pool-split-pct">{splitReady ? `${formatPoolPct(deposit.quotePct)}%` : "-"}</span>
                 <span className="pool-split-asset">{quote.label}</span>
                 <i className="pool-split-swatch is-quote" aria-hidden="true" />
               </span>
@@ -964,7 +964,7 @@ export default function TradePanel({
             {quote.label}
             <input type="text" readOnly value={formatToken(withdraw.quote, locale, 6)} />
             <span className="trade-field-usd">
-              {quoteUsd > 0 ? formatUsd(withdraw.quote * quoteUsd, locale) : "—"}
+              {quoteUsd > 0 ? formatUsd(withdraw.quote * quoteUsd, locale) : "-"}
             </span>
           </label>
         ) : isSingleLp && singleAsset === "xdx" ? null : (

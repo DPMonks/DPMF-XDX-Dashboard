@@ -32,7 +32,7 @@ function Detail({ label, value, hint, amount }) {
     <div className={`token-detail neon-card${flash ? ` is-flash-${flash}` : ""}`}>
       <span className="token-detail-label">{label}</span>
       <span className={`token-detail-value${flash ? ` is-${flash}` : ""}`}>
-        {value ?? "—"}
+        {value ?? "-"}
       </span>
       {hint ? <span className="token-detail-hint">{hint}</span> : null}
     </div>
@@ -190,11 +190,11 @@ export default function TokenDetails() {
         value={formatNumber(pick(data, ["lp_supply"]), locale)}
         amount={amountOf(data, ["lp_supply"])}
       />
-      <Detail label={t.issuerAccount} value={issuer ? shortAddress(issuer) : "—"} />
+      <Detail label={t.issuerAccount} value={issuer ? shortAddress(issuer) : "-"} />
       <Detail
         label={t.blackholed}
         value={
-          blackholed == null ? "—" : blackholed ? t.blackholedYes || `${t.yes}, ${t.fixed}` : t.no
+          blackholed == null ? "-" : blackholed ? t.blackholedYes || `${t.yes}, ${t.fixed}` : t.no
         }
         hint={blackholed && blackholedAt ? formatDay(blackholedAt, locale) : null}
       />
