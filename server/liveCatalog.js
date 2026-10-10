@@ -165,6 +165,27 @@ export async function loadXrplToToken(options = {}) {
   }
 }
 
+/**
+ * Circulating XDX is the issuer's outstanding obligation from gateway_balances
+ * (what holders hold). Issuer locked is the rest of the fixed 10B supply.
+ */
+export function issuerSupplyFromGatewayBalances(result, now = Date.now()) {
+  const obligations = result?.obligations || {};
+  const issued = Number(obligations.XDX || obligations[XDX_HEX] || 0);
+  if (!Number.isFinite(issued) || issued <= 0 || issued > XDX_TOTAL_SUPPLY) return null;
+  const locked = issuerLockedFromIssued(issued);
+  return {
+    issuer: XDX_ISSUER,
+    issuer_locked: locked,
+    burned_supply: locked,
+    issued,
+    circulating: issued,
+    ledger_index: Number(result?.ledger_index) || null,
+    as_of: new Date(now).toISOString(),
+    source: "xrpl",
+  };
+}
+
 export async function loadIssuerLockedLive(options = {}) {
   const now = Number(options.now) || Date.now();
   if (!options.fresh && issuerLockedCache.body && now - issuerLockedCache.at < ISSUER_MS) {
@@ -176,18 +197,10 @@ export async function loadIssuerLockedLive(options = {}) {
       { account: XDX_ISSUER, ledger_index: "validated", hotwallet: [] },
       options
     );
-    const obligations = result?.obligations || {};
-    const issued = Number(obligations.XDX || obligations[XDX_HEX] || 0);
-    const locked = issuerLockedFromIssued(issued);
-    const body = {
-      issuer: XDX_ISSUER,
-      issuer_locked: locked,
-      burned_supply: locked,
-      issued,
-      circulating: Math.max(XDX_TOTAL_SUPPLY - locked, 0),
-      as_of: new Date().toISOString(),
-      source: "xrpl",
-    };
+    const body = issuerSupplyFromGatewayBalances(result);
+    // A busy or empty reply has no XDX obligation. Treat it as unknown, never
+    // as "nothing issued", or circulating would read as the full 10B supply.
+    if (!body) throw new Error("gateway_balances had no XDX obligation");
     issuerLockedCache = { at: now, body };
     return body;
   } catch {

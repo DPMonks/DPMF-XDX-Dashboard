@@ -29,9 +29,12 @@ test("holder counts keep every non-zero XDX balance, including ordinary wallets"
   const counted = countXdxHolderLines([
     { account: HOLDER, currency: "XDX", balance: "-10", limit_peer: "100" },
     { account: WALLET, currency: "XDX", balance: "0", limit_peer: "0" },
-    { account: CREATE, currency: XDX_HEX, balance: "-0.000000002", limit_peer: "0" },
+    { account: CREATE, currency: "XDX", balance: "-0.000000002", limit_peer: "0" },
     { account: XDX_ISSUER, currency: "XDX", balance: "-1", limit_peer: "0" },
     { account: "rOtherAsset111111111111111111111", currency: "USD", balance: "-3" },
+    // Look alike codes on the same issuer are other tokens, not XDX.
+    { account: "rLowerCase1111111111111111111111", currency: "xdx", balance: "-4" },
+    { account: "rHexCode11111111111111111111111", currency: XDX_HEX, balance: "-4" },
   ]);
   assert.equal(counted.holders, 2);
   assert.equal(counted.trustlines, 3);

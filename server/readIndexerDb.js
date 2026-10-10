@@ -1,6 +1,5 @@
 import pg from "pg";
 import {
-  issuerLockedFromIssued,
   XDX_ISSUER,
   XDX_TOTAL_SUPPLY,
   XDX_XRP_AMM,
@@ -72,7 +71,7 @@ import {
   loadWalletOffers,
   xrpDropsFromAccountInfo,
 } from "./walletLedger.js";
-import { knownLivePoolSpecs, liveCatalogPayload, loadLiveMarket } from "./liveCatalog.js";
+import { knownLivePoolSpecs, liveCatalogPayload, loadIssuerLockedLive, loadLiveMarket } from "./liveCatalog.js";
 import { overlayDbResultWithLive, serveCatalogFallback } from "./catalogSwitch.js";
 import { catalogHealth } from "./sourceControl.js";
 import { FREE_API_HEADERS } from "./xrplToCatalog.js";
@@ -653,11 +652,6 @@ async function freshTokenHolders(db, limit, offset, options = {}) {
   };
 }
 
-async function tokenHolderCount(db) {
-  const source = await pickHolderSource(db);
-  return source.count;
-}
-
 async function tokenTrustlineSnapshot(db) {
   const latest = await tryQuery(
     db,
@@ -675,10 +669,6 @@ async function tokenTrustlineSnapshot(db) {
   const count = pickTrustlineCount(latestCount, historyCount);
   const asOf = historyCount > 0 ? history.rows[0]?.as_of : latest.rows[0]?.as_of;
   return { count, as_of: asIso(asOf) };
-}
-
-async function tokenTrustlineCount(db) {
-  return (await tokenTrustlineSnapshot(db)).count;
 }
 
 function lpPoolClause(pool, column = "pool_name") {
@@ -1720,11 +1710,12 @@ async function tokenHoldersPage(db, limit, offset, options = {}) {
 }
 
 async function loadLongHolderSeries(db) {
-  const [issued, holders, trustlines] = await Promise.all([
+  const [issued, verified] = await Promise.all([
     loadIssuedHolderHistory().catch(() => []),
-    tokenHolderCount(db),
-    tokenTrustlineCount(db),
+    verifiedDbHolderCounts(db),
   ]);
+  const holders = verified?.holders ?? null;
+  const trustlines = verified?.trustlines ?? null;
   const last = issued[issued.length - 1];
   const liveTradersRaw = last?.traders ?? last?.trader_count;
   const liveTraders =
@@ -1766,42 +1757,76 @@ const ISSUER_POLL_MS = 30_000;
 let issuerLockedCache = { at: 0, issued: 0, locked: 0, source: null, as_of: null };
 
 async function issuedXdxFromHolders(db) {
-  const history = await tryQuery(
-    db,
-    `SELECT COALESCE(SUM(ABS(balance::numeric)), 0) AS issued
-     FROM token_holders_history
-     WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_history)
-       AND ABS(balance::numeric) > 0
-       AND account <> $1`,
-    [XDX_ISSUER]
-  );
+  // One consistent snapshot only: rows written with the newest timestamp.
+  // Mixing an old and a half written new snapshot is how the sum once came out
+  // near 3.28B (and the holder count near 30k) while the indexer was writing.
   const latest = await tryQuery(
     db,
-    `SELECT COALESCE(SUM(ABS(balance::numeric)), 0) AS issued
+    `SELECT COALESCE(SUM(ABS(balance::numeric)), 0) AS issued,
+            COUNT(*) FILTER (WHERE ABS(balance::numeric) > 0)::int AS holders,
+            COUNT(*)::int AS lines
      FROM token_holders_latest
-     WHERE ABS(balance::numeric) > 0
+     WHERE timestamp = (SELECT MAX(timestamp) FROM token_holders_latest)
        AND account <> $1`,
     [XDX_ISSUER]
   );
-  const historyIssued = Number(history.rows[0]?.issued || 0);
-  const latestIssued = Number(latest.rows[0]?.issued || 0);
-  return historyIssued > 0 ? historyIssued : latestIssued;
+  const row = latest.rows[0] || {};
+  return {
+    issued: Number(row.issued || 0),
+    holders: Number(row.holders || 0),
+    lines: Number(row.lines || 0),
+  };
 }
 
-async function loadIssuerLocked(db) {
-  if (Date.now() - issuerLockedCache.at < ISSUER_POLL_MS && issuerLockedCache.locked > 0) {
+/**
+ * Circulating and issuer locked XDX come from the issuer's gateway_balances on
+ * the ledger, never from summing indexer rows. The summed rows are partial
+ * whenever the indexer is mid write, which made the tiles flip between
+ * 9,982,003,928 and 3,277,845,195 circulating on different loads.
+ */
+async function loadIssuerLocked() {
+  if (Date.now() - issuerLockedCache.at < ISSUER_POLL_MS && issuerLockedCache.issued > 0) {
     return issuerLockedCache;
   }
-  const issued = db ? await issuedXdxFromHolders(db) : 0;
-  const locked = issuerLockedFromIssued(issued);
-  issuerLockedCache = {
-    at: Date.now(),
-    issued,
-    locked,
-    source: "db",
-    as_of: new Date().toISOString(),
+  const live = await loadIssuerLockedLive().catch(() => null);
+  if (live?.source === "xrpl" && Number(live.issued) > 0) {
+    issuerLockedCache = {
+      at: Date.now(),
+      issued: Number(live.issued),
+      locked: Number(live.issuer_locked),
+      source: "xrpl",
+      as_of: live.as_of || new Date().toISOString(),
+    };
+    return issuerLockedCache;
+  }
+  if (issuerLockedCache.issued > 0) return issuerLockedCache;
+  return { at: 0, issued: 0, locked: 0, source: "empty", as_of: null };
+}
+
+/**
+ * Indexer holder rows only stand in for the ledger when they add up to the
+ * ledger's own outstanding XDX. A partial or doubled snapshot cannot pass.
+ */
+export function dbHolderCountsVerified(snapshot = {}, issued) {
+  const total = Number(issued);
+  const sum = Number(snapshot.issued);
+  const holders = Number(snapshot.holders);
+  if (!(total > 0) || !(sum > 0) || !(holders > 0)) return null;
+  if (Math.abs(sum - total) / total > 0.0005) return null;
+  const lines = Number(snapshot.lines);
+  return {
+    holders,
+    // Only a table that also keeps empty lines can say how many trust lines exist.
+    trustlines: lines > holders ? lines : null,
   };
-  return issuerLockedCache;
+}
+
+async function verifiedDbHolderCounts(db) {
+  const [snapshot, issuer] = await Promise.all([
+    db ? issuedXdxFromHolders(db).catch(() => null) : null,
+    loadIssuerLocked(),
+  ]);
+  return dbHolderCountsVerified(snapshot || {}, issuer.issued);
 }
 
 const BLACKHOLE_POLL_MS = 6 * 60 * 60 * 1000;
@@ -2280,12 +2305,11 @@ async function buildPrices(db) {
 }
 
 async function buildTokenOverview(db) {
-  const [amm, quote, holders, trustlines, issuerLocked, blackhole, ammXdx] = await Promise.all([
+  const [amm, quote, dbCounts, issuerLocked, blackhole, ammXdx] = await Promise.all([
     hydrateAmm(db),
     loadXrpQuote(db),
-    tokenHolderCount(db),
-    tokenTrustlineCount(db),
-    loadIssuerLocked(db),
+    verifiedDbHolderCounts(db),
+    loadIssuerLocked(),
     loadIssuerBlackhole(),
     tokenBalanceFor(db, XDX_XRP_AMM),
   ]);
@@ -2298,9 +2322,11 @@ async function buildTokenOverview(db) {
   const totalSupply = XDX_TOTAL_SUPPLY;
   // No issued figure means we do not know what is burned yet. Leave circulating
   // empty instead of reporting the full 10,000,000,000 supply.
-  const issuerKnown = Number(issuerLocked.issued) > 0;
+  const issuerKnown = issuerLocked.source === "xrpl" && Number(issuerLocked.issued) > 0;
   const burned = issuerKnown ? Number(issuerLocked.locked || 0) : null;
-  const circulating = issuerKnown ? Math.max(totalSupply - burned, 0) : null;
+  const circulating = issuerKnown ? Number(issuerLocked.issued) : null;
+  const holders = dbCounts?.holders ?? null;
+  const trustlines = dbCounts?.trustlines ?? null;
   const ammMarketCap = (await loadCatalogAmmMarketCap(db, xdxUsd)) || tvlUsd;
 
   return {
@@ -2353,15 +2379,14 @@ async function buildTokenOverview(db) {
 }
 
 async function buildSnapshot(db) {
-  const [amm, quote, holders, trustlines, lpOwners, lpTrustlines, issuerLocked, blackhole, ammXdx] =
+  const [amm, quote, dbCounts, lpOwners, lpTrustlines, issuerLocked, blackhole, ammXdx] =
     await Promise.all([
       hydrateAmm(db),
       loadXrpQuote(db),
-      tokenHolderCount(db),
-      tokenTrustlineCount(db),
+      verifiedDbHolderCounts(db),
       loadAllLpLineStats(db, true),
       loadLpTrustlineCount(db, "all"),
-      loadIssuerLocked(db),
+      loadIssuerLocked(),
       loadIssuerBlackhole(),
       tokenBalanceFor(db, XDX_XRP_AMM),
     ]);
@@ -2374,9 +2399,11 @@ async function buildSnapshot(db) {
   const totalSupply = XDX_TOTAL_SUPPLY;
   // No issued figure means we do not know what is burned yet. Leave circulating
   // empty instead of reporting the full 10,000,000,000 supply.
-  const issuerKnown = Number(issuerLocked.issued) > 0;
+  const issuerKnown = issuerLocked.source === "xrpl" && Number(issuerLocked.issued) > 0;
   const burned = issuerKnown ? Number(issuerLocked.locked || 0) : null;
-  const circulating = issuerKnown ? Math.max(totalSupply - burned, 0) : null;
+  const circulating = issuerKnown ? Number(issuerLocked.issued) : null;
+  const holders = dbCounts?.holders ?? null;
+  const trustlines = dbCounts?.trustlines ?? null;
   const pools = (await listXdxPools(db)).map((row) => presentPool(row, xdxUsd, xrpUsd));
   const ammMarketCap = pools.reduce((sum, pool) => sum + Number(pool.tvl || 0), 0) || tvlUsd;
 
@@ -2704,14 +2731,14 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "issuer-locked") {
-      const snap = await loadIssuerLocked(db);
-      const known = Number(snap.issued) > 0;
+      const snap = await loadIssuerLocked();
+      const known = snap.source === "xrpl" && Number(snap.issued) > 0;
       return withLiveCatalog(suffix, {
         issuer: XDX_ISSUER,
         issuer_locked: known ? snap.locked : null,
         burned_supply: known ? snap.locked : null,
         issued: known ? snap.issued : null,
-        circulating: known ? Math.max(XDX_TOTAL_SUPPLY - snap.locked, 0) : null,
+        circulating: known ? snap.issued : null,
         as_of: snap.as_of,
         source: snap.source,
       });
@@ -2723,11 +2750,17 @@ export async function readIndexerDb(suffix, search = "") {
 
     if (suffix === "holders/count") {
       if (wantsTodaySnapshot(params)) {
-        return withLiveCatalog(suffix, await loadTodayOwners(db, { includeHolders: false }));
+        const [today, verifiedToday] = await Promise.all([
+          loadTodayOwners(db, { includeHolders: false }),
+          verifiedDbHolderCounts(db),
+        ]);
+        // The holder tile reads this count. Only a snapshot that adds up to the
+        // ledger's outstanding XDX may stand in for the live ledger count.
+        return withLiveCatalog(suffix, { ...today, count: verifiedToday?.holders ?? null });
       }
-      const source = await pickHolderSource(db);
+      const [source, verified] = await Promise.all([pickHolderSource(db), verifiedDbHolderCounts(db)]);
       return withLiveCatalog(suffix, {
-        count: source.count,
+        count: verified?.holders ?? null,
         as_of: source.as_of,
         snapshot_day: source.snapshot_day || utcDay(source.as_of),
         present: source.present,
@@ -2737,9 +2770,9 @@ export async function readIndexerDb(suffix, search = "") {
     }
 
     if (suffix === "trustlines/count") {
-      const snap = await tokenTrustlineSnapshot(db);
+      const [snap, verified] = await Promise.all([tokenTrustlineSnapshot(db), verifiedDbHolderCounts(db)]);
       return withLiveCatalog(suffix, {
-        count: snap.count,
+        count: verified?.trustlines ?? null,
         as_of: snap.as_of,
         source: "db",
       });

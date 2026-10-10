@@ -13,7 +13,7 @@ import {
   rowsFromXrplToGraph,
   xrplToHolderGraphUrl,
 } from "../activityHistory";
-import { composeTokenDetails } from "../tokenDetails";
+import { composeTokenDetails, pickLedgerCount, pickLedgerSupply } from "../tokenDetails";
 import { composeTokenDetailHistory, xdxPriceHistoryRows } from "../tokenDetailsHistory";
 import lockedCandles from "../data/lockedCandles.json" with { type: "json" };
 import { fillMissingXdxFiat, pricesNeedFiat } from "../utils/fiatFx";
@@ -746,22 +746,23 @@ export async function getTokenDetails(onPartial) {
     api.lpTrustlinesCount({ pool: "all" }).catch(() => ({})),
     api.issuerLocked().catch(() => ({})),
   ]);
+  const supply = pickLedgerSupply(backed.overview, issuerLocked);
+  const countSource = backed.overview.holders_source;
   return composeTokenDetails({
     ...backed,
     overview: {
       ...backed.overview,
-      issuer_locked:
-        numberOrNull(backed.overview.issuer_locked ?? backed.overview.burned_supply) ??
-        numberOrNull(issuerLocked?.issuer_locked ?? issuerLocked?.burned_supply),
-      circulating:
-        numberOrNull(backed.overview.circulating ?? backed.overview.circulating_supply) ??
-        numberOrNull(issuerLocked?.circulating),
-      issued: numberOrNull(backed.overview.issued ?? backed.overview.issued_xdx) ?? numberOrNull(issuerLocked?.issued),
+      issuer_locked: supply.issuer_locked,
+      burned_supply: supply.issuer_locked,
+      circulating: supply.circulating,
+      circulating_supply: supply.circulating,
+      issued: supply.issued,
     },
-    holders: preferLedgerCount(holders, backed.overview.holder_count ?? backed.overview.holders),
-    trustlines: preferLedgerCount(
+    holders: pickLedgerCount(holders, backed.overview.holder_count ?? backed.overview.holders, countSource),
+    trustlines: pickLedgerCount(
       trustlines,
-      backed.overview.trustline_count ?? backed.overview.trustlines
+      backed.overview.trustline_count ?? backed.overview.trustlines,
+      countSource
     ),
     lpHolders: preferLedgerCount(lpHolders, backed.overview.lp_holder_count),
     lpTrustlines: preferLedgerCount(lpTrustlines, backed.overview.lp_trustline_count),

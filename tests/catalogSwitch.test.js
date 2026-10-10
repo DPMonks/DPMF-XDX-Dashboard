@@ -70,13 +70,14 @@ test("zero DB holder counts take the live token stats", () => {
   assert.equal(merged.source, "xrpl");
 });
 
-test("issuer lock stays on DB when issued is present", () => {
-  const db = mergeIssuerLocked({ issued: 9_000_000_000, issuer_locked: 1_000_000_000, source: "db" }, {
-    issued: 8,
-    issuer_locked: 2,
-    source: "xrpl",
-  });
-  assert.equal(db.issued, 9_000_000_000);
+test("issuer lock takes the live gateway_balances read over a summed DB row", () => {
+  const partialDb = { issued: 3_277_845_195, issuer_locked: 6_722_154_805, circulating: 3_277_845_195, source: "db" };
+  const ledger = { issued: 9_982_003_928.375591, issuer_locked: 17_996_071.62440872, circulating: 9_982_003_928.375591, source: "xrpl" };
+  const merged = mergeIssuerLocked(partialDb, ledger);
+  assert.equal(merged.issued, 9_982_003_928.375591);
+  assert.equal(merged.circulating, 9_982_003_928.375591);
+  assert.equal(merged.issuer_locked, 17_996_071.62440872);
+  assert.equal(merged.source, "xrpl");
   const live = mergeIssuerLocked({ issued: 0, issuer_locked: 0, source: "db" }, {
     issued: 9_100_000_000,
     issuer_locked: 900_000_000,
@@ -84,6 +85,24 @@ test("issuer lock stays on DB when issued is present", () => {
   });
   assert.equal(live.issued, 9_100_000_000);
   assert.equal(live.source, "xrpl");
+});
+
+test("issuer lock keeps a ledger sourced stored figure when the live read fails", () => {
+  const stored = { issued: 9_982_003_928.375591, issuer_locked: 17_996_071.62440872, source: "xrpl" };
+  const merged = mergeIssuerLocked(stored, { issued: null, issuer_locked: null, source: "empty" });
+  assert.equal(merged.issued, 9_982_003_928.375591);
+  assert.equal(merged.source, "xrpl");
+});
+
+test("issuer lock never shows a summed DB figure when the ledger is unknown", () => {
+  const merged = mergeIssuerLocked(
+    { issued: 3_277_845_195, issuer_locked: 6_722_154_805, circulating: 3_277_845_195, source: "db" },
+    { issued: null, issuer_locked: null, source: "empty" }
+  );
+  assert.equal(merged.issued, null);
+  assert.equal(merged.circulating, null);
+  assert.equal(merged.issuer_locked, null);
+  assert.equal(merged.source, "empty");
 });
 
 test("change24h uses live only when the DB row is blank", () => {
