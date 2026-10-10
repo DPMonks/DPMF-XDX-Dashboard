@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getTokenDetails } from "../api/indexer";
+import { keepKnownTokenDetails } from "../tokenDetails";
 import {
   formatDay,
   formatNumber,
@@ -66,14 +67,16 @@ export default function TokenDetails() {
       try {
         const next = await getTokenDetails((partial) => {
           if (!cancelled) {
-            lastGood.current = partial;
-            setData(partial);
+            const shown = keepKnownTokenDetails(lastGood.current, partial);
+            lastGood.current = shown;
+            setData(shown);
             setError(null);
           }
         });
         if (!cancelled) {
-          lastGood.current = next;
-          setData(next);
+          const shown = keepKnownTokenDetails(lastGood.current, next);
+          lastGood.current = shown;
+          setData(shown);
           setError(null);
         }
       } catch (err) {
@@ -152,6 +155,7 @@ export default function TokenDetails() {
         label={t.circulating}
         value={formatNumber(pick(data, ["circulating", "circulating_supply"]), locale)}
         amount={amountOf(data, ["circulating", "circulating_supply"])}
+        hint={t.circulatingHint}
       />
       <Detail
         label={t.totalSupply}
@@ -162,18 +166,19 @@ export default function TokenDetails() {
         label={t.burnedSupply}
         value={formatNumber(pick(data, ["burnedSupply", "burned_supply", "issuer_locked"]), locale)}
         amount={amountOf(data, ["burnedSupply", "burned_supply", "issuer_locked"])}
+        hint={t.burnedHint}
       />
       <Detail
         label={t.holders}
         value={formatNumber(pick(data, ["holders", "holder_count"]), locale)}
         amount={amountOf(data, ["holders", "holder_count"])}
-        hint={data.holders_stale ? t.holdersStale : null}
+        hint={data.holders_stale ? t.holdersStale : t.holdersHint}
       />
       <Detail
         label={t.trustlines}
         value={formatNumber(pick(data, ["trustlines", "trustline_count"]), locale)}
         amount={amountOf(data, ["trustlines", "trustline_count"])}
-        hint={data.holders_stale || data.trustlines_stale ? t.holdersStale : null}
+        hint={data.holders_stale || data.trustlines_stale ? t.holdersStale : t.trustlinesHint}
       />
       <Detail
         label={t.lpHoldersCount}

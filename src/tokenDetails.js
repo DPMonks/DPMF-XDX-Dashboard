@@ -32,21 +32,14 @@ export function composeTokenDetails({
 } = {}) {
   const totalSupply =
     numberOrNull(overview.total_supply || overview.totalSupply) || XDX_TOTAL_SUPPLY;
-  const issuerLockedKnown = numberOrNull(
-    overview.issuer_locked ?? overview.burned_supply ?? overview.issuerLocked
-  );
-  const issuerLocked = issuerLockedKnown ?? null;
-  const rawCirc = numberOrNull(
-    overview.circulating || overview.circulating_supply || overview.xdx_supply
-  );
-  // Only derive circulating from a known burned figure. Before the issuer read
-  // lands, total minus "0 burned" would flash the 10,000,000,000 placeholder.
-  const circulating =
-    rawCirc && rawCirc > 0
-      ? rawCirc
-      : issuerLocked != null && issuerLocked > 0
-        ? Math.max(totalSupply - issuerLocked, 0)
-        : null;
+  // One pair that adds up to the fixed supply, or nothing. Before the issuer
+  // read lands, total minus "0 burned" would flash the 10,000,000,000 placeholder.
+  const supply = pickLedgerSupply({
+    circulating: overview.circulating || overview.circulating_supply || overview.xdx_supply,
+    issuer_locked: overview.issuer_locked ?? overview.burned_supply ?? overview.issuerLocked,
+  });
+  const issuerLocked = supply.issuer_locked;
+  const circulating = supply.circulating;
   const filledPrices = fillMissingXdxFiat({ ...overview, ...prices });
   const price =
     recordedXdxUsdFromPrices(filledPrices, filledPrices.xrpUsd || overview.xrpUsd) ||
@@ -94,4 +87,79 @@ export function composeTokenDetails({
     change24h: change.xdx ?? change.XDX,
     source: overview.source,
   };
+}
+
+const SUPPLY_TOLERANCE = 1;
+
+/**
+ * Circulating and issuer locked XDX as one consistent pair. The issuer's
+ * gateway_balances read (source "xrpl") wins. Anything else must add up to the
+ * fixed 10B supply, or neither number is shown.
+ */
+export function pickLedgerSupply(overview = {}, issuerBody = {}) {
+  const issued = numberOrNull(issuerBody?.issued);
+  if (issuerBody?.source === "xrpl" && issued != null && issued > 0) {
+    const locked = numberOrNull(issuerBody.issuer_locked ?? issuerBody.burned_supply);
+    return {
+      circulating: issued,
+      issuer_locked: locked ?? Math.max(XDX_TOTAL_SUPPLY - issued, 0),
+      issued,
+    };
+  }
+  const circ = numberOrNull(overview?.circulating ?? overview?.circulating_supply);
+  const locked = numberOrNull(overview?.issuer_locked ?? overview?.burned_supply);
+  const circKnown = circ != null && circ > 0;
+  const lockedKnown = locked != null && locked > 0;
+  if (circKnown && lockedKnown) {
+    if (Math.abs(circ + locked - XDX_TOTAL_SUPPLY) > SUPPLY_TOLERANCE) {
+      return { circulating: null, issuer_locked: null, issued: null };
+    }
+    return { circulating: circ, issuer_locked: locked, issued: circ };
+  }
+  if (circKnown) return { circulating: circ, issuer_locked: Math.max(XDX_TOTAL_SUPPLY - circ, 0), issued: circ };
+  if (lockedKnown) {
+    const derived = Math.max(XDX_TOTAL_SUPPLY - locked, 0);
+    return { circulating: derived, issuer_locked: locked, issued: derived };
+  }
+  return { circulating: null, issuer_locked: null, issued: null };
+}
+
+/**
+ * Holder or trust line count. A complete ledger line walk wins outright. The
+ * old rule took the larger of two figures, which let a doubled count through.
+ */
+export function pickLedgerCount(endpointBody, overviewCount, overviewSource) {
+  const fromEndpoint = numberOrNull(endpointBody?.count);
+  const fromOverview = numberOrNull(overviewCount);
+  if (endpointBody?.source === "xrpl-lines" && fromEndpoint != null && fromEndpoint > 0) {
+    return { count: fromEndpoint, source: "xrpl-lines", stale: Boolean(endpointBody.stale) };
+  }
+  if (overviewSource === "xrpl-lines" && fromOverview != null && fromOverview > 0) {
+    return { count: fromOverview, source: "xrpl-lines" };
+  }
+  if (fromEndpoint != null && fromEndpoint > 0) return { count: fromEndpoint };
+  if (fromOverview != null && fromOverview > 0) return { count: fromOverview };
+  return { count: null };
+}
+
+const KEPT_COUNT_KEYS = ["holders", "trustlines", "lp_holder_count", "lp_trustline_count"];
+
+/**
+ * A refresh that misses a figure keeps the last one already on screen instead
+ * of blanking the tile. Circulating and issuer locked move together.
+ */
+export function keepKnownTokenDetails(prev, next) {
+  if (!prev || !next) return next;
+  const out = { ...next };
+  if (out.circulating == null && out.issuerLocked == null && prev.circulating != null) {
+    out.circulating = prev.circulating;
+    out.issuerLocked = prev.issuerLocked;
+    out.burnedSupply = prev.burnedSupply ?? prev.issuerLocked;
+    out.circulatingMarketCap =
+      out.price != null ? prev.circulating * out.price : prev.circulatingMarketCap ?? out.circulatingMarketCap;
+  }
+  for (const key of KEPT_COUNT_KEYS) {
+    if (out[key] == null && prev[key] != null) out[key] = prev[key];
+  }
+  return out;
 }

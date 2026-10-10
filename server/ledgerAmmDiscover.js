@@ -38,6 +38,10 @@ function emptyState() {
     error: "",
     holders: 0,
     trustlines: 0,
+    // account -> XDX balance. Keyed by account so a page read twice (a marker
+    // replayed on another node after a rotation) can never count a line twice.
+    lineBalances: new Map(),
+    ledgerIndex: null,
     holderSnapshot: null,
   };
 }
@@ -66,6 +70,13 @@ function isXdxCurrency(code) {
   return currency === "XDX" || currency === XDX_HEX;
 }
 
+// The issuer also has lines for look alike codes ("xdx", "Xdx", and the 160 bit
+// hex 5844 58...). Those are different tokens with their own balances, so the
+// holder and trust line counts only take the standard "XDX" code.
+function isXdxTokenLine(code) {
+  return String(code || "").trim() === "XDX";
+}
+
 export function countXdxHolderLines(lines = [], issuer = XDX_ISSUER) {
   const owner = String(issuer || XDX_ISSUER).trim();
   let holders = 0;
@@ -73,13 +84,42 @@ export function countXdxHolderLines(lines = [], issuer = XDX_ISSUER) {
   for (const line of Array.isArray(lines) ? lines : []) {
     const account = String(line?.account || "").trim();
     if (!account || account === owner) continue;
-    if (!isXdxCurrency(line?.currency)) continue;
+    if (!isXdxTokenLine(line?.currency)) continue;
     trustlines += 1;
     const balance = Number(line?.balance);
     // Issuer lines report a holder's balance as negative. Any non-zero balance counts.
     if (Number.isFinite(balance) && balance !== 0) holders += 1;
   }
   return { holders, trustlines };
+}
+
+/**
+ * Record XDX lines into an account keyed map and return the unique totals.
+ * Holders are accounts with a non-zero XDX balance; trustlines are every XDX
+ * line, empty or not. The same account seen again only overwrites itself.
+ */
+export function recordXdxHolderLines(map, lines = [], issuer = XDX_ISSUER) {
+  const owner = String(issuer || XDX_ISSUER).trim();
+  for (const line of Array.isArray(lines) ? lines : []) {
+    const account = String(line?.account || "").trim();
+    if (!account || account === owner) continue;
+    if (!isXdxTokenLine(line?.currency)) continue;
+    const balance = Number(line?.balance);
+    map.set(account, Number.isFinite(balance) ? Math.abs(balance) : 0);
+  }
+  return xdxLineTotals(map);
+}
+
+export function xdxLineTotals(map) {
+  let holders = 0;
+  let sum = 0;
+  for (const balance of map.values()) {
+    if (balance > 0) {
+      holders += 1;
+      sum += balance;
+    }
+  }
+  return { holders, trustlines: map.size, sum };
 }
 
 export function xdxAmmCandidateLines(lines = [], issuer = XDX_ISSUER) {
@@ -247,9 +287,11 @@ async function rpcConfirm(method, params, options, deadline, salt) {
 }
 
 async function readPage(options, marker) {
+  // Pin the whole walk to the ledger of its first page so every page reads one
+  // snapshot and a marker stays meaningful on whichever node serves it next.
   const params = {
     account: XDX_ISSUER,
-    ledger_index: "validated",
+    ledger_index: state.ledgerIndex || "validated",
     limit: PAGE_LIMIT,
   };
   if (marker) params.marker = marker;
@@ -265,6 +307,11 @@ async function walkLines(options, budgetMs) {
     } catch (err) {
       page = { error: String(err?.message || err || "account_lines failed") };
     }
+    if (page?.error && state.ledgerIndex && /lgrNotFound|ledgerNotFound|invalidParams|marker/i.test(String(page.error))) {
+      // The pinned ledger or its marker is not served here. Start a clean walk.
+      restartLineWalk();
+      continue;
+    }
     if (!page || page.error || !Array.isArray(page.lines)) {
       state.error = page?.error || "account_lines incomplete";
       if (!retryableRpc(page) || Date.now() - started > budgetMs - 800) return false;
@@ -272,9 +319,10 @@ async function walkLines(options, budgetMs) {
       continue;
     }
     const found = xdxAmmCandidateLines(page.lines);
-    const counted = countXdxHolderLines(page.lines);
-    state.holders += counted.holders;
-    state.trustlines += counted.trustlines;
+    if (!state.ledgerIndex && Number(page.ledger_index) > 0) state.ledgerIndex = Number(page.ledger_index);
+    const counted = recordXdxHolderLines(state.lineBalances, page.lines);
+    state.holders = counted.holders;
+    state.trustlines = counted.trustlines;
     const seen = new Set(state.candidates.map((row) => row.account));
     for (const row of found) {
       if (seen.has(row.account)) continue;
@@ -295,6 +343,8 @@ async function walkLines(options, budgetMs) {
       state.holderSnapshot = {
         holders: state.holders,
         trustlines: state.trustlines,
+        sum: xdxLineTotals(state.lineBalances).sum,
+        ledger_index: state.ledgerIndex,
         at: Date.now(),
         lines_done: true,
         source: "xrpl-lines",
@@ -316,21 +366,24 @@ function holderFields(now = Date.now()) {
       holders: snap.holders,
       trustlines: snap.trustlines,
       holders_at: snap.at,
+      holders_ledger_index: snap.ledger_index ?? null,
       holders_stale: refreshing || aged,
       holders_source: "xrpl-lines",
     };
   }
-  const partial = state.holders > 0 || state.trustlines > 0;
+  // A walk that has not reached the last page is a partial count. Never report
+  // it as the holder figure; the page would show a number that is too low.
   return {
-    holders: partial ? state.holders : null,
-    trustlines: partial ? state.trustlines : null,
+    holders: null,
+    trustlines: null,
     holders_at: null,
     holders_stale: true,
+    holders_partial: state.holders > 0 || state.trustlines > 0,
     holders_source: "xrpl-lines",
   };
 }
 
-function beginScheduledRefresh() {
+function restartLineWalk() {
   state.marker = undefined;
   state.pages = 0;
   state.candidates = [];
@@ -338,6 +391,12 @@ function beginScheduledRefresh() {
   state.verdicts = new Map();
   state.holders = 0;
   state.trustlines = 0;
+  state.lineBalances = new Map();
+  state.ledgerIndex = null;
+}
+
+function beginScheduledRefresh() {
+  restartLineWalk();
   state.error = "";
 }
 

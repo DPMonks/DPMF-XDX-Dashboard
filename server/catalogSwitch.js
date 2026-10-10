@@ -319,10 +319,26 @@ export function mergeChange24h(db = {}, live = {}) {
   return next;
 }
 
+function ledgerIssuerKnown(row) {
+  return row?.source === "xrpl" && !isBlankAmount(row.issued);
+}
+
+/**
+ * Circulating and issuer locked must come from the issuer's gateway_balances.
+ * The live ledger read wins; a stored figure only counts if it is ledger
+ * sourced too. A row summed from indexer tables is dropped, never shown.
+ */
 export function mergeIssuerLocked(db = {}, live = {}) {
-  if (!isBlankAmount(db.issued) || !isBlankAmount(db.issuer_locked)) return { ...db, source: db.source || "db" };
-  if (!live) return db;
-  return { ...db, ...live, source: catalogSource(false, true) };
+  if (ledgerIssuerKnown(live)) return { ...db, ...live, source: "xrpl" };
+  if (ledgerIssuerKnown(db)) return { ...db, source: "xrpl" };
+  return {
+    ...(db || {}),
+    issuer_locked: null,
+    burned_supply: null,
+    issued: null,
+    circulating: null,
+    source: "empty",
+  };
 }
 
 export function mergeCountPayload(db = {}, live = {}) {
