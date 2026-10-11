@@ -9,6 +9,7 @@ import {
   VERSION,
 } from "./handshake/contract";
 import { createRequestScheduler } from "./utils/requestScheduler";
+import { dataAgeMs, generatedAtFromHeaders } from "./dataAge.js";
 import {
   catalogFetchBlocked,
   isPostgresOutageStatus,
@@ -47,6 +48,11 @@ const API = REQUEST_ORIGIN
 const inflight = new Map();
 const responseCache = new Map();
 const CACHE_MS = 15_000;
+// A CDN copy older than this is shown at once but kept in the page cache only
+// briefly, so the next poll picks up the copy the edge refreshed meanwhile.
+export const STALE_DATA_MS = 120_000;
+const STALE_CACHE_MS = 2_000;
+const generatedAtByUrl = new Map();
 const scheduleRequest = createRequestScheduler({ concurrency: 2 });
 
 let handshakePromise = null;
@@ -197,6 +203,11 @@ async function fetchJson(url, { method = "GET", body, timeoutMs = 8000 } = {}) {
     throw next;
   }
   const data = await res.json().catch(() => ({}));
+  if (res.ok && method === "GET") {
+    const generatedAt = generatedAtFromHeaders(res.headers);
+    if (generatedAt != null) generatedAtByUrl.set(url, generatedAt);
+    else generatedAtByUrl.delete(url);
+  }
   if (!res.ok) {
     const fallback =
       res.status === 429
@@ -253,7 +264,10 @@ async function getJson(path, options = {}) {
     for (let attempt = 0; attempt < retries; attempt += 1) {
       try {
         const data = await getJsonOnce(path, { method, body, timeoutMs });
-        if (cache) cacheSet(cacheKey, data);
+        if (cache) {
+          const age = dataAgeMs(generatedAtByUrl.get(url));
+          cacheSet(cacheKey, data, age != null && age > STALE_DATA_MS ? STALE_CACHE_MS : CACHE_MS);
+        }
         return data;
       } catch (error) {
         lastError = error;
@@ -391,6 +405,19 @@ export function getHandshakeState() {
 
 function endpoint(name, params) {
   return withParams(handshakeState.endpoints[name] || DEFAULT_ENDPOINTS[name], params);
+}
+
+/**
+ * Age in ms of the oldest of these endpoints' last responses, or null when the
+ * server did not say. Used to label figures served from the edge cache.
+ */
+export function endpointDataAgeMs(names = [], now = Date.now()) {
+  let oldest = null;
+  for (const name of names) {
+    const age = dataAgeMs(generatedAtByUrl.get(requestUrl(endpoint(name))), now);
+    if (age != null && (oldest == null || age > oldest)) oldest = age;
+  }
+  return oldest;
 }
 
 export { API, INDEXER_ORIGIN, REQUEST_ORIGIN };
