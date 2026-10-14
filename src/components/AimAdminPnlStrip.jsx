@@ -66,6 +66,43 @@ function AgentNet({ agentId, usd, xrp }) {
   );
 }
 
+function NetBlock({ net, label }) {
+  if (!net || !net.team) return null;
+  const t = net.team;
+  return (
+    <div className="aim-pnl-net" aria-label={label}>
+      <ul className="aim-pnl-agents">
+        <li>
+          <b>Net</b>
+          <MoneyLines usd={t.net_usd} xrp={t.net_xrp} className={moneyClass("aim-pnl-amount", t.net_usd)} />
+        </li>
+        <li>
+          <b>Wins ({t.wins})</b>
+          <MoneyLines usd={t.wins_usd} xrp={t.wins_xrp} className="aim-pnl-amount" />
+        </li>
+        <li>
+          <b>Losses ({t.losses})</b>
+          <MoneyLines usd={t.losses_usd} xrp={t.losses_xrp} className={moneyClass("aim-pnl-amount", t.losses_usd)} />
+        </li>
+      </ul>
+      {net.by_agent.length ? (
+        <ul className="aim-pnl-agents" aria-label={`${label} by agent`}>
+          {net.by_agent.map((row) => (
+            <li key={row.agent_id || row.role}>
+              <Who agent={row.agent_id || row.role} />
+              <MoneyLines usd={row.net_usd} xrp={row.net_xrp} className={moneyClass("aim-pnl-amount", row.net_usd)} />
+              <small>
+                Wins {formatXrp(row.wins_xrp) || "0.0000 XRP"} {formatUsd(row.wins_usd)} | Losses{" "}
+                {formatXrp(row.losses_xrp) || "0.0000 XRP"} {formatUsd(row.losses_usd)}
+              </small>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0 }) {
   const [tab, setTab] = useState("all");
   const [all, setAll] = useState({ phase: "loading", summary: null, note: "" });
@@ -172,6 +209,7 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
                 aria-live="polite"
               />
               <p className="aim-pnl-meta">{formatAllProfitLine(ledger)}</p>
+              <NetBlock net={ledger.net} label="Ledger net, wins and losses" />
               <ul className="aim-pnl-agents" aria-label="Net profit by agent">
                 {ledger.by_agent.map((row) => (
                   <AgentNet
@@ -236,6 +274,7 @@ export default function AimAdminPnlStrip({ wallet, active = true, refreshKey = 0
               />
               <p className="aim-pnl-meta">{fillCountLabel(day.trade_count) || "Team total, last 24 hours"}</p>
               {windowLabel ? <p className="aim-pnl-window">{windowLabel}</p> : null}
+              <NetBlock net={day.net} label="24h net, wins and losses" />
               {day.by_agent?.length ? (
                 <ul className="aim-pnl-agents" aria-label="Earnings by agent">
                   {day.by_agent.map((row) => (

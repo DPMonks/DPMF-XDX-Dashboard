@@ -355,6 +355,29 @@ export function normalizeAllAgents(raw) {
   );
 }
 
+function netSlot(raw) {
+  const row = raw && typeof raw === "object" ? raw : {};
+  return {
+    agent_id: asText(row.agent_id, 40) || null,
+    role: asText(row.role, 40) || null,
+    net_xrp: asMoney(row.net_xrp) ?? 0,
+    net_usd: asMoney(row.net_usd) ?? 0,
+    wins_xrp: asMoney(row.wins_xrp) ?? 0,
+    wins_usd: asMoney(row.wins_usd) ?? 0,
+    losses_xrp: asMoney(row.losses_xrp) ?? 0,
+    losses_usd: asMoney(row.losses_usd) ?? 0,
+    wins: asCount(row.wins) ?? 0,
+    losses: asCount(row.losses) ?? 0,
+  };
+}
+
+/** Net, wins and losses from the desk ledger (losses are negative rows). Null when absent. */
+export function normalizeNet(raw) {
+  if (!raw || typeof raw !== "object" || !raw.team) return null;
+  const agents = Array.isArray(raw.by_agent) ? raw.by_agent : [];
+  return { team: netSlot(raw.team), by_agent: agents.slice(0, 20).map(netSlot) };
+}
+
 export function normalizePnlAll(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
   const wins = asCount(body.wins_count) ?? 0;
@@ -377,6 +400,7 @@ export function normalizePnlAll(payload) {
     by_agent,
     by_strategy: strategyRows(body.by_strategy),
     source_note: asText(body.source_note, 240),
+    net: normalizeNet(body.net_ledger ?? body.net),
   };
 }
 
@@ -394,6 +418,7 @@ export function normalizePnlSummary(payload) {
     by_agent,
     window_start: asIso(totals.since ?? totals.window_start ?? body.since ?? body.window_start),
     window_end: asIso(totals.until ?? totals.window_end ?? body.until ?? body.window_end),
+    net: normalizeNet(body.net ?? totals.net),
   };
 }
 
