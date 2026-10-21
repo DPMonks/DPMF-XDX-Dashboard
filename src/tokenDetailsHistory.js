@@ -115,11 +115,19 @@ function levelSample(value, { allowZero = false } = {}) {
   return num;
 }
 
+// A price or market cap of 0 (or below) is never a real sample: it comes from a
+// failed /api/prices read (recordedXdxUsdFromPrices returns 0) and plotted as a
+// drop to zero at the live tip.
+const POSITIVE_ONLY_METRICS = new Set(["price", "xdxPerXrp", "xrplMarketCap", "circulatingMarketCap"]);
+
 export function tokenDetailMetricNumber(row, metric) {
   const keys = METRIC_KEYS[metric] || [metric];
+  const positiveOnly = POSITIVE_ONLY_METRICS.has(metric);
   for (const key of keys) {
     const num = rawNumber(row?.[key]);
-    if (num != null) return num;
+    if (num == null) continue;
+    if (positiveOnly && !(num > 0)) continue;
+    return num;
   }
   return null;
 }
@@ -197,6 +205,28 @@ export function carryTokenDetailMetrics(rows = []) {
     }
     return next;
   });
+}
+
+/**
+ * Drop the live tip's price when it is more than 3x away from the last ledger
+ * candle (e.g. the XRP x 0.000001 fallback when the XRP/USD rate was missing).
+ */
+export function guardTipPrice(tip, priceRows = [], factor = 3) {
+  if (!tip) return tip;
+  const tipPrice = tokenDetailMetricNumber(tip, "price");
+  if (tipPrice == null) return tip;
+  let last = null;
+  for (const row of Array.isArray(priceRows) ? priceRows : []) {
+    const p = rawNumber(row?.price_usd ?? row?.price);
+    const ts = rowTs(row);
+    if (p > 0 && ts != null && (!last || ts > last.ts)) last = { ts, p };
+  }
+  if (!last || (tipPrice <= last.p * factor && tipPrice >= last.p / factor)) return tip;
+  const next = { ...tip };
+  for (const key of [...METRIC_KEYS.price, ...METRIC_KEYS.xrplMarketCap, ...METRIC_KEYS.circulatingMarketCap, ...METRIC_KEYS.xdxPerXrp]) {
+    delete next[key];
+  }
+  return next;
 }
 
 export function liveTokenDetailTip(live) {
@@ -537,7 +567,7 @@ export function composeTokenDetailHistory({
       sparkMetricRows(sparkSource, live),
       ammHistoryRows(amm, live),
       ammHistoryRows(tvl, live),
-      [liveTokenDetailTip(live)]
+      [guardTipPrice(liveTokenDetailTip(live), priceRows)]
     )
   );
 }
