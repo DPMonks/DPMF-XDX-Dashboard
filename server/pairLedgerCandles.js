@@ -10,6 +10,7 @@
 import { loadCexXrpUsdCandles } from "./cexOhlc.js";
 import { loadLedgerCandles } from "./ledgerCandles.js";
 import { queryIndexerDb } from "./readIndexerDb.js";
+import { loadXioPoolCandles, normalizeXioLedgerPair } from "./xioLedgerCandles.js";
 
 const CACHE_MS = 60_000;
 const HOUR_KEEP_MS = 400 * 86_400_000;
@@ -145,6 +146,8 @@ async function loadXrpUsdDaily(options) {
  * candles and the quote leg needed to cross them when the pool has no row.
  */
 export async function buildLedgerChartPayload(pair, options = {}) {
+  const xioPair = normalizeXioLedgerPair(pair);
+  if (xioPair) return buildXioLedgerChartPayload(xioPair, options);
   const name = normalizeLedgerPair(pair) || "XDX/XRP";
   const quote = name.split("/")[1];
   const [native, xrp, xrpUsd] = await Promise.all([
@@ -160,6 +163,31 @@ export async function buildLedgerChartPayload(pair, options = {}) {
     fields: ["t", "o", "h", "l", "c", "volume_xdx", "trades"],
     native,
     xrp: xrp || native,
+    fx: xrpUsd.length ? { "XRP/USD": xrpUsd } : {},
+  };
+}
+
+/**
+ * Chart payload for XIO/XRP or XIO/RLUSD: swaps on that pair's own XIO AMM
+ * since the XIO exchange lock ended (13 Sep 2026). `xrp` is the XIO/XRP pool
+ * so an XIO/RLUSD bucket before its pool existed can be crossed at XRP/USD.
+ */
+async function buildXioLedgerChartPayload(name, options = {}) {
+  const quote = name.split("/")[1];
+  const [native, xrp, xrpUsd] = await Promise.all([
+    loadXioPoolCandles(name, options).catch(() => null),
+    name === "XIO/XRP" ? null : loadXioPoolCandles("XIO/XRP", options).catch(() => null),
+    USD_QUOTES.has(quote) ? loadXrpUsdDaily(options) : [],
+  ]);
+  const fallback = { pair: name, source: "xrpl-ledger", reason: "unavailable", stale: true, partial: true, ohlc: {} };
+  return {
+    ok: true,
+    view: "ledger",
+    pair: name,
+    source: "xrpl-ledger",
+    fields: ["t", "o", "h", "l", "c", "volume_xio", "trades"],
+    native: native || fallback,
+    xrp: xrp || native || fallback,
     fx: xrpUsd.length ? { "XRP/USD": xrpUsd } : {},
   };
 }

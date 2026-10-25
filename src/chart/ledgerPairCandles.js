@@ -1,5 +1,6 @@
 /**
- * Ledger OHLC for XDX pair charts.
+ * Ledger OHLC for XDX pair charts, and for XIO/XRP and XIO/RLUSD after the
+ * XIO exchange lock ends.
  *
  * `/api/chart/candles?view=ledger&pair=XDX/...` returns the pool's own candles
  * (`native`), the XDX/XRP candles (`xrp`) and the XRP/USD daily leg (`fx`).
@@ -13,6 +14,8 @@ import { crossXrpCandle } from "./pairQuote.js";
 
 const DAY = 86_400_000;
 const USD_QUOTES = new Set(["RLUSD", "USD", "USDC"]);
+/** Pairs whose own pool is the XRP leg: nothing to cross. */
+const XRP_QUOTED_ROOTS = new Set(["XDX/XRP", "XIO/XRP"]);
 /** A quote leg older than this is not used to price an XDX candle. */
 const FX_MAX_AGE = { usd: 3 * DAY, token: 10 * DAY };
 /** Live quote marks only price buckets this close to now. */
@@ -52,7 +55,7 @@ export function parseLedgerPayload(body) {
   if (!body || typeof body !== "object" || body.view !== "ledger") return null;
   const pair = String(body.pair || "").toUpperCase();
   const native = setFromPayload(body.native, "ledger");
-  const xrp = pair === "XDX/XRP" ? native : setFromPayload(body.xrp, "ledger");
+  const xrp = XRP_QUOTED_ROOTS.has(pair) ? native : setFromPayload(body.xrp, "ledger");
   const xrpUsd = (Array.isArray(body.fx?.["XRP/USD"]) ? body.fx["XRP/USD"] : [])
     .map(([t, c]) => ({ t: Number(t), c: Number(c) }))
     .filter((row) => Number.isFinite(row.t) && row.c > 0)
@@ -183,7 +186,7 @@ export function ledgerPairCandles({ pair, intervalId = "1h", ledger, locked = {}
   const src = ledgerSourceInterval(intervalId);
   const native = dropCloseOutliers(ledger.native?.[src] || []);
   let rows = native;
-  if (name !== "XDX/XRP") {
+  if (!XRP_QUOTED_ROOTS.has(name)) {
     const startNative = native.length ? native[0].t : Infinity;
     const crossed = crossLedgerCandles(
       dropCloseOutliers(ledger.xrp?.[src] || []),

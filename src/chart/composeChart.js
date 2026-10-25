@@ -179,7 +179,9 @@ export function composePairCandles({
   // XIO history is the XIO exchange lock passed in `locked`. Do not paint XDX prints on it.
   // Trade prints arrive in both quote-per-base and base-per-quote. Anchor them
   // to the locked candle so inverted AMM fills cannot erase the real candles.
-  const ledgerOn = name.startsWith("XDX/") && hasLedgerData(ledger);
+  // XIO/XRP and XIO/RLUSD: the XIO lock ends on 13 Sep 2026; ledger swaps on
+  // each XIO AMM carry the chart on from the day after the last locked candle.
+  const ledgerOn = (name.startsWith("XDX/") || xioBase) && hasLedgerData(ledger);
   // Ledger candles replace the sparkline (hourly ledger closes) for XDX pairs.
   const sparkTicks =
     name === "XRP/RLUSD" || xioBase || ledgerOn
@@ -210,7 +212,7 @@ export function composePairCandles({
   if (!isDailyOrLonger(interval)) {
     // No intraday source: keep the coarse daily tape instead of inventing
     // flat or interpolated session bars from it.
-    if (name === "XRP/RLUSD" || xioBase) {
+    if (name === "XRP/RLUSD" || (xioBase && !ledgerOn)) {
       candles = clipCandleWicks(candles, wickClipOptions({ pair: name }));
       return windowed ? windowCandles(candles, range, now) : candles;
     }

@@ -57,6 +57,10 @@ export function xrplToMd5ForLpPool(pool) {
 export const XIO_ISSUER = "rfuzioNFTKArnU1PQD5BEF272vpbHMRoxU";
 export const XDX_XIO_AMM = "rDJXzsZGACeHGJQYfaudsYshaC5zJxqsHr";
 export const XDX_XIO_LP_HEX = "03E7A465A6E95CDA21E1110056AA51A71FA55CB9";
+/** XIO/XRP AMM (amm_info XRP + XIO). Its swaps are the XIO/XRP chart after the XIO exchange lock. */
+export const XIO_XRP_AMM = "rPYfrbCvJGGEs9ddUtRiq58kCJBw9hoGij";
+/** XIO/RLUSD AMM (amm_info RLUSD + XIO), live since 13 Sep 2026. */
+export const XIO_RLUSD_AMM = "rMass8RoHtoSUg78TTmdtCQHU8dfi9GAhR";
 export const XSQUAD_ISSUER = "roBYiFtZsTRpWEUw6TtpUCwZCfjcQeRBg";
 export const XDX_XSQUAD_AMM = "rwpht3XDGMhzYmT5V6ZyMyg6Uc37XFLSwv";
 export const XDX_XSQUAD_LP_HEX = "03BA7FDC0F32F83750869CBA241B93F1C66A8EEB";
