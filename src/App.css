@@ -5628,3 +5628,10 @@ body {
   font-weight: 600;
   color: #d7b8ff;
 }
+
+.data-age-note {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  color: var(--dpmf-text-muted);
+  opacity: 0.9;
+}

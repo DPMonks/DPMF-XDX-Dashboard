@@ -424,6 +424,13 @@ export function mergeOrderbookCatalogs(db, live) {
   return stored;
 }
 
+/** Paths where mergeCatalogPayload keeps filled stored rows and ignores live. */
+export function dbRowsWinWhenFilled(path) {
+  const p = String(path || "").split("?")[0];
+  if (p === "chart/candles" || p === "charts/candles") return false;
+  return /^charts\//.test(p) || p === "top-holders" || p === "top-holders-v2" || p === "top-lp";
+}
+
 export function mergeCatalogPayload(suffix, db, live) {
   const path = String(suffix || "").split("?")[0];
   if (live == null) return db;
@@ -506,9 +513,12 @@ export async function overlayDbResultWithLive(suffix, dbResult, loadLive) {
   } catch {
     return dbResult;
   }
+  // Stored rows win outright for these paths, so a slow live read would only
+  // be thrown away (top-holders pages used to wait 15s+ on it).
+  const skipLive = dbRowsWinWhenFilled(path) && hasRows(dbBody);
   let live;
   try {
-    live = await loadLive(suffix);
+    live = skipLive ? null : await loadLive(suffix);
   } catch {
     // last-good catalog memory fills empty Railway rows below
   }

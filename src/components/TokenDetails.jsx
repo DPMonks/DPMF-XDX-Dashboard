@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getTokenDetails } from "../api/indexer";
+import { STALE_DATA_MS, endpointDataAgeMs } from "../api";
+import { staleDataLabel } from "../dataAge";
 import { keepKnownTokenDetails } from "../tokenDetails";
 import {
   formatDay,
@@ -57,6 +59,7 @@ export default function TokenDetails() {
   const { t, locale } = useI18n();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [ageMs, setAgeMs] = useState(null);
   const lastGood = useRef(null);
 
   useEffect(() => {
@@ -78,6 +81,7 @@ export default function TokenDetails() {
           lastGood.current = shown;
           setData(shown);
           setError(null);
+          setAgeMs(endpointDataAgeMs(["overview", "prices"]));
         }
       } catch (err) {
         if (!cancelled && !lastGood.current) setError(err.message);
@@ -119,8 +123,11 @@ export default function TokenDetails() {
   const usdPrice = pick(data, ["recorded_price", "xdxUsd"]);
   const xrpPrice = pick(data, ["xdxPerXrp", "xdx_per_xrp"]);
   const recordedHint = `${t.recordedPrice} ${formatUsdPrice(usdPrice, locale)}`;
+  const staleLabel = staleDataLabel(ageMs, t.dataAgeRefreshing, STALE_DATA_MS);
 
   return (
+    <>
+    {staleLabel ? <p className="data-age-note" role="status">{staleLabel}</p> : null}
     <div className="token-details-grid">
       <Detail label={t.tokenType} value={pick(data, ["tokenType", "token_type"])} />
       <Detail
@@ -204,5 +211,6 @@ export default function TokenDetails() {
         hint={blackholed && blackholedAt ? formatDay(blackholedAt, locale) : null}
       />
     </div>
+    </>
   );
 }

@@ -5,6 +5,7 @@ import {
   proxyCorsHeaders,
   proxyResponseHeaders,
 } from "./proxyIndexer.js";
+import { GENERATED_AT_HEADER, cacheControlFor } from "./cachePolicy.js";
 
 export function suffixFromVercelReq(req) {
   const q = req.query?.path;
@@ -62,13 +63,16 @@ export async function writeIndexerResponse(req, res, forcedSuffix) {
       search,
       suffix,
     });
-    res.status(last?.status || 502);
+    const status = last?.status || 502;
+    res.status(status);
     for (const [key, value] of Object.entries(proxyResponseHeaders(last, req))) {
       res.setHeader(key, value);
     }
-    res.setHeader("cache-control", "s-maxage=30, stale-while-revalidate=120");
+    res.setHeader("cache-control", cacheControlFor(suffix, { search, status, method: req.method }));
+    res.setHeader(GENERATED_AT_HEADER, new Date().toISOString());
     res.send(last?.body || JSON.stringify({ error: "Indexer proxy failed" }));
   } catch (error) {
+    res.setHeader("cache-control", "no-store");
     res.status(502).json({ error: error.message || "Indexer proxy failed" });
   }
 }

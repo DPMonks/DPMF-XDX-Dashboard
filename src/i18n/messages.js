@@ -70,6 +70,7 @@ const en = {
   lpPositions: "LP positions",
   lpShare: "LP share",
   noLpPositions: "No LP positions",
+  dataAgeRefreshing: "Showing saved figures from {age} ago, refreshing",
   withdrawXdx: "Withdraw XDX quote",
   withdrawQuote: "Withdraw {asset} quote",
   topOfBook: "Top of book",
