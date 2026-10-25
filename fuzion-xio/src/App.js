@@ -1,0 +1,140 @@
+import "./App.css";
+import "./theme-dpmf.css";
+import React, { Suspense } from "react";
+import {
+  BrowserRouter as Router,
+  Navigate,
+  Outlet,
+  Route,
+  Routes
+} from "react-router-dom";
+import "bootstrap/dist/css/bootstrap.min.css";
+import { useJwt } from "react-jwt";
+import { useSuppressResizeObserverError } from "./helper/userSuppressResizeObserverError";
+import NftSuspenseLoader from "./components/common/NftSuspenseLoader";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
+const Nft = React.lazy(() => import("./components/nft/nft"));
+const Createnft = React.lazy(() => import("./components/nft/Createnft"));
+const Ownnft = React.lazy(() => import("./components/nft/ownnft"));
+const Nftdetail = React.lazy(() => import("./components/nft/Nftdetail"));
+const Nftlist = React.lazy(() => import("./components/nft/Nftlist"));
+const BidDetail = React.lazy(() => import("./components/nft/biddetail"));
+const Searchnft = React.lazy(() => import("./components/nft/searchNft"));
+const InteroperabilityDetail = React.lazy(() =>
+  import("./components/nft/interoperabilityDetail")
+);
+const DeclinedSendNFT = React.lazy(() =>
+  import("./components/nft/declinedSendNFT")
+);
+const Ramp = React.lazy(() => import("./components/ramp/Ramp"));
+const CancelPlacedOffer = React.lazy(() =>
+  import("./components/nft/cancelPlacedOffer")
+);
+const BuyOfferReceived = React.lazy(() =>
+  import("./components/nft/buyOfferReceived")
+);
+const Profile = React.lazy(() => import("./components/nft/profile"));
+const VscoreDashboard = React.lazy(() =>
+  import("./components/nft/vScoreDashboard")
+);
+const Collections = React.lazy(() => import("./components/nft/collections"));
+const XioDashboard = React.lazy(() => import("./components/nft/xioDashboard"));
+const Capabilities = React.lazy(() => import("./components/nft/capabilities"));
+const Explore = React.lazy(() => import("./components/nft/explore"));
+const CollectionDesk = React.lazy(() =>
+  import("./components/nft/collectionDesk")
+);
+const Activity = React.lazy(() => import("./components/nft/activity"));
+const Rankings = React.lazy(() => import("./components/nft/rankings"));
+const AssetsBook = React.lazy(() => import("./components/nft/assetsBook"));
+const ProfilesDesk = React.lazy(() => import("./components/nft/profilesDesk"));
+const Yem = React.lazy(() => import("./components/nft/yem"));
+const Discover = React.lazy(() => import("./components/nft/discover"));
+const ProDesk = React.lazy(() => import("./components/nft/proDesk"));
+const Drops = React.lazy(() => import("./components/nft/drops"));
+const Governance = React.lazy(() => import("./components/nft/governance"));
+const Onboarding = React.lazy(() => import("./components/nft/onboarding"));
+const Moderation = React.lazy(() => import("./components/nft/moderation"));
+const CreatorDesk = React.lazy(() => import("./components/nft/creatorDesk"));
+
+function App() {
+  useSuppressResizeObserverError();
+  const token = localStorage.getItem("jwtToken");
+  const { isExpired } = useJwt(token);
+
+  const PrivateRoute = () => {
+    return token !== null && isExpired === false ? (
+      <Outlet />
+    ) : (
+      <Navigate to="/" />
+    );
+  };
+
+  return (
+    <Router>
+      <Suspense fallback={<NftSuspenseLoader />}>
+        <Routes>
+          <Route path="/" element={<Nft />} />
+          <Route path="/Nftdetail/:id" element={<Nftdetail />} />
+          <Route
+            path="/InteroperabilityDetail/:id"
+            element={<InteroperabilityDetail />}
+          />
+          <Route path="/Nftlist/:type" element={<Nftlist />} />
+          <Route path="/BidDetail/:id" element={<BidDetail />} />
+          <Route path="/Searchnft" element={<Searchnft />} />
+          <Route path="/profiles" element={<ProfilesDesk />} />
+          <Route path="/Profile/:id" element={<Profile />} />
+          <Route path="/collections" element={<Collections />} />
+          <Route path="/market" element={<Capabilities />} />
+          <Route path="/explore" element={<Explore />} />
+          <Route path="/explore/:slug" element={<CollectionDesk />} />
+          <Route path="/activity" element={<Activity />} />
+          <Route path="/rankings" element={<Rankings />} />
+          <Route path="/assets" element={<AssetsBook />} />
+          <Route path="/Xiodashboard" element={<XioDashboard />} />
+          <Route path="/yem" element={<Yem />} />
+          <Route path="/Yem" element={<Yem />} />
+          <Route path="/discover" element={<Discover />} />
+          <Route path="/pro" element={<ProDesk />} />
+          <Route path="/pro/:slug" element={<ProDesk />} />
+          <Route path="/drops" element={<Drops />} />
+          <Route path="/drops/:slug" element={<Drops />} />
+          <Route path="/governance" element={<Governance />} />
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/moderation" element={<Moderation />} />
+          <Route path="/creator/:address" element={<CreatorDesk />} />
+          <Route path="/portfolio/:address" element={<CreatorDesk />} />
+
+          <Route element={<PrivateRoute />}>
+            <Route path="/Createnft" element={<Createnft />} />
+            <Route path="/MyNFT" element={<Ownnft />} />
+            <Route path="/myNFT" element={<Ownnft />} />
+            <Route path="/mynft" element={<Ownnft />} />
+            <Route path="/DeclinedSendNFT" element={<DeclinedSendNFT />} />
+            <Route path="/ramp" element={<Ramp />} />
+            <Route path="/Cancelplacedoffer" element={<CancelPlacedOffer />} />
+            <Route path="/BuyOfferReceived" element={<BuyOfferReceived />} />
+            <Route path="/Profile" element={<Profile />} />
+            <Route path="/Vscoredashboard" element={<VscoreDashboard />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </Suspense>
+      <ToastContainer
+        limit={1}
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        pauseOnFocusLoss={false}
+        pauseOnHover={false}
+      />
+    </Router>
+  );
+}
+
+export default App;
