@@ -1,4 +1,5 @@
 import pg from "pg";
+import { cachedDbRead } from "./dbReadCache.js";
 import {
   XDX_ISSUER,
   XDX_TOTAL_SUPPLY,
@@ -282,11 +283,12 @@ export function postgresPoolOptions(raw) {
       ssl,
       max: 2,
       connectionTimeoutMillis: 2500,
-      idleTimeoutMillis: 8000,
+      // Keep warm connections for reuse across invocations (fewer TLS handshakes).
+      idleTimeoutMillis: 30000,
       allowExitOnIdle: true,
     };
   } catch {
-    return { connectionString, ssl, max: 2, connectionTimeoutMillis: 2500, idleTimeoutMillis: 8000, allowExitOnIdle: true };
+    return { connectionString, ssl, max: 2, connectionTimeoutMillis: 2500, idleTimeoutMillis: 30000, allowExitOnIdle: true };
   }
 }
 
@@ -2593,7 +2595,11 @@ async function withLiveCatalog(suffix, dbBody, search = "") {
   return overlayDbResultWithLive(suffix, ok(dbBody), (path) => liveCatalogPayload(path, { search }));
 }
 
-export async function readIndexerDb(suffix, search = "") {
+export function readIndexerDb(suffix, search = "") {
+  return cachedDbRead(suffix, search, () => readIndexerDbDirect(suffix, search));
+}
+
+async function readIndexerDbDirect(suffix, search = "") {
   const ledger = walletLedgerResult(suffix, search);
   if (ledger) return ledger;
 
